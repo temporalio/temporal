@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -18,24 +17,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type WorkflowVisibilityTestSuite struct {
-	testcore.FunctionalTestBase
-}
+func TestVisibility(t *testing.T) {
+	s := testcore.NewEnv(t)
 
-func TestWorkflowVisibilityTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowVisibilityTestSuite))
-}
-
-func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	startTime := time.Now().UTC()
 
-	// Start 2 workflow executions
-	id1 := "functional-visibility-test1"
-	id2 := "functional-visibility-test2"
-	wt := "functional-visibility-test-type"
-	tl := "functional-visibility-test-taskqueue"
-	identity := "worker1"
+	tv := s.Tv()
+	id1 := tv.WithWorkflowIDNumber(1).WorkflowID()
+	id2 := tv.WithWorkflowIDNumber(2).WorkflowID()
+	wt := tv.WorkflowType().Name
+	tl := tv.TaskQueue().Name
+	identity := tv.WorkerIdentity()
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
