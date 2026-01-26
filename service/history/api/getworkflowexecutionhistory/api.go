@@ -42,6 +42,66 @@ func equalEventIDSlices(a, b []int64) bool {
 	return true
 }
 
+// appendTransientEvents queries mutable state for transient/speculative events and appends them to the response
+func appendTransientEvents(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	eventNotifier events.Notifier,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	initialTransientEventIDs []int64,
+	useRawHistory bool,
+	history **historypb.History,
+	historyBlob *[]*commonpb.DataBlob,
+) error {
+	msResp, err := api.GetOrPollWorkflowMutableState(
+		ctx,
+		shardContext,
+		&historyservice.GetMutableStateRequest{
+			NamespaceId: namespaceID.String(),
+			Execution:   execution,
+		},
+		workflowConsistencyChecker,
+		eventNotifier,
+	)
+	if err != nil || msResp.GetTransientOrSpeculativeEvents() == nil {
+		// Ignore errors - if we can't get transient events, continue without them
+		return nil
+	}
+
+	transientWorkflowTask := msResp.GetTransientOrSpeculativeEvents()
+
+	// Compare with initial snapshot to detect changes during pagination
+	if len(initialTransientEventIDs) > 0 {
+		var currentTransientEventIDs []int64
+		for _, event := range transientWorkflowTask.GetHistorySuffix() {
+			currentTransientEventIDs = append(currentTransientEventIDs, event.GetEventId())
+		}
+
+		// If transient events changed, return retryable error
+		if !equalEventIDSlices(initialTransientEventIDs, currentTransientEventIDs) {
+			return serviceerror.NewUnavailable(
+				"workflow state changed during history retrieval, please retry")
+		}
+	}
+
+	// Manually append transient events to the response
+	if useRawHistory {
+		// Serialize transient events into a blob
+		transientEventsBlob, err := shardContext.GetPayloadSerializer().SerializeEvents(
+			transientWorkflowTask.GetHistorySuffix())
+		if err == nil {
+			*historyBlob = append(*historyBlob, transientEventsBlob)
+		}
+	} else {
+		// Append events directly to history
+		(*history).Events = append((*history).Events, transientWorkflowTask.GetHistorySuffix()...)
+	}
+
+	return nil
+}
+
 func Invoke(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -162,6 +222,9 @@ func Invoke(
 
 		execution.RunId = continuationToken.GetRunId()
 
+		// Set isWorkflowRunning from continuation token for pagination
+		isWorkflowRunning = continuationToken.IsWorkflowRunning
+
 		// we need to update the current next event ID and whether workflow is running
 		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
@@ -241,42 +304,6 @@ func Invoke(
 		}
 	}
 
-	// Query fresh transient/speculative events on last page
-	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
-	if isWorkflowRunning && len(continuationToken.PersistenceToken) == 0 {
-		// Last page - query mutable state for fresh transient/speculative events
-		msResp, err := api.GetOrPollWorkflowMutableState(
-			ctx,
-			shardContext,
-			&historyservice.GetMutableStateRequest{
-				NamespaceId: namespaceID.String(),
-				Execution:   execution,
-			},
-			workflowConsistencyChecker,
-			eventNotifier,
-		)
-		if err == nil {
-			transientWorkflowTask = msResp.GetTransientOrSpeculativeEvents()
-
-			// Compare with initial snapshot to detect changes during pagination
-			if len(initialTransientEventIDs) > 0 {
-				var currentTransientEventIDs []int64
-				if transientWorkflowTask != nil {
-					for _, event := range transientWorkflowTask.GetHistorySuffix() {
-						currentTransientEventIDs = append(currentTransientEventIDs, event.GetEventId())
-					}
-				}
-
-				// If transient events changed (discarded, added, or modified), return retryable error
-				if !equalEventIDSlices(initialTransientEventIDs, currentTransientEventIDs) {
-					return nil, serviceerror.NewUnavailable(
-						"workflow state changed during history retrieval, please retry")
-				}
-			}
-		}
-		// Ignore errors - if we can't get transient events, continue without them
-	}
-
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
@@ -290,7 +317,7 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					transientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					continuationToken.IsWorkflowRunning,
 				)
@@ -310,7 +337,7 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					transientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
 					continuationToken.IsWorkflowRunning,
@@ -371,7 +398,7 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					transientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					continuationToken.IsWorkflowRunning,
 				)
@@ -386,7 +413,7 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					transientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
 					continuationToken.IsWorkflowRunning,
@@ -395,6 +422,25 @@ func Invoke(
 
 			if err != nil {
 				return nil, err
+			}
+
+			// Query and append transient/speculative events if on last page
+			if isWorkflowRunning && len(continuationToken.PersistenceToken) == 0 {
+				transientEventsErr := appendTransientEvents(
+					ctx,
+					shardContext,
+					workflowConsistencyChecker,
+					eventNotifier,
+					namespaceID,
+					execution,
+					initialTransientEventIDs,
+					sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices,
+					&history,
+					&historyBlob,
+				)
+				if transientEventsErr != nil {
+					return nil, transientEventsErr
+				}
 			}
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
