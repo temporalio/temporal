@@ -64,113 +64,66 @@ func TestIsInternalTaskQueueForUserNs(t *testing.T) {
 	}
 }
 
-func TestCheckNotInternalTaskQueueForUserNs(t *testing.T) {
-	tests := []struct {
-		name      string
-		taskQueue string
-		wantErr   bool
-	}{
-		{
-			name:      "PerNSWorkerTaskQueue returns error",
-			taskQueue: PerNSWorkerTaskQueue,
-			wantErr:   true,
-		},
-		{
-			name:      "DefaultWorkerTaskQueue returns nil",
-			taskQueue: DefaultWorkerTaskQueue,
-			wantErr:   false,
-		},
-		{
-			name:      "MigrationActivityTQ returns nil",
-			taskQueue: MigrationActivityTQ,
-			wantErr:   false,
-		},
-		{
-			name:      "User defined task queue returns nil",
-			taskQueue: "my-custom-task-queue",
-			wantErr:   false,
-		},
-		{
-			name:      "Empty string returns nil, this method logic doesn't check for empty string",
-			taskQueue: "",
-			wantErr:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := CheckNotInternalPerNsTaskQueue(tt.taskQueue)
-			if tt.wantErr {
-				require.Error(t, err)
-				var invalidArgument *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgument)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
 func TestCheckInternalTaskQueueForUserNsAllowed(t *testing.T) {
 	tests := []struct {
 		name            string
 		parentTaskQueue string
-		childTaskQueue  string
+		targetTaskQueue string
 		wantErr         bool
 	}{
 		{
 			name:            "Child is internal, parent is internal - allowed",
 			parentTaskQueue: PerNSWorkerTaskQueue,
-			childTaskQueue:  PerNSWorkerTaskQueue,
+			targetTaskQueue: PerNSWorkerTaskQueue,
 			wantErr:         false,
 		},
 		{
 			name:            "Child is internal, parent is user task queue - error",
 			parentTaskQueue: "my-custom-task-queue",
-			childTaskQueue:  PerNSWorkerTaskQueue,
+			targetTaskQueue: PerNSWorkerTaskQueue,
 			wantErr:         true,
 		},
 		{
 			name:            "Child is internal, parent is empty - error",
 			parentTaskQueue: "",
-			childTaskQueue:  PerNSWorkerTaskQueue,
+			targetTaskQueue: PerNSWorkerTaskQueue,
 			wantErr:         true,
 		},
 		{
 			name:            "Child is not internal, parent is internal - allowed",
 			parentTaskQueue: PerNSWorkerTaskQueue,
-			childTaskQueue:  DefaultWorkerTaskQueue,
+			targetTaskQueue: DefaultWorkerTaskQueue,
 			wantErr:         false,
 		},
 		{
 			name:            "Child is user task queue, parent is user task queue - allowed",
 			parentTaskQueue: "my-custom-task-queue",
-			childTaskQueue:  "another-custom-task-queue",
+			targetTaskQueue: "another-custom-task-queue",
 			wantErr:         false,
 		},
 		{
 			name:            "Child is not internal, parent is empty - allowed, this method logic doesn't check for empty string",
 			parentTaskQueue: "",
-			childTaskQueue:  DefaultWorkerTaskQueue,
+			targetTaskQueue: DefaultWorkerTaskQueue,
 			wantErr:         false,
 		},
 		{
 			name:            "Child is empty, parent is internal - allowed",
 			parentTaskQueue: PerNSWorkerTaskQueue,
-			childTaskQueue:  "",
-			wantErr:         false,
+			targetTaskQueue: "",
+			wantErr:         true,
 		},
 		{
-			name:            "Both empty - allowed, this method logic doesn't check for empty string",
+			name:            "Both empty - error",
 			parentTaskQueue: "",
-			childTaskQueue:  "",
-			wantErr:         false,
+			targetTaskQueue: "",
+			wantErr:         true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := CheckInternalPerNsTaskQueueAllowed(tt.parentTaskQueue, tt.childTaskQueue)
+			err := CheckInternalPerNsTaskQueueAllowed(tt.targetTaskQueue, tt.parentTaskQueue)
 			if tt.wantErr {
 				require.Error(t, err)
 				var invalidArgument *serviceerror.InvalidArgument
