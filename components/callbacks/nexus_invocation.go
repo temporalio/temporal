@@ -105,7 +105,15 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
 
 	if err != nil {
-		e.Logger.Error("Callback request failed with error", tag.Error(err))
+		e.Logger.Error("Callback request failed with error",
+			tag.Error(err),
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.WorkflowID(n.workflowID),
+			tag.WorkflowRunID(n.runID),
+			tag.NewStringTag("destination", task.Destination()),
+			tag.NewStringTag("url", n.nexus.Url),
+			tag.Attempt(n.attempt),
+		)
 		return invocationResultRetry{err}
 	}
 
@@ -115,7 +123,15 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		// propagate errors to the machine.
 		if _, err = io.Copy(io.Discard, response.Body); err == nil {
 			if err = response.Body.Close(); err != nil {
-				e.Logger.Error("Callback request failed with error", tag.Error(err))
+				e.Logger.Error("Callback request failed to close response body",
+					tag.Error(err),
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowID(n.workflowID),
+					tag.WorkflowRunID(n.runID),
+					tag.NewStringTag("destination", task.Destination()),
+					tag.NewStringTag("url", n.nexus.Url),
+					tag.Attempt(n.attempt),
+				)
 				return invocationResultRetry{err}
 			}
 		}
@@ -124,7 +140,17 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	retryable := isRetryableHTTPResponse(response)
 	err = readHandlerErrFromResponse(response, e.Logger)
-	e.Logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
+	e.Logger.Error("Callback request failed",
+		tag.Error(err),
+		tag.NewStringTag("status", response.Status),
+		tag.NewBoolTag("retryable", retryable),
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.WorkflowID(n.workflowID),
+		tag.WorkflowRunID(n.runID),
+		tag.NewStringTag("destination", task.Destination()),
+		tag.NewStringTag("url", n.nexus.Url),
+		tag.Attempt(n.attempt),
+	)
 	if retryable {
 		return invocationResultRetry{err}
 	}

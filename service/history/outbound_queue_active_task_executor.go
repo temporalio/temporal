@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -142,6 +143,24 @@ func (e *outboundQueueActiveTaskExecutor) executeStateMachineTask(
 		return err
 	}
 
+	// Extract destination for logging if this is an outbound task
+	var destination string
+	if outboundTask, ok := task.(*tasks.StateMachineOutboundTask); ok {
+		destination = outboundTask.Destination
+	}
+
 	smRegistry := e.shardContext.StateMachineRegistry()
-	return smRegistry.ExecuteImmediateTask(ctx, e, ref, smt)
+	err = smRegistry.ExecuteImmediateTask(ctx, e, ref, smt)
+	if err != nil {
+		e.logger.Error("Failed to execute outbound state machine task",
+			tag.Error(err),
+			tag.WorkflowNamespaceID(ref.WorkflowKey.NamespaceID),
+			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+			tag.WorkflowRunID(ref.WorkflowKey.RunID),
+			tag.NewStringTag("destination", destination),
+			tag.NewInt64("taskID", ref.TaskID),
+			tag.NewStringTag("taskType", fmt.Sprintf("%T", smt)),
+		)
+	}
+	return err
 }
