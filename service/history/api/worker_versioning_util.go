@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -38,7 +37,7 @@ func ReactivateVersionWorkflowIfPinned(
 		return
 	}
 
-	shardContext.GetLogger().Error("REACTIVATION DEBUG: ReactivateVersionWorkflowIfPinned called",
+	shardContext.GetLogger().Debug("Sending reactivation signal to version workflow",
 		tag.WorkflowNamespaceID(namespaceID.String()),
 		tag.NewStringTag("deployment", pinnedVersion.GetDeploymentName()),
 		tag.NewStringTag("build_id", pinnedVersion.GetBuildId()))
@@ -70,59 +69,15 @@ func ReactivateVersionWorkflowIfPinned(
 		},
 	}
 
-	shardContext.GetLogger().Error("REACTIVATION DEBUG: Attempting to send signal",
-		tag.WorkflowNamespaceID(namespaceID.String()),
-		tag.WorkflowID(workflowID),
-		tag.NewStringTag("deployment_name", pinnedVersion.GetDeploymentName()),
-		tag.NewStringTag("build_id", pinnedVersion.GetBuildId()),
-		tag.NewStringTag("signal_time", time.Now().Format("15:04:05.000")),
-		tag.NewStringTag("namespace_name", nsEntry.Name().String()),
-		tag.NewStringTag("request_namespace_id", signalRequest.NamespaceId))
+	// Use history client to route signal to the correct shard (version workflow may be on a different shard)
+	historyClient := shardContext.GetHistoryClient()
 
-	// Get the engine and send signal synchronously - fire and forget
-	engine, err := shardContext.GetEngine(ctx)
+	_, err = historyClient.SignalWorkflowExecution(ctx, signalRequest)
 	if err != nil {
-		shardContext.GetLogger().Warn("Failed to get engine for version workflow signal",
-			tag.WorkflowNamespaceID(namespaceID.String()),
+		shardContext.GetLogger().Warn("Failed to signal version workflow for reactivation",
+			tag.WorkflowNamespace(nsEntry.Name().String()),
 			tag.WorkflowID(workflowID),
 			tag.Error(err))
 		return
 	}
-
-	// Try to signal with retry in case workflow is doing ContinueAsNew
-	maxRetries := 3
-	var signalErr error
-	for i := 0; i < maxRetries; i++ {
-		_, signalErr = engine.SignalWorkflowExecution(ctx, signalRequest)
-		if signalErr == nil {
-			shardContext.GetLogger().Error("REACTIVATION DEBUG: Successfully sent signal",
-				tag.WorkflowNamespace(nsEntry.Name().String()),
-				tag.WorkflowID(workflowID),
-				tag.NewInt("retry_attempt", i))
-			return
-		}
-
-		// Check if it's a "workflow not found" error
-		if signalErr.Error() == "workflow not found for ID: "+workflowID {
-			if i < maxRetries-1 {
-				// Wait a bit in case workflow is doing ContinueAsNew
-				time.Sleep(100 * time.Millisecond)
-				shardContext.GetLogger().Error("REACTIVATION DEBUG: Retrying signal",
-					tag.WorkflowID(workflowID),
-					tag.NewInt("retry_attempt", i+1))
-				continue
-			}
-		}
-		// For other errors, don't retry
-		break
-	}
-
-	// If we get here, all retries failed
-	shardContext.GetLogger().Error("REACTIVATION DEBUG: Failed to signal version workflow after retries",
-		tag.WorkflowNamespace(nsEntry.Name().String()),
-		tag.WorkflowID(workflowID),
-		tag.NewStringTag("full_workflow_id", signalRequest.SignalRequest.WorkflowExecution.WorkflowId),
-		tag.NewStringTag("deployment_name", pinnedVersion.GetDeploymentName()),
-		tag.NewStringTag("build_id", pinnedVersion.GetBuildId()),
-		tag.Error(signalErr))
 }
