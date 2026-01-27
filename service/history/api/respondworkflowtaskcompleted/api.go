@@ -677,8 +677,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		hasNewRun := newMutableState != nil
 		if hasNewRun {
 			// If a new run was created (e.g. ContinueAsNew, Retry, Cron), then Updates that were
-			// received while this WFT was running are aborted with a retryable error.
-			// Then, the SDK will retry the API call and the Update will land on the new run.
+			// received while this WFT was running are aborted with ErrWorkflowClosing (SDK-retryable).
+			// The SDK will retry the API call and the Update will land on the new run.
 			updateRegistry.Abort(update.AbortReasonWorkflowContinuing)
 		} else {
 			// If the Workflow completed itself via one of the completion commands without

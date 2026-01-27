@@ -143,7 +143,7 @@ func Invoke(
 		res, err = uws.Invoke(ctx)
 		if err != nil {
 			// If the Update-with-Start encountered the same error of a closing workflow again, it will convert
-			// the error to Aborted (which is a retryable error) to allow the client to retry the operation.
+			// the error to Aborted (which is an SDK-retryable error) to allow the client to retry the operation.
 			// TODO(stephan): remove dynamic config again
 			allowClientSideRetry := shardContext.GetConfig().EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort(ns)
 			if !allowClientSideRetry || !uws.updateOnlyWasAbortedByClosingWorkflow(err) {
