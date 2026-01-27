@@ -441,7 +441,22 @@ func shouldIncludeTransientOrSpeculativeEvents(
 	return true
 }
 
-// areValidTransientOrSpecEvents validates transient events are properly formed
+// areValidTransientOrSpecEvents validates that transient/speculative workflow task events
+// are properly formed before including them in GetWorkflowExecutionHistory responses.
+//
+// Transient events represent workflow tasks that exist in mutable state but may not be
+// persisted to the event history (e.g., retry attempts after task failure). Speculative
+// events represent workflow tasks created for processing updates that may be rejected.
+//
+// Valid transient/speculative events must be:
+// 1. A WorkflowTaskScheduled event (always required)
+// 2. Optionally followed by a WorkflowTaskStarted event with consecutive event ID
+//
+// This validation ensures we only include well-formed workflow task events and prevents
+// corruption of the history view returned to clients. Invalid events are silently dropped
+// with a warning logged.
+//
+// Returns true if events are valid and should be included in history, false otherwise.
 func areValidTransientOrSpecEvents(
 	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 ) bool {
@@ -455,16 +470,15 @@ func areValidTransientOrSpecEvents(
 		return false
 	}
 
-	// TODO seankane: This can likely be removed
-	// // If 2 events, second must be WFT_STARTED immediately after
-	// if len(events) == 2 {
-	// 	if events[1].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-	// 		return false
-	// 	}
-	// 	if events[1].GetEventId() != events[0].GetEventId()+1 {
-	// 		return false
-	// 	}
-	// }
+	// If 2 events, second must be WFT_STARTED immediately after
+	if len(events) == 2 {
+		if events[1].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+			return false
+		}
+		if events[1].GetEventId() != events[0].GetEventId()+1 {
+			return false
+		}
+	}
 
 	return true
 }

@@ -827,6 +827,11 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 				)
 			}
 		}()
+		// Note: We pass nil for transientWorkflowTaskInfo here because the current task's
+		// scheduled/started events should not be visible in the history returned to that task.
+		// Transient events are only included in GetWorkflowExecutionHistory API responses,
+		// not in PollWorkflowTask responses. Including them here would show the worker its own
+		// task events, which is incorrect (see issue #7741).
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
 			handler.shardContext,
@@ -837,7 +842,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nextEventID,
 			maximumPageSize,
 			nil,
-			matchingResp.GetTransientWorkflowTask(),
+			nil, // Don't include transient events for PollWorkflowTask responses
 			branchToken,
 			handler.persistenceVisibilityMgr,
 			true,
