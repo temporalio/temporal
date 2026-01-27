@@ -1194,7 +1194,7 @@ func (s *DeploymentVersionSuite) checkVersionStatusInDeployment(
 		a.NoError(err)
 		found := false
 		for _, versionSummary := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
-			if versionSummary.GetVersion() == tv.DeploymentVersionString() {
+			if versionSummary.GetVersion() == tv.DeploymentVersionString() { //nolint:staticcheck // SA1019: worker versioning v0.31
 				a.Equal(expectedStatus, versionSummary.GetStatus(),
 					"DescribeWorkerDeployment should show version %s as %s", tv.DeploymentVersionString(), expectedStatus)
 				found = true
@@ -2140,7 +2140,7 @@ func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnP
 			break
 		}
 	}
-	s.Greater(resetEventID, int64(0), "Should have found a workflow task complete event")
+	s.Positive(resetEventID, "Should have found a workflow task complete event")
 
 	// Reset the workflow with PostResetOperations containing a versioning override pinned to v1 (which is currently DRAINED)
 	var resetResp *workflowservice.ResetWorkflowExecutionResponse
@@ -3023,7 +3023,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset
 				break
 			}
 		}
-		s.Greater(resetEventID, int64(0))
+		s.Positive(resetEventID)
 		return run, resetEventID
 	}
 

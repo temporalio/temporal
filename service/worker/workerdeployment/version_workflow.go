@@ -96,11 +96,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	drainageStatusSignalChannel := workflow.GetSignalChannel(ctx, SyncDrainageSignalName)
 
-	// Version gate the new reactivation signal to avoid NDEs
-	// TODO: Add version gate before merging to avoid NDEs in production
-	// For now, removing version gate to allow tests to pass
-	reactivateSignalChannel := workflow.GetSignalChannel(ctx, ReactivateVersionSignalName)
-
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
@@ -139,44 +134,49 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		d.syncSummary(ctx)
 	})
 
-	// Add reactivation signal handler
-	d.signalHandler.signalSelector.AddReceive(reactivateSignalChannel, func(c workflow.ReceiveChannel, more bool) {
-		d.signalHandler.processingSignals++
-		defer func() { d.signalHandler.processingSignals-- }()
+	// Version gate for reactivation signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "reactivation-signal", workflow.DefaultVersion, 0) >= 0 {
+		reactivateSignalChannel := workflow.GetSignalChannel(ctx, ReactivateVersionSignalName)
 
-		c.Receive(ctx, nil) // No payload needed
+		// Add reactivation signal handler
+		d.signalHandler.signalSelector.AddReceive(reactivateSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
 
-		d.logger.Info("REACTIVATION SIGNAL RECEIVED",
-			"current_status", d.VersionState.Status,
-			"deleteVersion", d.deleteVersion,
-			"drainage_status", d.VersionState.GetDrainageInfo().GetStatus())
+			c.Receive(ctx, nil) // No payload needed
 
-		// Only reactivate if DRAINED or INACTIVE
-		if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
-			d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
+			d.logger.Info("REACTIVATION SIGNAL RECEIVED",
+				"current_status", d.VersionState.Status,
+				"deleteVersion", d.deleteVersion,
+				"drainage_status", d.VersionState.GetDrainageInfo().GetStatus())
 
-			d.logger.Info("REACTIVATING VERSION - Setting to DRAINING",
-				"version", worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion()))
+			// Only reactivate if DRAINED or INACTIVE
+			if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
+				d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
 
-			// Set up drainage info for monitoring
-			d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
-				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
-				LastChangedTime: timestamppb.New(workflow.Now(ctx)),
-				LastCheckedTime: timestamppb.New(workflow.Now(ctx)),
+				d.logger.Info("REACTIVATING VERSION - Setting to DRAINING",
+					"version", worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion()))
+
+				// Set up drainage info for monitoring
+				d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+					Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+					LastChangedTime: timestamppb.New(workflow.Now(ctx)),
+					LastCheckedTime: timestamppb.New(workflow.Now(ctx)),
+				}
+
+				d.deleteVersion = false // Clear deletion flag if set
+
+				// Use existing function to update status and sync to task queues
+				d.updateVersionStatusAfterDrainageStatusChange(ctx, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
+				d.setStateChanged() // Trigger CaN
+
+				d.logger.Info("REACTIVATION COMPLETE - Version should now be DRAINING")
+			} else {
+				d.logger.Info("REACTIVATION SIGNAL IGNORED - Version not in DRAINED or INACTIVE state",
+					"current_status", d.VersionState.Status)
 			}
-
-			d.deleteVersion = false // Clear deletion flag if set
-
-			// Use existing function to update status and sync to task queues
-			d.updateVersionStatusAfterDrainageStatusChange(ctx, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
-			d.setStateChanged() // Trigger CaN
-
-			d.logger.Info("REACTIVATION COMPLETE - Version should now be DRAINING")
-		} else {
-			d.logger.Info("REACTIVATION SIGNAL IGNORED - Version not in DRAINED or INACTIVE state",
-				"current_status", d.VersionState.Status)
-		}
-	})
+		})
+	}
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {

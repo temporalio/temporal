@@ -53,6 +53,12 @@ func (noopVersionMembershipCache) Put(
 ) {
 }
 
+type noopReactivationSignalCache struct{}
+
+func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string) bool {
+	return false // Always return false to skip sending signals in tests
+}
+
 var (
 	emptyOptions            = &workflowpb.WorkflowExecutionOptions{}
 	unpinnedOverrideOptions = &workflowpb.WorkflowExecutionOptions{
@@ -263,8 +269,8 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.shardContext,
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
-		noopVersionMembershipCache{}, // cache not meant to be used in this test
-		nil,                          // reactivationSignalCache not meant to be used in this test
+		noopVersionMembershipCache{},  // cache not meant to be used in this test
+		noopReactivationSignalCache{}, // cache not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)
