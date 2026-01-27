@@ -162,10 +162,10 @@ func TestFilterNilSearchAttributes(t *testing.T) {
 	result := FilterNilSearchAttributes(nil)
 	s.Nil(result)
 
-	// empty SearchAttributes returns itself
+	// empty SearchAttributes returns nil
 	emptySA := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{}}
 	result = FilterNilSearchAttributes(emptySA)
-	s.Equal(emptySA, result)
+	s.Nil(result)
 
 	// SearchAttributes with only valid values returns filtered copy
 	validPayload := EncodeString("value")

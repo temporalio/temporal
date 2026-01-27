@@ -97,7 +97,7 @@ func isEqual(a, b *commonpb.Payload) bool {
 // Reuses MergeMapOfPayload which already handles nil payload filtering.
 func FilterNilSearchAttributes(sa *commonpb.SearchAttributes) *commonpb.SearchAttributes {
 	if sa == nil || len(sa.GetIndexedFields()) == 0 {
-		return sa
+		return nil
 	}
 
 	filtered := MergeMapOfPayload(nil, sa.GetIndexedFields())

@@ -131,6 +131,29 @@ func (s *visibilitySuite) TestMergeCustomSearchAttributes() {
 	s.Nil(s.visibility.CustomSearchAttributes(s.mockContext))
 }
 
+func (s *visibilitySuite) TestNewVisibilityWithData_FilterNilSearchAttributes() {
+	stringKey, stringVal := "stringKey", "stringValue"
+	// SA with 1 valid and 2 nil values - nil values should be filtered out
+	customSearchAttributes := map[string]*commonpb.Payload{
+		stringKey: s.mustEncode(stringVal),
+		"nilKey1": nil,
+		"nilKey2": nil,
+	}
+	// Memo with 1 valid and 2 nil values - nil values should NOT be filtered out
+	customMemo := map[string]*commonpb.Payload{
+		stringKey: s.mustEncode(stringVal),
+		"nilKey1": nil,
+		"nilKey2": nil,
+	}
+	visibility := NewVisibilityWithData(s.mockMutableContext, customSearchAttributes, customMemo)
+	// SA should have only 1 field (nil values filtered out)
+	s.Len(visibility.SA.Get(s.mockContext).IndexedFields, 1)
+	s.NotNil(visibility.SA.Get(s.mockContext).IndexedFields[stringKey])
+	// Memo should have all 3 fields (nil values NOT filtered)
+	s.Len(visibility.Memo.Get(s.mockContext).Fields, 3)
+	s.NotNil(visibility.Memo.Get(s.mockContext).Fields[stringKey])
+}
+
 func (s *visibilitySuite) TestReplaceCustomSearchAttributes() {
 	stringKey, stringVal := "stringKey", "stringValue"
 	intKey, intVal := "intKey", 42
@@ -309,36 +332,6 @@ func (s *visibilitySuite) TestReplaceCustomMemo() {
 	s.Len(s.mockMutableContext.Tasks, 3)
 	s.assertTaskPayload(4, s.mockMutableContext.Tasks[2].Payload)
 	_, ok := s.visibility.Memo.TryGet(s.mockContext)
-	s.False(ok)
-	s.Nil(s.visibility.CustomMemo(s.mockContext))
-
-	// Test that nil values are filtered out during replace.
-	s.visibility.ReplaceCustomMemo(
-		s.mockMutableContext,
-		map[string]*commonpb.Payload{
-			stringKey: s.mustEncode(stringVal),
-			intKey:    nil, // Should be filtered out
-		},
-	)
-	s.Len(s.mockMutableContext.Tasks, 4)
-	s.assertTaskPayload(5, s.mockMutableContext.Tasks[3].Payload)
-
-	memo = s.visibility.CustomMemo(s.mockMutableContext)
-	s.Len(memo, 1, "nil values should be filtered out")
-	s.NotNil(memo[stringKey])
-	s.Nil(memo[intKey])
-
-	// Test that replacing with all nil values removes the node.
-	s.visibility.ReplaceCustomMemo(
-		s.mockMutableContext,
-		map[string]*commonpb.Payload{
-			stringKey: nil,
-			intKey:    nil,
-		},
-	)
-	s.Len(s.mockMutableContext.Tasks, 5)
-	s.assertTaskPayload(6, s.mockMutableContext.Tasks[4].Payload)
-	_, ok = s.visibility.Memo.TryGet(s.mockContext)
 	s.False(ok)
 	s.Nil(s.visibility.CustomMemo(s.mockContext))
 }
