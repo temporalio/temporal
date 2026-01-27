@@ -730,6 +730,8 @@ func (s *workflowQueueSchedulerSuite) newScheduler(queueSize int) *WorkflowQueue
 	return NewWorkflowQueueScheduler[*MockTask](
 		&WorkflowQueueSchedulerOptions{
 			QueueSize: queueSize,
+			MaxQueues: 500,
+			QueueTTL:  5 * time.Second,
 		},
 		func(task *MockTask) any { return 1 }, // All tasks to same key
 		log.NewNoopLogger(),
@@ -742,6 +744,8 @@ func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID(queueSize int) 
 	return NewWorkflowQueueScheduler[*testTaskWithID](
 		&WorkflowQueueSchedulerOptions{
 			QueueSize: queueSize,
+			MaxQueues: 500,
+			QueueTTL:  5 * time.Second,
 		},
 		func(task *testTaskWithID) any { return task.workflowID }, // Key by workflow ID
 		log.NewNoopLogger(),

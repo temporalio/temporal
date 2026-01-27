@@ -28,9 +28,8 @@ func TestWorkflowQueueSchedulerTestSuite(t *testing.T) {
 
 func (s *WorkflowQueueSchedulerTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():      true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Key(): 4,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key():   1000,
+		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():    true,
+		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key(): 1000,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -197,122 +196,6 @@ func sumMetricValues(snapshot map[string][]*metricstest.CapturedRecording, metri
 		}
 	}
 	return total
-}
-
-type WorkflowQueueSchedulerWorkerScalingTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestWorkflowQueueSchedulerWorkerScalingTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowQueueSchedulerWorkerScalingTestSuite))
-}
-
-func (s *WorkflowQueueSchedulerWorkerScalingTestSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():      true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Key(): 2, // Start with low worker count
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key():   1000,
-	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-// TestWorkerScaling verifies that worker count changes take effect during runtime.
-func (s *WorkflowQueueSchedulerWorkerScalingTestSuite) TestWorkerScaling() {
-	const workflowCount = 5
-	const signalsPerWorkflow = 20
-	const signalName = "scaling-signal"
-
-	// Workflow that processes signals sequentially with a small delay
-	processingWorkflow := func(ctx workflow.Context) (int, error) {
-		count := 0
-		signalChan := workflow.GetSignalChannel(ctx, signalName)
-
-		for {
-			var signal int
-			ok, _ := signalChan.ReceiveWithTimeout(ctx, 5*time.Second, &signal)
-			if !ok {
-				break
-			}
-			// Small processing delay to simulate work
-			_ = workflow.Sleep(ctx, 10*time.Millisecond)
-			count++
-		}
-		return count, nil
-	}
-
-	s.Worker().RegisterWorkflowWithOptions(processingWorkflow, workflow.RegisterOptions{Name: "scaling-workflow"})
-
-	// Capture metrics
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
-
-	// Start multiple workflows
-	var runs []client.WorkflowRun
-	for range workflowCount {
-		workflowID := testcore.RandomizeStr("wf-scaling")
-		run, err := s.SdkClient().ExecuteWorkflow(testcore.NewContext(), client.StartWorkflowOptions{
-			ID:        workflowID,
-			TaskQueue: s.TaskQueue(),
-		}, processingWorkflow)
-		s.NoError(err)
-		runs = append(runs, run)
-	}
-
-	time.Sleep(200 * time.Millisecond)
-
-	// Send signals to all workflows concurrently
-	var wg sync.WaitGroup
-	for _, run := range runs {
-		for j := range signalsPerWorkflow {
-			wg.Add(1)
-			go func(r client.WorkflowRun, num int) {
-				defer wg.Done()
-				_ = s.SdkClient().SignalWorkflow(testcore.NewContext(), r.GetID(), r.GetRunID(), signalName, num)
-			}(run, j)
-		}
-	}
-	wg.Wait()
-
-	// Increase worker count mid-test
-	s.OverrideDynamicConfig(
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount,
-		8, // Increase from 2 to 8
-	)
-
-	// Wait for all workflows to complete
-	for _, run := range runs {
-		var result int
-		err := run.Get(testcore.NewContext(), &result)
-		s.NoError(err)
-		s.Equal(signalsPerWorkflow, result, "Each workflow should process all its signals")
-	}
-
-	// Check metrics
-	snapshot := capture.Snapshot()
-	activeWorkers := getLatestGaugeValue(snapshot, metrics.WorkflowQueueSchedulerActiveWorkers.Name())
-
-	s.Logger.Info("Worker scaling test metrics",
-		tag.NewFloat64("active_workers", activeWorkers),
-		tag.NewInt64("tasks_submitted", sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())),
-		tag.NewInt64("tasks_completed", sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksCompleted.Name())))
-
-	// Verify worker count was updated (should reflect the increased count)
-	// Note: The exact value depends on timing, but it should be > 2 if scaling happened
-}
-
-// getLatestGaugeValue returns the most recent value for a gauge metric.
-func getLatestGaugeValue(snapshot map[string][]*metricstest.CapturedRecording, metricName string) float64 {
-	recordings := snapshot[metricName]
-	if len(recordings) == 0 {
-		return 0
-	}
-	// Return the last recorded value
-	last := recordings[len(recordings)-1]
-	if v, ok := last.Value.(float64); ok {
-		return v
-	}
-	return 0
 }
 
 // getTimerStats returns count, total, average, min, max, p50, p90, p99 for a timer metric.
@@ -565,9 +448,8 @@ func TestWorkflowQueueSchedulerActivityTestSuite(t *testing.T) {
 
 func (s *WorkflowQueueSchedulerActivityTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():      true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Key(): 4,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key():   1000,
+		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():    true,
+		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key(): 1000,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -586,9 +468,8 @@ func TestWorkflowQueueSchedulerContentionTestSuite(t *testing.T) {
 func (s *WorkflowQueueSchedulerContentionTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		// Enable WorkflowQueueScheduler
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():      true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Key(): 50,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key():   500,
+		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():    true,
+		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key(): 500,
 		// Increase pending activities limit to allow more parallel activities
 		dynamicconfig.NumPendingActivitiesLimitError.Key(): 5000,
 		// Set FIFO worker count to 50 to increase contention

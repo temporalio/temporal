@@ -1791,11 +1791,6 @@ that processes tasks for contended workflows sequentially to avoid busy workflow
 		`TaskSchedulerWorkflowQueueSchedulerQueueSize is the buffer size for each workflow's task channel in the workflow queue scheduler.
 Changes to this value require a restart to take effect.`,
 	)
-	TaskSchedulerWorkflowQueueSchedulerWorkerCount = NewGlobalIntSetting(
-		"history.taskSchedulerWorkflowQueueSchedulerWorkerCount",
-		128,
-		`TaskSchedulerWorkflowQueueSchedulerWorkerCount is the number of workers for the workflow queue scheduler`,
-	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",

@@ -36,19 +36,6 @@ import (
 
 var _ Scheduler[Task] = (*WorkflowQueueScheduler[Task])(nil)
 
-const (
-	// defaultQueueTTL is how long a queue goroutine waits for new tasks before exiting.
-	// This allows the queue to handle bursts of tasks without constantly creating/destroying goroutines.
-	defaultQueueTTL = 5 * time.Second
-
-	// defaultQueueBufferSize is the buffer size for each queue's task channel.
-	defaultQueueBufferSize = 100
-
-	// defaultMaxQueues is the maximum number of concurrent workflow queues.
-	// This prevents unbounded goroutine growth under high cardinality workloads.
-	defaultMaxQueues = 500
-)
-
 type (
 	// WorkflowQueueSchedulerOptions contains configuration for the WorkflowQueueScheduler.
 	WorkflowQueueSchedulerOptions struct {
@@ -88,15 +75,19 @@ type (
 		shutdownChan chan struct{}
 		shutdownWG   sync.WaitGroup
 
-		options    *WorkflowQueueSchedulerOptions
-		queueKeyFn QueueKeyFn[T]
-		logger     log.Logger
+		options        *WorkflowQueueSchedulerOptions
+		queueKeyFn     QueueKeyFn[T]
+		logger         log.Logger
 		metricsHandler metrics.Handler
-		timeSource clock.TimeSource
+		timeSource     clock.TimeSource
 
 		// mu protects the queues map
 		mu     sync.RWMutex
 		queues map[any]*workflowQueue[T]
+
+		// queueRemovedCh is signaled when a queue is removed, allowing blocked
+		// Submit() calls to retry creating a queue when at max capacity
+		queueRemovedCh chan struct{}
 	}
 )
 
@@ -108,25 +99,15 @@ func NewWorkflowQueueScheduler[T Task](
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 ) *WorkflowQueueScheduler[T] {
-	opts := *options
-	if opts.QueueSize <= 0 {
-		opts.QueueSize = defaultQueueBufferSize
-	}
-	if opts.MaxQueues <= 0 {
-		opts.MaxQueues = defaultMaxQueues
-	}
-	if opts.QueueTTL <= 0 {
-		opts.QueueTTL = defaultQueueTTL
-	}
-
 	s := &WorkflowQueueScheduler[T]{
 		shutdownChan:   make(chan struct{}),
-		options:        &opts,
+		options:        options,
 		queueKeyFn:     queueKeyFn,
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		timeSource:     timeSource,
 		queues:         make(map[any]*workflowQueue[T]),
+		queueRemovedCh: make(chan struct{}, 1),
 	}
 	s.status.Store(common.DaemonStatusInitialized)
 	return s
@@ -152,6 +133,12 @@ func (s *WorkflowQueueScheduler[T]) Stop() {
 		close(q.taskCh)
 	}
 	s.mu.Unlock()
+
+	// Wake up any Submit() calls waiting for queue capacity (non-blocking)
+	select {
+	case s.queueRemovedCh <- struct{}{}:
+	default:
+	}
 
 	// Wait for all queue goroutines to finish
 	go func() {
@@ -186,18 +173,16 @@ func (s *WorkflowQueueScheduler[T]) Submit(task T) {
 
 	// Try to get existing queue or create new one
 	q, created := s.getOrCreateQueue(key)
-	if q == nil {
-		// Failed to create queue (at max capacity and TrySubmit semantics)
-		// For Submit, we block until we can create a queue
-		for q == nil {
-			select {
-			case <-s.shutdownChan:
-				task.Abort()
-				metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
-				return
-			case <-time.After(10 * time.Millisecond):
-				q, created = s.getOrCreateQueue(key)
-			}
+	for q == nil {
+		// Failed to create queue (at max capacity), wait for capacity
+		select {
+		case <-s.shutdownChan:
+			task.Abort()
+			metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+			return
+		case <-s.queueRemovedCh:
+			// Queue removed, retry
+			q, created = s.getOrCreateQueue(key)
 		}
 	}
 
@@ -264,6 +249,12 @@ func (s *WorkflowQueueScheduler[T]) getOrCreateQueue(key any) (*workflowQueue[T]
 	// Slow path: need to create queue
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Check if scheduler is stopped - prevents creating queues during shutdown
+	// which could cause WaitGroup misuse and delayed shutdown
+	if s.isStopped() {
+		return nil, false
+	}
 
 	// Double-check after acquiring write lock
 	if q, exists := s.queues[key]; exists {
@@ -344,12 +335,18 @@ func (s *WorkflowQueueScheduler[T]) runQueueWorker(key any, q *workflowQueue[T])
 	}
 }
 
-// removeQueue removes a queue from the map.
+// removeQueue removes a queue from the map and signals waiting Submit() calls.
 func (s *WorkflowQueueScheduler[T]) removeQueue(key any) {
 	s.mu.Lock()
 	delete(s.queues, key)
 	queueCount := len(s.queues)
 	s.mu.Unlock()
+
+	// Signal any Submit() calls waiting for queue capacity (non-blocking)
+	select {
+	case s.queueRemovedCh <- struct{}{}:
+	default:
+	}
 
 	metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(queueCount))
 }

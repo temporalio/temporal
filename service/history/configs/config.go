@@ -123,8 +123,7 @@ type Config struct {
 	// WorkflowQueueScheduler settings for sequential per-workflow task processing
 	TaskSchedulerEnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
 	// TaskSchedulerWorkflowQueueSchedulerQueueSize requires restart to take effect
-	TaskSchedulerWorkflowQueueSchedulerQueueSize   dynamicconfig.IntPropertyFn
-	TaskSchedulerWorkflowQueueSchedulerWorkerCount dynamicconfig.TypedSubscribable[int]
+	TaskSchedulerWorkflowQueueSchedulerQueueSize dynamicconfig.IntPropertyFn
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -520,11 +519,10 @@ func NewConfig(
 		TaskSchedulerGlobalMaxQPS:                      dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
 		TaskSchedulerMaxQPS:                            dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
 		TaskSchedulerNamespaceMaxQPS:                   dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
-		TaskSchedulerGlobalNamespaceMaxQPS:             dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
-		TaskSchedulerInactiveChannelDeletionDelay:      dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
-		TaskSchedulerEnableWorkflowQueueScheduler:      dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Get(dc),
-		TaskSchedulerWorkflowQueueSchedulerQueueSize:   dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Get(dc),
-		TaskSchedulerWorkflowQueueSchedulerWorkerCount: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerWorkerCount.Subscribe(dc),
+		TaskSchedulerGlobalNamespaceMaxQPS:            dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
+		TaskSchedulerInactiveChannelDeletionDelay:    dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskSchedulerEnableWorkflowQueueScheduler:    dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Get(dc),
+		TaskSchedulerWorkflowQueueSchedulerQueueSize: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),
