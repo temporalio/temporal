@@ -8,8 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc/metadata"
-
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -92,6 +91,7 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 		}}, nil
 	}
 
+	//nolint:staticcheck // SA1019 Using deprecated testcore.TaskPoller for backwards compatibility
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
@@ -236,6 +236,7 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_TransientWFT_Schedule
 		}}, nil
 	}
 
+	//nolint:staticcheck // SA1019 Using deprecated testcore.TaskPoller for backwards compatibility
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),
@@ -346,6 +347,7 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 		}}, nil
 	}
 
+	//nolint:staticcheck // SA1019 Using deprecated testcore.TaskPoller for backwards compatibility
 	poller := &testcore.TaskPoller{
 		Client:              s.FrontendClient(),
 		Namespace:           s.Namespace().String(),

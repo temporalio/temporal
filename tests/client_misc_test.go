@@ -95,10 +95,13 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	future, err := s.SdkClient().ExecuteWorkflow(ctx, options, parentWorkflow)
 	s.NoError(err)
 
+	// Note: The transient WorkflowTaskScheduled and WorkflowTaskStarted events that led to this failure
+	// are dropped from history after the task fails, so we only check for the WorkflowTaskFailed event
+	// and the subsequent retry attempt.
 	s.WaitForHistoryEventsSuffix(`
- WorkflowTaskScheduled
- WorkflowTaskStarted // 26 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED
  WorkflowTaskFailed {"Cause":26,"Failure":{"Message":"PendingChildWorkflowsLimitExceeded: the number of pending child workflow executions, 10, has reached the per-workflow limit of 10"}}
+ WorkflowTaskScheduled
+ WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowID})
 	}, 10*time.Second, 500*time.Millisecond)
@@ -178,11 +181,13 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	}
 
 	// verify that the workflow's history contains a task that failed because it would otherwise exceed the pending
-	// child workflow limit
+	// child workflow limit. Note: The transient WorkflowTaskScheduled and WorkflowTaskStarted events that led to
+	// this failure are dropped from history after the task fails, so we only check for the WorkflowTaskFailed
+	// event and the subsequent retry attempt.
 	s.WaitForHistoryEventsSuffix(`
- 19 WorkflowTaskScheduled
- 20 WorkflowTaskStarted // 27 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED
  21 WorkflowTaskFailed {"Cause":27,"Failure":{"Message":"PendingActivitiesLimitExceeded: the number of pending activities, 10, has reached the per-workflow limit of 10"}}
+ 22 WorkflowTaskScheduled
+ 23 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()})
 	}, 3*time.Second, 500*time.Millisecond)
@@ -326,11 +331,15 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 			s.Error(err)
 		}
 
+		// Note: After the WorkflowTaskFailed, a transient retry task is created (events 5 and 6).
+		// With the fix for #7741, these transient events are now visible in GetHistory.
 		s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 28 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":28,"Failure":{"Message":"PendingSignalsLimitExceeded: the number of pending signals to external workflows, 10, has reached the per-workflow limit of 10"}}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)

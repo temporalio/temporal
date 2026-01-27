@@ -374,9 +374,11 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 		WorkflowId: id,
 		RunId:      we0.GetRunId(),
 	})
+	// With the fix for #7741, a transient WorkflowTaskScheduled event (event 5) is now visible after the failure
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, historyEvents)
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, historyEvents)
 }

@@ -178,6 +178,8 @@ WaitForStickyTimeoutLoop:
 	}
 
 	events := s.GetHistory(s.Namespace().String(), workflowExecution)
+	// Note: With the fix for #7741, transient WorkflowTaskScheduled events are now visible in GetHistory.
+	// Event 16 is the transient task scheduled after the second workflow task failure (event 15).
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -193,7 +195,8 @@ WaitForStickyTimeoutLoop:
  12 WorkflowExecutionSignaled
  13 WorkflowTaskScheduled
  14 WorkflowTaskStarted
- 15 WorkflowTaskFailed`, events)
+ 15 WorkflowTaskFailed
+ 16 WorkflowTaskScheduled`, events)
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
@@ -366,6 +369,8 @@ WaitForStickyTimeoutLoop:
 	}
 
 	events := s.GetHistory(s.Namespace().String(), workflowExecution)
+	// Note: With the fix for #7741, transient WorkflowTaskScheduled events are now visible in GetHistory.
+	// Event 16 is the transient task scheduled after the second workflow task failure (event 15).
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -381,7 +386,8 @@ WaitForStickyTimeoutLoop:
  12 WorkflowExecutionSignaled
  13 WorkflowTaskScheduled
  14 WorkflowTaskStarted
- 15 WorkflowTaskFailed`, events)
+ 15 WorkflowTaskFailed
+ 16 WorkflowTaskScheduled`, events)
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
