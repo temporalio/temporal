@@ -201,6 +201,7 @@ func TestSomething(t *testing.T) {
 - [ ] Remove `"github.com/stretchr/testify/suite"` import
 - [ ] **Count tests after migration**: Run `go test -v ./tests/... -run "^TestXxx$" -list ".*"` and verify the count matches
 - [ ] Run tests to verify functionality is preserved
+- [ ] run `make fmt-imports`
 
 ---
 
