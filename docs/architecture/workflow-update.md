@@ -290,8 +290,8 @@ stateDiagram-v2
     blockCompleted --> wfCompletedFailure: Workflow completed/continuing after Update accepted
     blockCompleted --> updateAbortedError: Registry cleared
 ```
-`ErrWorkflowClosing` and `AbortedByServerErr` are both SDK-retryable errors.
-Even though they are set on futures, they will not be returned to the API caller but will be retried automatically by the SDK.
+`ErrWorkflowClosing` and `AbortedByServerErr` are both internally retryable and SDK-retryable errors.
+The server will first attempt internal retries, and only if those fail will the error be returned to the SDK for client-side retry.
 
 ### Timeouts
 The API caller can specify the time it is willing to wait before the specified stage is reached.
