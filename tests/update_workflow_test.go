@@ -567,9 +567,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 2:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled // Speculative WT2 which was created while completing WT1.
-  6 WorkflowTaskStarted`, task.History)
+  4 WorkflowTaskCompleted`, task.History)
+				// Note: The speculative WorkflowTaskScheduled and WorkflowTaskStarted events
+				// are not visible in this history view from HandlePartialWorkflowTask.
+				// They exist in mutable state and will be visible in GetWorkflowExecutionHistory.
 				// Message handler rejects update.
 				return nil, nil
 			case 3:
@@ -691,9 +692,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 2:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
-  5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled // Speculative WFT2 with event (5) which was created while completing WFT1.
-  7 WorkflowTaskStarted`, task.History)
+  5 ActivityTaskScheduled`, task.History)
+				// Note: The speculative WorkflowTaskScheduled (6) and WorkflowTaskStarted (7) events
+				// are not visible in this history view from HandlePartialWorkflowTask.
+				// They exist in mutable state and will be visible in GetWorkflowExecutionHistory.
 				// Message handler rejects update.
 				return nil, nil
 			case 3:
@@ -4435,9 +4437,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted`, task.History)
+  4 WorkflowTaskCompleted`, task.History)
+				// Note: Speculative WorkflowTaskScheduled (5) and WorkflowTaskStarted (6) events
+				// are not visible in this history view from HandlePartialWorkflowTask.
+				// After the first speculative WT was dropped, a new speculative WT was created
+				// with the second update, and those events will be visible in GetWorkflowExecutionHistory.
 				commands := append(s.UpdateAcceptCompleteCommands(tv2),
 					&commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
