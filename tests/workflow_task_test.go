@@ -800,11 +800,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
+	// With the fix for #7741, transient events remain visible while the task is active
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
 	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{

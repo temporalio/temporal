@@ -243,11 +243,15 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		}, cancelWorkflowsInRange, 0, numTargetWorkflows)
 		s.NoError(err)
 
+		// Note: After the WorkflowTaskFailed, a transient retry task is created (events 5 and 6).
+		// With the fix for #7741, these transient events are now visible in GetHistory.
 		s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 29 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 5*time.Second, 500*time.Millisecond)
