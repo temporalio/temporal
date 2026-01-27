@@ -10,7 +10,6 @@ import (
 // worker request.
 type Handler func(
 	chasmCtx chasm.MutableContext,
-	backend Backend,
 	validator Validator,
 	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
@@ -21,10 +20,6 @@ type Validator interface {
 	// IsValidPayloadSize validates that a payload size is within the configured limits.
 	IsValidPayloadSize(size int) bool
 }
-
-// Backend provides access to workflow state needed by command handlers.
-// This is intentionally minimal - handlers should use chasmCtx for CHASM operations.
-type Backend interface{}
 
 // FailWorkflowTaskError is an error that can be returned from a [Handler] to fail the current workflow task and
 // optionally terminate the entire workflow.

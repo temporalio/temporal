@@ -23,7 +23,6 @@ func registerCommandHandlers(registry *command.Registry) error {
 
 func handleScheduleCommand(
 	chasmCtx chasm.MutableContext,
-	ms command.Backend,
 	validator command.Validator,
 	workflowTaskCompletedEventID int64,
 	cmd *commandpb.Command,
@@ -34,7 +33,6 @@ func handleScheduleCommand(
 
 func handleCancelCommand(
 	chasmCtx chasm.MutableContext,
-	ms command.Backend,
 	validator command.Validator,
 	workflowTaskCompletedEventID int64,
 	cmd *commandpb.Command,
