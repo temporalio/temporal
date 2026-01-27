@@ -1453,10 +1453,14 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 }
 
 func makeDeploymentQuery(version string) string {
-	var statusFilter string
-	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(version))
-	statusFilter = "= 'Running'"
-	return fmt.Sprintf("%s %s AND %s %s", sadefs.BuildIds, deploymentFilter, sadefs.ExecutionStatus, statusFilter)
+	deploymentFilter := fmt.Sprintf("= '%s'", version)
+	statusFilter := "= 'Running'"
+	behaviorFilter := "= 'Pinned'"
+	return fmt.Sprintf("%s %s AND %s %s AND %s %s",
+		sadefs.TemporalWorkerDeploymentVersion, deploymentFilter,
+		sadefs.TemporalWorkflowVersioningBehavior, behaviorFilter,
+		sadefs.ExecutionStatus, statusFilter,
+	)
 }
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {
