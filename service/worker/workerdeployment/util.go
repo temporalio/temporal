@@ -54,11 +54,11 @@ const (
 	// of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions)
 
 	// Signals
-	ForceCANSignalName        = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
-	SyncDrainageSignalName    = "sync-drainage-status"
-	TerminateDrainageSignal   = "terminate-drainage"
-	SyncVersionSummarySignal  = "sync-version-summary"
-	PropagationCompleteSignal = "propagation-complete"
+	ForceCANSignalName          = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName      = "sync-drainage-status"
+	TerminateDrainageSignal     = "terminate-drainage"
+	SyncVersionSummarySignal    = "sync-version-summary"
+	PropagationCompleteSignal   = "propagation-complete"
 	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
 
 	// Queries

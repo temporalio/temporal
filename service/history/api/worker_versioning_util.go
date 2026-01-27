@@ -18,9 +18,9 @@ import (
 const ReactivateVersionSignalName = "reactivate-version"
 
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
-// when workflows are pinned to a potentially DRAINED/INACTIVE version.
-// This is a fire-and-forget operation - errors are logged but don't fail the operation.
-// If signalCache is provided, it deduplicates signals within the cache TTL window.
+// when workflows are pinned to a potentially DRAINED/INACTIVE version. It also deduplicates
+// signals within the cache TTL window.
+// This is a fire-and-forget operation - errors are logged but don't fail the calling operation.
 func ReactivateVersionWorkflowIfPinned(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -75,7 +75,7 @@ func ReactivateVersionWorkflowIfPinned(
 			},
 			SignalName: ReactivateVersionSignalName,
 			Input:      nil, // No payload needed
-			Identity:   "system-versioning-override-handler",
+			Identity:   "history-service",
 		},
 	}
 

@@ -129,7 +129,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
 			d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
-			d.setStateChanged() // Ensure we trigger CaN when status changes to DRAINED via signal
 		}
 		d.syncSummary(ctx)
 	})
@@ -145,17 +144,9 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 
 			c.Receive(ctx, nil) // No payload needed
 
-			d.logger.Info("REACTIVATION SIGNAL RECEIVED",
-				"current_status", d.VersionState.Status,
-				"deleteVersion", d.deleteVersion,
-				"drainage_status", d.VersionState.GetDrainageInfo().GetStatus())
-
 			// Only reactivate if DRAINED or INACTIVE
 			if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
 				d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
-
-				d.logger.Info("REACTIVATING VERSION - Setting to DRAINING",
-					"version", worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion()))
 
 				// Set up drainage info for monitoring
 				d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
@@ -169,11 +160,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 				// Use existing function to update status and sync to task queues
 				d.updateVersionStatusAfterDrainageStatusChange(ctx, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
 				d.setStateChanged() // Trigger CaN
-
-				d.logger.Info("REACTIVATION COMPLETE - Version should now be DRAINING")
-			} else {
-				d.logger.Info("REACTIVATION SIGNAL IGNORED - Version not in DRAINED or INACTIVE state",
-					"current_status", d.VersionState.Status)
 			}
 		})
 	}
@@ -185,14 +171,6 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 }
 
 func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
-	// Log when workflow starts/restarts after CAN
-	d.logger.Info("VERSION WORKFLOW STARTED",
-		"status", d.VersionState.Status,
-		"deleteVersion", d.deleteVersion,
-		"drainage_status", d.VersionState.GetDrainageInfo().GetStatus(),
-		"version", worker_versioning.WorkerDeploymentVersionToStringV32(d.VersionState.GetVersion()),
-		"workflow_time", workflow.Now(ctx).Format("15:04:05.000"))
-
 	if d.GetVersionState().Version == nil {
 		return fmt.Errorf("version cannot be nil on start")
 	}
@@ -283,40 +261,20 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
 	// there are no pending updates/signals and the state has changed.
 	err := workflow.Await(ctx, func() bool {
-		canContinue := (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
+		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
 				// And there is a force CaN or a propagated state change
 				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0)))
-
-		if canContinue {
-			d.logger.Info("VERSION WORKFLOW READY TO CAN OR COMPLETE",
-				"deleteVersion", d.deleteVersion,
-				"status", d.VersionState.Status,
-				"stateChanged", d.stateChanged,
-				"forceCAN", d.forceCAN,
-				"asyncPropagationsInProgress", d.asyncPropagationsInProgress,
-				"signalsPending", d.signalHandler.signalSelector.HasPending(),
-				"processingSignals", d.signalHandler.processingSignals)
-		}
-		return canContinue
 	})
 	if err != nil {
 		return err
 	}
 
 	if d.deleteVersion {
-		d.logger.Info("VERSION WORKFLOW COMPLETING - Version was deleted")
 		return nil
 	}
 
-	d.logger.Info("VERSION WORKFLOW DOING CONTINUE-AS-NEW",
-		"status", d.VersionState.Status,
-		"drainage_status", d.VersionState.GetDrainageInfo().GetStatus(),
-		"deleteVersion", d.deleteVersion,
-		"stateChanged", d.stateChanged,
-		"forceCAN", d.forceCAN,
-		"asyncPropagationsInProgress", d.asyncPropagationsInProgress)
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	nextArgs.VersionState = d.VersionState
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
