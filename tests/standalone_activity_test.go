@@ -2293,12 +2293,9 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() 
 			})
 			require.NoError(t, err)
 			require.NotNil(t, describeResp)
-
-			// Verify top-level response fields
 			require.Equal(t, startResp.RunId, describeResp.GetRunId())
 			protorequire.ProtoEqual(t, defaultInput, describeResp.GetInput())
-
-			// Verify Info fields for completed activity
+			// info fields
 			info := describeResp.GetInfo()
 			require.NotNil(t, info)
 			require.Equal(t, activityID, info.GetActivityId())
@@ -2314,8 +2311,8 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() 
 			protorequire.ProtoEqual(t, defaultUserMetadata, info.GetUserMetadata())
 			require.Equal(t, 45*time.Second, info.GetHeartbeatTimeout().AsDuration())
 			require.Equal(t, defaultStartToCloseTimeout, info.GetStartToCloseTimeout().AsDuration())
-
-			// Verify time-based fields for completed activity
+			require.Equal(t, defaultIdentity, info.GetLastWorkerIdentity())
+			// time fields
 			require.NotNil(t, info.GetScheduleTime())
 			require.Positive(t, info.GetScheduleTime().AsTime().Unix())
 			require.NotNil(t, info.GetLastStartedTime())
@@ -2325,10 +2322,6 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() 
 			require.GreaterOrEqual(t, info.GetCloseTime().AsTime().UnixNano(), info.GetLastStartedTime().AsTime().UnixNano())
 			require.Positive(t, info.GetStateTransitionCount())
 
-			// Worker identity should be set since activity was started
-			require.Equal(t, defaultIdentity, info.GetLastWorkerIdentity())
-
-			// Verify Outcome
 			tc.outcomeValidator(t, describeResp)
 		})
 	}
