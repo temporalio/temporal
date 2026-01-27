@@ -524,6 +524,11 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	if c.namespace.ActiveClusterName(c.workflowID) != c.ClusterMetadata.GetCurrentClusterName() {
 		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header, c.workflowID) {
 			c.forwarded = true
+			c.logger.Info("Forwarding Nexus completion callback to active cluster",
+				tag.WorkflowID(c.workflowID),
+				tag.SourceCluster(c.ClusterMetadata.GetCurrentClusterName()),
+				tag.TargetCluster(c.namespace.ActiveClusterName(c.workflowID)),
+			)
 			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(methodNameForMetrics)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(c.workflowID), c.namespace.Name().String(), retErr)
@@ -584,9 +589,11 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 	if err != nil {
 		redirectAllowed = true
 	}
+	// Note: We don't check len(ClusterNames) > 1 here because the caller already
+	// verified ActiveClusterName(businessID) != currentCluster, which means there
+	// IS another cluster to forward to.
 	return redirectAllowed &&
 		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
-		len(c.namespace.ClusterNames(businessID)) > 1 &&
 		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
 }
