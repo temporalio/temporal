@@ -2362,6 +2362,28 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			},
 		},
 		{
+			name: "cancellation",
+			taskCompletionFn: func(ctx context.Context, taskToken []byte, activityID, runID string) error {
+				_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+					Namespace:  s.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      runID,
+				})
+				if err != nil {
+					return err
+				}
+				_, err = s.FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+					Namespace: s.Namespace().String(),
+					TaskToken: taskToken,
+				})
+				return err
+			},
+			completionValidationFn: func(t *testing.T, response *workflowservice.PollActivityExecutionResponse) {
+				require.NotNil(t, response.GetOutcome().GetFailure())
+				require.NotNil(t, response.GetOutcome().GetFailure().GetCanceledFailureInfo())
+			},
+		},
+		{
 			name: "termination",
 			taskCompletionFn: func(ctx context.Context, _ []byte, activityID, runID string) error {
 				_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
