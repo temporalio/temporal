@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
@@ -36,6 +38,8 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	cases := []struct {
@@ -73,6 +77,8 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	cases := []struct {
@@ -116,6 +122,8 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	cases := []struct {
@@ -172,6 +180,8 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMap,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.WorkflowID, "test-schedule-id")
@@ -194,6 +204,8 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
 		searchattribute.TestNameTypeMapWithScheduleId,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	values, err := vi.Values(searchattribute.ScheduleID, searchattribute.ScheduleID, "test-workflow-id")

@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -113,6 +114,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(testNamespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
@@ -126,6 +128,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		disableOrderByClause:           visibilityDisableOrderByClause,
 		enableManualPagination:         visibilityEnableManualPagination,
 		metricsHandler:                 s.mockMetricsHandler,
+		logger:                         log.NewNoopLogger(),
 	}
 }
 
@@ -197,7 +200,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// test custom sort
 	request.Query = `Order bY WorkflowId`
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery).MustNot(namespaceDivisionExists)
-	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
+	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
 	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
@@ -1412,6 +1415,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 				disableOrderByClause:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 				enableManualPagination:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.manualPagination),
 				metricsHandler:                 s.mockMetricsHandler,
+				logger:                         log.NewNoopLogger(),
 			}
 			params := &client.SearchParameters{
 				Index:  testIndex,

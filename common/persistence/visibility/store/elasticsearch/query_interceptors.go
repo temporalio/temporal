@@ -6,11 +6,16 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 )
+
+var elasticsearchQueryInvalidComparisonCounter = metrics.NewCounterDef("elasticsearch_query_invalid_comparison")
 
 type (
 	nameInterceptor struct {
@@ -23,6 +28,8 @@ type (
 	valuesInterceptor struct {
 		namespace               namespace.Name
 		searchAttributesTypeMap searchattribute.NameTypeMap
+		metricsHandler          metrics.Handler
+		logger                  log.Logger
 	}
 )
 
@@ -41,10 +48,14 @@ func NewNameInterceptor(
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *valuesInterceptor {
 	return &valuesInterceptor{
 		namespace:               namespaceName,
 		searchAttributesTypeMap: saTypeMap,
+		metricsHandler:          metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
+		logger:                  logger,
 	}
 }
 
@@ -123,7 +134,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
-		value, err = validateValueType(name, value, fieldType)
+		value, err = vi.validateValueType(name, value, fieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -159,7 +170,7 @@ func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 	return value, nil
 }
 
-func validateValueType(name string, value any, fieldType enumspb.IndexedValueType) (any, error) {
+func (vi *valuesInterceptor) validateValueType(name string, value any, fieldType enumspb.IndexedValueType) (any, error) {
 	switch fieldType {
 	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		switch v := value.(type) {
@@ -171,6 +182,17 @@ func validateValueType(name string, value any, fieldType enumspb.IndexedValueTyp
 				return nil, query.NewConverterError(
 					"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
 			}
+			elasticsearchQueryInvalidComparisonCounter.With(vi.metricsHandler).Record(1)
+			vi.logger.Warn(
+				fmt.Sprintf(
+					"[Visibility] invalid value type comparison: value `%v` of type %T comparing against search attribute %q of type %s",
+					value,
+					value,
+					name,
+					fieldType.String(),
+				),
+				tag.WorkflowNamespace(vi.namespace.String()),
+			)
 		default:
 			return nil, query.NewConverterError(
 				"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
@@ -195,6 +217,22 @@ func validateValueType(name string, value any, fieldType enumspb.IndexedValueTyp
 		default:
 			return nil, query.NewConverterError(
 				"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
+		}
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if _, ok := value.(string); !ok {
+			elasticsearchQueryInvalidComparisonCounter.With(vi.metricsHandler).Record(1)
+			vi.logger.Warn(
+				fmt.Sprintf(
+					"[Visibility] invalid value type comparison: value `%v` of type %T comparing against search attribute %q of type %s",
+					value,
+					value,
+					name,
+					fieldType.String(),
+				),
+				tag.WorkflowNamespace(vi.namespace.String()),
+			)
 		}
 	}
 	return value, nil
