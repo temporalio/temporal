@@ -323,6 +323,8 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		var commandHandler chasmcommand.Handler
 		var chasmCtx chasm.MutableContext
 
+		// TODO: need to handle migration between HSM and CHASM
+
 		if handler.mutableState.ChasmEnabled() {
 			// Use CHASM command handler from the Workflow component.
 			var wf *chasmworkflow.Workflow
