@@ -18,7 +18,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
-var elasticsearchQueryConverterCmpInvalidTypeCounter = metrics.NewCounterDef("elasticsearch_query_converter_cmp_invalid_type")
+var elasticsearchQueryInvalidComparisonCounter = metrics.NewCounterDef("elasticsearch_query_invalid_comparison")
 
 type (
 	nameInterceptor struct {
@@ -183,7 +183,7 @@ func (vi *valuesInterceptor) validateValueType(name string, value any, fieldType
 				return nil, query.NewConverterError(
 					"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
 			}
-			elasticsearchQueryConverterCmpInvalidTypeCounter.With(vi.metricsHandler).Record(1)
+			elasticsearchQueryInvalidComparisonCounter.With(vi.metricsHandler).Record(1)
 			vi.logger.Warn(
 				fmt.Sprintf(
 					"[Visibility] invalid value type comparison: value `%v` of type %T comparing against search attribute %q of type %s",
@@ -223,7 +223,7 @@ func (vi *valuesInterceptor) validateValueType(name string, value any, fieldType
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		enumspb.INDEXED_VALUE_TYPE_TEXT:
 		if _, ok := value.(string); !ok {
-			elasticsearchQueryConverterCmpInvalidTypeCounter.With(vi.metricsHandler).Record(1)
+			elasticsearchQueryInvalidComparisonCounter.With(vi.metricsHandler).Record(1)
 			vi.logger.Warn(
 				fmt.Sprintf(
 					"[Visibility] invalid value type comparison: value `%v` of type %T comparing against search attribute %q of type %s",
