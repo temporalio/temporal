@@ -7,7 +7,6 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
@@ -95,13 +94,13 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 
 func workflowVerifierProvider() WorkflowVerifier {
 	return func(
-		ctx context.Context,
-		request *verifyReplicationTasksRequest,
-		remoteAdminClient adminservice.AdminServiceClient,
-		localAdminClient adminservice.AdminServiceClient,
-		ns *namespace.Namespace,
-		execution *replicationspb.MigrationExecutionInfo,
-		mu *adminservice.DescribeMutableStateResponse,
+		_ context.Context,
+		_ *verifyReplicationTasksRequest,
+		_ adminservice.AdminServiceClient,
+		_ adminservice.AdminServiceClient,
+		_ *namespace.Namespace,
+		_ *ExecutionInfo,
+		_ *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error) {
 		return verifyResult{
 			status: verified,

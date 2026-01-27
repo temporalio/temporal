@@ -79,7 +79,8 @@ var (
 	filterByExecutionStatus = fmt.Sprintf("map[term:map[ExecutionStatus:%s]", testStatus.String())
 	filterByNSDivision      = fmt.Sprintf("map[term:map[TemporalNamespaceDivision:%s]", testNSDivision)
 
-	namespaceDivisionIsNull = elastic.NewBoolQuery().MustNot(
+	namespaceDivisionExists = elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision)
+	namespaceDivisionIsNull = newBoolQuery().MustNot(
 		elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision),
 	)
 )
@@ -219,7 +220,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	filterQuery = elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208")
 	boolQuery := elastic.NewBoolQuery().Filter(
 		matchNamespaceQuery,
-		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
+		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
 	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
@@ -235,7 +236,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 	// test for open with namespace division
 	request.Query = `WorkflowId="guid-2208" and TemporalNamespaceDivision="hidden-stuff"`
 	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
-	filterQuery = elastic.NewBoolQuery().Filter(elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208"), matchNSDivision)
+	filterQuery = newBoolQuery().Filter(elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208"), matchNSDivision)
 	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
 	p, err = s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
@@ -292,7 +293,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2DisableOrderByClause() {
 	filterQuery := elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208")
 	boolQuery := elastic.NewBoolQuery().Filter(
 		matchNamespaceQuery,
-		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
+		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
 	p, err := s.visibilityStore.BuildSearchParametersV2(request, s.visibilityStore.GetListFieldSorter)
 	s.NoError(err)
@@ -551,10 +552,9 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery(sadefs.WorkflowID, "wid")).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{},
 				GroupBy: []string{},
@@ -566,10 +566,9 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery(sadefs.WorkflowID, "wid")).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{elastic.NewFieldSort(sadefs.WorkflowID).Missing("_last")},
 				GroupBy: []string{},
@@ -581,10 +580,9 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery(sadefs.WorkflowID, "wid")).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{},
 				GroupBy: []string{sadefs.ExecutionStatus},
@@ -596,18 +594,19 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewBoolQuery().
-							Should(
-								elastic.NewBoolQuery().Filter(
-									elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
-									elastic.NewTermQuery("CustomKeywordField", "foo"),
-								),
-								elastic.NewTermQuery("CustomIntField", int64(123)),
-							).
-							MinimumNumberShouldMatch(1),
-					),
+					newBoolQuery().
+						Filter(
+							newBoolQuery().
+								Should(
+									newBoolQuery().Filter(
+										elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
+										elastic.NewTermQuery("CustomKeywordField", "foo"),
+									),
+									elastic.NewTermQuery("CustomIntField", int64(123)),
+								).
+								MinimumNumberShouldMatch(1),
+						).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{elastic.NewFieldSort("CustomKeywordField").Missing("_last")},
 				GroupBy: []string{},
@@ -891,10 +890,9 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("ExecutionStatus", "Terminated"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")).
+						MustNot(namespaceDivisionExists),
 				),
 				p.Query,
 			)
@@ -981,10 +979,9 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("ExecutionStatus", "Terminated"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")).
+						MustNot(namespaceDivisionExists),
 				),
 				query,
 			)
@@ -1006,10 +1003,9 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("ExecutionStatus", "Terminated"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")).
+						MustNot(namespaceDivisionExists),
 				),
 				query,
 			)
@@ -2001,10 +1997,9 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("TemporalBool01", true),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("TemporalBool01", true)).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{},
 				GroupBy: []string{},
@@ -2016,10 +2011,9 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("TemporalKeyword01", "active"),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("TemporalKeyword01", "active")).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{},
 				GroupBy: []string{},
@@ -2031,10 +2025,9 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("TemporalInt01", int64(42)),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("TemporalInt01", int64(42))).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{},
 				GroupBy: []string{},
@@ -2046,10 +2039,9 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewTermQuery("TemporalBool01", true),
-					),
+					newBoolQuery().
+						Filter(elastic.NewTermQuery("TemporalBool01", true)).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{elastic.NewFieldSort("TemporalKeyword01").Missing("_last")},
 				GroupBy: []string{},
@@ -2061,13 +2053,12 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			want: &esQueryParams{
 				Query: elastic.NewBoolQuery().Filter(
 					namespaceIDQuery,
-					elastic.NewBoolQuery().Filter(
-						namespaceDivisionIsNull,
-						elastic.NewBoolQuery().Filter(
+					newBoolQuery().
+						Filter(
 							elastic.NewTermQuery("TemporalKeyword01", "active"),
 							elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
-						),
-					),
+						).
+						MustNot(namespaceDivisionExists),
 				),
 				Sorter:  []elastic.Sorter{},
 				GroupBy: []string{},
@@ -2120,7 +2111,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 	filterQuery := elastic.NewTermQuery("TemporalBool01", true)
 	boolQuery := elastic.NewBoolQuery().Filter(
 		matchNamespaceQuery,
-		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
+		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
 	p, err := s.visibilityStore.BuildChasmSearchParameters(
 		&manager.ListChasmExecutionsRequest{
@@ -2145,7 +2136,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2_ChasmMapper() {
 	filterQuery = elastic.NewTermQuery("TemporalKeyword01", "active")
 	boolQuery = elastic.NewBoolQuery().Filter(
 		matchNamespaceQuery,
-		elastic.NewBoolQuery().Filter(namespaceDivisionIsNull, filterQuery),
+		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.Namespace.String())).Return(s.mockMetricsHandler)
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).Return(metrics.NoopCounterMetricFunc)
