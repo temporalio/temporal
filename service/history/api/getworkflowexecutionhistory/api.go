@@ -88,14 +88,11 @@ func appendTransientEvents(
 
 	// Manually append transient events to the response
 	if useRawHistory {
-		// Serialize transient events into a blob
-		transientEventsBlob, err := shardContext.GetPayloadSerializer().SerializeEvents(
-			transientWorkflowTask.GetHistorySuffix())
+		transientEventsBlob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTask.GetHistorySuffix())
 		if err == nil {
 			*historyBlob = append(*historyBlob, transientEventsBlob)
 		}
 	} else {
-		// Append events directly to history
 		(*history).Events = append((*history).Events, transientWorkflowTask.GetHistorySuffix()...)
 	}
 

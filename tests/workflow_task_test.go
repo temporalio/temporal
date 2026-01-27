@@ -645,7 +645,6 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		s.NoError(err2)
 	}
 
-	// With the fix for #7741, a transient WorkflowTaskScheduled event (event 5) is now visible after the failure
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -662,12 +661,17 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
-	// After the signal, the history should show the signal event. The transient WorkflowTaskScheduled
-	// is not yet persisted and will be visible when polled.
+	// After the signal, verify the core events are present. A transient WorkflowTaskScheduled
+	// may also be visible (event 6), but we only verify the first 5 persisted events.
 	histAfterSignal := s.GetHistory(s.Namespace().String(), we)
-	// The length can be 5 or 6 depending on whether transient event is included
-	s.GreaterOrEqual(len(histAfterSignal), 5)
-	s.LessOrEqual(len(histAfterSignal), 6)
+	s.GreaterOrEqual(len(histAfterSignal), 5, "Should have at least 5 events after signal")
+	// Verify the first 5 events match expected history
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskFailed
+  5 WorkflowExecutionSignaled`, histAfterSignal[:5])
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -800,7 +804,6 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
-	// With the fix for #7741, transient events remain visible while the task is active
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

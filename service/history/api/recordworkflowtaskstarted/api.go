@@ -299,8 +299,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	var persistenceToken []byte
 	var history *historypb.History
 	var err error
-	// For RecordWorkflowTaskStarted, the workflow is always running since we're starting a task
-	isWorkflowRunning := true
 
 	// Set context to skip client check for transient events in PollWorkflowTask.
 	// Transient events should always be included for workers.
@@ -319,7 +317,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			nil,
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
-			isWorkflowRunning,
+			true,
 		)
 	} else {
 		history, persistenceToken, err = api.GetHistory(
@@ -335,7 +333,7 @@ func setHistoryForRecordWfTaskStartedResp(
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
 			persistenceVisibilityMgr,
-			isWorkflowRunning,
+			true,
 		)
 	}
 	if err != nil {

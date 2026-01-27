@@ -871,9 +871,6 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// With the fix for #7741, speculative events are now included in GetHistory to prevent
-			// "premature end of stream" errors. So we expect to see the speculative WorkflowTaskScheduled
-			// and WorkflowTaskStarted events.
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
@@ -961,9 +958,6 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// With the fix for #7741, speculative events are now included in GetHistory to prevent
-			// "premature end of stream" errors. So we expect to see the speculative WorkflowTaskScheduled
-			// and WorkflowTaskStarted events.
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
@@ -2441,7 +2435,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					s.verifySpeculativeTask(execution)
 				} else if transientTask {
 					s.verifyTransientTask(task)
-					// Get events from server-side history. This includes transient events (due to fix for #7741).
+					// Get events from server-side history, this includes transient events.
 					historyEvents = s.GetHistory(s.Namespace().String(), execution)
 				}
 
@@ -2466,10 +2460,10 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
-						if i == len(wfTaskStartedEvents)-1 { // last event
+						if i == len(wfTaskStartedEvents)-1 {
 							s.True(attr.GetSuggestContinueAsNew())
 							s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
-						} else { // earlier events
+						} else {
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 						}
@@ -2574,8 +2568,6 @@ func (s *Versioning3Suite) triggerTransientWFT(ctx context.Context, tv *testvars
 
 // Verify this is a speculative task - events not yet in persisted history
 func (s *Versioning3Suite) verifySpeculativeTask(execution *commonpb.WorkflowExecution) {
-	// With the fix for #7741, GetHistory now includes speculative events.
-	// So we expect to see the speculative WorkflowTaskScheduled and WorkflowTaskStarted events.
 	events := s.GetHistory(s.Namespace().String(), execution)
 	s.EqualHistoryEvents(`
 						1 WorkflowExecutionStarted

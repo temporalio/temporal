@@ -568,10 +568,6 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 2:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted`, task.History)
-				// Note: The speculative WorkflowTaskScheduled and WorkflowTaskStarted events
-				// are not visible in this history view from HandlePartialWorkflowTask.
-				// They exist in mutable state and will be visible in GetWorkflowExecutionHistory.
-				// Message handler rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -693,10 +689,6 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled`, task.History)
-				// Note: The speculative WorkflowTaskScheduled (6) and WorkflowTaskStarted (7) events
-				// are not visible in this history view from HandlePartialWorkflowTask.
-				// They exist in mutable state and will be visible in GetWorkflowExecutionHistory.
-				// Message handler rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -4438,10 +4430,6 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 3:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted`, task.History)
-				// Note: Speculative WorkflowTaskScheduled (5) and WorkflowTaskStarted (6) events
-				// are not visible in this history view from HandlePartialWorkflowTask.
-				// After the first speculative WT was dropped, a new speculative WT was created
-				// with the second update, and those events will be visible in GetWorkflowExecutionHistory.
 				commands := append(s.UpdateAcceptCompleteCommands(tv2),
 					&commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,

@@ -243,8 +243,6 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		}, cancelWorkflowsInRange, 0, numTargetWorkflows)
 		s.NoError(err)
 
-		// Note: After the WorkflowTaskFailed, a transient retry task is created (events 5 and 6).
-		// With the fix for #7741, these transient events are now visible in GetHistory.
 		s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -335,8 +333,6 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 			s.Error(err)
 		}
 
-		// Note: After the WorkflowTaskFailed, a transient retry task is created (events 5 and 6).
-		// With the fix for #7741, these transient events are now visible in GetHistory.
 		s.WaitForHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

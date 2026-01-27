@@ -97,7 +97,6 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	workflowTaskTimeout := false
 	for i := 0; i < 3; i++ {
 		events := s.GetHistory(s.Namespace().String(), workflowExecution)
-		// With the fix for #7741, a transient WorkflowTaskScheduled event (event 9) is now visible after the timeout
 		if len(events) >= 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

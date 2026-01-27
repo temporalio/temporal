@@ -827,8 +827,6 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 				)
 			}
 		}()
-		// For RespondWorkflowTaskCompleted with new task, workflow is running
-		isWorkflowRunning := true
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
 			handler.shardContext,
@@ -842,7 +840,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			matchingResp.GetTransientWorkflowTask(),
 			branchToken,
 			handler.persistenceVisibilityMgr,
-			isWorkflowRunning,
+			true,
 		)
 		if err != nil {
 			return nil, err

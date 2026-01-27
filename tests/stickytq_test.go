@@ -178,8 +178,6 @@ WaitForStickyTimeoutLoop:
 	}
 
 	events := s.GetHistory(s.Namespace().String(), workflowExecution)
-	// Note: With the fix for #7741, transient WorkflowTaskScheduled events are now visible in GetHistory.
-	// Event 16 is the transient task scheduled after the second workflow task failure (event 15).
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -369,8 +367,6 @@ WaitForStickyTimeoutLoop:
 	}
 
 	events := s.GetHistory(s.Namespace().String(), workflowExecution)
-	// Note: With the fix for #7741, transient WorkflowTaskScheduled events are now visible in GetHistory.
-	// Event 16 is the transient task scheduled after the second workflow task failure (event 15).
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

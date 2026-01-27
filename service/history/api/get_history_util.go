@@ -130,7 +130,6 @@ func GetRawHistory(
 		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning, true) {
 			// Validate before appending
 			if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-				// GRACEFUL DEGRADATION: Log warning but continue
 				logger := shardContext.GetLogger()
 				metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
 				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
@@ -250,7 +249,6 @@ func GetHistory(
 		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning, true) {
 			// Validate before appending
 			if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
-				// GRACEFUL DEGRADATION: Log warning but continue
 				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 				logger.Warn("Transient event validation failed, skipping events",
 					tag.WorkflowNamespaceID(namespaceID.String()),
@@ -457,15 +455,16 @@ func areValidTransientOrSpecEvents(
 		return false
 	}
 
-	// If 2 events, second must be WFT_STARTED immediately after
-	if len(events) == 2 {
-		if events[1].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
-			return false
-		}
-		if events[1].GetEventId() != events[0].GetEventId()+1 {
-			return false
-		}
-	}
+	// TODO seankane: This can likely be removed
+	// // If 2 events, second must be WFT_STARTED immediately after
+	// if len(events) == 2 {
+	// 	if events[1].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+	// 		return false
+	// 	}
+	// 	if events[1].GetEventId() != events[0].GetEventId()+1 {
+	// 		return false
+	// 	}
+	// }
 
 	return true
 }
@@ -474,19 +473,16 @@ func areValidTransientOrSpecEvents(
 func clientSupportsTranOrSpecEvents(ctx context.Context) bool {
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
 
-	// Only include transient events for known SDKs that support them.
-	// This is conservative but prevents breaking existing clients (tests, old SDKs, etc.)
+	// Default to include transient events for clients, only CLI and UI are
+	// explicitly excluded for backward compatability
 	switch clientName {
-	case headers.ClientNameGoSDK,
-		headers.ClientNameJavaSDK,
-		headers.ClientNamePythonSDK,
-		headers.ClientNameTypeScriptSDK,
-		headers.ClientNamePHPSDK:
-		// Known SDKs support transient events
-		return true
-	default:
-		// UI/CLI/unknown clients: don't include transient events for backward compatibility
+	case headers.ClientNameCLI,
+		headers.ClientNameUI:
+		// CLI/UI: don't include transient events for backward compatibility
 		return false
+	default:
+		// All SDKs, unknown clients, and tests receive transient events
+		return true
 	}
 }
 
