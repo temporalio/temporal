@@ -61,6 +61,7 @@ func Invoke(
 	tokenSerializer *tasktoken.Serializer,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
@@ -101,6 +102,7 @@ func Invoke(
 			startReq,
 			matchingClient,
 			versionMembershipCache,
+			reactivationSignalCache,
 			uws.workflowLeaseCallback(ctx),
 		)
 		if err != nil {

@@ -24,6 +24,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.SignalWithStartRequest.WorkflowId)
 	if err != nil {
@@ -94,7 +95,7 @@ func Invoke(
 
 	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
 	if started {
-		api.ReactivateVersionWorkflowIfPinned(ctx, shard, namespaceID, request.GetVersioningOverride())
+		api.ReactivateVersionWorkflowIfPinned(ctx, shard, namespaceID, request.GetVersioningOverride(), reactivationSignalCache)
 	}
 
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{

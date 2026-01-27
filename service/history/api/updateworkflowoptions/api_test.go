@@ -264,6 +264,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.workflowConsistencyChecker,
 		s.mockMatchingClient,
 		noopVersionMembershipCache{}, // cache not meant to be used in this test
+		nil,                          // reactivationSignalCache not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)

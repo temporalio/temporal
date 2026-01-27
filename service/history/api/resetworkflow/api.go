@@ -29,6 +29,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 ) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
 	namespaceID := namespace.ID(resetRequest.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -182,7 +183,7 @@ func Invoke(
 	for _, operation := range request.GetPostResetOperations() {
 		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
 			api.ReactivateVersionWorkflowIfPinned(ctx, shardContext, namespaceID,
-				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride())
+				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignalCache)
 		}
 	}
 

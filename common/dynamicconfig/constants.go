@@ -2764,6 +2764,19 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
+	ReactivationSignalCacheTTL = NewGlobalDurationSetting(
+		"history.reactivationSignalCacheTTL",
+		10*time.Second,
+		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
+		draining status to DRAINING from DRAINED/INACTIVE states.`,
+	)
+
+	ReactivationSignalCacheMaxSize = NewGlobalIntSetting(
+		"history.reactivationSignalCacheMaxSize",
+		10000,
+		`Maximum number of entries in the reactivation signal cache.`,
+	)
+
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
 		"history.externalPayloadsEnabled",
 		false,

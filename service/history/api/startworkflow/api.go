@@ -62,6 +62,7 @@ type Starter struct {
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
 	versionMembershipCache     worker_versioning.VersionMembershipCache
+	reactivationSignalCache    worker_versioning.ReactivationSignalCache
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -91,6 +92,7 @@ func NewStarter(
 	request *historyservice.StartWorkflowExecutionRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
@@ -110,6 +112,7 @@ func NewStarter(
 		createOrUpdateLeaseFn:      createLeaseFn,
 		enableRequestIdRefLinks:    shardContext.GetConfig().EnableRequestIdRefLinks,
 		versionMembershipCache:     versionMembershipCache,
+		reactivationSignalCache:    reactivationSignalCache,
 	}, nil
 }
 
@@ -218,7 +221,7 @@ func (s *Starter) Invoke(
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
-	api.ReactivateVersionWorkflowIfPinned(ctx, s.shardContext, s.namespace.ID(), s.request.StartRequest.GetVersioningOverride())
+	api.ReactivateVersionWorkflowIfPinned(ctx, s.shardContext, s.namespace.ID(), s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache)
 
 	resp, err = s.generateResponse(
 		creationParams.runID,

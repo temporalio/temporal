@@ -20,12 +20,13 @@ const ReactivateVersionSignalName = "reactivate-version"
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
 // when workflows are pinned to a potentially DRAINED/INACTIVE version.
 // This is a fire-and-forget operation - errors are logged but don't fail the operation.
-// TODO: Add caching to prevent duplicate signals within a time window
+// If signalCache is provided, it deduplicates signals within the cache TTL window.
 func ReactivateVersionWorkflowIfPinned(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	namespaceID namespace.ID,
 	override *workflowpb.VersioningOverride,
+	signalCache worker_versioning.ReactivationSignalCache,
 ) {
 	// Only process if we're pinning to a specific version
 	if !worker_versioning.OverrideIsPinned(override) {
@@ -34,6 +35,15 @@ func ReactivateVersionWorkflowIfPinned(
 
 	pinnedVersion := worker_versioning.GetOverridePinnedVersion(override)
 	if pinnedVersion == nil {
+		return
+	}
+
+	// Check cache - skip if signal was recently sent
+	if signalCache != nil && !signalCache.ShouldSendSignal(
+		namespaceID.String(),
+		pinnedVersion.GetDeploymentName(),
+		pinnedVersion.GetBuildId(),
+	) {
 		return
 	}
 
