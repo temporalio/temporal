@@ -191,6 +191,7 @@ func TestSomething(t *testing.T) {
 
 ## Checklist for Each Conversion
 
+- [ ] read tests/testcore/test_env.go
 - [ ] **Count tests before migration**: Run `go test -v ./tests/... -run "^TestXxxSuite$" -list ".*"` and record the number of tests
 - [ ] Remove suite struct definition
 - [ ] Remove `TestXxxSuite` function with `suite.Run`
