@@ -28,6 +28,14 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+type contextKey string
+
+const (
+	// SkipTransientEventClientCheckKey is a context key to skip client support checks for transient events.
+	// Used by PollWorkflowTask to always include transient events regardless of client.
+	SkipTransientEventClientCheckKey contextKey = "skipTransientEventClientCheck"
+)
+
 func GetRawHistory(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -117,7 +125,9 @@ func GetRawHistory(
 
 	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
 		// Check if we should include transient/speculative events
-		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning) {
+		// Pass checkClientSupport=true for raw history (used by both GetWorkflowExecutionHistory and PollWorkflowTask)
+		// Note: For PollWorkflowTask, transient events are added separately in recordworkflowtaskstarted
+		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning, true) {
 			// Validate before appending
 			if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				// GRACEFUL DEGRADATION: Log warning but continue
@@ -236,7 +246,8 @@ func GetHistory(
 	}
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		// Check if we should include transient/speculative events
-		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning) {
+		// Pass checkClientSupport=true for regular history (GetWorkflowExecutionHistory)
+		if shouldIncludeTransientOrSpeculativeEvents(ctx, transientWorkflowTaskInfo, true, isWorkflowRunning, true) {
 			// Validate before appending
 			if err := validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				// GRACEFUL DEGRADATION: Log warning but continue
@@ -400,6 +411,7 @@ func shouldIncludeTransientOrSpeculativeEvents(
 	tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo,
 	isLastPage bool,
 	isWorkflowRunning bool,
+	checkClientSupport bool,
 ) bool {
 	// Must be last page
 	if !isLastPage {
@@ -411,8 +423,10 @@ func shouldIncludeTransientOrSpeculativeEvents(
 		return false
 	}
 
-	// Client must support (not UI/CLI)
-	if !clientSupportsTranOrSpecEvents(ctx) {
+	// Check client support if required (not needed for PollWorkflowTask)
+	// Skip check if context indicates to do so (set by PollWorkflowTask)
+	skipCheck := ctx.Value(SkipTransientEventClientCheckKey) != nil
+	if checkClientSupport && !skipCheck && !clientSupportsTranOrSpecEvents(ctx) {
 		return false
 	}
 
@@ -460,13 +474,19 @@ func areValidTransientOrSpecEvents(
 func clientSupportsTranOrSpecEvents(ctx context.Context) bool {
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
 
-	// UI/CLI don't support transient events
+	// Only include transient events for known SDKs that support them.
+	// This is conservative but prevents breaking existing clients (tests, old SDKs, etc.)
 	switch clientName {
-	case headers.ClientNameCLI, headers.ClientNameUI:
-		return false
-	default:
-		// SDKs and unknown clients: optimistic (better than error)
+	case headers.ClientNameGoSDK,
+		headers.ClientNameJavaSDK,
+		headers.ClientNamePythonSDK,
+		headers.ClientNameTypeScriptSDK,
+		headers.ClientNamePHPSDK:
+		// Known SDKs support transient events
 		return true
+	default:
+		// UI/CLI/unknown clients: don't include transient events for backward compatibility
+		return false
 	}
 }
 
