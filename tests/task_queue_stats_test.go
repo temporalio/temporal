@@ -26,13 +26,6 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-const (
-	minPriority     = 1
-	maxPriority     = 5
-	defaultPriority = 3
-	partitionCount  = 2 // kept low to reduce test time on CI
-)
-
 type (
 	// TaskQueueStatsSuite tests are querying task queue stats.
 	//
@@ -46,6 +39,11 @@ type (
 		testcore.FunctionalTestBase
 		usePriMatcher        bool
 		useNewDeploymentData bool
+
+		minPriority     int
+		maxPriority     int
+		defaultPriority int
+		partitionCount  int
 	}
 
 	TaskQueueExpectations struct {
@@ -70,11 +68,16 @@ func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 }
 
 func (s *TaskQueueStatsSuite) SetupTest() {
+	s.minPriority = 1
+	s.maxPriority = 5
+	s.defaultPriority = 3
+	s.partitionCount = 2 // kept low to reduce test time on CI
+
 	s.FunctionalTestBase.SetupTest()
 	s.OverrideDynamicConfig(dynamicconfig.EnableDeploymentVersions, true)
 	s.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, s.usePriMatcher)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingPriorityLevels, maxPriority)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPriorityLevels, s.maxPriority)
 }
 
 func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
@@ -95,8 +98,8 @@ func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
 }
 
 func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -104,8 +107,8 @@ func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats() {
 }
 
 func (s *TaskQueueStatsSuite) TestMultipleTasks_WithMatchingBehavior_ValidateStats() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -164,11 +167,11 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
 }
 
 func (s *TaskQueueStatsSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.currentVersionAbsorbsUnversionedBacklogNoRamping(partitionCount)
+		s.currentVersionAbsorbsUnversionedBacklogNoRamping(s.partitionCount)
 	})
 }
 
@@ -275,20 +278,20 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 }
 
 func (s *TaskQueueStatsSuite) TestRampingAndCurrentAbsorbUnversionedBacklog() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.rampingAndCurrentAbsorbsUnversionedBacklog(partitionCount)
+		s.rampingAndCurrentAbsorbsUnversionedBacklog(s.partitionCount)
 	})
 }
 
 func (s *TaskQueueStatsSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(partitionCount)
+		s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(s.partitionCount)
 	})
 }
 
@@ -360,11 +363,11 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 }
 
 func (s *TaskQueueStatsSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned(partitionCount)
+		s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned(s.partitionCount)
 	})
 }
 
@@ -601,11 +604,11 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 }
 
 func (s *TaskQueueStatsSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.inactiveVersionDoesNotAbsorbUnversionedBacklog(partitionCount)
+		s.inactiveVersionDoesNotAbsorbUnversionedBacklog(s.partitionCount)
 	})
 }
 
@@ -1187,7 +1190,7 @@ func (s *TaskQueueStatsSuite) enqueueWorkflows(sets int, tqName string) int {
 
 	var total int
 	for version := range 2 { // 0=unversioned, 1=versioned
-		for priority := 0; priority <= maxPriority; priority++ {
+		for priority := 0; priority <= s.maxPriority; priority++ {
 			for range sets {
 				wt := "functional-workflow-multiple-tasks"
 				workflowType := &commonpb.WorkflowType{Name: wt}
@@ -1299,7 +1302,7 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 
 	var total int
 	for version := 0; version < 2; version++ { // 0=unversioned, 1=versioned
-		for priority := 0; priority <= maxPriority; priority++ {
+		for priority := 0; priority <= s.maxPriority; priority++ {
 			for i := 0; i < sets; { // not counting up here to allow for retries
 				pollReq := &workflowservice.PollWorkflowTaskQueueRequest{
 					Namespace: s.Namespace().String(),
@@ -1489,7 +1492,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 		validateTaskQueueStats(label, a, resp.Stats, expectation)
 		if s.usePriMatcher && expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
-			validateTaskQueueStatsByPriority(label, a, resp.StatsByPriorityKey, expectation)
+			s.validateTaskQueueStatsByPriority(label, a, resp.StatsByPriorityKey, expectation)
 		}
 	}, 5*time.Second, 100*time.Millisecond)
 }
@@ -1585,7 +1588,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 				validateTaskQueueStats(label, a, info.Stats, expectation)
 				if s.usePriMatcher && expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
-					validateTaskQueueStatsByPriority(label, a, info.StatsByPriorityKey, expectation)
+					s.validateTaskQueueStatsByPriority(label, a, info.StatsByPriorityKey, expectation)
 				}
 				return
 			}
@@ -1594,17 +1597,17 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-func validateTaskQueueStatsByPriority(
+func (s *TaskQueueStatsSuite) validateTaskQueueStatsByPriority(
 	label string,
 	a *require.Assertions,
 	stats map[int32]*taskqueuepb.TaskQueueStats,
 	taskQueueExpectation TaskQueueExpectations,
 ) {
-	a.Len(stats, maxPriority, "%s: stats should contain %d priorities", label, maxPriority)
+	a.Len(stats, s.maxPriority, "%s: stats should contain %d priorities", label, s.maxPriority)
 
 	// use an abgridged version when caching since the exact stats are difficult to predict
 	if taskQueueExpectation.CachedEnabled {
-		for i := int32(minPriority); i <= maxPriority; i++ {
+		for i := int32(s.minPriority); i <= int32(s.maxPriority); i++ {
 			if stats[i].ApproximateBacklogCount != 0 && stats[i].TasksDispatchRate > 0 || stats[i].TasksAddRate > 0 {
 				return
 			}
@@ -1613,10 +1616,10 @@ func validateTaskQueueStatsByPriority(
 	}
 
 	var accBacklogCount int
-	for i := int32(minPriority); i <= maxPriority; i++ {
+	for i := int32(s.minPriority); i <= int32(s.maxPriority); i++ {
 		priExpectation := taskQueueExpectation
-		priExpectation.BacklogCount = taskQueueExpectation.BacklogCount / (maxPriority + 1)
-		if i == defaultPriority {
+		priExpectation.BacklogCount = taskQueueExpectation.BacklogCount / (s.maxPriority + 1)
+		if i == int32(s.defaultPriority) {
 			priExpectation.BacklogCount *= 2 // zero priority translates to default priority 3
 		}
 
