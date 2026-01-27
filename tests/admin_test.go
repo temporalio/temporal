@@ -129,7 +129,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		// From transition history perspective, Rebuild is considered as an update to the workflow and updates
 		// all sub state machines in the workflow, which includes the workflow ExecutionState.
 		require.Equal(t, &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition.NamespaceFailoverVersion,
+			NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.GetLastUpdateVersionedTransition().GetNamespaceFailoverVersion(),
 			TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
 		}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
 
@@ -255,7 +255,7 @@ func TestAdminRebuildMutableState(t *testing.T) {
 		// From transition history perspective, Rebuild is considered as an update to the workflow and updates
 		// all sub state machines in the workflow, which includes the workflow ExecutionState.
 		require.Equal(t, &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition.NamespaceFailoverVersion,
+			NamespaceFailoverVersion: response1.DatabaseMutableState.ExecutionState.GetLastUpdateVersionedTransition().GetNamespaceFailoverVersion(),
 			TransitionCount:          response1.DatabaseMutableState.ExecutionInfo.StateTransitionCount + 1,
 		}, response2.DatabaseMutableState.ExecutionState.LastUpdateVersionedTransition)
 
