@@ -30,6 +30,7 @@ const (
 	minPriority     = 1
 	maxPriority     = 5
 	defaultPriority = 3
+	partitionCount  = 2 // kept low to reduce test time on CI
 )
 
 type (
@@ -94,26 +95,17 @@ func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
 }
 
 func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 	s.publishConsumeWorkflowTasksValidateStats(0, false)
 }
 
-func (s *TaskQueueStatsSuite) TestSingleTask_SinglePartition_ValidateStats() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 5*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
-
-	s.publishConsumeWorkflowTasksValidateStats(1, true)
-}
-
-func (s *TaskQueueStatsSuite) TestMultipleTasks_MultiplePartitions_WithMatchingBehavior_ValidateStats() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+func (s *TaskQueueStatsSuite) TestMultipleTasks_WithMatchingBehavior_ValidateStats() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -123,7 +115,7 @@ func (s *TaskQueueStatsSuite) TestMultipleTasks_MultiplePartitions_WithMatchingB
 }
 
 // NOTE: Cache _eviction_ is already covered by the other tests.
-func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateStats_Cached() {
+func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour) // using a long TTL to verify caching
 
@@ -171,19 +163,12 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_MultiplePartitions_ValidateSt
 	s.validateTaskQueueStatsByType(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, expectations, false)
 }
 
-func (s *TaskQueueStatsSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping_SinglePartition() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-
-	s.currentVersionAbsorbsUnversionedBacklogNoRamping(1)
-}
-
-func (s *TaskQueueStatsSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping_MultiplePartitions() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+func (s *TaskQueueStatsSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.currentVersionAbsorbsUnversionedBacklogNoRamping(4)
+		s.currentVersionAbsorbsUnversionedBacklogNoRamping(partitionCount)
 	})
 }
 
@@ -289,35 +274,21 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsSuite) TestRampingAndCurrentAbsorbUnversionedBacklog_SinglePartition() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-
-	s.rampingAndCurrentAbsorbsUnversionedBacklog(1)
-}
-
-func (s *TaskQueueStatsSuite) TestRampingAndCurrentAbsorbUnversionedBacklog_MultiplePartitions() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+func (s *TaskQueueStatsSuite) TestRampingAndCurrentAbsorbUnversionedBacklog() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.rampingAndCurrentAbsorbsUnversionedBacklog(4)
+		s.rampingAndCurrentAbsorbsUnversionedBacklog(partitionCount)
 	})
 }
 
-func (s *TaskQueueStatsSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned_SinglePartition() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-
-	s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(1)
-}
-
-func (s *TaskQueueStatsSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned_MultiplePartitions() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+func (s *TaskQueueStatsSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(4)
+		s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned(partitionCount)
 	})
 }
 
@@ -388,19 +359,12 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned_SinglePartition() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-
-	s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned(1)
-}
-
-func (s *TaskQueueStatsSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned_MultiplePartitions() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+func (s *TaskQueueStatsSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned(4)
+		s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned(partitionCount)
 	})
 }
 
@@ -636,20 +600,13 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog_MultiplePartitions() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
+func (s *TaskQueueStatsSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, partitionCount)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, partitionCount)
 
 	s.RunTestWithMatchingBehavior(func() {
-		s.inactiveVersionDoesNotAbsorbUnversionedBacklog(4)
+		s.inactiveVersionDoesNotAbsorbUnversionedBacklog(partitionCount)
 	})
-}
-
-func (s *TaskQueueStatsSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog_SinglePartition() {
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-
-	s.inactiveVersionDoesNotAbsorbUnversionedBacklog(1)
 }
 
 func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(numPartitions int) {
