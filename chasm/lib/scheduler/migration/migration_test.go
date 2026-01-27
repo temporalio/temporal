@@ -16,7 +16,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func testSchedule() *schedulepb.Schedule {
+func newTestSchedule() *schedulepb.Schedule {
 	return &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Minute)}},
@@ -70,7 +70,7 @@ func TestLegacyToMigrateScheduleRequest(t *testing.T) {
 	searchAttrs := map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}
 	memo := map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}
 
-	req := LegacyToMigrateScheduleRequest(testSchedule(), info, state, searchAttrs, memo, now)
+	req := LegacyToMigrateScheduleRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
 	// Basic fields
 	require.Equal(t, "test-ns-id", req.NamespaceId)
@@ -100,6 +100,7 @@ func TestLegacyToMigrateScheduleRequest(t *testing.T) {
 	for id, backfiller := range req.MigrationState.Backfillers {
 		require.Equal(t, id, backfiller.BackfillId)
 		require.NotNil(t, backfiller.GetBackfillRequest())
+		require.Equal(t, now.Add(-time.Hour), backfiller.GetBackfillRequest().StartTime.AsTime())
 	}
 
 	// Last completion result
@@ -141,7 +142,7 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		NamespaceId:   "ns-id",
 		ScheduleId:    "sched-id",
 		ConflictToken: 7,
-		Schedule:      testSchedule(),
+		Schedule:      newTestSchedule(),
 		Info:          &schedulepb.ScheduleInfo{ActionCount: 12},
 	}
 	generator := &schedulerpb.GeneratorState{LastProcessedTime: timestamppb.New(now.Add(-time.Minute))}
