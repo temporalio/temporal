@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 func block()   { <-make(chan struct{}) }
@@ -49,7 +51,7 @@ func TestAdaptivePool_Grows(t *testing.T) {
 
 	// wait for goroutine to block in Do
 	// there should be one timer
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	eventually.Require(t, func(t *eventually.T) { require.Equal(t, 1, ts.NumTimers()) }, time.Second, time.Millisecond)
 
 	select {
 	case <-doneCh:
@@ -58,12 +60,12 @@ func TestAdaptivePool_Grows(t *testing.T) {
 	default:
 	}
 
-	assert.Equal(t, 5, p.NumWorkers()) // still 5 here
+	require.Equal(t, 5, p.NumWorkers()) // still 5 here
 
 	ts.Advance(15 * time.Millisecond)
 	<-doneCh
 
-	assert.Equal(t, 6, p.NumWorkers()) // now 6 here
+	require.Equal(t, 6, p.NumWorkers()) // now 6 here
 }
 
 func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
@@ -104,9 +106,13 @@ func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
 	// wait for sixth
 	<-doneCh
 
-	assert.Equal(t, 5, p.NumWorkers()) // still 5
+	require.Equal(t, 5, p.NumWorkers()) // still 5
 }
 
+// TestAdaptivePool_ShrinksAgain uses testify's assert.Eventually instead of eventually.Require
+// because this test has specific goroutine scheduling requirements. The synchronous nature of
+// eventually.Require doesn't give the worker goroutine enough scheduling opportunities to process
+// the timer channel and decrement the worker count.
 func TestAdaptivePool_ShrinksAgain(t *testing.T) {
 	t.Parallel()
 	ts := clock.NewEventTimeSource()
@@ -129,7 +135,7 @@ func TestAdaptivePool_ShrinksAgain(t *testing.T) {
 	ts.Advance(10 * time.Millisecond) // allow it to start another
 	<-syncCh                          // wait for it to call the function
 
-	assert.Equal(t, 3, p.NumWorkers())
+	require.Equal(t, 3, p.NumWorkers())
 
 	// now there are 3 workers with one free, another call or three should start immediately
 	p.Do(nothing)

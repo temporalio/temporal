@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -21,6 +20,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -219,8 +219,8 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// DescribeWorkerDeploymentVersion: current version should also show the full backlog for this task queue.
 		s.requireWDVTaskQueueStatsRelaxed(
@@ -245,7 +245,7 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 			currentStatsExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 
 	// The backlog count for the activity task queue should be equal to the number of activities scheduled since the activity task queue is part of the current version.
 	activitesToSchedule := 10 * numPartitions
@@ -259,8 +259,8 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// Since the activity task queue is part of the current version,
 		// the DescribeWorkerDeploymentVersion should report the backlog count for the activity task queue.
@@ -286,7 +286,7 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 			activityStatsExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) TestRampingAndCurrentAbsorbUnversionedBacklog_SinglePartition() {
@@ -358,8 +358,8 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// There is no way right now for a user to query stats of the "unversioned" version. All we can do in this case
 		// is to query the current version's stats and see that it is attributed 80% of the unversioned backlog.
@@ -385,7 +385,7 @@ func (s *TaskQueueStatsSuite) currentAbsorbsUnversionedBacklogWhenRampingToUnver
 			legacyExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned_SinglePartition() {
@@ -442,8 +442,8 @@ func (s *TaskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// We can't query "unversioned" as a WorkerDeploymentVersion, but we can validate that the ramping version
 		// is attributed its ramp share of the unversioned backlog.
@@ -469,7 +469,7 @@ func (s *TaskQueueStatsSuite) rampingAbsorbsUnversionedBacklogWhenCurrentIsUnver
 			legacyExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPartitions int) {
@@ -519,8 +519,8 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 	// Currently only testing the following API's:
 	// - DescribeWorkerDeploymentVersion for the current and ramping versions.
 	// - DescribeTaskQueue Legacy Mode for the current and ramping versions.
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// DescribeWorkerDeploymentVersion: current version should also show only 70% of the unversioned backlog for this task queue
 		// as a ramping version, with ramp set to 30%, exists and absorbs 30% of the unversioned backlog.
@@ -558,7 +558,7 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 			legacyExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 
 	// Here, since the activity task queue is present both in the current and in the ramping version, the backlog count would differ depending on the version described.
 	// Poll with BOTH buildIDs in parallel to drain all workflow tasks (hash distribution splits them between current and ramping)
@@ -604,8 +604,8 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// Validate current version activity stats
 		s.requireWDVTaskQueueStatsRelaxed(
@@ -633,7 +633,7 @@ func (s *TaskQueueStatsSuite) rampingAndCurrentAbsorbsUnversionedBacklog(numPart
 			numPartitions,
 		)
 
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog_MultiplePartitions() {
@@ -698,8 +698,8 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 	// Currently only testing the following API's:
 	// - DescribeWorkerDeploymentVersion
 	// - DescribeTaskQueue Legacy Mode
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// DescribeWorkerDeploymentVersion: current version should should show 100% of the unversioned backlog for this task queue
 		s.requireWDVTaskQueueStatsRelaxed(
@@ -726,7 +726,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			inactiveExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 
 	// Polling the workflow tasks and scheduling activities
 	s.pollWorkflowTasksAndScheduleActivitiesParallel(
@@ -772,8 +772,8 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 		MaxExtraTasks: 0,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		// The activity task queue of the current version should have the backlog count for the activities that were scheduled
 		s.requireWDVTaskQueueStatsRelaxed(
@@ -826,7 +826,7 @@ func (s *TaskQueueStatsSuite) inactiveVersionDoesNotAbsorbUnversionedBacklog(num
 			inactiveActivityExpectation,
 			numPartitions,
 		)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 // requireWDVTaskQueueStatsRelaxed asserts task queue statistics by allowing for over-counting in multi-partition ramping scenarios.
@@ -1294,8 +1294,8 @@ func (s *TaskQueueStatsSuite) createVersionsInTaskQueue(ctx context.Context, tqN
 	}()
 
 	// Wait for the version to be created.
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(10*time.Second, 200*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
 			DeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
@@ -1305,7 +1305,7 @@ func (s *TaskQueueStatsSuite) createVersionsInTaskQueue(ctx context.Context, tqN
 		})
 		a.NoError(err)
 		a.NotNil(resp)
-	}, 10*time.Second, 200*time.Millisecond)
+	})
 }
 
 // TODO (Shivam): Remove this guy.
@@ -1449,8 +1449,8 @@ func (s *TaskQueueStatsSuite) validateRates(
 		ReportStats:   true,
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 100*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 		label := "validateRates[" + tqType.String() + "]"
 
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
@@ -1466,7 +1466,7 @@ func (s *TaskQueueStatsSuite) validateRates(
 			a.Greater(resp.Stats.TasksDispatchRate, float32(0),
 				"%s: TasksDispatchRate should be > 0, got %f", label, resp.Stats.TasksDispatchRate)
 		}
-	}, 5*time.Second, 100*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) validateTaskQueueStatsByType(
@@ -1511,8 +1511,8 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 	//nolint:staticcheck // SA1019 deprecated
 	s.Nil(resp.TaskQueueStatus, "status should not be reported by default")
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 100*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 		label := "DescribeTaskQueue_DefaultMode[" + tqType.String() + "]"
 
 		req.ReportStats = true
@@ -1534,7 +1534,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithDefaultMode(
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
 			validateTaskQueueStatsByPriority(label, a, resp.StatsByPriorityKey, expectation)
 		}
-	}, 5*time.Second, 100*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
@@ -1569,8 +1569,8 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 		s.Nil(resp.TaskQueueStatus, "status should not be reported")
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 100*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		req.ReportStats = true
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, req)
@@ -1588,7 +1588,7 @@ func (s *TaskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 
 			validateTaskQueueStats("DescribeTaskQueue_EnhancedMode["+tqType.String()+"]", a, info.Stats, expectation)
 		}
-	}, 5*time.Second, 100*time.Millisecond)
+	})
 }
 
 func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
@@ -1614,8 +1614,8 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 		s.Nil(info.Stats, "stats should not be reported by default")
 	}
 
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		a := require.New(c)
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 100*time.Millisecond, func(t *eventually.T) {
+		a := require.New(t)
 
 		req.ReportTaskQueueStats = true
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
@@ -1634,7 +1634,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 			}
 		}
 		a.Failf("Task queue %s of type %s not found in response", tqName, tqType)
-	}, 5*time.Second, 100*time.Millisecond)
+	})
 }
 
 func validateTaskQueueStatsByPriority(

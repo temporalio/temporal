@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/util"
 	expmaps "golang.org/x/exp/maps"
 )
@@ -47,8 +48,9 @@ func (s *RpoSuite) TestMonitor() {
 	s.Nil(err, "Ringpop monitor failed to find host for key")
 	s.NotNil(host, "Ringpop monitor returned a nil host")
 
-	s.Eventually(func() bool {
-		return len(r.Members()) == 3 && len(r.AvailableMembers()) == 3
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Len(t, r.Members(), 3)
+		require.Len(t, r.AvailableMembers(), 3)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Force refresh now and drain the notification channel
@@ -122,12 +124,10 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.NoError(err)
 
 	waitAndCheckMembers := func(elements []string) {
-		var addrs []string
-		s.Eventually(func() bool {
-			addrs = util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
-			return len(addrs) == len(elements)
+		eventually.Require(s.T(), func(t *eventually.T) {
+			addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+			require.ElementsMatch(t, elements, addrs)
 		}, 15*time.Second, 100*time.Millisecond)
-		s.ElementsMatch(elements, addrs)
 	}
 
 	// we should see only 1 first, then 0,1, then 0,1,2

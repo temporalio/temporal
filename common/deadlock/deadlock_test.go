@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/pingable"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 type blockingPingable struct{ done chan struct{} }
@@ -50,28 +51,30 @@ func TestCurrentCounterAndGauge(t *testing.T) {
 	capture := mh.StartCapture()
 	go lc.check(context.Background(), check)
 
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		require.Equal(collect, int64(1), dd.CurrentSuspected())
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, int64(1), dd.CurrentSuspected())
 
 		snapshot := capture.Snapshot()
 		current := snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
 		counter := snapshot[metrics.DDSuspectedDeadlocks.Name()]
-		require.Len(collect, current, 1)
-		require.Equal(collect, 1.0, current[0].Value)
-		require.Len(collect, counter, 1)
-		require.Equal(collect, int64(1), counter[0].Value)
+		if !assert.Len(t, current, 1) || !assert.Len(t, counter, 1) {
+			return
+		}
+		require.Equal(t, 1.0, current[0].Value)
+		require.Equal(t, int64(1), counter[0].Value)
 	}, 2*time.Second, time.Millisecond)
 
 	close(b.done)
 
-	require.EventuallyWithT(t, func(collect *assert.CollectT) {
-		require.Equal(collect, int64(0), dd.CurrentSuspected())
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, int64(0), dd.CurrentSuspected())
 
 		snapshot := capture.Snapshot()
 		current := snapshot[metrics.DDCurrentSuspectedDeadlocks.Name()]
 		counter := snapshot[metrics.DDSuspectedDeadlocks.Name()]
-		require.Len(collect, current, 2)
-		require.Equal(collect, 0.0, current[1].Value)
-		require.Len(collect, counter, 1)
+		if !assert.Len(t, current, 2) || !assert.Len(t, counter, 1) {
+			return
+		}
+		require.Equal(t, 0.0, current[1].Value)
 	}, 2*time.Second, time.Millisecond)
 }

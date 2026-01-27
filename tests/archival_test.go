@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -28,6 +29,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -142,7 +144,8 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 
 	var executions []*workflowpb.WorkflowExecutionInfo
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, 500*time.Millisecond, func(t *eventually.T) {
+		executions = nil
 		request := &workflowservice.ListArchivedWorkflowExecutionsRequest{
 			Namespace: s.archivalNamespace.String(),
 			PageSize:  2,
@@ -150,16 +153,13 @@ func (s *ArchivalSuite) TestVisibilityArchival() {
 		}
 		for len(executions) == 0 || request.NextPageToken != nil {
 			response, err := s.FrontendClient().ListArchivedWorkflowExecutions(testcore.NewContext(), request)
-			s.NoError(err)
-			s.NotNil(response)
+			require.NoError(t, err)
+			require.NotNil(t, response)
 			executions = append(executions, response.GetExecutions()...)
 			request.NextPageToken = response.NextPageToken
 		}
-		if len(executions) == numRuns {
-			return true
-		}
-		return false
-	}, 20*time.Second, 500*time.Millisecond)
+		require.Equal(t, numRuns, len(executions))
+	})
 
 	for _, execution := range executions {
 		s.Equal(workflowID, execution.GetExecution().GetWorkflowId())
@@ -191,23 +191,17 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 	)
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		ctx := testcore.NewContext()
-		var historyResponse *archiver.GetHistoryResponse
-		historyResponse, err = historyArchiver.Get(ctx, historyURI, &archiver.GetHistoryRequest{
+		historyResponse, err := historyArchiver.Get(ctx, historyURI, &archiver.GetHistoryRequest{
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 			RunID:       execution.GetRunId(),
 			PageSize:    1,
 		})
-		if err != nil {
-			return false
-		}
-		if len(historyResponse.HistoryBatches) == 0 {
-			return false
-		}
-		var visibilityResponse *archiver.QueryVisibilityResponse
-		visibilityResponse, err = visibilityArchiver.Query(
+		require.NoError(t, err)
+		require.NotEmpty(t, historyResponse.HistoryBatches)
+		visibilityResponse, err := visibilityArchiver.Query(
 			ctx,
 			visibilityURI,
 			&archiver.QueryVisibilityRequest{
@@ -221,14 +215,9 @@ func (s *ArchivalSuite) workflowIsArchived(namespaceID namespace.ID, execution *
 			},
 			searchattribute.NameTypeMap{},
 		)
-		if err != nil {
-			return false
-		}
-		if len(visibilityResponse.Executions) > 0 {
-			return true
-		}
-		return false
-	}, 20*time.Second, 500*time.Millisecond)
+		require.NoError(t, err)
+		require.NotEmpty(t, visibilityResponse.Executions)
+	})
 }
 
 func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
@@ -238,7 +227,7 @@ func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
 		s.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		_, err := s.GetTestCluster().TestBase().ExecutionManager.ReadHistoryBranch(
 			testcore.NewContext(),
 			&persistence.ReadHistoryBranchRequest{
@@ -250,12 +239,8 @@ func (s *ArchivalSuite) historyIsDeleted(workflowInfo archivalWorkflowInfo) {
 				NextPageToken: nil,
 			},
 		)
-		if common.IsNotFoundError(err) {
-			return true
-		}
-		s.NoError(err)
-		return false
-	}, 20*time.Second, 500*time.Millisecond)
+		require.True(t, common.IsNotFoundError(err), "expected history to be deleted")
+	})
 }
 
 func (s *ArchivalSuite) mutableStateIsDeleted(namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
@@ -269,14 +254,10 @@ func (s *ArchivalSuite) mutableStateIsDeleted(namespaceID namespace.ID, executio
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		_, err := s.GetTestCluster().TestBase().ExecutionManager.GetWorkflowExecution(testcore.NewContext(), request)
-		if common.IsNotFoundError(err) {
-			return true
-		}
-		s.NoError(err)
-		return false
-	}, 20*time.Second, 500*time.Millisecond)
+		require.True(t, common.IsNotFoundError(err), "expected mutable state to be deleted")
+	})
 }
 
 func (s *ArchivalSuite) startAndFinishWorkflow(

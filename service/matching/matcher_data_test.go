@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -132,18 +133,18 @@ func (s *MatcherDataSuite) newBacklogTaskWithPriority(id int64, age time.Duratio
 }
 
 func (s *MatcherDataSuite) waitForPollers(n int) {
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		s.md.lock.Lock()
 		defer s.md.lock.Unlock()
-		return s.md.pollers.Len() >= n
+		require.GreaterOrEqual(t, s.md.pollers.Len(), n)
 	}, time.Second, time.Millisecond)
 }
 
 func (s *MatcherDataSuite) waitForTasks(n int) {
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		s.md.lock.Lock()
 		defer s.md.lock.Unlock()
-		return s.md.tasks.Len() >= n
+		require.GreaterOrEqual(t, s.md.tasks.Len(), n)
 	}, time.Second, time.Millisecond)
 }
 

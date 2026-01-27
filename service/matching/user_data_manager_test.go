@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -25,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
@@ -154,8 +153,8 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	require.NoError(t, m.WaitUntilInitialized(ctx))
 
 	// should be refreshing quickly
-	require.Eventually(t, func() bool {
-		return tm.getGetUserDataCount(dbq) >= 5
+	eventually.Require(t, func(et *eventually.T) {
+		require.GreaterOrEqual(et, tm.getGetUserDataCount(dbq), 5)
 	}, time.Second, time.Millisecond)
 
 	// should still have version 2
@@ -180,9 +179,10 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	data2.Version++
 
 	// eventually it will notice and reload the data
-	require.Eventually(t, func() bool {
+	eventually.Require(t, func(et *eventually.T) {
 		userData, _, err := m.GetUserData()
-		return err == nil && userData.Version == data2.Version
+		require.NoError(et, err)
+		require.Equal(et, data2.Version, userData.Version)
 	}, time.Second, time.Millisecond)
 
 	m.Stop()
@@ -225,8 +225,8 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	require.NoError(t, m.WaitUntilInitialized(ctx))
 
 	// should be refreshing quickly
-	require.Eventually(t, func() bool {
-		return tm.getGetUserDataCount(dbq) >= 5
+	eventually.Require(t, func(et *eventually.T) {
+		require.GreaterOrEqual(et, tm.getGetUserDataCount(dbq), 5)
 	}, time.Second, time.Millisecond)
 
 	// should still have version 6
@@ -251,9 +251,9 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	data4.Version++
 
 	// it should unload the task queue
-	require.Eventually(t, func() bool {
+	eventually.Require(t, func(et *eventually.T) {
 		_, _, err := m.GetUserData()
-		return errors.Is(err, errTaskQueueClosed)
+		require.ErrorIs(et, err, errTaskQueueClosed)
 	}, time.Second, time.Millisecond)
 }
 
@@ -764,7 +764,9 @@ func TestUserData_FetchesStickyToNormal(t *testing.T) {
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
 	require.Equal(t, data1, userData)
-	require.Eventually(t, func() bool { return firstPartition.Load() == secondPartition.Load() }, 5*time.Second, time.Millisecond)
+	eventually.Require(t, func(et *eventually.T) {
+		require.Equal(et, firstPartition.Load(), secondPartition.Load())
+	}, eventually.DefaultTimeout, time.Millisecond)
 	m.Stop()
 	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
@@ -878,13 +880,13 @@ func TestUserData_Propagation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(iter+1), newVersion)
 		start := time.Now()
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
+		eventually.Require(t, func(et *eventually.T) {
 			for i := 1; i < N; i++ {
 				d, _, err := managers[i].GetUserData()
-				require.NoError(c, err, "number", i)
-				require.Equal(c, iter+1, int(d.GetVersion()), "number", i)
+				require.NoError(et, err, "number", i)
+				require.Equal(et, iter+1, int(d.GetVersion()), "number", i)
 			}
-		}, 5*time.Second, 10*time.Millisecond, "failed to propagate")
+		}, eventually.DefaultTimeout, 10*time.Millisecond)
 		t.Log("Propagation time:", time.Since(start))
 	}
 }
@@ -988,14 +990,14 @@ func TestUserData_CheckPropagation(t *testing.T) {
 	failing.Store(false)
 
 	// CheckTaskQueueUserDataPropagation should return soon
-	require.Eventually(t, func() bool {
+	eventually.Require(t, func(et *eventually.T) {
 		select {
 		case err := <-checkReturned:
-			return err == nil
+			require.NoError(et, err)
 		default:
-			return false
+			require.Fail(et, "CheckTaskQueueUserDataPropagation did not return fast enough")
 		}
-	}, 100*time.Millisecond, 5*time.Millisecond, "CheckTaskQueueUserDataPropagation did not return fast enough")
+	}, 100*time.Millisecond, 5*time.Millisecond)
 }
 
 func defaultTqmTestOpts(controller *gomock.Controller) *tqmTestOpts {

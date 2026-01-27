@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -138,7 +139,7 @@ func (s *DeploymentVersionSuite) updateMetadata(tv *testvars.TestVars, upsertEnt
 
 func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *testvars.TestVars) {
 	go s.pollFromDeployment(ctx, tv)
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(tv)
 		a.NoError(err)
@@ -165,7 +166,7 @@ func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, tv *t
 				v.GetBuildId() == tv.ExternalDeploymentVersion().GetBuildId()
 		})
 		a.True(contains)
-	}, time.Second*5, time.Millisecond*200)
+	})
 }
 
 func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx context.Context, tv *testvars.TestVars) {
@@ -200,7 +201,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 	s.NoError(err)
 
 	// verifying we see our registered workers in the version deployment even after a CAN
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(eventually.DefaultTimeout, time.Second, func(t *eventually.T) {
 		a := assert.New(t)
 
 		resp, err := s.describeVersion(tv)
@@ -222,7 +223,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Nil(resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
@@ -236,7 +237,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 	go s.pollFromDeployment(ctx, tv)
 
 	// Querying the Deployment
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := require.New(t)
 
 		resp, err := s.describeVersion(tv)
@@ -252,7 +253,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue() {
 
 		a.Equal(numberOfDeployments, len(resp.GetVersionTaskQueues()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
-	}, time.Second*5, time.Millisecond*200)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_ConcurrentPollers() {
@@ -272,7 +273,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 	}
 
 	// Querying the Worker Deployment Version
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, eventually.DefaultPollInterval, func(t *eventually.T) {
 		a := assert.New(t)
 
 		resp, err := s.describeVersion(tv)
@@ -287,7 +288,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 		a.Equal(tv.TaskQueue().GetName(), resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()[0].Name)
 		a.Equal(2, len(resp.GetVersionTaskQueues()))
 		a.Equal(tv.TaskQueue().GetName(), resp.GetVersionTaskQueues()[0].Name)
-	}, time.Second*10, time.Millisecond*1000)
+	})
 }
 
 // Name is used by testvars. We use a shorten test name in variables so that physical task queue IDs
@@ -496,13 +497,13 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 	// describe version and confirm that it is not drained
 	// add a 3s time requirement so that it does not succeed immediately
 	sentSignal := time.Now()
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := require.New(t)
 		a.Greater(time.Since(sentSignal), 2*time.Second)
 		resp, err := s.describeVersion(tv1)
 		a.NoError(err)
 		a.NotEqual(enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	})
 }
 
 // Testing DeleteVersion
@@ -527,7 +528,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -536,7 +537,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteCurrentVersion() {
 		a.NoError(err)
 		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		a.Equal(tv1.ExternalDeploymentVersion(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
-	}, time.Second*5, time.Millisecond*200)
+	})
 
 }
 
@@ -557,7 +558,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 
 	// Verifying workflow is not in a locked state after an invalid delete request such as the one above. If the workflow were in a locked
 	// state, the passed context would have timed out making the following operation fail.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -566,7 +567,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_DeleteRampedVersion() {
 		a.NoError(err)
 		a.Equal(tv1.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion()) //nolint:staticcheck // SA1019: worker versioning v0.31
 		a.Equal(tv1.ExternalDeploymentVersion(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
-	}, time.Second*5, time.Millisecond*200)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
@@ -585,7 +586,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -599,7 +600,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_NoWfs() {
 				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
-	}, time.Second*5, time.Millisecond*200)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_DrainingVersion() {
@@ -687,11 +688,11 @@ func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv
 	s.Nil(err)
 
 	// wait for drained
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		resp, err := s.describeVersion(tv)
 		assert.NoError(t, err)
 		assert.Equal(t, enumspb.VERSION_DRAINAGE_STATUS_DRAINED, resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo().GetStatus())
-	}, 10*time.Second, time.Second)
+	})
 }
 
 func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, tv *testvars.TestVars, moreExpectedVersions ...*testvars.TestVars) {
@@ -701,7 +702,7 @@ func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, tv *testvar
 			expectedVersionsStr = append(expectedVersionsStr, tv2.DeploymentVersionStringV32())
 		}
 	}
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 100*time.Millisecond, func(t *eventually.T) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
@@ -718,7 +719,7 @@ func (s *DeploymentVersionSuite) waitForPollers(ctx context.Context, tv *testvar
 			}
 		}
 		require.Equal(t, len(expectedVersionsStr), versionsSeen)
-	}, 10*time.Second, 100*time.Millisecond)
+	})
 }
 
 func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testvars.TestVars, moreUnexpectedVersions ...*testvars.TestVars) {
@@ -728,7 +729,7 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 			unexpectedVersionsStr = append(unexpectedVersionsStr, tv2.DeploymentVersionStringV32())
 		}
 	}
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 100*time.Millisecond, func(t *eventually.T) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv.TaskQueue(),
@@ -747,7 +748,7 @@ func (s *DeploymentVersionSuite) waitForNoPollers(ctx context.Context, tv *testv
 			}
 		}
 		require.Equal(t, 0, versionsSeen)
-	}, 10*time.Second, 100*time.Millisecond)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
@@ -811,7 +812,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	s.startVersionWorkflow(ctx, tvMax)
 
 	// tvs[0] is draining so can't be deleted. tvs[1] is current, so tvs[2] should be deleted.
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -826,7 +827,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 		a.Contains(versions, tvs[0].DeploymentVersionString())
 		a.Contains(versions, tvs[1].DeploymentVersionString())
 		a.Contains(versions, tvs[3].DeploymentVersionString())
-	}, time.Second*5, time.Millisecond*200)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
@@ -849,7 +850,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -863,7 +864,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete() {
 				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
-	}, time.Second*5, time.Millisecond*200)
+	})
 
 	// idempotency check: deleting the same version again should succeed
 	s.tryDeleteVersion(ctx, tv1, "", false)
@@ -880,7 +881,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 	s.startVersionWorkflow(ctx, tv1)
 
 	// Wait for pollers going away
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv1.TaskQueue(),
@@ -888,13 +889,13 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 		})
 		require.NoError(t, err)
 		require.Empty(t, resp.Pollers)
-	}, 5*time.Second, time.Second)
+	})
 
 	// skipDrainage=true will make delete succeed
 	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// deployment version does not exist in the deployment list
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 100*time.Millisecond, func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -908,20 +909,20 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ValidDelete_SkipDrainage() {
 				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
-	}, time.Second*5, time.Millisecond*200)
+	})
 
 	// idempotency check: deleting the same version again should succeed
 	s.tryDeleteVersion(ctx, tv1, "", false)
 
 	// Describe Worker Deployment should give not found
 	// describe deployment version gives not found error
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		a := assert.New(t)
 		_, err := s.describeVersion(tv1)
 		a.Error(err)
 		var nfe *serviceerror.NotFound
 		a.True(errors.As(err, &nfe))
-	}, time.Second*5, time.Millisecond*200)
+	})
 }
 
 func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
@@ -935,7 +936,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	s.startVersionWorkflow(ctx, tv1)
 
 	// Wait for pollers going away
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     tv1.TaskQueue(),
@@ -943,7 +944,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 		})
 		require.NoError(t, err)
 		require.Empty(t, resp.Pollers)
-	}, 10*time.Second, time.Second)
+	})
 
 	// concurrent delete version requests should not break the system.
 	var wg sync.WaitGroup
@@ -959,7 +960,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	wg.Wait()
 
 	// deployment version does not exist in the deployment list
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 50*time.Millisecond, func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 			Namespace:      s.Namespace().String(),
@@ -973,7 +974,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 				a.NotEqual(tv1.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
 			}
 		}
-	}, time.Second*10, time.Millisecond*200)
+	})
 }
 
 // VersionMissingTaskQueues
@@ -1160,7 +1161,7 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 		time.Sleep(waitFor + 1*time.Second) //nolint:forbidigo
 	}
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(tv)
 		a.NoError(err)
@@ -1175,7 +1176,7 @@ func (s *DeploymentVersionSuite) checkVersionDrainageAndVersionStatus(
 		a.Equal(expectedStatus, resp.GetWorkerDeploymentVersionInfo().GetStatus())
 		changedTime = dInfo.GetLastChangedTime().AsTime()
 		checkedTime = dInfo.GetLastCheckedTime().AsTime()
-	}, 5*time.Second, time.Millisecond*100)
+	})
 	return changedTime, checkedTime
 }
 
@@ -1184,7 +1185,7 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 	wf *commonpb.WorkflowExecution,
 	expectedOverride *workflowpb.VersioningOverride,
 ) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 500*time.Millisecond, func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
@@ -1221,7 +1222,7 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 				a.Equal(d.GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
 			}
 		}
-	}, 10*time.Second, 50*time.Millisecond)
+	})
 }
 
 func (s *DeploymentVersionSuite) checkWorkflowUpdateOptionsEventIdentity(
@@ -1229,7 +1230,7 @@ func (s *DeploymentVersionSuite) checkWorkflowUpdateOptionsEventIdentity(
 	wf *commonpb.WorkflowExecution,
 	expectedIdentity string,
 ) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 50*time.Millisecond, func(t *eventually.T) {
 		a := require.New(t)
 		resp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.Namespace().String(),
@@ -1253,12 +1254,12 @@ func (s *DeploymentVersionSuite) checkWorkflowUpdateOptionsEventIdentity(
 				a.Equal(expectedIdentity, event.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetIdentity())
 			}
 		}
-	}, 10*time.Second, 50*time.Millisecond)
+	})
 }
 
 func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *testvars.TestVars) {
 	// Querying the Deployment Version
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(tv)
 		if !a.NoError(err) {
@@ -1270,12 +1271,12 @@ func (s *DeploymentVersionSuite) checkVersionIsCurrent(ctx context.Context, tv *
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	})
 }
 
 func (s *DeploymentVersionSuite) checkVersionIsRamping(ctx context.Context, tv *testvars.TestVars) {
 	// Querying the Deployment Version
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, time.Second, func(t *eventually.T) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(tv)
 		if !a.NoError(err) {
@@ -1287,7 +1288,7 @@ func (s *DeploymentVersionSuite) checkVersionIsRamping(ctx context.Context, tv *
 
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetRampingSinceTime())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.GetWorkerDeploymentVersionInfo().GetStatus())
-	}, time.Second*10, time.Millisecond*1000)
+	})
 }
 
 func (s *DeploymentVersionSuite) setCurrent(tv *testvars.TestVars, ignoreMissingTQs bool) error {
@@ -1439,7 +1440,7 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_Ca
 	s.Nil(resp)
 
 	// Wait for the cache TTL to expire
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(10*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		_, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 			Namespace:                s.Namespace().String(),
 			WorkflowExecution:        tv.WorkflowExecution(),
@@ -1447,8 +1448,8 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_Ca
 			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 			Identity:                 tv.ClientIdentity(),
 		})
-		return err == nil
-	}, 10*time.Second, 500*time.Millisecond)
+		require.NoError(t, err)
+	})
 
 	// The Pinned Override should have now succeeded with no error. Verify that the
 	// the workflow shows the override.
@@ -1756,20 +1757,17 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 }
 func (s *DeploymentVersionSuite) startBatchJobWithinConcurrentJobLimit(ctx context.Context, req *workflowservice.StartBatchOperationRequest) error {
 	var err error
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(10*time.Second, 50*time.Millisecond, func(t *eventually.T) {
 		_, err = s.FrontendClient().StartBatchOperation(ctx, req)
-		if err == nil {
-			return true
-		} else if strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
-			return false // retry
+		if err != nil && strings.Contains(err.Error(), "Max concurrent batch operations is reached") {
+			require.Fail(t, "Max concurrent batch operations is reached, retrying")
 		}
-		return true
-	}, 5*time.Second, 500*time.Millisecond)
+	})
 	return err
 }
 
 func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.Context, jobId string) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(t *eventually.T) {
 		a := assert.New(t)
 		listResp, err := s.FrontendClient().ListBatchOperations(ctx, &workflowservice.ListBatchOperationsRequest{
 			Namespace: s.Namespace().String(),
@@ -1779,9 +1777,9 @@ func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.
 		if len(listResp.GetOperationInfo()) > 0 {
 			a.Equal(jobId, listResp.GetOperationInfo()[0].GetJobId())
 		}
-	}, 10*time.Second, 50*time.Millisecond)
+	})
 
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 50*time.Millisecond, func(t *eventually.T) {
 		a := assert.New(t)
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
 			Namespace: s.Namespace().String(),
@@ -1790,11 +1788,11 @@ func (s *DeploymentVersionSuite) checkListAndWaitForBatchCompletion(ctx context.
 		a.NoError(err)
 		a.NotEqual(enumspb.BATCH_OPERATION_STATE_FAILED, descResp.GetState(), fmt.Sprintf("batch operation failed. description: %+v", descResp))
 		a.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
-	}, 10*time.Second, 50*time.Millisecond)
+	})
 }
 
 func (s *DeploymentVersionSuite) checkBatchOperationFails(ctx context.Context, jobID string, numWorkflows int) {
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(30*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		a := assert.New(t)
 		descResp, err := s.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
 			Namespace: s.Namespace().String(),
@@ -1803,7 +1801,7 @@ func (s *DeploymentVersionSuite) checkBatchOperationFails(ctx context.Context, j
 		a.NoError(err)
 		// All workflows should have failed validation
 		a.Equal(int64(numWorkflows), descResp.GetFailureOperationCount(), "expected all operations to fail")
-	}, 30*time.Second, 500*time.Millisecond)
+	})
 }
 
 func (s *DeploymentVersionSuite) makePinnedOverride(tv *testvars.TestVars) *workflowpb.VersioningOverride {
@@ -1854,11 +1852,11 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_C
 	// Wait for the cache TTL to expire; On expiry of the cache TTL, it would result in a fresh RPC which would verify the version presence,
 	// eventually leading to the StartWorkflowExecution call succeeding.
 	var resp *workflowservice.StartWorkflowExecutionResponse
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(10*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		var err error
 		resp, err = s.FrontendClient().StartWorkflowExecution(ctx, request)
-		return err == nil
-	}, 10*time.Second, 500*time.Millisecond)
+		require.NoError(t, err)
+	})
 
 	// The StartWorkflowExecution should now succeed with no error. Verify that the workflow shows the override.
 	s.checkDescribeWorkflowAfterOverride(ctx, &commonpb.WorkflowExecution{
@@ -1908,11 +1906,12 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinned
 	// Wait for the cache TTL to expire; On expiry of the cache TTL, it would result in a fresh RPC which would verify the version presence,
 	// eventually leading to the SignalWithStartWorkflowExecution call succeeding.
 	var resp *workflowservice.SignalWithStartWorkflowExecutionResponse
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(10*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		var err error
 		resp, err = s.FrontendClient().SignalWithStartWorkflowExecution(ctx, request)
-		return err == nil && resp.GetStarted()
-	}, 10*time.Second, 500*time.Millisecond)
+		require.NoError(t, err)
+		require.True(t, resp.GetStarted())
+	})
 
 	wf := &commonpb.WorkflowExecution{
 		WorkflowId: tv.WorkflowID(),

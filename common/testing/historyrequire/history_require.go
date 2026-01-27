@@ -7,22 +7,19 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common/testing/eventually"
 	"google.golang.org/protobuf/proto"
 )
 
 type (
 	HistoryRequire struct {
-		t require.TestingT
-	}
-
-	helper interface {
-		Helper()
+		t testing.TB
 	}
 
 	HistoryEventsReader func() []*historypb.HistoryEvent
@@ -34,7 +31,7 @@ var (
 	typeOfBytes = reflect.TypeOf([]byte(nil))
 )
 
-func New(t require.TestingT) HistoryRequire {
+func New(t testing.TB) HistoryRequire {
 	return HistoryRequire{
 		t: t,
 	}
@@ -46,9 +43,7 @@ func New(t require.TestingT) HistoryRequire {
 //  - enums as strings not as ints
 
 func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
 
@@ -60,9 +55,7 @@ func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistory
 }
 
 func (h HistoryRequire) EqualHistoryEventsSuffix(expectedHistorySuffix string, actualHistoryEvents []*historypb.HistoryEvent) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySuffix)
 
@@ -74,9 +67,7 @@ func (h HistoryRequire) EqualHistoryEventsSuffix(expectedHistorySuffix string, a
 }
 
 func (h HistoryRequire) EqualHistoryEventsPrefix(expectedHistoryPrefix string, actualHistoryEvents []*historypb.HistoryEvent) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistoryPrefix)
 
@@ -90,9 +81,7 @@ func (h HistoryRequire) EqualHistoryEventsPrefix(expectedHistoryPrefix string, a
 // ContainsHistoryEvents checks if expectedHistorySegment is contained in actualHistoryEvents.
 // actualHistoryEvents are sanitized based on the first event in expectedHistorySegment.
 func (h HistoryRequire) ContainsHistoryEvents(expectedHistorySegment string, actualHistoryEvents []*historypb.HistoryEvent) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySegment)
 
@@ -104,14 +93,12 @@ func (h HistoryRequire) ContainsHistoryEvents(expectedHistorySegment string, act
 }
 
 func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHistoryEventsReader HistoryEventsReader, waitFor time.Duration, tick time.Duration) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistory)
 
 	var actualHistoryEvents []*historypb.HistoryEvent
-	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
+	eventually.Require(h.t, func(t *eventually.T) {
 		actualHistoryEvents = actualHistoryEventsReader()
 		require.Equalf(t, len(expectedHistoryEvents), len(actualHistoryEvents),
 			"Length of expected(%d) and actual(%d) histories is not equal - actual history: \n%v",
@@ -122,16 +109,14 @@ func (h HistoryRequire) WaitForHistoryEvents(expectedHistory string, actualHisto
 }
 
 func (h HistoryRequire) WaitForHistoryEventsSuffix(expectedHistorySuffix string, actualHistoryEventsReader HistoryEventsReader, waitFor time.Duration, tick time.Duration) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	expectedHistoryEvents, expectedEventsAttributes := h.parseHistory(expectedHistorySuffix)
 
 	expectedCompactHistory := h.formatHistoryEvents(expectedHistoryEvents, true)
 
 	var actualHistoryEvents []*historypb.HistoryEvent
-	require.EventuallyWithT(h.t, func(t *assert.CollectT) {
+	eventually.Require(h.t, func(t *eventually.T) {
 		actualHistoryEvents = actualHistoryEventsReader()
 
 		require.GreaterOrEqualf(t, len(actualHistoryEvents), len(expectedHistoryEvents),
@@ -155,41 +140,31 @@ func (h HistoryRequire) WaitForHistoryEventsSuffix(expectedHistorySuffix string,
 }
 
 func (h HistoryRequire) EqualHistory(expectedHistory string, actualHistory *historypb.History) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	h.EqualHistoryEvents(expectedHistory, actualHistory.GetEvents())
 }
 
 func (h HistoryRequire) EqualHistorySuffix(expectedHistorySuffix string, actualHistory *historypb.History) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	h.EqualHistoryEventsSuffix(expectedHistorySuffix, actualHistory.GetEvents())
 }
 
 func (h HistoryRequire) EqualHistoryPrefix(expectedHistoryPrefix string, actualHistory *historypb.History) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	h.EqualHistoryEventsPrefix(expectedHistoryPrefix, actualHistory.GetEvents())
 }
 
 func (h HistoryRequire) ContainsHistory(expectedHistorySegment string, actualHistory *historypb.History) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	h.ContainsHistoryEvents(expectedHistorySegment, actualHistory.GetEvents())
 }
 
 func (h HistoryRequire) WaitForHistory(expectedHistory string, actualHistoryReader HistoryReader, waitFor time.Duration, tick time.Duration) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	h.WaitForHistoryEvents(expectedHistory, func() []*historypb.HistoryEvent {
 		return actualHistoryReader().GetEvents()
@@ -197,9 +172,7 @@ func (h HistoryRequire) WaitForHistory(expectedHistory string, actualHistoryRead
 }
 
 func (h HistoryRequire) WaitForHistorySuffix(expectedHistorySuffix string, actualHistoryReader HistoryReader, waitFor time.Duration, tick time.Duration) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	h.WaitForHistoryEventsSuffix(expectedHistorySuffix, func() []*historypb.HistoryEvent {
 		return actualHistoryReader().GetEvents()
@@ -227,9 +200,7 @@ func (h HistoryRequire) equalHistoryEvents(
 	expectedEventsAttributes []map[string]any,
 	actualHistoryEvents []*historypb.HistoryEvent,
 ) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	actualHistoryEvents = h.sanitizeActualHistoryEventsForEquals(expectedHistoryEvents, actualHistoryEvents)
 
@@ -245,9 +216,7 @@ func (h HistoryRequire) containsHistoryEvents(
 	expectedEventsAttributes []map[string]any,
 	actualHistoryEvents []*historypb.HistoryEvent,
 ) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	actualHistoryEvents = h.sanitizeActualHistoryEventsForContains(expectedHistoryEvents, actualHistoryEvents)
 
@@ -330,9 +299,7 @@ func (h HistoryRequire) equalHistoryEventsAttributes(
 	expectedEventsAttributes []map[string]any,
 	actualHistoryEvents []*historypb.HistoryEvent,
 ) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	for i, expectedEventAttributes := range expectedEventsAttributes {
 		if expectedEventAttributes == nil {
@@ -345,9 +312,7 @@ func (h HistoryRequire) equalHistoryEventsAttributes(
 }
 
 func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEvent, compact bool) string {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	if len(historyEvents) == 0 {
 		return ""
@@ -380,9 +345,7 @@ func (h HistoryRequire) formatHistoryEvents(historyEvents []*historypb.HistoryEv
 }
 
 func (h HistoryRequire) structToMap(strct any) map[string]any {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	strctV := reflect.ValueOf(strct)
 	strctT := strctV.Type()
@@ -442,9 +405,7 @@ func (h HistoryRequire) fieldValue(field reflect.Value) any {
 
 //nolint:revive // cognitive complexity 26 (> max enabled 25)
 func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[string]any, actualAttributesV reflect.Value, eventID int64, attrPrefix string) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	if actualAttributesV.Kind() == reflect.Pointer {
 		actualAttributesV = actualAttributesV.Elem()
@@ -505,9 +466,7 @@ func (h HistoryRequire) equalExpectedMapToActualAttributes(expectedMap map[strin
 //
 //nolint:revive // cognitive complexity 29 (> max enabled 25)
 func (h HistoryRequire) parseHistory(history string) ([]*historypb.HistoryEvent, []map[string]any) {
-	if th, ok := h.t.(helper); ok {
-		th.Helper()
-	}
+	h.t.Helper()
 
 	var historyEvents []*historypb.HistoryEvent
 	var eventsAttrs []map[string]any

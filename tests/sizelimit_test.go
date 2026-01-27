@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -202,34 +204,26 @@ SignalLoop:
  22 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
-			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.Namespace().String(),
-					MaximumPageSize: 100,
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: nil,
-						LatestTime:   timestamppb.New(time.Now().UTC()),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.Namespace().String(),
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				return true
-			}
-			s.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+			},
+		)
+		require.NoError(t, err1)
+		require.Len(t, resp.Executions, 1)
+	})
 }
 
 func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
@@ -448,34 +442,26 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
   5 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
-			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.Namespace().String(),
-					MaximumPageSize: 100,
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: nil,
-						LatestTime:   timestamppb.New(time.Now().UTC()),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.Namespace().String(),
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				return true
-			}
-			s.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+			},
+		)
+		require.NoError(t, err1)
+		require.Len(t, resp.Executions, 1)
+	})
 }
 
 func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit() {
@@ -549,32 +535,24 @@ SignalLoop:
  12 WorkflowExecutionTerminated`, historyEvents)
 
 	// verify visibility is correctly processed from open to close
-	s.Eventually(
-		func() bool {
-			resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.ListClosedWorkflowExecutionsRequest{
-					Namespace:       s.Namespace().String(),
-					MaximumPageSize: 100,
-					StartTimeFilter: &filterpb.StartTimeFilter{
-						EarliestTime: nil,
-						LatestTime:   timestamppb.New(time.Now().UTC()),
-					},
-					Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
-						ExecutionFilter: &filterpb.WorkflowExecutionFilter{
-							WorkflowId: id,
-						},
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		resp, err1 := s.FrontendClient().ListClosedWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       s.Namespace().String(),
+				MaximumPageSize: 100,
+				StartTimeFilter: &filterpb.StartTimeFilter{
+					EarliestTime: nil,
+					LatestTime:   timestamppb.New(time.Now().UTC()),
+				},
+				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_ExecutionFilter{
+					ExecutionFilter: &filterpb.WorkflowExecutionFilter{
+						WorkflowId: id,
 					},
 				},
-			)
-			s.NoError(err1)
-			if len(resp.Executions) == 1 {
-				return true
-			}
-			s.Logger.Info("Closed WorkflowExecution is not yet visible")
-			return false
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+			},
+		)
+		require.NoError(t, err1)
+		require.Len(t, resp.Executions, 1)
+	})
 }

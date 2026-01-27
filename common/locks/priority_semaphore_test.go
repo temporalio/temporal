@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 type (
@@ -201,17 +202,10 @@ func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
 func (s *prioritySemaphoreSuite) waitUntilBlockedInSemaphore(n int) {
 	pattern := `\[select\]\:\n\S*\(\*PrioritySemaphoreImpl\)\.Acquire`
 	re := regexp.MustCompile(pattern)
-	s.Eventually(
-		func() bool {
-			buf := make([]byte, 100000)
-			size := runtime.Stack(buf, true)
-			threads := len(re.FindAllIndex(buf[:size], -1))
-			if threads == n {
-				return true
-			}
-			return false
-		},
-		10*time.Second,
-		100*time.Millisecond,
-	)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		buf := make([]byte, 100000)
+		size := runtime.Stack(buf, true)
+		threads := len(re.FindAllIndex(buf[:size], -1))
+		require.Equal(t, n, threads)
+	}, 10*time.Second, 100*time.Millisecond)
 }

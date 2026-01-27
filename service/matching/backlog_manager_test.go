@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -245,8 +247,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppen
 	blm.taskWriter.Start()
 	// Adding tasks to the buffer will increase the in-memory counter by 1
 	// and this will be written to persistence
-	s.Eventually(func() bool {
-		return totalApproximateBacklogCount(blm) == int64(1)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, int64(1), totalApproximateBacklogCount(blm))
 	}, time.Second*30, time.Millisecond)
 }
 

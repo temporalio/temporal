@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -1431,15 +1433,11 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	}
 
 	// Assert visibility is correct
-	s.Eventually(
-		func() bool {
-			listResp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), listOpenRequest)
-			s.NoError(err)
-			return len(listResp.Executions) == 1
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		listResp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), listOpenRequest)
+		require.NoError(t, err)
+		require.Len(t, listResp.Executions, 1)
+	})
 
 	// Terminate workflow execution and assert visibility is correct
 	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1453,15 +1451,11 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow() {
 	})
 	s.NoError(err)
 
-	s.Eventually(
-		func() bool {
-			listResp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), listOpenRequest)
-			s.NoError(err)
-			return len(listResp.Executions) == 0
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		listResp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), listOpenRequest)
+		require.NoError(t, err)
+		require.Empty(t, listResp.Executions)
+	})
 
 	listClosedRequest := &workflowservice.ListClosedWorkflowExecutionsRequest{
 		Namespace:       s.Namespace().String(),

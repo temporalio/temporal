@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -21,6 +20,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
@@ -88,7 +88,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	// Poll for a task and see attached decision is to scale up b/c of backlog
 	feClient := s.FrontendClient()
 	// This needs to be done in an eventually loop because nexus endpoints don't become available immediately...
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(20*time.Second, eventually.DefaultPollInterval, func(t *eventually.T) {
 		resp, err := feClient.PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -129,11 +129,11 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 			Commands:  commands,
 		})
 		require.NoError(t, err)
-	}, 20*time.Second, 200*time.Millisecond)
+	})
 
 	// Wait to ensure add rate exceeds dispatch rate & backlog age grows
 	tqtyp := enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(20*time.Second, eventually.DefaultPollInterval, func(t *eventually.T) {
 		res, err := feClient.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:      s.Namespace().String(),
 			TaskQueue:      &taskqueuepb.TaskQueue{Name: tq},
@@ -144,7 +144,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 		require.NoError(t, err)
 		stats := res.GetVersionsInfo()[""].TypesInfo[int32(tqtyp)].Stats
 		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
-	}, 20*time.Second, 200*time.Millisecond)
+	})
 
 	actResp, err := feClient.PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -308,9 +308,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	}()
 
 	// This needs to be done in an eventually loop since version existence in the server is eventually consistent.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
-
+	s.AwaitWithTimeout(20*time.Second, eventually.DefaultPollInterval, func(t *eventually.T) {
 		// Verify the version status is Inactive and has been registered due to a poller.
 		descResp, err := feClient.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 			Namespace: s.Namespace().String(),
@@ -319,14 +317,14 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 				BuildId:        testBuildID,
 			},
 		})
-		a.NoError(err)
-		a.NotNil(descResp)
-		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
-		a.Len(descResp.GetVersionTaskQueues(), 2) // one for workflow TQ, one for activity TQ
+		require.NoError(t, err)
+		require.NotNil(t, descResp)
+		require.Equal(t, enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
+		require.Len(t, descResp.GetVersionTaskQueues(), 2) // one for workflow TQ, one for activity TQ
 
 		// Promote the deployment version to either current or ramping.
 		err = promoteDeploymentVersion(ctx, feClient, deploymentName, testBuildID)
-		a.NoError(err)
+		require.NoError(t, err)
 
 		// Verify the version status is the expected status.
 		descResp, err = feClient.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -336,10 +334,10 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 				BuildId:        testBuildID,
 			},
 		})
-		a.NoError(err)
-		a.NotNil(descResp)
-		a.Equal(expectedStatus, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
-	}, 20*time.Second, 200*time.Millisecond)
+		require.NoError(t, err)
+		require.NotNil(t, descResp)
+		require.Equal(t, expectedStatus, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
+	})
 
 	// Stop the activity poller to grow the backlog and to see poller scaling decisions.
 	pollCancel()
@@ -384,8 +382,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	// Wait to ensure add rate exceeds dispatch rate & backlog age grows.
 	tqtyp := enumspb.TASK_QUEUE_TYPE_ACTIVITY
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.AwaitWithTimeout(20*time.Second, eventually.DefaultPollInterval, func(t *eventually.T) {
 		res, err := feClient.DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: tq},
@@ -394,7 +391,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 		})
 		require.NoError(t, err)
 		stats := res.GetStats()
-		a.GreaterOrEqual(stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
+		require.GreaterOrEqual(t, stats.ApproximateBacklogAge.AsDuration(), 200*time.Millisecond)
 
 		// Describe the deployment version to see the activity stats attributed to it.
 		versionDescResp, err := feClient.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -405,18 +402,18 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 			},
 			ReportTaskQueueStats: true,
 		})
-		a.NoError(err)
-		a.NotNil(versionDescResp)
+		require.NoError(t, err)
+		require.NotNil(t, versionDescResp)
 
 		found := false
 		for _, info := range versionDescResp.GetVersionTaskQueues() {
 			if info.Type == enumspb.TASK_QUEUE_TYPE_ACTIVITY {
-				a.Equal(int64(10), info.GetStats().GetApproximateBacklogCount())
+				require.Equal(t, int64(10), info.GetStats().GetApproximateBacklogCount())
 				found = true
 			}
 		}
-		a.True(found)
-	}, 20*time.Second, 200*time.Millisecond)
+		require.True(t, found)
+	})
 
 	// Start an activity poller that's in the deployment version. This should see a scale up decision since the backlog
 	// is absorbed by the deployment version.

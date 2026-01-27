@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -31,6 +30,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
@@ -1406,14 +1406,12 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, 1, len(description.PendingActivities))
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
-	},
-		10*time.Second,
-		500*time.Millisecond)
+	})
 
 	err = s.SdkClient().CompleteActivityByID(ctx, s.Namespace().String(), run.GetID(), run.GetRunID(), ai.ActivityID, nil, nil)
 	s.NoError(err)
@@ -1437,14 +1435,12 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
 	s.NoError(err)
 	ai := <-activityInfo
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.AwaitWithTimeout(10*time.Second, 500*time.Millisecond, func(t *eventually.T) {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, 1, len(description.PendingActivities))
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
-	},
-		10*time.Second,
-		500*time.Millisecond)
+	})
 
 	err = s.SdkClient().CompleteActivity(ctx, ai.TaskToken, nil, nil)
 	var svcErr *serviceerror.NotFound

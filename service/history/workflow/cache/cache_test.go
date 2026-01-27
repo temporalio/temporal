@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/eventually"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -461,11 +462,11 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		release1(nil)
 		snapshot := capture.Snapshot()
-		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
-		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
+		require.Greater(t, snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
+		require.Equal(t, tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"])
 	}, 150*time.Millisecond, 100*time.Millisecond)
 
 	capture = metricsHandler.StartCapture()
@@ -478,11 +479,11 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		release2(nil)
 		snapshot := capture.Snapshot()
-		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
-		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
+		require.Greater(t, snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
+		require.Equal(t, tests.NamespaceID.String(), snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"])
 	}, 300*time.Millisecond, 200*time.Millisecond)
 }
 

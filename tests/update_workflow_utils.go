@@ -4,12 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -101,14 +101,14 @@ func sendUpdateInternal(
 
 func waitUpdateAdmitted(s testcore.Env, tv *testvars.TestVars) {
 	s.T().Helper()
-	require.EventuallyWithTf(s.T(), func(collect *assert.CollectT) {
+	s.AwaitWithTimeout(eventually.DefaultTimeout, 10*time.Millisecond, func(t *eventually.T) {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
 			Namespace:  s.Namespace().String(),
 			UpdateRef:  tv.UpdateRef(),
 			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED},
 		})
 
-		require.NoError(collect, pollErr)
-		require.GreaterOrEqual(collect, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
-	}, 5*time.Second, 10*time.Millisecond, "update %s did not reach Admitted stage", tv.UpdateID())
+		require.NoError(t, pollErr)
+		require.GreaterOrEqual(t, pollResp.GetStage(), enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ADMITTED)
+	})
 }

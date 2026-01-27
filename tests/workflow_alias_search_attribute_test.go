@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -20,6 +19,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -73,8 +73,7 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	}
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.AwaitWithTimeout(10*time.Second, 1*time.Second, func(t *eventually.T) {
 		resp, err := s.GetTestCluster().MatchingClient().CheckTaskQueueVersionMembership(
 			ctx,
 			&matchingservice.CheckTaskQueueVersionMembershipRequest{
@@ -84,9 +83,9 @@ func (s *WorkflowAliasSearchAttributeTestSuite) startVersionedPollerAndValidate(
 				Version:       version,
 			},
 		)
-		a.NoError(err)
-		a.True(resp.GetIsMember())
-	}, 10*time.Second, 1*time.Second)
+		require.NoError(t, err)
+		require.True(t, resp.GetIsMember())
+	})
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) createWorkflow(
@@ -137,36 +136,32 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	_, err := s.createWorkflow(ctx, tv, nil)
 	s.Require().NoError(err)
 
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			// Filter by WorkflowId to isolate this test's workflow from other tests
-			resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowId = '%s'", tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, resp.GetExecutions(), 1)
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		// Filter by WorkflowId to isolate this test's workflow from other tests
+		resp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowId = '%s'", tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, resp.GetExecutions(), 1)
 
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+		queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+		queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'Pinned' AND WorkflowId = '%s'", tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
+	})
 
 	_, err = s.terminateWorkflow(ctx, tv)
 	s.Require().NoError(err)
@@ -200,28 +195,24 @@ func (s *WorkflowAliasSearchAttributeTestSuite) TestWorkflowAliasSearchAttribute
 	_, err = s.createWorkflow(ctx, tv, sa)
 	s.Require().NoError(err)
 
-	s.EventuallyWithT(
-		func(t *assert.CollectT) {
-			// Filter by WorkflowId to isolate this test's workflow from other tests
-			queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, queriedResp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 100*time.Millisecond, func(t *eventually.T) {
+		// Filter by WorkflowId to isolate this test's workflow from other tests
+		queriedResp, err := s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = 'Pinned' AND WorkflowId = '%s'", sadefs.TemporalWorkflowVersioningBehavior, tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, queriedResp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
 
-			queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
-			})
-			require.NoError(t, err)
-			require.NotNil(t, queriedResp)
-			require.Len(t, queriedResp.GetExecutions(), 1)
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
+		queriedResp, err = s.SdkClient().ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("WorkflowVersioningBehavior = 'user-defined' AND WorkflowId = '%s'", tv.WorkflowID()),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, queriedResp)
+		require.Len(t, queriedResp.GetExecutions(), 1)
+	})
 
 	_, err = s.terminateWorkflow(ctx, tv)
 	s.Require().NoError(err)

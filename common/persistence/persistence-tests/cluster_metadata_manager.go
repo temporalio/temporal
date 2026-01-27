@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 type (
@@ -250,21 +251,18 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertExpiresCorrectl
 // waitForPrune waits up for the persistence backend to prune all records. Some persistence backends
 // may not remove TTL'd entries at the exact instant they should expire, so we allow some timing flexibility here.
 func (s *ClusterMetadataManagerSuite) waitForPrune(waitFor time.Duration) {
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		err := s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 100})
-		s.Nil(err)
+		require.Nil(t, err)
 
 		resp, err := s.ClusterMetadataManager.GetClusterMembers(
 			s.ctx,
 			&p.GetClusterMembersRequest{LastHeartbeatWithin: time.Minute * 10},
 		)
-		s.NoError(err)
-		s.NotNil(resp)
-		return len(resp.ActiveMembers) == 0
-
-	},
-		waitFor,
-		500*time.Millisecond)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+		require.Empty(t, resp.ActiveMembers)
+	}, waitFor, 500*time.Millisecond)
 }
 
 // TestClusterMembershipUpsertInvalidExpiry verifies we cannot specify a non-positive RecordExpiry duration

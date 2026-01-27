@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 func TestGradualChangeValue_BeforeAfter(t *testing.T) {
@@ -300,18 +301,18 @@ func TestSubscribeGradualChange_TimerFiresAtTransitionTime(t *testing.T) {
 	assert.False(t, initial)
 
 	ts.Update(gc.When(key).Add(-time.Second))
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, callbackVals.get())
+	eventually.Require(t, func(t *eventually.T) {
+		require.Empty(t, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(gc.When(key).Add(time.Second))
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals.get())
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(end.Add(time.Second))
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals.get())
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 }
 

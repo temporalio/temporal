@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -18,6 +17,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -256,19 +256,15 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 	task = s.pollWorkflowTaskQueue()
 	s.failWorkflow(task, "failure 2")
 
-	s.Require().EventuallyWithT(
-		func(c *assert.CollectT) {
-			resp, err := s.FrontendClient().CountWorkflowExecutions(
-				testcore.NewContext(),
-				&workflowservice.CountWorkflowExecutionsRequest{
-					Namespace: s.Namespace().String(),
-					Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
-				},
-			)
-			require.NoError(c, err)
-			require.Equal(c, int64(2), resp.Count)
-		},
-		testcore.WaitForESToSettle,
-		200*time.Millisecond,
-	)
+	s.AwaitWithTimeout(testcore.WaitForESToSettle, 200*time.Millisecond, func(t *eventually.T) {
+		resp, err := s.FrontendClient().CountWorkflowExecutions(
+			testcore.NewContext(),
+			&workflowservice.CountWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				Query:     fmt.Sprintf("WorkflowId = '%s' AND ExecutionStatus = 'Failed'", s.defaultWorkflowID()),
+			},
+		)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), resp.Count)
+	})
 }

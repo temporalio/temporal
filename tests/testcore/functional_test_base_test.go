@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/worker"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -68,14 +70,11 @@ func (s *FunctionalTestBaseSuite) TestWorkerServiceHealthCheck() {
 	defer func() { _ = conn.Close() }()
 
 	healthClient := healthpb.NewHealthClient(conn)
-	s.Eventually(
-		func() bool {
-			resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
-				Service: worker.ServiceName,
-			})
-			return err == nil && resp.Status == healthpb.HealthCheckResponse_SERVING
-		},
-		10*time.Second,
-		100*time.Millisecond,
-	)
+	s.AwaitWithTimeout(10*time.Second, 100*time.Millisecond, func(t *eventually.T) {
+		resp, err := healthClient.Check(context.Background(), &healthpb.HealthCheckRequest{
+			Service: worker.ServiceName,
+		})
+		require.NoError(t, err)
+		require.Equal(t, healthpb.HealthCheckResponse_SERVING, resp.Status)
+	})
 }

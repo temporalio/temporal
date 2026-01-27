@@ -4,11 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 )
@@ -55,12 +56,12 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardOne(t *testing.T) {
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
 
 	capture := metricsHandler.StartCapture()
-	snapshot := capture.Snapshot()
 	emitter.Start()
-	assert.Eventually(t, func() bool {
+	var snapshot map[string][]*metricstest.CapturedRecording
+	eventually.Require(t, func(t *eventually.T) {
 		snapshot = capture.Snapshot()
-		return len(snapshot[metrics.DLQMessageCount.Name()]) == len(categoryRegistry.GetCategories())
-	}, 5*time.Second, 100*time.Millisecond)
+		require.Len(t, snapshot[metrics.DLQMessageCount.Name()], len(categoryRegistry.GetCategories()))
+	}, eventually.DefaultTimeout, 100*time.Millisecond)
 
 	emitter.Stop()
 	<-emitter.shutdownCh
@@ -68,12 +69,12 @@ func TestDLQMetricsEmitter_EmitMetrics_WhenInstanceHostsShardOne(t *testing.T) {
 	messageCount := make(map[string]float64)
 	for _, recording := range snapshot[metrics.DLQMessageCount.Name()] {
 		value, ok := recording.Value.(float64)
-		assert.True(t, ok)
+		require.True(t, ok)
 		messageCount[recording.Tags[metrics.TaskCategoryTagName]] = value
 	}
-	assert.Equal(t, float64(9), messageCount["transfer"])
-	assert.Equal(t, float64(11), messageCount["timer"])
-	assert.Equal(t, float64(13), messageCount["replication"])
+	require.Equal(t, float64(9), messageCount["transfer"])
+	require.Equal(t, float64(11), messageCount["timer"])
+	require.Equal(t, float64(13), messageCount["replication"])
 }
 
 func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardOne(t *testing.T) {
@@ -96,22 +97,15 @@ func TestDLQMetricsEmitter_DoesNotEmitMetrics_WhenInstanceDoesNotHostShardOne(t 
 	logger.EXPECT().Error(gomock.Any()).AnyTimes()
 
 	emitter.Start()
-	assert.Eventually(t, func() bool {
+	eventually.Require(t, func(t *eventually.T) {
 		snapshot := capture.Snapshot()
-		if len(snapshot[metrics.DLQMessageCount.Name()]) == 0 {
-			return false
-		}
+		require.NotEmpty(t, snapshot[metrics.DLQMessageCount.Name()])
 		for _, r := range snapshot[metrics.DLQMessageCount.Name()] {
 			value, ok := r.Value.(float64)
-			if !ok {
-				return false
-			}
-			if value != 0 {
-				return false
-			}
+			require.True(t, ok)
+			require.Equal(t, float64(0), value)
 		}
-		return true
-	}, 5*time.Second, 15*time.Millisecond)
+	}, eventually.DefaultTimeout, 15*time.Millisecond)
 	emitter.Stop()
 	<-emitter.shutdownCh
 }

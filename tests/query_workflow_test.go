@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,6 +26,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -298,10 +300,10 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(10*time.Second, 50*time.Millisecond, func(t *eventually.T) {
 		// wait for workflow task to fail 3 times
-		return atomic.LoadInt32(&failures) >= 3
-	}, 10*time.Second, 50*time.Millisecond)
+		require.GreaterOrEqual(t, atomic.LoadInt32(&failures), int32(3))
+	})
 
 	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)

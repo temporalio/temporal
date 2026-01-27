@@ -3,7 +3,6 @@ package metrics
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,10 +81,7 @@ func TestNewOpenTelemetryProviderWithStatsD(t *testing.T) {
 	counter.Add(context.Background(), 5)
 
 	// Test shutdown
-	require.Eventually(t, func() bool {
-		provider.Stop(logger)
-		return true
-	}, time.Second, 100*time.Millisecond)
+	provider.Stop(logger)
 }
 
 func TestNewOpenTelemetryProviderWithPrometheus(t *testing.T) {
@@ -124,8 +120,5 @@ func TestNewOpenTelemetryProviderWithPrometheus(t *testing.T) {
 	counter.Add(context.Background(), 5)
 
 	// Test shutdown
-	require.Eventually(t, func() bool {
-		provider.Stop(logger)
-		return true
-	}, time.Second, 100*time.Millisecond)
+	provider.Stop(logger)
 }
