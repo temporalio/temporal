@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	//nolint:staticcheck
 	registryClearedErr = errors.New("update registry was cleared")
 	// AbortedByServerErr is an SDK-retryable error returned when an update is aborted by the server
 	// (e.g., when the update registry is cleared). SDKs will automatically retry this error.
