@@ -21,22 +21,22 @@ type updateResponseErr struct {
 	err      error
 }
 
-func sendUpdate(ctx context.Context, s testEnv, tv *testvars.TestVars) <-chan updateResponseErr {
+func sendUpdate(ctx context.Context, s testcore.Env, tv *testvars.TestVars) <-chan updateResponseErr {
 	s.T().Helper()
 	return sendUpdateInternal(ctx, s, tv, nil, false)
 }
 
-func sendUpdateNoError(s testEnv, tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+func sendUpdateNoError(s testcore.Env, tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	return sendUpdateNoErrorInternal(s, tv, nil)
 }
 
-func sendUpdateNoErrorWaitPolicyAccepted(s testEnv, tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+func sendUpdateNoErrorWaitPolicyAccepted(s testcore.Env, tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	return sendUpdateNoErrorInternal(s, tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 }
 
-func pollUpdate(s testEnv, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
+func pollUpdate(s testcore.Env, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) (*workflowservice.PollWorkflowExecutionUpdateResponse, error) {
 	s.T().Helper()
 	return s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
 		Namespace: s.Namespace().String(),
@@ -49,7 +49,7 @@ func pollUpdate(s testEnv, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolic
 }
 
 func updateWorkflowRequest(
-	s testEnv,
+	s testcore.Env,
 	tv *testvars.TestVars,
 	waitPolicy *updatepb.WaitPolicy,
 ) *workflowservice.UpdateWorkflowExecutionRequest {
@@ -67,7 +67,7 @@ func updateWorkflowRequest(
 	}
 }
 
-func sendUpdateNoErrorInternal(s testEnv, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
+func sendUpdateNoErrorInternal(s testcore.Env, tv *testvars.TestVars, waitPolicy *updatepb.WaitPolicy) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
 	s.T().Helper()
 	retCh := make(chan *workflowservice.UpdateWorkflowExecutionResponse)
 	syncCh := make(chan struct{})
@@ -82,7 +82,7 @@ func sendUpdateNoErrorInternal(s testEnv, tv *testvars.TestVars, waitPolicy *upd
 
 func sendUpdateInternal(
 	ctx context.Context,
-	s testEnv,
+	s testcore.Env,
 	tv *testvars.TestVars,
 	waitPolicy *updatepb.WaitPolicy,
 	requireNoError bool,
@@ -118,7 +118,7 @@ func sendUpdateInternal(
 	return updateResultCh
 }
 
-func waitUpdateAdmitted(s testEnv, tv *testvars.TestVars) {
+func waitUpdateAdmitted(s testcore.Env, tv *testvars.TestVars) {
 	s.T().Helper()
 	require.EventuallyWithTf(s.T(), func(collect *assert.CollectT) {
 		pollResp, pollErr := s.FrontendClient().PollWorkflowExecutionUpdate(testcore.NewContext(), &workflowservice.PollWorkflowExecutionUpdateRequest{
