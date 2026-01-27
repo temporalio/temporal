@@ -47,6 +47,7 @@ type (
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		metricsHandler                 metrics.Handler
+		logger                         log.Logger
 	}
 
 	visibilityPageToken struct {
@@ -140,6 +141,7 @@ func NewVisibilityStore(
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
+		logger:                         logger,
 	}, nil
 }
 
@@ -574,7 +576,7 @@ func (s *VisibilityStore) convertQuery(
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider)
 	queryConverter := NewQueryConverter(
 		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap),
+		NewValuesInterceptor(namespace, saTypeMap, s.metricsHandler, s.logger),
 		saTypeMap,
 	)
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
