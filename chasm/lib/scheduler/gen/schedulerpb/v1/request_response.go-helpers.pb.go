@@ -2,6 +2,8 @@
 package schedulerpb
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -523,76 +525,21 @@ func (this *MigrateScheduleResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type MigrateScheduleV1Request to the protobuf v3 wire format
-func (val *MigrateScheduleV1Request) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type MigrateScheduleV1Request from the protobuf v3 wire format
-func (val *MigrateScheduleV1Request) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *MigrateScheduleV1Request) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two MigrateScheduleV1Request values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *MigrateScheduleV1Request) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
+var (
+	SchedulerTarget_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Chasm":       1,
+		"Workflow":    2,
 	}
+)
 
-	var that1 *MigrateScheduleV1Request
-	switch t := that.(type) {
-	case *MigrateScheduleV1Request:
-		that1 = t
-	case MigrateScheduleV1Request:
-		that1 = &t
-	default:
-		return false
+// SchedulerTargetFromString parses a SchedulerTarget value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to SchedulerTarget
+func SchedulerTargetFromString(s string) (SchedulerTarget, error) {
+	if v, ok := SchedulerTarget_value[s]; ok {
+		return SchedulerTarget(v), nil
+	} else if v, ok := SchedulerTarget_shorthandValue[s]; ok {
+		return SchedulerTarget(v), nil
 	}
-
-	return proto.Equal(this, that1)
-}
-
-// Marshal an object of type MigrateScheduleV1Response to the protobuf v3 wire format
-func (val *MigrateScheduleV1Response) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type MigrateScheduleV1Response from the protobuf v3 wire format
-func (val *MigrateScheduleV1Response) Unmarshal(buf []byte) error {
-	return proto.Unmarshal(buf, val)
-}
-
-// Size returns the size of the object, in bytes, once serialized
-func (val *MigrateScheduleV1Response) Size() int {
-	return proto.Size(val)
-}
-
-// Equal returns whether two MigrateScheduleV1Response values are equivalent by recursively
-// comparing the message's fields.
-// For more information see the documentation for
-// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *MigrateScheduleV1Response) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	var that1 *MigrateScheduleV1Response
-	switch t := that.(type) {
-	case *MigrateScheduleV1Response:
-		that1 = t
-	case MigrateScheduleV1Response:
-		that1 = &t
-	default:
-		return false
-	}
-
-	return proto.Equal(this, that1)
+	return SchedulerTarget(0), fmt.Errorf("%s is not a valid SchedulerTarget", s)
 }

@@ -26,7 +26,8 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_service_proto protoreflect
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/service.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1aCtemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xb0\f\n" +
+	":temporal/server/chasm/lib/scheduler/proto/v1/service.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1aCtemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xf6\n" +
+	"\n" +
 	"\x10SchedulerService\x12\xbf\x01\n" +
 	"\x0eCreateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xbf\x01\n" +
 	"\x0eUpdateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xbc\x01\n" +
@@ -34,8 +35,7 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_rawDesc = 
 	"\x0eDeleteSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xc5\x01\n" +
 	"\x10DescribeSchedule\x12E.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest\x1aF.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xe0\x01\n" +
 	"\x19ListScheduleMatchingTimes\x12N.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest\x1aO.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xb1\x01\n" +
-	"\x0fMigrateSchedule\x12D.temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleRequest\x1aE.temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleResponse\"\x11\x92\xc4\x03\r\x1a\vschedule_id\x12\xb7\x01\n" +
-	"\x11MigrateScheduleV1\x12F.temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleV1Request\x1aG.temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleV1Response\"\x11\x92\xc4\x03\r\x1a\vschedule_idBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x0fMigrateSchedule\x12D.temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleRequest\x1aE.temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleResponse\"\x11\x92\xc4\x03\r\x1a\vschedule_idBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_goTypes = []any{
 	(*CreateScheduleRequest)(nil),             // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest
@@ -45,15 +45,13 @@ var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_goTypes = []
 	(*DescribeScheduleRequest)(nil),           // 4: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest
 	(*ListScheduleMatchingTimesRequest)(nil),  // 5: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest
 	(*MigrateScheduleRequest)(nil),            // 6: temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleRequest
-	(*MigrateScheduleV1Request)(nil),          // 7: temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleV1Request
-	(*CreateScheduleResponse)(nil),            // 8: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse
-	(*UpdateScheduleResponse)(nil),            // 9: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse
-	(*PatchScheduleResponse)(nil),             // 10: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse
-	(*DeleteScheduleResponse)(nil),            // 11: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse
-	(*DescribeScheduleResponse)(nil),          // 12: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse
-	(*ListScheduleMatchingTimesResponse)(nil), // 13: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse
-	(*MigrateScheduleResponse)(nil),           // 14: temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleResponse
-	(*MigrateScheduleV1Response)(nil),         // 15: temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleV1Response
+	(*CreateScheduleResponse)(nil),            // 7: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse
+	(*UpdateScheduleResponse)(nil),            // 8: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse
+	(*PatchScheduleResponse)(nil),             // 9: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse
+	(*DeleteScheduleResponse)(nil),            // 10: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse
+	(*DescribeScheduleResponse)(nil),          // 11: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse
+	(*ListScheduleMatchingTimesResponse)(nil), // 12: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse
+	(*MigrateScheduleResponse)(nil),           // 13: temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleResponse
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.CreateSchedule:input_type -> temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest
@@ -63,17 +61,15 @@ var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_depIdxs = []
 	4,  // 4: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.DescribeSchedule:input_type -> temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest
 	5,  // 5: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.ListScheduleMatchingTimes:input_type -> temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest
 	6,  // 6: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.MigrateSchedule:input_type -> temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleRequest
-	7,  // 7: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.MigrateScheduleV1:input_type -> temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleV1Request
-	8,  // 8: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.CreateSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse
-	9,  // 9: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.UpdateSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse
-	10, // 10: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.PatchSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse
-	11, // 11: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.DeleteSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse
-	12, // 12: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.DescribeSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse
-	13, // 13: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.ListScheduleMatchingTimes:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse
-	14, // 14: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.MigrateSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleResponse
-	15, // 15: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.MigrateScheduleV1:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleV1Response
-	8,  // [8:16] is the sub-list for method output_type
-	0,  // [0:8] is the sub-list for method input_type
+	7,  // 7: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.CreateSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse
+	8,  // 8: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.UpdateSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse
+	9,  // 9: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.PatchSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse
+	10, // 10: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.DeleteSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse
+	11, // 11: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.DescribeSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse
+	12, // 12: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.ListScheduleMatchingTimes:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse
+	13, // 13: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService.MigrateSchedule:output_type -> temporal.server.chasm.lib.scheduler.proto.v1.MigrateScheduleResponse
+	7,  // [7:14] is the sub-list for method output_type
+	0,  // [0:7] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

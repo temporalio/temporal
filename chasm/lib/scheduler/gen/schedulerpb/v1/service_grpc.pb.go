@@ -27,7 +27,6 @@ const (
 	SchedulerService_DescribeSchedule_FullMethodName          = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/DescribeSchedule"
 	SchedulerService_ListScheduleMatchingTimes_FullMethodName = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/ListScheduleMatchingTimes"
 	SchedulerService_MigrateSchedule_FullMethodName           = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/MigrateSchedule"
-	SchedulerService_MigrateScheduleV1_FullMethodName         = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/MigrateScheduleV1"
 )
 
 // SchedulerServiceClient is the client API for SchedulerService service.
@@ -40,11 +39,10 @@ type SchedulerServiceClient interface {
 	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
 	DescribeSchedule(ctx context.Context, in *DescribeScheduleRequest, opts ...grpc.CallOption) (*DescribeScheduleResponse, error)
 	ListScheduleMatchingTimes(ctx context.Context, in *ListScheduleMatchingTimesRequest, opts ...grpc.CallOption) (*ListScheduleMatchingTimesResponse, error)
-	// MigrateSchedule creates a CHASM schedule from migrated V1 state.
-	// Used during migration from workflow-backed schedules to CHASM schedules.
+	// MigrateSchedule migrates a schedule between implementations.
+	// Use target=CHASM to migrate from V1 workflow-backed to CHASM.
+	// Use target=WORKFLOW to migrate from CHASM to V1 workflow-backed.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
-	// MigrateScheduleV1 migrates a CHASM schedule to a V1 workflow-backed schedule.
-	MigrateScheduleV1(ctx context.Context, in *MigrateScheduleV1Request, opts ...grpc.CallOption) (*MigrateScheduleV1Response, error)
 }
 
 type schedulerServiceClient struct {
@@ -118,15 +116,6 @@ func (c *schedulerServiceClient) MigrateSchedule(ctx context.Context, in *Migrat
 	return out, nil
 }
 
-func (c *schedulerServiceClient) MigrateScheduleV1(ctx context.Context, in *MigrateScheduleV1Request, opts ...grpc.CallOption) (*MigrateScheduleV1Response, error) {
-	out := new(MigrateScheduleV1Response)
-	err := c.cc.Invoke(ctx, SchedulerService_MigrateScheduleV1_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 // SchedulerServiceServer is the server API for SchedulerService service.
 // All implementations must embed UnimplementedSchedulerServiceServer
 // for forward compatibility
@@ -137,11 +126,10 @@ type SchedulerServiceServer interface {
 	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
 	DescribeSchedule(context.Context, *DescribeScheduleRequest) (*DescribeScheduleResponse, error)
 	ListScheduleMatchingTimes(context.Context, *ListScheduleMatchingTimesRequest) (*ListScheduleMatchingTimesResponse, error)
-	// MigrateSchedule creates a CHASM schedule from migrated V1 state.
-	// Used during migration from workflow-backed schedules to CHASM schedules.
+	// MigrateSchedule migrates a schedule between implementations.
+	// Use target=CHASM to migrate from V1 workflow-backed to CHASM.
+	// Use target=WORKFLOW to migrate from CHASM to V1 workflow-backed.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
-	// MigrateScheduleV1 migrates a CHASM schedule to a V1 workflow-backed schedule.
-	MigrateScheduleV1(context.Context, *MigrateScheduleV1Request) (*MigrateScheduleV1Response, error)
 	mustEmbedUnimplementedSchedulerServiceServer()
 }
 
@@ -169,9 +157,6 @@ func (UnimplementedSchedulerServiceServer) ListScheduleMatchingTimes(context.Con
 }
 func (UnimplementedSchedulerServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
-}
-func (UnimplementedSchedulerServiceServer) MigrateScheduleV1(context.Context, *MigrateScheduleV1Request) (*MigrateScheduleV1Response, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method MigrateScheduleV1 not implemented")
 }
 func (UnimplementedSchedulerServiceServer) mustEmbedUnimplementedSchedulerServiceServer() {}
 
@@ -312,24 +297,6 @@ func _SchedulerService_MigrateSchedule_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SchedulerService_MigrateScheduleV1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MigrateScheduleV1Request)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SchedulerServiceServer).MigrateScheduleV1(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: SchedulerService_MigrateScheduleV1_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServiceServer).MigrateScheduleV1(ctx, req.(*MigrateScheduleV1Request))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 // SchedulerService_ServiceDesc is the grpc.ServiceDesc for SchedulerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -364,10 +331,6 @@ var SchedulerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateSchedule",
 			Handler:    _SchedulerService_MigrateSchedule_Handler,
-		},
-		{
-			MethodName: "MigrateScheduleV1",
-			Handler:    _SchedulerService_MigrateScheduleV1_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

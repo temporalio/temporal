@@ -73,6 +73,15 @@ message ListScheduleMatchingTimesResponse {
     temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponse frontend_response = 1;
 }
 
+// Target scheduler implementation for migration.
+enum SchedulerTarget {
+    SCHEDULER_TARGET_UNSPECIFIED = 0;
+    // Migrate to CHASM-backed scheduler (V2).
+    SCHEDULER_TARGET_CHASM = 1;
+    // Migrate to workflow-backed scheduler (V1).
+    SCHEDULER_TARGET_WORKFLOW = 2;
+}
+
 message MigrateScheduleRequest {
     // Internal namespace ID (UUID).
     string namespace_id = 1;
@@ -83,27 +92,17 @@ message MigrateScheduleRequest {
     // Schedule ID.
     string schedule_id = 3;
 
-    // Migrated CHASM state components.
-    SchedulerMigrationState migration_state = 4;
+    // Target scheduler implementation.
+    SchedulerTarget target = 4;
+
+    // Migration state (required when target is CHASM).
+    SchedulerMigrationState migration_state = 5;
+
+    // Identity of the caller.
+    string identity = 6;
+
+    // Used for request deduplication.
+    string request_id = 7;
 }
 
 message MigrateScheduleResponse {}
-
-message MigrateScheduleV1Request {
-    // Internal namespace ID (UUID).
-    string namespace_id = 1;
-
-    // Namespace name.
-    string namespace = 2;
-
-    // Schedule ID.
-    string schedule_id = 3;
-
-    // Identity of the caller.
-    string identity = 4;
-
-    // Used for request deduplication.
-    string request_id = 5;
-}
-
-message MigrateScheduleV1Response {}
