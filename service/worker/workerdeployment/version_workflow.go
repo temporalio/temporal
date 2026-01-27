@@ -275,6 +275,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return nil
 	}
 
+	d.logger.Debug("Version doing continue-as-new")
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
 	nextArgs.VersionState = d.VersionState
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
@@ -879,18 +880,10 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 		return // only refresh when status is draining
 	}
-
-	d.logger.Info("REFRESH DRAINAGE INFO STARTED",
-		"status", d.VersionState.Status,
-		"drainage_status", d.VersionState.GetDrainageInfo().GetStatus())
-
 	defer func() {
 		// regardless of results mark state as dirty so we CaN in the first opportunity now that some
 		// history events are made.
 		d.setStateChanged()
-		d.logger.Info("REFRESH DRAINAGE INFO COMPLETED",
-			"status", d.VersionState.Status,
-			"drainage_status", d.VersionState.GetDrainageInfo().GetStatus())
 	}()
 
 	drainage := d.VersionState.GetDrainageInfo()
