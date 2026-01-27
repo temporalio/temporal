@@ -996,7 +996,6 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 
 		// Update the status of the version according to the drainage status
 		d.updateVersionStatusAfterDrainageStatusChange(ctx, newInfo.Status)
-		d.setStateChanged() // Ensure we trigger CaN when status changes to DRAINED
 	}
 	d.syncSummary(ctx)
 }
