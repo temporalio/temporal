@@ -14,16 +14,18 @@ import (
 // ChasmVisibilityInterceptor.
 type ChasmEngineInterceptor struct {
 	engine         Engine
-	logger         log.Logger
+	logger         log.SnTaggedLogger
 	metricsHandler metrics.Handler
 }
 
 func (i *ChasmEngineInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (resp interface{}, retError error) {
+) (resp any, retError error) {
+	// Capture panics for any handler method, not just CHASM-specific ones. This could have gone into a separate
+	// interceptor, but having it here avoids the overhead of adding another layer to the interceptor chain.
 	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 
 	ctx = NewEngineContext(ctx, i.engine)

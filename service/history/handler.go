@@ -1909,7 +1909,9 @@ func (h *Handler) PollWorkflowExecutionUpdate(
 
 func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
-) error {
+) (retErr error) {
+	// Note that since this is not a unary RPC, we cannot use the interceptor to capture panics.
+	metrics.CapturePanic(h.logger, h.metricsHandler, &retErr)
 	getter := headers.NewGRPCHeaderGetter(server.Context())
 	clientClusterShardID, serverClusterShardID, err := history.DecodeClusterShardMD(getter)
 	if err != nil {
