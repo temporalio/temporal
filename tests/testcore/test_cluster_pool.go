@@ -136,54 +136,58 @@ type clusterPool struct {
 	dedicated *pool
 }
 
-func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynamicconfig.Key]any) *FunctionalTestBase {
-	if dedicated || len(dynamicConfig) > 0 {
-		return p.getDedicated(t, dynamicConfig)
+func (p *clusterPool) get(t *testing.T, opts envOptions) *FunctionalTestBase {
+	if opts.dedicatedCluster {
+		return p.getDedicated(t, opts)
 	}
 	return p.getShared(t)
 }
 
 func (p *clusterPool) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, true)
+		return p.createCluster(t, envOptions{})
 	})
 }
 
-func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any) *FunctionalTestBase {
-	if len(dynamicConfig) > 0 {
-		// Custom dynamic config requires a fresh cluster (can't reuse).
-		p.dedicated.acquireSlot(t)
-		cluster := p.createCluster(t, dynamicConfig, false)
+func (p *clusterPool) getDedicated(t *testing.T, opts envOptions) *FunctionalTestBase {
+	// Dedicated clusters always get a fresh cluster (no reuse).
+	p.dedicated.acquireSlot(t)
+	cluster := p.createCluster(t, opts)
 
-		// Register cleanup to tear down the cluster when the test completes.
-		t.Cleanup(func() {
-			if err := cluster.testCluster.TearDownCluster(); err != nil {
-				t.Logf("Failed to tear down cluster: %v", err)
-			}
-		})
-
-		return cluster
-	}
-
-	// If no custom dynamic config is provided, reuse an existing cluster.
-	return p.dedicated.get(t, func() *FunctionalTestBase {
-		return p.createCluster(t, nil, false)
+	// Register cleanup to tear down the cluster when the test completes.
+	t.Cleanup(func() {
+		if err := cluster.testCluster.TearDownCluster(); err != nil {
+			t.Logf("Failed to tear down cluster: %v", err)
+		}
 	})
+
+	return cluster
 }
 
-func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool) *FunctionalTestBase {
+func (p *clusterPool) createCluster(t *testing.T, opts envOptions) *FunctionalTestBase {
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	var opts []TestClusterOption
-	if shared {
-		opts = append(opts, WithSharedCluster())
-	}
-	if len(dynamicConfig) > 0 {
-		opts = append(opts, WithDynamicConfigOverrides(dynamicConfig))
+	var clusterOpts []TestClusterOption
+
+	// Mark cluster shared, if applicable.
+	if !opts.dedicatedCluster {
+		clusterOpts = append(clusterOpts, WithSharedCluster())
 	}
 
-	tbase.setupCluster(opts...)
+	// Apply dynamic config overrides, if any.
+	dynamicConfig := make(map[dynamicconfig.Key]any, len(opts.dynamicConfigSettings))
+	for _, override := range opts.dynamicConfigSettings {
+		dynamicConfig[override.setting.Key()] = override.value
+	}
+	clusterOpts = append(clusterOpts, WithDynamicConfigOverrides(dynamicConfig))
+
+	// Apply time source override, if any.
+	if opts.fakeTimeSource != nil {
+		clusterOpts = append(clusterOpts, withTimeSource(opts.fakeTimeSource))
+	}
+
+	tbase.setupCluster(clusterOpts...)
 
 	return tbase
 }

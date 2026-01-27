@@ -95,6 +95,55 @@ func (ts *EventTimeSource) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
 	return c, timer
 }
 
+// NewTicker creates a Ticker that sends the current time on a channel after each tick.
+// It returns the channel and the Ticker.
+func (ts *EventTimeSource) NewTicker(d time.Duration) (<-chan time.Time, Ticker) {
+	c := make(chan time.Time, 1)
+	ticker := &fakeTicker{
+		timeSource: ts,
+		interval:   d,
+		c:          c,
+	}
+	// Schedule the first tick
+	ticker.scheduleNextTick()
+	return c, ticker
+}
+
+// fakeTicker is a fake implementation of Ticker for EventTimeSource.
+type fakeTicker struct {
+	timeSource *EventTimeSource
+	interval   time.Duration
+	c          chan time.Time
+	timer      *fakeTimer
+	stopped    bool
+}
+
+func (t *fakeTicker) scheduleNextTick() {
+	target := t.timeSource.Now().Add(t.interval)
+	t.timer = &fakeTimer{
+		timeSource: t.timeSource,
+		deadline:   target,
+		callback: func() {
+			if !t.stopped {
+				select {
+				case t.c <- target:
+				default:
+				}
+				// Schedule next tick
+				t.scheduleNextTick()
+			}
+		},
+	}
+	t.timeSource.addTimer(t.timer)
+}
+
+func (t *fakeTicker) Stop() {
+	t.stopped = true
+	if t.timer != nil {
+		t.timer.Stop()
+	}
+}
+
 func (ts *EventTimeSource) addTimer(t *fakeTimer) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()

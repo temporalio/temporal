@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -101,6 +102,7 @@ type (
 		FaultInjectionConfig   *config.FaultInjection
 		NumHistoryShards       int32
 		SharedCluster          bool
+		TimeSource             clock.TimeSource
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -166,6 +168,14 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 func WithSharedCluster() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.SharedCluster = true
+	}
+}
+
+// withTimeSource sets a custom TimeSource for the cluster.
+// This enables tests to control time by using EventTimeSource.
+func withTimeSource(ts clock.TimeSource) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.TimeSource = ts
 	}
 }
 
@@ -275,6 +285,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMetricsCapture:   true,
 		EnableArchival:         params.ArchivalEnabled,
 		EnableMTLS:             params.EnableMTLS,
+		TimeSource:             params.TimeSource,
 	}
 
 	// Apply configuration for shared clusters.

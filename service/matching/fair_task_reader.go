@@ -32,7 +32,7 @@ type (
 		lock sync.Mutex
 
 		readPending  bool
-		backoffTimer *time.Timer
+		backoffTimer clock.Timer
 		retrier      backoff.Retrier
 		addRetries   *semaphore.Weighted
 
@@ -73,13 +73,14 @@ func newFairTaskReader(
 	subqueue subqueueIndex,
 	initialAckLevel fairLevel,
 ) *fairTaskReader {
+	timeSource := backlogMgr.pqMgr.TimeSource()
 	return &fairTaskReader{
 		backlogMgr: backlogMgr,
 		subqueue:   subqueue,
 		logger:     backlogMgr.logger,
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			clock.NewRealTimeSource(),
+			timeSource,
 		),
 		backlogAge: newBacklogAgeTracker(),
 		addRetries: semaphore.NewWeighted(concurrentAddRetries),
@@ -90,7 +91,7 @@ func newFairTaskReader(
 		ackLevel:         initialAckLevel,
 
 		// gc state
-		lastGCTime: time.Now(),
+		lastGCTime: timeSource.Now(),
 	}
 }
 
@@ -498,7 +499,7 @@ func (tr *fairTaskReader) retryReadAfter(duration time.Duration) {
 	defer tr.lock.Unlock()
 
 	if tr.backoffTimer == nil {
-		tr.backoffTimer = time.AfterFunc(duration, func() {
+		tr.backoffTimer = tr.backlogMgr.pqMgr.TimeSource().AfterFunc(duration, func() {
 			tr.lock.Lock()
 			defer tr.lock.Unlock()
 			tr.backoffTimer = nil
@@ -595,7 +596,7 @@ func (tr *fairTaskReader) maybeGCLocked() {
 		return
 	}
 	tr.inGC = true
-	tr.lastGCTime = time.Now()
+	tr.lastGCTime = tr.backlogMgr.pqMgr.TimeSource().Now()
 	// gc in new goroutine so poller doesn't have to wait
 	go tr.doGC(tr.ackLevel)
 }
@@ -605,7 +606,7 @@ func (tr *fairTaskReader) shouldGCLocked() bool {
 		return false
 	}
 	return tr.numToGC >= tr.backlogMgr.config.MaxTaskDeleteBatchSize() ||
-		time.Since(tr.lastGCTime) > tr.backlogMgr.config.TaskDeleteInterval()
+		tr.backlogMgr.pqMgr.TimeSource().Since(tr.lastGCTime) > tr.backlogMgr.config.TaskDeleteInterval()
 }
 
 // called in new goroutine

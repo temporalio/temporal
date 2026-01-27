@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -51,6 +52,7 @@ type (
 		clientBean      client.Bean
 		clusterMetadata cluster.Metadata
 		logger          log.Logger
+		timeSource      clock.TimeSource
 
 		fetchersLock sync.Mutex
 		fetchers     map[string]taskFetcher
@@ -81,6 +83,7 @@ type (
 		rateLimiter    quotas.RateLimiter
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
+		timeSource     clock.TimeSource
 
 		requestByShard map[int32]*replicationTaskRequest
 	}
@@ -92,6 +95,7 @@ func NewTaskFetcherFactory(
 	config *configs.Config,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
+	timeSource clock.TimeSource,
 ) TaskFetcherFactory {
 	return &taskFetcherFactoryImpl{
 		clusterMetadata: clusterMetadata,
@@ -100,6 +104,7 @@ func NewTaskFetcherFactory(
 		fetchers:        make(map[string]taskFetcher),
 		status:          common.DaemonStatusInitialized,
 		logger:          logger,
+		timeSource:      timeSource,
 	}
 }
 
@@ -155,6 +160,7 @@ func (f *taskFetcherFactoryImpl) createReplicationFetcherLocked(clusterName stri
 		currentCluster,
 		f.config,
 		f.clientBean,
+		f.timeSource,
 	)
 	fetcher.Start()
 	f.fetchers[clusterName] = fetcher
@@ -192,6 +198,7 @@ func newReplicationTaskFetcher(
 	currentCluster string,
 	config *configs.Config,
 	clientBean client.Bean,
+	timeSource clock.TimeSource,
 ) *taskFetcherImpl {
 	numWorker := config.ReplicationTaskFetcherParallelism()
 	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
@@ -211,6 +218,7 @@ func newReplicationTaskFetcher(
 			rateLimiter,
 			requestChan,
 			shutdownChan,
+			timeSource,
 		)
 	}
 
@@ -285,6 +293,7 @@ func newReplicationTaskFetcherWorker(
 	rateLimiter quotas.RateLimiter,
 	requestChan chan *replicationTaskRequest,
 	shutdownChan chan struct{},
+	timeSource clock.TimeSource,
 ) *replicationTaskFetcherWorker {
 	return &replicationTaskFetcherWorker{
 		status:         common.DaemonStatusInitialized,
@@ -296,6 +305,7 @@ func newReplicationTaskFetcherWorker(
 		rateLimiter:    rateLimiter,
 		requestChan:    requestChan,
 		shutdownChan:   shutdownChan,
+		timeSource:     timeSource,
 
 		requestByShard: make(map[int32]*replicationTaskRequest, requestsMapSize),
 	}
@@ -330,7 +340,7 @@ func (f *replicationTaskFetcherWorker) Stop() {
 
 // fetchTasks collects getReplicationTasks request from shards and send out aggregated request to source frontend.
 func (f *replicationTaskFetcherWorker) fetchTasks() {
-	timer := time.NewTimer(backoff.Jitter(
+	timerC, timer := f.timeSource.NewTimer(backoff.Jitter(
 		f.config.ReplicationTaskFetcherAggregationInterval(),
 		f.config.ReplicationTaskFetcherTimerJitterCoefficient(),
 	))
@@ -341,7 +351,7 @@ func (f *replicationTaskFetcherWorker) fetchTasks() {
 		case request := <-f.requestChan:
 			f.bufferRequests(request)
 
-		case <-timer.C:
+		case <-timerC:
 			// When timer fires, we collect all the requests we have so far and attempt to send them to remote.
 			err := f.getMessages()
 			if err != nil {

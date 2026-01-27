@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -71,6 +72,7 @@ func (s *taskFetcherSuite) SetupTest() {
 		cluster.TestCurrentClusterName,
 		s.config,
 		s.mockResource.ClientBean,
+		clock.NewRealTimeSource(),
 	)
 }
 
@@ -282,6 +284,7 @@ func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 		cluster.TestCurrentClusterName,
 		s.config,
 		s.mockResource.ClientBean,
+		clock.NewRealTimeSource(),
 	)
 
 	s.frontendClient.EXPECT().GetReplicationMessages(
@@ -326,6 +329,7 @@ func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 		cluster.TestCurrentClusterName,
 		s.config,
 		s.mockResource.ClientBean,
+		clock.NewRealTimeSource(),
 	)
 
 	s.frontendClient.EXPECT().GetReplicationMessages(

@@ -99,6 +99,7 @@ func NewTestController(
 		metricsTestHandler,
 		resource.GetHostInfoProvider(),
 		contextFactory,
+		resource.GetTimeSource(),
 	)
 }
 

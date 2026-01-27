@@ -22,9 +22,10 @@ type (
 	memoryScheduledQueue struct {
 		scheduler ctasks.Scheduler[ctasks.Task]
 
-		taskQueue     collection.Queue[Executable]
-		nextTaskTimer *time.Timer
-		newTaskCh     chan Executable
+		taskQueue       collection.Queue[Executable]
+		nextTaskTimerCh <-chan time.Time
+		nextTaskTimer   clock.Timer
+		newTaskCh       chan Executable
 
 		timeSource     clock.TimeSource
 		logger         log.Logger
@@ -43,15 +44,16 @@ func newMemoryScheduledQueue(
 	metricsHandler metrics.Handler,
 ) *memoryScheduledQueue {
 
-	nextTaskTimer := time.NewTimer(0)
+	nextTaskTimerCh, nextTaskTimer := timeSource.NewTimer(0)
 	if !nextTaskTimer.Stop() {
-		<-nextTaskTimer.C
+		<-nextTaskTimerCh
 	}
 
 	return &memoryScheduledQueue{
-		taskQueue:     collection.NewPriorityQueue[Executable](executableVisibilityTimeCompareLess),
-		nextTaskTimer: nextTaskTimer,
-		newTaskCh:     make(chan Executable),
+		taskQueue:       collection.NewPriorityQueue[Executable](executableVisibilityTimeCompareLess),
+		nextTaskTimerCh: nextTaskTimerCh,
+		nextTaskTimer:   nextTaskTimer,
+		newTaskCh:       make(chan Executable),
 
 		timeSource:     timeSource,
 		logger:         logger,
@@ -128,13 +130,13 @@ func (q *memoryScheduledQueue) processQueueLoop() {
 				if !nextTaskTime.IsZero() {
 					if !q.nextTaskTimer.Stop() {
 						// Drain timer channel to prevent timer firing.
-						<-q.nextTaskTimer.C
+						<-q.nextTaskTimerCh
 					}
 				}
 				q.nextTaskTimer.Reset(newTask.GetVisibilityTime().Sub(q.timeSource.Now()))
 			}
 			metrics.NewTimerNotifyCounter.With(q.metricsHandler).Record(1)
-		case <-q.nextTaskTimer.C:
+		case <-q.nextTaskTimerCh:
 			taskToExecute := q.taskQueue.Remove()
 			// Skip tasks which are already canceled. Majority of the tasks in the queue should be cancelled already.
 			nextTask := q.purgeCanceledTasks()

@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -35,6 +36,7 @@ type (
 		healthServer      *health.Server
 		readinessCancel   context.CancelFunc
 		chasmRegistry     *chasm.Registry
+		timeSource        clock.TimeSource
 	}
 )
 
@@ -49,6 +51,7 @@ func NewService(
 	metricsHandler metrics.Handler,
 	healthServer *health.Server,
 	chasmRegistry *chasm.Registry,
+	timeSource clock.TimeSource,
 ) *Service {
 	return &Service{
 		server:            server,
@@ -61,6 +64,7 @@ func NewService(
 		metricsHandler:    metricsHandler,
 		healthServer:      healthServer,
 		chasmRegistry:     chasmRegistry,
+		timeSource:        timeSource,
 	}
 }
 
@@ -151,7 +155,7 @@ func (s *Service) Stop() {
 	s.handler.controller.Stop()
 
 	// All grpc handlers should be cancelled now. Give them a little time to return.
-	t := time.AfterFunc(2*time.Second, func() {
+	t := s.timeSource.AfterFunc(2*time.Second, func() {
 		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 		s.server.Stop()
 	})

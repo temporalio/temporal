@@ -38,11 +38,19 @@ linters:
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
-        - pattern: '^Unix$'
+        - pattern: time\.NewTimer
+          msg: "Do not use time.NewTimer directly in history/matching services. Use TimeSource.NewTimer() for testability with fake time."
+        - pattern: time\.AfterFunc
+          msg: "Do not use time.AfterFunc directly in history/matching services. Use TimeSource.AfterFunc() for testability with fake time."
+        - pattern: time\.NewTicker
+          msg: "Do not use time.NewTicker directly in history/matching services. Use TimeSource.NewTicker() for testability with fake time."
+        - pattern: time\.After\(
+          msg: "Do not use time.After directly in history/matching services. Use TimeSource.NewTimer() for testability with fake time."
+        - pattern: "^Unix$"
           msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
-        - pattern: '^UnixMilli$'
+        - pattern: "^UnixMilli$"
           msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
-        - pattern: '^UnixNano$'
+        - pattern: "^UnixNano$"
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
     depguard:
       rules:
@@ -179,6 +187,21 @@ linters:
       # Allow in tests
       - path: _test\.go$
         text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
+      # time.NewTimer/AfterFunc/NewTicker/After rules only apply to history and matching services
+      - path-except: service/(history|matching)/.*\.go$
+        text: "time.NewTimer|time.AfterFunc|time.NewTicker|time.After"
+        linters:
+          - forbidigo
+      # Allow in tests
+      - path: _test\.go$
+        text: "time.NewTimer|time.AfterFunc|time.NewTicker|time.After"
+        linters:
+          - forbidigo
+      # Allow in workers subpackage (worker registry is not timing-critical for task dispatching)
+      - path: service/matching/workers/.*\.go$
+        text: "time.NewTimer|time.AfterFunc|time.NewTicker|time.After"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/

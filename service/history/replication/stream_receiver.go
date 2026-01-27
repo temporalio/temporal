@@ -138,6 +138,7 @@ func (r *StreamReceiverImpl) Start() {
 		r.shutdownChan,
 		r.Stop,
 		r.logger,
+		r.TimeSource,
 	)
 	r.logger.Info("StreamReceiver started.")
 }
@@ -180,14 +181,14 @@ func (r *StreamReceiverImpl) sendEventLoop() error {
 	}()
 	defer log.CapturePanic(r.logger, &panicErr)
 
-	timer := time.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
+	timerC, timer := r.TimeSource.NewTicker(r.Config.ReplicationStreamSyncStatusDuration())
 	defer timer.Stop()
 
 	var inclusiveLowWatermark int64
 
 	for {
 		select {
-		case <-timer.C:
+		case <-timerC:
 			watermark, err := r.ackMessage(r.stream)
 			if err != nil {
 				return err

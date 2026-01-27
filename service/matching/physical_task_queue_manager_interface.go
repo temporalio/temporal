@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/clock"
 )
 
 type (
@@ -58,5 +59,6 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
+		TimeSource() clock.TimeSource
 	}
 )

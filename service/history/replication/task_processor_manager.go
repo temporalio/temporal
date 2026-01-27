@@ -204,14 +204,14 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 
 func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 	shardID := r.shard.GetShardID()
-	cleanupTimer := time.NewTimer(backoff.Jitter(
+	cleanupTimerC, cleanupTimer := r.shard.GetTimeSource().NewTimer(backoff.Jitter(
 		r.config.ReplicationTaskProcessorCleanupInterval(shardID),
 		r.config.ReplicationTaskProcessorCleanupJitterCoefficient(shardID),
 	))
 	defer cleanupTimer.Stop()
 	for {
 		select {
-		case <-cleanupTimer.C:
+		case <-cleanupTimerC:
 			if err := r.cleanupReplicationTasks(); err != nil {
 				r.logger.Error("Failed to clean up replication messages.", tag.Error(err))
 				metrics.ReplicationTaskCleanupFailure.With(r.metricsHandler).Record(
@@ -231,9 +231,9 @@ func (r *taskProcessorManagerImpl) completeReplicationTaskLoop() {
 
 func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
 	for {
-		timer := time.NewTimer(backoff.FullJitter(dlqSizeCheckInterval))
+		timerC, timer := r.shard.GetTimeSource().NewTimer(backoff.FullJitter(dlqSizeCheckInterval))
 		select {
-		case <-timer.C:
+		case <-timerC:
 			if r.config.ReplicationEnableDLQMetrics() {
 				r.checkReplicationDLQSize()
 			}

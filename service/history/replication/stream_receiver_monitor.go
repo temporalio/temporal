@@ -126,7 +126,7 @@ func (m *StreamReceiverMonitorImpl) RegisterInboundStream(
 
 func (m *StreamReceiverMonitorImpl) eventLoop() {
 	defer m.Stop()
-	ticker := time.NewTicker(streamReceiverMonitorInterval)
+	tickerC, ticker := m.TimeSource.NewTicker(streamReceiverMonitorInterval)
 	defer ticker.Stop()
 
 	clusterMetadataChangeChan := make(chan struct{}, 1)
@@ -145,7 +145,7 @@ Loop:
 		case <-clusterMetadataChangeChan:
 			m.reconcileInboundStreams()
 			m.reconcileOutboundStreams()
-		case <-ticker.C:
+		case <-tickerC:
 			m.reconcileInboundStreams()
 			m.reconcileOutboundStreams()
 		case <-m.shutdownOnce.Channel():
@@ -291,12 +291,12 @@ func (m *StreamReceiverMonitorImpl) doReconcileOutboundStreams(
 }
 
 func (m *StreamReceiverMonitorImpl) statusMonitorLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
+	tickerC, ticker := m.TimeSource.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-tickerC:
 			m.monitorStreamStatus()
 		case <-m.shutdownOnce.Channel():
 			return

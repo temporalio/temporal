@@ -31,7 +31,7 @@ type (
 		backlogMgr *backlogManagerImpl
 
 		backoffTimerLock      sync.Mutex
-		backoffTimer          *time.Timer
+		backoffTimer          clock.Timer
 		retrier               backoff.Retrier
 		backlogHeadCreateTime atomic.Int64
 	}
@@ -46,7 +46,7 @@ func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, backlogMgr.config.GetTasksBatchSize()-1),
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			clock.NewRealTimeSource(),
+			backlogMgr.pqMgr.TimeSource(),
 		),
 	}
 	tr.backlogHeadCreateTime.Store(-1)
@@ -130,12 +130,13 @@ func (tr *taskReader) completeTask(task *internalTask, res taskResponse) {
 // nolint:revive // can improve this later
 func (tr *taskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
+	timeSource := tr.backlogMgr.pqMgr.TimeSource()
 
 	if err := tr.backlogMgr.WaitUntilInitialized(ctx); err != nil {
 		return
 	}
 
-	updateAckTimer := time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
+	updateAckTimerC, updateAckTimer := timeSource.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
 	tr.Signal() // prime pump
@@ -180,7 +181,7 @@ Loop:
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
-		case <-updateAckTimer.C:
+		case <-updateAckTimerC:
 			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
 			if err != nil && !isConditionFailed {
@@ -190,7 +191,7 @@ Loop:
 				// keep going as saving ack is not critical
 			}
 			tr.Signal() // periodically signal pump to check persistence for tasks
-			updateAckTimer = time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
+			updateAckTimer.Reset(tr.backlogMgr.config.UpdateAckInterval())
 		}
 	}
 }
@@ -303,7 +304,7 @@ func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
 	defer tr.backoffTimerLock.Unlock()
 
 	if tr.backoffTimer == nil {
-		tr.backoffTimer = time.AfterFunc(duration, func() {
+		tr.backoffTimer = tr.backlogMgr.pqMgr.TimeSource().AfterFunc(duration, func() {
 			tr.backoffTimerLock.Lock()
 			defer tr.backoffTimerLock.Unlock()
 

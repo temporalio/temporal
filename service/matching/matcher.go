@@ -11,6 +11,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -42,6 +43,7 @@ type TaskMatcher struct {
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
+	timeSource             clock.TimeSource
 }
 
 var (
@@ -52,7 +54,7 @@ var (
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
 // find a match. Both sync matches and non-sync matches should use this implementation
-func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler, rateLimiter quotas.RateLimiter) *TaskMatcher {
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler, rateLimiter quotas.RateLimiter, timeSource clock.TimeSource) *TaskMatcher {
 	return &TaskMatcher{
 		config:                 config,
 		rateLimiter:            rateLimiter,
@@ -62,6 +64,7 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 		queryTaskC:             make(chan *internalTask),
 		closeC:                 make(chan struct{}),
 		backlogTasksCreateTime: make(map[int64]int),
+		timeSource:             timeSource,
 	}
 }
 
@@ -204,6 +207,7 @@ func syncOfferTask[T any](
 
 	fwdrTokenC := tm.fwdrAddReqTokenC()
 	var noPollerC <-chan time.Time
+	var noPollerTimer clock.Timer
 
 	for {
 		if returnNoPollerErr {
@@ -212,9 +216,8 @@ func syncOfferTask[T any](
 				// Reserving 1sec to customize the timeout error if user is querying a workflow
 				// without having started the workers.
 				noPollerTimeout := time.Until(deadline) - returnEmptyTaskTimeBudget
-				t := time.NewTimer(noPollerTimeout)
-				noPollerC = t.C
-				defer t.Stop()
+				noPollerC, noPollerTimer = tm.timeSource.NewTimer(noPollerTimeout)
+				defer noPollerTimer.Stop() //nolint:revive // timer is created at most once due to returnNoPollerErr guard
 			}
 		}
 
@@ -292,7 +295,7 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	default:
 	}
 
-	var reconsiderFwdTimer *time.Timer
+	var reconsiderFwdTimer clock.Timer
 	defer func() {
 		if reconsiderFwdTimer != nil {
 			reconsiderFwdTimer.Stop()
@@ -320,8 +323,7 @@ forLoop:
 			maxWaitForLocalPoller := tm.config.MaxWaitForPollerBeforeFwd()
 			if lp < maxWaitForLocalPoller {
 				fwdTokenC = nil
-				reconsiderFwdTimer = time.NewTimer(maxWaitForLocalPoller - lp)
-				reconsiderFwdTimerC = reconsiderFwdTimer.C
+				reconsiderFwdTimerC, reconsiderFwdTimer = tm.timeSource.NewTimer(maxWaitForLocalPoller - lp)
 			}
 		}
 

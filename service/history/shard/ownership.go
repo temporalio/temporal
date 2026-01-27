@@ -2,8 +2,8 @@ package shard
 
 import (
 	"context"
-	"time"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
@@ -34,6 +34,7 @@ type (
 		logger                 log.Logger
 		membershipUpdateCh     chan *membership.ChangedEvent
 		metricsHandler         metrics.Handler
+		timeSource             clock.TimeSource
 	}
 )
 
@@ -43,6 +44,7 @@ func newOwnership(
 	hostInfoProvider membership.HostInfoProvider,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 ) *ownership {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	logger = log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity))
@@ -54,6 +56,7 @@ func newOwnership(
 		logger:                 logger,
 		membershipUpdateCh:     make(chan *membership.ChangedEvent, 1),
 		metricsHandler:         metricsHandler,
+		timeSource:             timeSource,
 	}
 }
 
@@ -77,14 +80,14 @@ func (o *ownership) start(controller *ControllerImpl) {
 }
 
 func (o *ownership) eventLoop(ctx context.Context) {
-	acquireTicker := time.NewTicker(o.config.AcquireShardInterval())
+	acquireTickerC, acquireTicker := o.timeSource.NewTicker(o.config.AcquireShardInterval())
 	defer acquireTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-acquireTicker.C:
+		case <-acquireTickerC:
 			o.scheduleAcquire()
 		case changedEvent := <-o.membershipUpdateCh:
 			metrics.MembershipChangedCounter.With(o.metricsHandler).Record(1)

@@ -116,14 +116,14 @@ func (m *schedulerMonitor) RecordStart(executable Executable) {
 }
 
 func (m *schedulerMonitor) metricEmissionLoop() {
-	emissionTicker := time.NewTicker(m.options.aggregationDuration)
+	emissionTickerCh, emissionTicker := m.timeSource.NewTicker(m.options.aggregationDuration)
 	defer emissionTicker.Stop()
 
 	for {
 		select {
 		case <-m.shutdownCh:
 			return
-		case <-emissionTicker.C:
+		case <-emissionTickerCh:
 			m.Lock()
 
 			now := m.timeSource.Now()

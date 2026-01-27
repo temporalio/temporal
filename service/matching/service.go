@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -30,6 +31,7 @@ type Service struct {
 	metricsHandler         metrics.Handler
 	healthServer           *health.Server
 	visibilityManager      manager.VisibilityManager
+	timeSource             clock.TimeSource
 }
 
 func NewService(
@@ -43,6 +45,7 @@ func NewService(
 	metricsHandler metrics.Handler,
 	healthServer *health.Server,
 	visibilityManager manager.VisibilityManager,
+	timeSource clock.TimeSource,
 ) *Service {
 	return &Service{
 		config:                 serviceConfig,
@@ -55,6 +58,7 @@ func NewService(
 		metricsHandler:         metricsHandler,
 		healthServer:           healthServer,
 		visibilityManager:      visibilityManager,
+		timeSource:             timeSource,
 	}
 }
 
@@ -112,7 +116,7 @@ func (s *Service) Stop() {
 	s.handler.Stop()
 
 	// All grpc handlers should be cancelled now. Give them a little time to return.
-	t := time.AfterFunc(2*time.Second, func() {
+	t := s.timeSource.AfterFunc(2*time.Second, func() {
 		s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 		s.server.Stop()
 	})

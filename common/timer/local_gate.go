@@ -18,8 +18,9 @@ type (
 
 		timeSource clock.TimeSource
 
-		// the actual timer which will fire
-		timer *time.Timer
+		// the actual timer which will fire (uses TimeSource.NewTimer for fake time support)
+		timerCh <-chan time.Time
+		timer   clock.Timer
 		// variable indicating when the above timer will fire
 		nextWakeupTime time.Time
 	}
@@ -27,8 +28,10 @@ type (
 
 // NewLocalGate create a new timer gate instance
 func NewLocalGate(timeSource clock.TimeSource) LocalGate {
+	timerCh, timer := timeSource.NewTimer(0)
 	lg := &LocalGateImpl{
-		timer:          time.NewTimer(0),
+		timerCh:        timerCh,
+		timer:          timer,
 		nextWakeupTime: time.Time{},
 		fireCh:         make(chan struct{}, 1),
 		closeCh:        make(chan struct{}),
@@ -37,7 +40,7 @@ func NewLocalGate(timeSource clock.TimeSource) LocalGate {
 	// the timer should be stopped when initialized
 	if !lg.timer.Stop() {
 		// drain the existing signal if exist
-		<-lg.timer.C
+		<-lg.timerCh
 	}
 
 	go func() {
@@ -46,7 +49,7 @@ func NewLocalGate(timeSource clock.TimeSource) LocalGate {
 	loop:
 		for {
 			select {
-			case <-lg.timer.C:
+			case <-lg.timerCh:
 				select {
 				// re-transmit on gateC
 				case lg.fireCh <- struct{}{}:

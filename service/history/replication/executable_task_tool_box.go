@@ -2,6 +2,7 @@ package replication
 
 import (
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -31,6 +32,7 @@ type (
 		LowPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`
 		MetricsHandler           metrics.Handler
 		Logger                   log.Logger
+		TimeSource               clock.TimeSource
 		Serializer               serialization.Serializer
 		DLQWriter                DLQWriter
 		HistoryEventsHandler     eventhandler.HistoryEventsHandler

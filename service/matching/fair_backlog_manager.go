@@ -206,11 +206,14 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 }
 
 func (c *fairBacklogManagerImpl) periodicSync() {
+	tickerC, ticker := c.pqMgr.TimeSource().NewTicker(c.config.UpdateAckInterval())
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-tickerC:
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()

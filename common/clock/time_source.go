@@ -6,12 +6,18 @@ import (
 )
 
 type (
+	// Ticker represents a ticker that can be stopped.
+	Ticker interface {
+		Stop()
+	}
+
 	// TimeSource is an interface to make it easier to test code that uses time.
 	TimeSource interface {
 		Now() time.Time
 		Since(t time.Time) time.Duration
 		AfterFunc(d time.Duration, f func()) Timer
 		NewTimer(d time.Duration) (<-chan time.Time, Timer)
+		NewTicker(d time.Duration) (<-chan time.Time, Ticker)
 	}
 	// Timer is a timer returned by TimeSource.AfterFunc. Unlike the timers returned by [time.NewTimer] or time.Ticker,
 	// this timer does not have a channel. That is because the callback already reacts to the timer firing.
@@ -52,5 +58,11 @@ func (ts RealTimeSource) AfterFunc(d time.Duration, f func()) Timer {
 // NewTimer is a pass-through to time.NewTimer.
 func (ts RealTimeSource) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
 	t := time.NewTimer(d)
+	return t.C, t
+}
+
+// NewTicker is a pass-through to time.NewTicker.
+func (ts RealTimeSource) NewTicker(d time.Duration) (<-chan time.Time, Ticker) {
+	t := time.NewTicker(d)
 	return t.C, t
 }
