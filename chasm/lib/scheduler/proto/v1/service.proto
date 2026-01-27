@@ -37,4 +37,9 @@ service SchedulerService {
     rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
     }
+
+    // MigrateScheduleV1 migrates a CHASM schedule to a V1 workflow-backed schedule.
+    rpc MigrateScheduleV1(MigrateScheduleV1Request) returns (MigrateScheduleV1Response) {
+        option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
+    }
 }
