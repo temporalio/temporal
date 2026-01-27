@@ -167,7 +167,7 @@ type OperationCompletionUnsuccessfulOptions struct {
 	// [DefaultFailureConverter].
 	//
 	// NOTE: To call server versions <= 1.31.0, use a FailureConverter that unwraps the error cause if message is not
-	// present.
+	// present. That is is the default FailureConverter behavior, this comment applies to custom failure converters only.
 	FailureConverter nexus.FailureConverter
 	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
 	//

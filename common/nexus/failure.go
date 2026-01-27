@@ -151,6 +151,7 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 			encodedAttributes = base64.StdEncoding.EncodeToString(b)
 		}
 		var retryableOverride *bool
+		// nolint:exhaustive // There are only two valid values other than unspecified.
 		switch info.NexusHandlerFailureInfo.GetRetryBehavior() {
 		case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
 			val := true
@@ -158,10 +159,6 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 		case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
 			val := false
 			retryableOverride = &val
-		case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_UNSPECIFIED:
-			// noop
-		default:
-			// noop
 		}
 
 		handlerError := serializedHandlerError{
