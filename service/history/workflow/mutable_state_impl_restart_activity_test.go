@@ -285,7 +285,7 @@ func (s *retryActivitySuite) TestRetryActivity_ScheduleToStartTimeout_should_ret
 
 	state, err := s.mutableState.RetryActivity(s.activity, scheduleToStartFailure)
 
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "ScheduleToStart timeout should return RETRY_STATE_TIMEOUT, got %v", state)
 	s.assertActivityWasNotScheduled(s.activity, "with ScheduleToStart timeout")
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
@@ -309,7 +309,7 @@ func (s *retryActivitySuite) TestRetryActivity_ScheduleToCloseTimeout_should_ret
 
 	state, err := s.mutableState.RetryActivity(s.activity, scheduleToCloseFailure)
 
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "ScheduleToClose timeout should return RETRY_STATE_TIMEOUT, got %v", state)
 	s.assertActivityWasNotScheduled(s.activity, "with ScheduleToClose timeout")
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
