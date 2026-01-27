@@ -6,33 +6,22 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/workflow/command"
-	commonnexus "go.temporal.io/server/common/nexus"
 )
 
-type commandHandler struct {
-	config           *Config
-	endpointRegistry commonnexus.EndpointRegistry
-}
-
-func RegisterCommandHandlers(
-	registry *command.Registry,
-	endpointRegistry commonnexus.EndpointRegistry,
-	config *Config,
-) error {
-	h := &commandHandler{config: config, endpointRegistry: endpointRegistry}
+func registerCommandHandlers(registry *command.Registry) error {
 	if err := registry.Register(
 		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-		h.handleScheduleCommand,
+		handleScheduleCommand,
 	); err != nil {
 		return err
 	}
 	return registry.Register(
 		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-		h.handleCancelCommand,
+		handleCancelCommand,
 	)
 }
 
-func (ch *commandHandler) handleScheduleCommand(
+func handleScheduleCommand(
 	chasmCtx chasm.MutableContext,
 	ms command.Backend,
 	validator command.Validator,
@@ -43,7 +32,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	return serviceerror.NewUnimplemented("CHASM nexus operation scheduling not yet implemented")
 }
 
-func (ch *commandHandler) handleCancelCommand(
+func handleCancelCommand(
 	chasmCtx chasm.MutableContext,
 	ms command.Backend,
 	validator command.Validator,
