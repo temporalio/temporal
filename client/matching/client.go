@@ -101,7 +101,9 @@ func (c *clientImpl) PollActivityTaskQueue(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		request.GetForwardedSource())
+		request.GetForwardedSource(),
+		getRetryHint(ctx),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +124,9 @@ func (c *clientImpl) PollWorkflowTaskQueue(
 		request.GetPollRequest().GetTaskQueue(),
 		request.GetNamespaceId(),
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		request.GetForwardedSource())
+		request.GetForwardedSource(),
+		getRetryHint(ctx),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +182,12 @@ func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid st
 }
 
 // pickClientForWrite mutates the given proto. Callers should copy the proto before if necessary.
-func (c *clientImpl) pickClientForWrite(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (matchingservice.MatchingServiceClient, error) {
+func (c *clientImpl) pickClientForWrite(
+	proto *taskqueuepb.TaskQueue,
+	nsid string,
+	taskType enumspb.TaskQueueType,
+	forwardedFrom string,
+) (matchingservice.MatchingServiceClient, error) {
 	p, tq := c.processInputPartition(proto, nsid, taskType, forwardedFrom)
 	if tq != nil {
 		p = c.loadBalancer.PickWritePartition(tq)
@@ -188,10 +197,16 @@ func (c *clientImpl) pickClientForWrite(proto *taskqueuepb.TaskQueue, nsid strin
 }
 
 // pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.
-func (c *clientImpl) pickClientForRead(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (client matchingservice.MatchingServiceClient, release func(), err error) {
+func (c *clientImpl) pickClientForRead(
+	proto *taskqueuepb.TaskQueue,
+	nsid string,
+	taskType enumspb.TaskQueueType,
+	forwardedFrom string,
+	retryHint retryHint,
+) (client matchingservice.MatchingServiceClient, release func(), err error) {
 	p, tq := c.processInputPartition(proto, nsid, taskType, forwardedFrom)
 	if tq != nil {
-		token := c.loadBalancer.PickReadPartition(tq)
+		token := c.loadBalancer.PickReadPartition(tq, retryHint)
 		p = token.TQPartition
 		release = token.Release
 	}

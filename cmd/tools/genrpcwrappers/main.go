@@ -78,6 +78,10 @@ var (
 		"retryableClient.matching.PollActivityTaskQueue": "pollPolicy",
 		"retryableClient.matching.PollNexusTaskQueue":    "pollPolicy",
 	}
+	withRetryHint = map[string]string{
+		"retryableClient.matching.PollWorkflowTaskQueue": "withRetryHint",
+		"retryableClient.matching.PollActivityTaskQueue": "withRetryHint",
+	}
 	ignoreMethod = map[string]bool{
 		// TODO stream APIs are not supported. do not generate.
 		"client.admin.StreamWorkflowReplicationMessages":          true,
@@ -417,6 +421,7 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		"ResponseType": respType.String(),
 		"MetricPrefix": fmt.Sprintf("%s%sClient", strings.ToUpper(service.name[:1]), service.name[1:]),
 		"RetryPolicy":  cmp.Or(longPollRetryPolicy[key], "policy"),
+		"RetryHint":    withRetryHint[key],
 	}
 	if longPollContext[key] {
 		fields["LongPoll"] = "LongPoll"
@@ -611,6 +616,9 @@ func (c *retryableClient) {{.Method}}(
 		resp, err = c.client.{{.Method}}(ctx, request, opts...)
 		return err
 	}
+{{- if .RetryHint }}
+	ctx = {{.RetryHint}}(ctx)
+{{- end}}
 	err := backoff.ThrottleRetryContext(ctx, op, c.{{.RetryPolicy}}, c.isRetryable)
 	return resp, err
 }

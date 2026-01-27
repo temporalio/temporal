@@ -17,19 +17,19 @@ type (
 	LoadBalancer interface {
 		// PickWritePartition returns the task queue partition for adding
 		// an activity or workflow task. The input is the name of the
-		// original task queue (with no partition info). When forwardedFrom
-		// is non-empty, this call is forwardedFrom from a child partition
-		// to a parent partition in which case, no load balancing should be
-		// performed
+		// original task queue (with no partition info).
 		PickWritePartition(
 			taskQueue *tqid.TaskQueue,
 		) *tqid.NormalPartition
 
 		// PickReadPartition returns the task queue partition to send a poller to.
-		// Input is name of the original task queue as specified by caller. When
-		// forwardedFrom is non-empty, no load balancing should be done.
+		// Input is name of the original task queue as specified by caller.
+		// retryHint points to a bit field with bits set for partitions that have been tried
+		// already. PickReadPartition should try to avoid returning the same partition again
+		// if possible. It may be nil if hints aren't being used.
 		PickReadPartition(
 			taskQueue *tqid.TaskQueue,
+			retryHint retryHint,
 		) *pollToken
 	}
 
@@ -93,6 +93,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 // Caller is responsible to call pollToken.Release() after complete the poll.
 func (lb *defaultLoadBalancer) PickReadPartition(
 	taskQueue *tqid.TaskQueue,
+	retryHint retryHint,
 ) *pollToken {
 	tqlb := lb.getTaskQueueLoadBalancer(taskQueue)
 
@@ -109,7 +110,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 
-	return tqlb.pickReadPartition(partitionCount)
+	return tqlb.pickReadPartition(partitionCount, retryHint)
 }
 
 func (lb *defaultLoadBalancer) getTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
@@ -136,12 +137,12 @@ func newTaskQueueLoadBalancer(tq *tqid.TaskQueue) *tqLoadBalancer {
 	}
 }
 
-func (b *tqLoadBalancer) pickReadPartition(partitionCount int) *pollToken {
+func (b *tqLoadBalancer) pickReadPartition(partitionCount int, retryHint retryHint) *pollToken {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
 	b.ensurePartitionCountLocked(partitionCount)
-	partitionID := b.pickReadPartitionWithFewestPolls(partitionCount)
+	partitionID := b.pickReadPartitionWithFewestPolls(partitionCount, retryHint)
 
 	b.pollerCounts[partitionID]++
 
@@ -166,7 +167,7 @@ func (b *tqLoadBalancer) forceReadPartition(partitionCount, partitionID int) *po
 }
 
 // caller to ensure that lock is obtained before call this function
-func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) int {
+func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int, retryHint retryHint) int {
 	// pick a random partition to start with
 	startPartitionID := rand.Intn(partitionCount)
 	pickedPartitionID := startPartitionID
@@ -178,6 +179,13 @@ func (b *tqLoadBalancer) pickReadPartitionWithFewestPolls(partitionCount int) in
 			minPollerCount = b.pollerCounts[currPartitionID]
 		}
 	}
+
+	if partitionCount > 1 && retryHint.used(pickedPartitionID) {
+		// If we already tried this one, try once to pick a different one.
+		// We may end up on the same one, that's okay.
+		pickedPartitionID = rand.Intn(partitionCount)
+	}
+	retryHint.set(pickedPartitionID)
 
 	return pickedPartitionID
 }
