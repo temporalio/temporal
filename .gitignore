@@ -44,6 +44,3 @@
 
 **/.venv/
 **/.ruff_cache/
-
-# Scratchpad for external memory/planning
-scratchpad.md
