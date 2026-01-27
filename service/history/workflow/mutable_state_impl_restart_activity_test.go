@@ -267,6 +267,54 @@ func (s *retryActivitySuite) TestRetryActivity_when_failure_in_list_of_not_retry
 	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
 }
 
+// TestRetryActivity_ScheduleToStartTimeout_should_return_timeout tests that
+// ScheduleToStart timeout failures return RETRY_STATE_TIMEOUT, not NON_RETRYABLE_FAILURE.
+// See: https://github.com/temporalio/temporal/issues/3667
+func (s *retryActivitySuite) TestRetryActivity_ScheduleToStartTimeout_should_return_timeout() {
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	scheduleToStartFailure := &failurepb.Failure{
+		Message: "activity ScheduleToStart timeout",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+			},
+		},
+	}
+
+	state, err := s.mutableState.RetryActivity(s.activity, scheduleToStartFailure)
+
+	s.Require().NoError(err)
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "ScheduleToStart timeout should return RETRY_STATE_TIMEOUT, got %v", state)
+	s.assertActivityWasNotScheduled(s.activity, "with ScheduleToStart timeout")
+	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
+}
+
+// TestRetryActivity_ScheduleToCloseTimeout_should_return_timeout tests that
+// ScheduleToClose timeout failures return RETRY_STATE_TIMEOUT, not NON_RETRYABLE_FAILURE.
+// See: https://github.com/temporalio/temporal/issues/3667
+func (s *retryActivitySuite) TestRetryActivity_ScheduleToCloseTimeout_should_return_timeout() {
+	taskGeneratorMock := NewMockTaskGenerator(s.controller)
+	s.mutableState.taskGenerator = taskGeneratorMock
+
+	scheduleToCloseFailure := &failurepb.Failure{
+		Message: "activity ScheduleToClose timeout",
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			},
+		},
+	}
+
+	state, err := s.mutableState.RetryActivity(s.activity, scheduleToCloseFailure)
+
+	s.Require().NoError(err)
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, state, "ScheduleToClose timeout should return RETRY_STATE_TIMEOUT, got %v", state)
+	s.assertActivityWasNotScheduled(s.activity, "with ScheduleToClose timeout")
+	s.assertNoChange(s.activity, "activity should not change if it is not restarted")
+}
+
 const nextBackoffIntervalParametersFormat = "now(%v):currentAttempt(%v):maxAttempts(%v):initInterval(%v):maxInterval(%v):expirationTime(%v):backoffCoefficient(%v)"
 
 type nextBackoffIntervalStub struct {
