@@ -167,6 +167,7 @@ type (
 // NewRedirection creates DC redirection interceptor
 func NewRedirection(
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceCache namespace.Registry,
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
@@ -178,6 +179,7 @@ func NewRedirection(
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		clusterMetadata,
 		enabledForNS,
+		selectedForNS,
 		namespaceCache,
 		policy,
 	)

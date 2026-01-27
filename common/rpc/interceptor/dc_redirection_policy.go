@@ -49,6 +49,7 @@ type (
 	SelectedAPIsForwardingRedirectionPolicy struct {
 		currentClusterName string
 		enabledForNS       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		selectedForNS      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		namespaceRegistry  namespace.Registry
 		enableForAllAPIs   bool
 	}
@@ -73,6 +74,7 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 func RedirectionPolicyGenerator(
 	clusterMetadata cluster.Metadata,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
 	policy config.DCRedirectionPolicy,
 ) DCRedirectionPolicy {
@@ -84,10 +86,10 @@ func RedirectionPolicyGenerator(
 		return NewNoopRedirectionPolicy(clusterMetadata.GetCurrentClusterName())
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
+		return NewSelectedAPIsForwardingPolicy(currentClusterName, enabledForNS, selectedForNS, namespaceRegistry)
 	case DCRedirectionPolicyAllAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
-		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, namespaceRegistry)
+		return NewAllAPIsForwardingPolicy(currentClusterName, enabledForNS, selectedForNS, namespaceRegistry)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -114,11 +116,13 @@ func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(_ context.Context, _ 
 func NewSelectedAPIsForwardingPolicy(
 	currentClusterName string,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
 ) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		enabledForNS:       enabledForNS,
+		selectedForNS:      selectedForNS,
 		namespaceRegistry:  namespaceRegistry,
 	}
 }
@@ -127,11 +131,13 @@ func NewSelectedAPIsForwardingPolicy(
 func NewAllAPIsForwardingPolicy(
 	currentClusterName string,
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceRegistry namespace.Registry,
 ) *SelectedAPIsForwardingRedirectionPolicy {
 	return &SelectedAPIsForwardingRedirectionPolicy{
 		currentClusterName: currentClusterName,
 		enabledForNS:       enabledForNS,
+		selectedForNS:      selectedForNS,
 		namespaceRegistry:  namespaceRegistry,
 		enableForAllAPIs:   true,
 	}
@@ -188,7 +194,8 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	// Get business ID from context (set by BusinessIDInterceptor)
 	businessID := GetBusinessIDFromContext(ctx)
 
-	if policy.enableForAllAPIs {
+	// selectedForNS takes priority over enableForAllAPIs: force whitelist for this namespace when set
+	if policy.enableForAllAPIs && !policy.selectedForNS(namespaceEntry.Name().String()) {
 		return namespaceEntry.ActiveClusterName(businessID), true
 	}
 
