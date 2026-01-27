@@ -67,14 +67,16 @@ func Test_SetRequestDefaultValueAndGetTargetVersionHistory_ExclusiveEndEventOnNo
 	assert.Equal(t, branch1, targetVersionHistory)
 }
 
-// Test_SetRequestDefaultValueAndGetTargetVersionHistory_InvalidEndEventId tests edge case
-// where EndEventId is 1, meaning the actual last event (EndEventId - 1 = 0) is invalid.
-func Test_SetRequestDefaultValueAndGetTargetVersionHistory_InvalidEndEventId(t *testing.T) {
+// Test_SetRequestDefaultValueAndGetTargetVersionHistory_EndEventNotFound tests the case
+// where neither {EndEventId, EndEventVersion} nor {EndEventId-1, EndEventVersion} exist.
+func Test_SetRequestDefaultValueAndGetTargetVersionHistory_EndEventNotFound(t *testing.T) {
+	// Branch has events 1-10 at version 1
 	branch := versionhistory.NewVersionHistory([]byte("token"), []*historyspb.VersionHistoryItem{
 		versionhistory.NewVersionHistoryItem(int64(10), int64(1)),
 	})
 	versionHistories := versionhistory.NewVersionHistories(branch)
 
+	// Request events at version 2, which doesn't exist
 	request := &historyservice.GetWorkflowExecutionRawHistoryV2Request{
 		NamespaceId: uuid.NewString(),
 		Request: &adminservice.GetWorkflowExecutionRawHistoryV2Request{
@@ -84,9 +86,9 @@ func Test_SetRequestDefaultValueAndGetTargetVersionHistory_InvalidEndEventId(t *
 				RunId:      uuid.NewString(),
 			},
 			StartEventId:      0,
-			StartEventVersion: 1,
-			EndEventId:        1,
-			EndEventVersion:   1,
+			StartEventVersion: 2,
+			EndEventId:        5,
+			EndEventVersion:   2,
 			MaximumPageSize:   100,
 		},
 	}
