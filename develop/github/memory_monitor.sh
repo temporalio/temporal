@@ -20,6 +20,7 @@ HISTORY_FILE="/tmp/memory_history.txt"
 HIGH_MEMORY_THRESHOLD=95
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 HEAP_PRINTED=false
+HIGH_WATER_MARK=0
 
 # Clear history on start
 : > "$HISTORY_FILE"
@@ -118,22 +119,25 @@ snapshot() {
     HEAP_PRINTED=true
   fi
 
-  # Write snapshot to disk.
-  {
-    echo "Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S')"
-    echo ""
-    cat "$HISTORY_FILE"
-    echo ""
-    echo "--- Top Processes ---"
-    ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20
-    echo ""
-    echo "--- Memory Summary ---"
-    free -m
-    echo ""
-    echo "$pprof_output"
-    echo ""
-    echo "$goroutine_output"
-  } > "$SNAPSHOT_FILE"
+  # Write snapshot to disk only if memory usage is at or above high water mark.
+  if [[ "$pct" -ge "$HIGH_WATER_MARK" ]]; then
+    HIGH_WATER_MARK="$pct"
+    {
+      echo "Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (${pct}% - high water mark)"
+      echo ""
+      cat "$HISTORY_FILE"
+      echo ""
+      echo "--- Top Processes ---"
+      ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20
+      echo ""
+      echo "--- Memory Summary ---"
+      free -m
+      echo ""
+      echo "$pprof_output"
+      echo ""
+      echo "$goroutine_output"
+    } > "$SNAPSHOT_FILE"
+  fi
 }
 
 # Take snapshots every 30s until killed.
