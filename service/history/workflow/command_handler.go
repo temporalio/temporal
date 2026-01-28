@@ -7,31 +7,19 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // ErrDuplicateRegistration is returned by a [CommandHandlerRegistry] when it detects duplicate registration.
 var ErrDuplicateRegistration = errors.New("duplicate registration")
 
-// FailWorkflowTaskError is an error that can be returned from a [CommandHandler] to fail the current workflow task and
-// optionally terminate the entire workflow.
-type FailWorkflowTaskError struct {
-	// The cause to set on the WorkflowTaskFailed event.
-	Cause             enumspb.WorkflowTaskFailedCause
-	Message           string
-	TerminateWorkflow bool
-}
-
-func (e FailWorkflowTaskError) Error() string {
-	return e.Message
-}
-
 // CommandHandler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
 // worker request.
 type CommandHandler func(
 	context.Context,
 	historyi.MutableState,
-	CommandValidator,
+	chasmcommand.Validator,
 	int64,
 	*commandpb.Command,
 ) error
@@ -39,12 +27,6 @@ type CommandHandler func(
 // CommandHandlerRegistry maintains a mapping of command type to [CommandHandler].
 type CommandHandlerRegistry struct {
 	handlers map[enumspb.CommandType]CommandHandler
-}
-
-// CommandValidator is a helper for validating workflow commands.
-type CommandValidator interface {
-	// IsValidPayloadSize validates that a payload size is within the configured limits.
-	IsValidPayloadSize(size int) bool
 }
 
 // NewCommandHandlerRegistry creates a new [CommandHandlerRegistry].
