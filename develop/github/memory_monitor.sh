@@ -113,7 +113,7 @@ snapshot() {
   local pprof_output
   pprof_output="$(print_pprof_analysis)"
 
-  # If memory threshold was reached, print Go heap details to stdout. But only once per run.
+  # If memory threshold was reached, print Go heap details and goroutine stacks to stdout. But only once per run.
   if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
     echo ""
     echo "=== HIGH MEMORY WARNING: ${pct}% used (threshold: ${HIGH_MEMORY_THRESHOLD}%) ==="
@@ -122,9 +122,12 @@ snapshot() {
       echo ""
     fi
     echo "$pprof_output"
+    echo ""
+    print_goroutine_stacks 1000
     echo "=== END HIGH MEMORY WARNING ==="
     echo ""
     HEAP_PRINTED=true
+    GOROUTINE_DUMP_PRINTED=true  # Don't print again for high goroutine count
   fi
 
   # If goroutine count is too high, dump goroutine stacks to help debug leaks. But only once per run.
