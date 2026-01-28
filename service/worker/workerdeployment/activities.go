@@ -148,7 +148,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		return err
 	}
 
-	workflowID := GenerateVersionWorkflowID(args.DeploymentName, versionObj.GetBuildId())
+	workflowID := worker_versioning.GenerateVersionWorkflowID(args.DeploymentName, versionObj.GetBuildId())
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.DeleteVersionArgs{
 		Identity:         identity,
 		Version:          args.Version,
