@@ -16,7 +16,8 @@ const (
 )
 
 var (
-	ArchetypeID = chasm.GenerateTypeID(chasm.FullyQualifiedName(libraryName, componentName))
+	Archetype   = chasm.FullyQualifiedName(libraryName, componentName)
+	ArchetypeID = chasm.GenerateTypeID(Archetype)
 )
 
 func newComponentOnlyLibrary() *componentOnlyLibrary {

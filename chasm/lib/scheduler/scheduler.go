@@ -3,7 +3,6 @@ package scheduler
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -85,7 +84,7 @@ const (
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
 	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
-	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
+	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -545,12 +544,12 @@ func (s *Scheduler) ListMatchingTimes(
 
 	frontendReq := req.FrontendRequest
 	if frontendReq == nil || frontendReq.StartTime == nil || frontendReq.EndTime == nil {
-		return nil, errors.New("missing or invalid query")
+		return nil, ErrInvalidQuery
 	}
 
 	cspec, err := s.getCompiledSpec(specBuilder)
 	if err != nil {
-		return nil, fmt.Errorf("invalid schedule: %w", err)
+		return nil, serviceerror.NewInvalidArgumentf("invalid schedule: %v", err)
 	}
 
 	var out []*timestamppb.Timestamp

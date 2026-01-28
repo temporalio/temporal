@@ -342,7 +342,7 @@ func NewMutableState(
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
 		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
-		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
+		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(namespaceName),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
 		workflowTaskUpdated:          false,
@@ -6196,6 +6196,24 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
+	// ScheduleToStart and ScheduleToClose timeouts are server-enforced deadlines,
+	// not actual activity execution failures. They should return RETRY_STATE_TIMEOUT,
+	// not RETRY_STATE_NON_RETRYABLE_FAILURE.
+	//
+	// When RETRY_STATE_TIMEOUT is returned, the actual activity failure (if any) that
+	// caused retries is available in failure.Cause. SDKs should surface this cause
+	// to users since it represents the real failure, while the schedule timeout is
+	// just the trigger that finally closed the activity after exhausting retries.
+	//
+	// See: https://github.com/temporalio/temporal/issues/3667
+	if activityFailure.GetTimeoutFailureInfo() != nil {
+		timeoutType := activityFailure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START ||
+			timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
+			return enumspb.RETRY_STATE_TIMEOUT, nil
+		}
+	}
+
 	if !isRetryable(activityFailure, ai.RetryNonRetryableErrorTypes) {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
@@ -6817,7 +6835,7 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 
-	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory()
+	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory(namespaceEntry.Name().String())
 
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
