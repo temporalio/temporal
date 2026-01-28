@@ -3,6 +3,7 @@ package testcore
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -96,6 +97,9 @@ func init() {
 	if os.Getenv("CI") != "" {
 		maxUsage = 50
 	}
+
+	fmt.Printf("Test parallelism: GOMAXPROCS=%d, shared_clusters=%d, dedicated_clusters=%d\n",
+		runtime.GOMAXPROCS(0), sharedSize, dedicatedSize)
 
 	sharedPool := newPool(sharedSize, false)
 	sharedPool.maxUsage = maxUsage
