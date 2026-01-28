@@ -1,0 +1,12 @@
+<testsuites tests="2" failures="2">
+    <testsuite name="ALERTS" tests="2" failures="2" errors="0" id="0" time="">
+        <testcase name="TestFoo1" classname="fakepkg1">
+            <failure message="race: Data race detected"><![CDATA[Detected in tests:
+	fakepkg1.TestFoo1]]></failure>
+        </testcase>
+        <testcase name="TestFoo2" classname="fakepkg1">
+            <failure message="panic: This is a panic"><![CDATA[Detected in tests:
+	fakepkg1.TestFoo2]]></failure>
+        </testcase>
+    </testsuite>
+</testsuites>

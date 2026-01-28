@@ -1,0 +1,10 @@
+some log line before
+another log line
+    Error Trace:    /path/to/test_file.go:123
+                    /path/to/test_file.go:456
+    Error:          Not equal:
+                    expected: "foo"
+                    actual  : "bar"
+    Test:           TestSomething
+    Messages:       Expected values to match
+more log lines after
