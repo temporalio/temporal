@@ -54,7 +54,7 @@ func PrintClusterStats() {
 }
 
 func init() {
-	sharedSize := runtime.GOMAXPROCS(0)
+	sharedSize := 2
 	if v := os.Getenv("TEMPORAL_TEST_SHARED_CLUSTERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
