@@ -1,5 +1,5 @@
 name: Docker Build (PR)
-
+# will remove this one after the build passes. It was added to validate multi arch builds in PR. It's likely overkill now. There is a single arch docker build on each PR for the feature tests
 on:
   pull_request:
 
