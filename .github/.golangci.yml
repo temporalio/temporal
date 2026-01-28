@@ -38,12 +38,14 @@ linters:
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
-        - pattern: '^Unix$'
+        - pattern: "^Unix$"
           msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
-        - pattern: '^UnixMilli$'
+        - pattern: "^UnixMilli$"
           msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
-        - pattern: '^UnixNano$'
+        - pattern: "^UnixNano$"
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
+        - pattern: FunctionalTestBase
+          msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
     depguard:
       rules:
         main:
@@ -183,6 +185,10 @@ linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
         text: "panic"
+        linters:
+          - forbidigo
+      - path-except: tests/[^/]+\.go$ # scoped to files inside tests/ only as it's still used (and wrapped) in tests/testcore/
+        text: "FunctionalTestBase"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
