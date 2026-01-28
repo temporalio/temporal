@@ -162,9 +162,6 @@ func (s *engine3Suite) TearDownTest() {
 }
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
-	// Disable raw history to test the non-raw history path
-	s.config.SendRawHistoryBetweenInternalServices = func() bool { return false }
-
 	fakeHistory := []*historypb.HistoryEvent{
 		{
 			EventId:   int64(1),
@@ -274,7 +271,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInternalRawHistory() {
 	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
-	s.config.SendRawHistoryBytesToMatchingService = func() bool { return true }
 	fakeHistory := historypb.History{
 		Events: []*historypb.HistoryEvent{
 			{
@@ -376,7 +372,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	expectedResponse.BranchToken, _ = ms.GetCurrentBranchToken()
-	expectedResponse.RawHistoryBytes = [][]byte{historyBlob}
+	expectedResponse.RawHistory = [][]byte{historyBlob}
 	expectedResponse.NextPageToken = nil
 
 	response, err := s.historyEngine.RecordWorkflowTaskStarted(context.Background(), &request)
@@ -384,10 +380,6 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 	s.NotNil(response)
 	s.True(response.StartedTime.AsTime().After(expectedResponse.ScheduledTime.AsTime()))
 	expectedResponse.StartedTime = response.StartedTime
-
-	// When raw history is enabled, History is NOT populated - only RawHistoryBytes is set.
-	// The matching service will use RawHistoryBytes which gets auto-deserialized by gRPC.
-	s.Nil(response.History)
 	s.Equal(&expectedResponse, response)
 }
 
