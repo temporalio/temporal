@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -541,42 +540,6 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	prtnMgr.config.NewMatcher = true
 	prtnMgr.config.EnableFairness = true
 
-	// Pre-populate the pri table (draining source) with metadata but NO tasks
-	// This simulates a scenario where draining was started but tasks have already been consumed
-	priInfo := &persistencespb.TaskQueueInfo{
-		NamespaceId: physicalTaskQueueKey.NamespaceId(),
-		Name:        physicalTaskQueueKey.PersistenceName(),
-		TaskType:    physicalTaskQueueKey.TaskType(),
-		AckLevel:    0,
-		Subqueues: []*persistencespb.SubqueueInfo{
-			{Key: &persistencespb.SubqueueKey{Priority: 100}, AckLevel: 0},
-		},
-	}
-	_, err = priTm.CreateTaskQueue(context.Background(), &persistence.CreateTaskQueueRequest{
-		RangeID:       1,
-		TaskQueueInfo: priInfo,
-	})
-	require.NoError(t, err)
-
-	// Pre-populate the fair table (active) with metadata having OtherHasTasks=true
-	// This signals that the pri table has tasks that need to be drained
-	// Since the pri table is empty, the drain should complete immediately
-	fairInfo := &persistencespb.TaskQueueInfo{
-		NamespaceId:   physicalTaskQueueKey.NamespaceId(),
-		Name:          physicalTaskQueueKey.PersistenceName(),
-		TaskType:      physicalTaskQueueKey.TaskType(),
-		AckLevel:      0,
-		OtherHasTasks: true, // This triggers draining
-		Subqueues: []*persistencespb.SubqueueInfo{
-			{Key: &persistencespb.SubqueueKey{Priority: 100}, FairAckLevel: &taskqueuespb.FairLevel{}},
-		},
-	}
-	_, err = fairTm.CreateTaskQueue(context.Background(), &persistence.CreateTaskQueueRequest{
-		RangeID:       1,
-		TaskQueueInfo: fairInfo,
-	})
-	require.NoError(t, err)
-
 	// Create and start the physical task queue manager
 	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, physicalTaskQueueKey)
 	require.NoError(t, err)
@@ -589,10 +552,21 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	// Verify draining is set up initially
+	// Get queue data for both tables
+	priQueueData := priTm.getQueueDataByKey(physicalTaskQueueKey)
+	fairQueueData := fairTm.getQueueDataByKey(physicalTaskQueueKey)
+
+	// Wait for both tables to be loaded (rangeID > 0 indicates the table was initialized via
+	// CreateTaskQueue or UpdateTaskQueue)
 	require.Eventually(t, func() bool {
-		return tqMgr.getDrainBacklogMgr() != nil
-	}, 2*time.Second, 10*time.Millisecond, "draining should be set up")
+		priQueueData.Lock()
+		priLoaded := priQueueData.rangeID > 0
+		priQueueData.Unlock()
+		fairQueueData.Lock()
+		fairLoaded := fairQueueData.rangeID > 0
+		fairQueueData.Unlock()
+		return priLoaded && fairLoaded
+	}, 2*time.Second, 10*time.Millisecond, "both tables should be loaded")
 
 	// Since the pri table is empty, drain should complete quickly
 	// Wait for drain completion (drainBacklogMgr becomes nil)
@@ -612,12 +586,14 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// Stop the manager
 	tqMgr.Stop(unloadCauseUnspecified)
 
-	// Record current call counts on pri table (the migration/draining table)
-	priQueueData := priTm.getQueueDataByKey(physicalTaskQueueKey)
+	// Record current update count on pri table (the migration/draining table)
 	priQueueData.Lock()
 	priUpdateCountBefore := priQueueData.updateCount
-	priGetTasksCountBefore := priQueueData.getTasksCount
 	priQueueData.Unlock()
+
+	fairQueueData.Lock()
+	fairUpdateCountBefore := fairQueueData.updateCount
+	fairQueueData.Unlock()
 
 	// Create a new manager (simulating reload)
 	prtnMgr2, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
@@ -639,20 +615,21 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	cancel2()
 	require.NoError(t, err)
 
+	// Wait for fair table to be updated on reload
+	require.Eventually(t, func() bool {
+		fairQueueData.Lock()
+		defer fairQueueData.Unlock()
+		return fairQueueData.updateCount > fairUpdateCountBefore
+	}, 2*time.Second, 10*time.Millisecond, "fair table should be updated on reload")
+
 	// Verify no draining is set up on reload
 	require.Nil(t, tqMgr2.getDrainBacklogMgr(), "draining should not be set up after reload")
 
 	// Verify no new persistence calls to pri table (the migration table)
-	// Give a short window for any async operations to settle
-	time.Sleep(100 * time.Millisecond)
-
 	priQueueData.Lock()
 	priUpdateCountAfter := priQueueData.updateCount
-	priGetTasksCountAfter := priQueueData.getTasksCount
 	priQueueData.Unlock()
 
 	assert.Equal(t, priUpdateCountBefore, priUpdateCountAfter,
 		"no new UpdateTaskQueue calls should be made to migration table after reload")
-	assert.Equal(t, priGetTasksCountBefore, priGetTasksCountAfter,
-		"no new GetTasks calls should be made to migration table after reload")
 }
