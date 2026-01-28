@@ -196,7 +196,7 @@ func (s *mutableStateSuite) SetupTest() {
 
 	s.mockConfig.MutableStateActivityFailureSizeLimitWarn = func(namespace string) int { return 1 * 1024 }
 	s.mockConfig.MutableStateActivityFailureSizeLimitError = func(namespace string) int { return 2 * 1024 }
-	s.mockConfig.EnableTransitionHistory = func() bool { return true }
+	s.mockConfig.EnableTransitionHistory = func(string) bool { return true }
 	s.mockShard.SetEventsCacheForTesting(s.mockEventsCache)
 
 	s.namespaceEntry = tests.GlobalNamespaceEntry

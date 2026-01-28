@@ -1539,11 +1539,10 @@ timeout timer when execution timeout is specified when starting a workflow.`,
 		`EnableUpdateWorkflowModeIgnoreCurrent controls whether to enable the new logic for updating closed workflow execution
 by mutation using UpdateWorkflowModeIgnoreCurrent`,
 	)
-	EnableTransitionHistory = NewGlobalBoolSetting(
+	EnableTransitionHistory = NewNamespaceBoolSetting(
 		"history.enableTransitionHistory",
-		false,
-		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
-This feature is still under development and should NOT be enabled.`,
+		true,
+		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.`,
 	)
 	HistoryStartupMembershipJoinDelay = NewGlobalDurationSetting(
 		"history.startupMembershipJoinDelay",
