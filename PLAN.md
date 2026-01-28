@@ -29,7 +29,7 @@ Convert remaining test files in `tests/` from testify suite pattern to `testcore
 | 20 | `update_workflow_sdk_test.go` | 401 | Completed |
 | 21 | `stickytq_test.go` | 411 | Completed |
 | 22 | `transient_task_test.go` | 414 | Completed |
-| 23 | `activity_api_update_test.go` | 427 | Completed |
+| 23 | `activity_api_update_test.go` | 427 | Reverted |
 | 24 | `archival_test.go` | 433 | Completed |
 | 25 | `poller_scaling_test.go` | 435 | Completed |
 | 26 | `workflow_delete_execution_test.go` | 435 | Completed |
