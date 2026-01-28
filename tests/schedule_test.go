@@ -742,6 +742,13 @@ func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
 	})
 	s.NotNil(v1Entry.GetInfo())
 
+	// Count with V1 handler.
+	v1CountResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(v1CountResp.Count, int64(1), "Expected at least 1 schedule with V1 handler")
+
 	// Flip on CHASM experiment and make sure we can still list.
 	s.newContext = func() context.Context {
 		return metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
@@ -751,6 +758,13 @@ func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
 	chasmEntry := s.getScheduleEntryFomVisibility(sid, nil)
 	s.NotNil(chasmEntry.GetInfo())
 	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
+
+	// Count with CHASM handler and verify it matches V1 count.
+	chasmCountResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.Equal(v1CountResp.Count, chasmCountResp.Count, "CHASM and V1 counts should match")
 }
 
 // TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.

@@ -4437,7 +4437,25 @@ func (wh *WorkflowHandler) ListSchedules(
 	}
 
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	if err != nil {
+		return nil, err
+	}
 
+	if chasmEnabled {
+		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+	}
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+}
+
+// prepareSchedulerQuery validates a scheduler RPC's query argument, and wraps it
+// in the appropriate base query.
+func (wh *WorkflowHandler) prepareSchedulerQuery(
+	chasmEnabled bool,
+	query string,
+	namespaceName namespace.Name,
+) (string, error) {
 	// Use different base queries based on code path:
 	// - CHASM path uses TemporalSystemExecutionStatus (translated via archetype ID)
 	// - V1 path uses ExecutionStatus directly (no archetype ID available)
@@ -4446,29 +4464,27 @@ func (wh *WorkflowHandler) ListSchedules(
 		baseQuery = scheduler.VisibilityListQueryChasm
 	}
 
-	query := baseQuery
-	if strings.TrimSpace(request.Query) != "" {
+	result := baseQuery
+	if strings.TrimSpace(query) != "" {
 		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
-			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
+
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
-			request.Query,
+			query,
 		); err != nil {
-			return nil, err
+			return "", err
 		}
-		query = fmt.Sprintf("%s AND (%s)", baseQuery, request.Query)
+
+		result = fmt.Sprintf("%s AND (%s)", baseQuery, query)
 	}
 
-	if chasmEnabled {
-		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
-		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
-	}
-	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+	return result, nil
 }
 
 func (wh *WorkflowHandler) listSchedulesChasm(
@@ -4589,27 +4605,14 @@ func (wh *WorkflowHandler) CountSchedules(
 		return nil, errListNotAllowed
 	}
 
-	// Build query with base filter (same as ListSchedules)
-	query := scheduler.VisibilityBaseListQuery
-	if strings.TrimSpace(request.Query) != "" {
-		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
-		if err != nil {
-			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
-		}
-		if err := scheduler.ValidateVisibilityQuery(
-			namespaceName,
-			saNameType,
-			wh.saMapperProvider,
-			wh.config.VisibilityEnableUnifiedQueryConverter,
-			request.Query,
-		); err != nil {
-			return nil, err
-		}
-		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	if err != nil {
+		return nil, err
 	}
 
 	// Route to CHASM or V1 based on config (same pattern as ListSchedules)
-	if wh.chasmSchedulerEnabled(ctx, namespaceName.String()) {
+	if chasmEnabled {
 		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, query)
 	}
 	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, query)
