@@ -543,6 +543,18 @@ jobs:
         if: always()
         run: if [ -f /tmp/temporal_cluster_stats.txt ]; then cat /tmp/temporal_cluster_stats.txt; fi
 
+      - name: Print goleak violations
+        if: always()
+        run: |
+          if [ -d /tmp/goleak_violations ] && [ "$(ls -A /tmp/goleak_violations 2>/dev/null)" ]; then
+            echo "=== Goroutine Leak Violations ==="
+            for f in /tmp/goleak_violations/*.txt; do
+              echo "--- $f ---"
+              cat "$f"
+              echo ""
+            done
+          fi
+
       - name: Generate crash report
         if: failure()
         run:
@@ -704,6 +716,22 @@ jobs:
         if: always()
         run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
+      - name: Print cluster stats
+        if: always()
+        run: if [ -f /tmp/temporal_cluster_stats.txt ]; then cat /tmp/temporal_cluster_stats.txt; fi
+
+      - name: Print goleak violations
+        if: always()
+        run: |
+          if [ -d /tmp/goleak_violations ] && [ "$(ls -A /tmp/goleak_violations 2>/dev/null)" ]; then
+            echo "=== Goroutine Leak Violations ==="
+            for f in /tmp/goleak_violations/*.txt; do
+              echo "--- $f ---"
+              cat "$f"
+              echo ""
+            done
+          fi
+
       - name: Generate crash report
         if: failure()
         run:
@@ -861,6 +889,22 @@ jobs:
       - name: Print memory snapshot
         if: always()
         run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
+
+      - name: Print cluster stats
+        if: always()
+        run: if [ -f /tmp/temporal_cluster_stats.txt ]; then cat /tmp/temporal_cluster_stats.txt; fi
+
+      - name: Print goleak violations
+        if: always()
+        run: |
+          if [ -d /tmp/goleak_violations ] && [ "$(ls -A /tmp/goleak_violations 2>/dev/null)" ]; then
+            echo "=== Goroutine Leak Violations ==="
+            for f in /tmp/goleak_violations/*.txt; do
+              echo "--- $f ---"
+              cat "$f"
+              echo ""
+            done
+          fi
 
       - name: Generate crash report
         if: failure()
