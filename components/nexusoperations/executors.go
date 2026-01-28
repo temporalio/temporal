@@ -157,6 +157,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to get namespace by ID: %w", err)
 	}
 
+	logger := log.With(e.Logger, tag.WorkflowNamespace(ns.Name().String()), tag.WorkflowID(ref.WorkflowKey.WorkflowID))
 	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
@@ -209,11 +210,12 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	var timeoutType enumspb.TimeoutType
 	// Adjust timeout based on remaining operation timeouts.
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.
+	now := time.Now()
 	if args.scheduleToStartTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToStartTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToStartTimeout-now.Sub(args.scheduledTimeFromEvent))
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START
 	} else if args.scheduleToCloseTimeout > 0 {
-		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-time.Since(args.scheduledTime))
+		callTimeout = min(callTimeout, args.scheduleToCloseTimeout-now.Sub(args.scheduledTimeFromEvent))
 		timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
 	}
 	// Inform the handler of the operation timeout via header.
@@ -223,7 +225,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		opTimeout = args.startToCloseTimeout
 	}
 	if args.scheduleToCloseTimeout > 0 {
-		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTime), opTimeout)
+		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTimeFromEvent), opTimeout)
 	}
 	header := nexus.Header(args.header)
 	// Set the operation timeout header if not already set.
@@ -251,7 +253,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
+		traceLogger := log.With(logger,
 			tag.Operation("StartOperation"),
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.RequestID(args.requestID),
@@ -327,22 +329,32 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		failureSource := failureSourceFromContext(ctx)
 		// TODO(bergundy): Debug level for "not enough time" errors.
 		if failureSource == commonnexus.FailureSourceWorker {
-			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr),
+			logger.Debug("Nexus StartOperation request failed", tag.Error(callErr),
 				tag.NewDurationTag("scheduleToCloseTimeout", args.scheduleToCloseTimeout),
 				tag.NewDurationTag("startToCloseTimeout", args.startToCloseTimeout),
 				tag.NewDurationTag("scheduleToStartTimeout", args.scheduleToStartTimeout),
-				tag.NewDurationTag("scheduleToCloseFromEvent", args.scheduleToCloseTimeoutFromEvent),
+				tag.NewDurationTag("scheduleToCloseTimeoutFromEvent", args.scheduleToCloseTimeoutFromEvent),
+				tag.NewTimeTag("scheduledTimeFromState", args.scheduledTimeFromState),
+				tag.NewTimeTag("scheduledTimeFromEvent", args.scheduledTimeFromEvent),
+				tag.NewTimeTag("now", now),
 				tag.NewDurationTag("callTimeout", callTimeout),
 				tag.NewDurationTag("dcMinTimeout", e.Config.MinRequestTimeout(ns.Name().String())),
+				tag.NewBoolTag("eventIsNil", args.eventIsNil),
+				tag.NewBoolTag("eventAttrsAreNil", args.eventAttrsAreNil),
 			)
 		} else {
-			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr),
+			logger.Error("Nexus StartOperation request failed", tag.Error(callErr),
 				tag.NewDurationTag("scheduleToCloseTimeout", args.scheduleToCloseTimeout),
 				tag.NewDurationTag("startToCloseTimeout", args.startToCloseTimeout),
 				tag.NewDurationTag("scheduleToStartTimeout", args.scheduleToStartTimeout),
-				tag.NewDurationTag("scheduleToCloseFromEvent", args.scheduleToCloseTimeoutFromEvent),
+				tag.NewDurationTag("scheduleToCloseTimeoutFromEvent", args.scheduleToCloseTimeoutFromEvent),
+				tag.NewTimeTag("scheduledTimeFromState", args.scheduledTimeFromState),
+				tag.NewTimeTag("scheduledTimeFromEvent", args.scheduledTimeFromEvent),
 				tag.NewDurationTag("callTimeout", callTimeout),
+				tag.NewTimeTag("now", now),
 				tag.NewDurationTag("dcMinTimeout", e.Config.MinRequestTimeout(ns.Name().String())),
+				tag.NewBoolTag("eventIsNil", args.eventIsNil),
+				tag.NewBoolTag("eventAttrsAreNil", args.eventAttrsAreNil),
 			)
 		}
 	}
@@ -362,11 +374,14 @@ type startArgs struct {
 	requestID                       string
 	endpointName                    string
 	endpointID                      string
-	scheduledTime                   time.Time
+	scheduledTimeFromState          time.Time
 	scheduleToStartTimeout          time.Duration
 	scheduleToCloseTimeout          time.Duration
 	startToCloseTimeout             time.Duration
 	scheduleToCloseTimeoutFromEvent time.Duration
+	scheduledTimeFromEvent          time.Time
+	eventIsNil                      bool
+	eventAttrsAreNil                bool
 	header                          map[string]string
 	payload                         *commonpb.Payload
 	nexusLink                       nexus.Link
@@ -391,6 +406,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.service = operation.Service
 		args.operation = operation.Operation
 		args.requestID = operation.RequestId
+		args.scheduledTimeFromState = operation.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = operation.ScheduleToCloseTimeout.AsDuration()
 		args.scheduleToStartTimeout = operation.ScheduleToStartTimeout.AsDuration()
 		args.startToCloseTimeout = operation.StartToCloseTimeout.AsDuration()
@@ -399,8 +415,10 @@ func (e taskExecutor) loadOperationArgs(
 		if err != nil {
 			return nil
 		}
-		args.scheduledTime = event.EventTime.AsTime()
+		args.scheduledTimeFromEvent = event.EventTime.AsTime()
 		attrs := event.GetNexusOperationScheduledEventAttributes()
+		args.eventIsNil = attrs == nil
+		args.eventAttrsAreNil = attrs == nil
 		args.scheduleToCloseTimeoutFromEvent = attrs.GetScheduleToCloseTimeout().AsDuration()
 		args.payload = attrs.GetInput()
 		args.header = attrs.GetNexusHeader()
