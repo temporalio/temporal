@@ -842,7 +842,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nextEventID,
 			maximumPageSize,
 			nil,
-			nil, // Don't include transient events for PollWorkflowTask responses
+			nil,
 			branchToken,
 			handler.persistenceVisibilityMgr,
 			true,

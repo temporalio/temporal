@@ -661,11 +661,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
-	// After the signal, verify the core events are present. A transient WorkflowTaskScheduled
-	// may also be visible (event 6), but we only verify the first 5 persisted events.
 	histAfterSignal := s.GetHistory(s.Namespace().String(), we)
 	s.GreaterOrEqual(len(histAfterSignal), 5, "Should have at least 5 events after signal")
-	// Verify the first 5 events match expected history
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled

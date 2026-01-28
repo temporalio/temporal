@@ -254,7 +254,6 @@ func Invoke(
 	config := shardContext.GetConfig()
 	sendRawHistoryBetweenInternalServices := config.SendRawHistoryBetweenInternalServices()
 	sendRawWorkflowHistoryForNamespace := config.SendRawWorkflowHistory(request.Request.GetNamespace())
-
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {

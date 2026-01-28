@@ -95,9 +95,6 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	future, err := s.SdkClient().ExecuteWorkflow(ctx, options, parentWorkflow)
 	s.NoError(err)
 
-	// Note: The transient WorkflowTaskScheduled and WorkflowTaskStarted events that led to this failure
-	// are dropped from history after the task fails, so we only check for the WorkflowTaskFailed event
-	// and the subsequent retry attempt.
 	s.WaitForHistoryEventsSuffix(`
  WorkflowTaskFailed {"Cause":26,"Failure":{"Message":"PendingChildWorkflowsLimitExceeded: the number of pending child workflow executions, 10, has reached the per-workflow limit of 10"}}
  WorkflowTaskScheduled
@@ -181,9 +178,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	}
 
 	// verify that the workflow's history contains a task that failed because it would otherwise exceed the pending
-	// child workflow limit. Note: The transient WorkflowTaskScheduled and WorkflowTaskStarted events that led to
-	// this failure are dropped from history after the task fails, so we only check for the WorkflowTaskFailed
-	// event and the subsequent retry attempt.
+	// child workflow limit. 
 	s.WaitForHistoryEventsSuffix(`
  21 WorkflowTaskFailed {"Cause":27,"Failure":{"Message":"PendingActivitiesLimitExceeded: the number of pending activities, 10, has reached the per-workflow limit of 10"}}
  22 WorkflowTaskScheduled

@@ -11,11 +11,10 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
@@ -44,8 +43,8 @@ func newSDKContext() context.Context {
 }
 
 // TestGetHistoryAfterCacheEviction_TransientWFT is the core regression test.
-// It replicates the exact bug scenario where a worker's cache is evicted and it requests
-// history that should include transient events. This prevents the "premature end of stream" error.
+// It replicates the scenario where a worker's cache is evicted and then requests
+// history that should include transient events.
 func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_TransientWFT() {
 	id := "functional-get-history-after-cache-eviction-transient-wft"
 	wt := "functional-get-history-after-cache-eviction-transient-wft-type"
@@ -67,7 +66,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -105,7 +103,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 	// Poll and fail the first workflow task - this creates transient WFT (attempt=2)
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	s.Logger.Info("First workflow task failed, transient WFT created")
 
 	// Step 2: Poll the transient task and start it (but don't complete yet)
 	// This simulates having both scheduled + started transient events
@@ -118,20 +115,15 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.NotEmpty(resp2.TaskToken)
-	s.Logger.Info("Polled transient workflow task", tag.NewInt64("StartedEventId", resp2.GetStartedEventId()))
 
-	// Step 3: Call GetWorkflowExecutionHistory (simulating worker cache eviction)
-	// This is where the bug would manifest - without the fix, this would return
-	// history without transient events, causing "premature end of stream"
+	// Step 3: Call GetWorkflowExecutionHistory, simulating worker cache eviction
 	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx,
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.Namespace().String(),
-			Execution: workflowExecution,
-			// Use a reasonable page size
+			Namespace:       s.Namespace().String(),
+			Execution:       workflowExecution,
 			MaximumPageSize: 100,
 		})
 
-	// Step 4: Verify NO "premature end of stream" error
 	s.NoError(err, "GetWorkflowExecutionHistory should not return 'premature end of stream' error")
 	s.NotNil(histResp)
 	s.NotNil(histResp.History)
@@ -147,7 +139,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 			attrs := event.GetWorkflowTaskScheduledEventAttributes()
 			if attrs.GetAttempt() == 2 {
 				foundScheduled = true
-				s.Logger.Info("Found transient WorkflowTaskScheduled event", tag.NewInt64("EventId", event.GetEventId()))
 			}
 		}
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
@@ -159,7 +150,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 					if prevEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED &&
 						prevEvent.GetWorkflowTaskScheduledEventAttributes().GetAttempt() == 2 {
 						foundStarted = true
-						s.Logger.Info("Found transient WorkflowTaskStarted event", tag.NewInt64("EventId", event.GetEventId()))
 					}
 				}
 			}
@@ -169,12 +159,12 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistoryAfterCacheEviction_Tra
 	s.True(foundScheduled, "History should include transient WorkflowTaskScheduled event (attempt=2)")
 	s.True(foundStarted, "History should include transient WorkflowTaskStarted event")
 
-	// Key assertion: The last event ID in history should match or exceed what worker expects from PollWorkflowTask
+	// The last event ID in history should match or exceed what worker expects from PollWorkflowTask
 	lastEventID := events[len(events)-1].GetEventId()
 	s.GreaterOrEqual(lastEventID, resp2.GetStartedEventId(),
 		"Last event ID in history should be >= StartedEventId from poll response to prevent 'premature end of stream'")
 
-	// Clean up: Complete the workflow task
+	// Clean up by completing the workflow task
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: s.Namespace().String(),
 		TaskToken: resp2.TaskToken,
@@ -213,7 +203,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_TransientWFT_Schedule
 
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -250,7 +239,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_TransientWFT_Schedule
 	// Poll and fail the first workflow task
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	s.Logger.Info("First workflow task failed, transient WFT created")
 
 	// Step 2: Call GetWorkflowExecutionHistory BEFORE polling the transient task
 	ctx := newSDKContext()
@@ -260,7 +248,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_TransientWFT_Schedule
 			Execution:       workflowExecution,
 			MaximumPageSize: 100,
 		})
-
 	s.NoError(err)
 	s.NotNil(histResp)
 	s.NotNil(histResp.History)
@@ -276,7 +263,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_TransientWFT_Schedule
 			attrs := event.GetWorkflowTaskScheduledEventAttributes()
 			if attrs.GetAttempt() == 2 {
 				foundScheduled = true
-				s.Logger.Info("Found transient WorkflowTaskScheduled event", tag.NewInt64("EventId", event.GetEventId()))
 			}
 		}
 		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
@@ -324,7 +310,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
 
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -361,7 +346,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 	// Poll and fail the first workflow task
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.NoError(err)
-	s.Logger.Info("First workflow task failed, transient WFT created")
 
 	// Step 2: Poll the transient task to start it
 	ctx := newSDKContext()
@@ -413,38 +397,15 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 
 		// The implementation should detect the state change.
 		// Depending on timing, we might get:
-		// 1. An Unavailable error with "workflow state changed" message (ideal case)
+		// 1. An Unavailable error (ideal case - race condition detected)
 		// 2. Success if the workflow completed before the second pagination call
 		// We verify that if there's an error, it's the expected type
 		if err != nil {
-			s.Logger.Info("Received error during pagination after state change", tag.Error(err))
-			// Check if it's an Unavailable error (serviceerror.Unavailable)
-			// The error message should contain "workflow state changed during history retrieval"
-			s.Contains(err.Error(), "workflow state changed", "Error should indicate workflow state changed")
+			s.ErrorAs(err, &serviceerror.Unavailable{})
 		} else {
 			// If no error, the pagination completed successfully
 			// This can happen if the workflow completed before the second page was fetched
 			s.NotNil(histResp2)
-			s.Logger.Info("Pagination completed successfully (workflow completed before second page fetch)")
-		}
-	} else {
-		// If there's no next page token, the entire history fit in one page
-		// This is also a valid outcome
-		s.Logger.Info("History fit in single page, no pagination needed")
-	}
-}
-
-// Helper function to find an event in history by type and attempt
-func findEventByTypeAndAttempt(events []*historypb.HistoryEvent, eventType enumspb.EventType, attempt int32) *historypb.HistoryEvent {
-	for _, event := range events {
-		if event.GetEventType() == eventType {
-			if eventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
-				attrs := event.GetWorkflowTaskScheduledEventAttributes()
-				if attrs != nil && attrs.GetAttempt() == attempt {
-					return event
-				}
-			}
 		}
 	}
-	return nil
 }

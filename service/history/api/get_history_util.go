@@ -411,34 +411,16 @@ func shouldIncludeTransientOrSpeculativeEvents(
 	isWorkflowRunning bool,
 	checkClientSupport bool,
 ) bool {
-	// Must be last page
-	if !isLastPage {
-		return false
-	}
-
-	// Must have events
-	if len(tranOrSpecEvents.GetHistorySuffix()) == 0 {
-		return false
-	}
-
 	// Check client support if required (not needed for PollWorkflowTask)
 	// Skip check if context indicates to do so (set by PollWorkflowTask)
 	skipCheck := ctx.Value(SkipTransientEventClientCheckKey) != nil
-	if checkClientSupport && !skipCheck && !clientSupportsTranOrSpecEvents(ctx) {
-		return false
-	}
+	clientSupported := !checkClientSupport || skipCheck || clientSupportsTranOrSpecEvents(ctx)
 
-	// Workflow must be running
-	if !isWorkflowRunning {
-		return false
-	}
-
-	// Events must be valid WFT events
-	if !areValidTransientOrSpecEvents(tranOrSpecEvents) {
-		return false
-	}
-
-	return true
+	return isLastPage &&
+		len(tranOrSpecEvents.GetHistorySuffix()) > 0 &&
+		clientSupported &&
+		isWorkflowRunning &&
+		areValidTransientOrSpecEvents(tranOrSpecEvents)
 }
 
 // areValidTransientOrSpecEvents validates that transient/speculative workflow task events
