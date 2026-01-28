@@ -59,11 +59,12 @@ print_goroutine_count() {
   echo "$count"
 }
 
-# Print goroutine stacks (debug=2 gives full stacks).
-print_goroutine_stacks() {
-  local lines="${1:-500}"
-  echo "--- Goroutine Stacks (top $lines lines) ---"
-  curl -s --max-time 30 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=2" 2>/dev/null | head -"$lines" || echo "(pprof endpoint not available)"
+# Print goroutines grouped by stack trace, sorted by count (debug=1).
+# This is more useful for identifying leaks since it shows which stacks have the most goroutines.
+print_goroutine_summary() {
+  local lines="${1:-200}"
+  echo "--- Goroutines by Stack (top $lines lines, grouped and sorted by count) ---"
+  curl -s --max-time 30 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" 2>/dev/null | head -"$lines" || echo "(pprof endpoint not available)"
 }
 
 # Print pprof heap analysis.
@@ -123,7 +124,7 @@ snapshot() {
     fi
     echo "$pprof_output"
     echo ""
-    print_goroutine_stacks 1000
+    print_goroutine_summary 500
     echo "=== END HIGH MEMORY WARNING ==="
     echo ""
     HEAP_PRINTED=true
@@ -138,7 +139,7 @@ snapshot() {
       cat /tmp/temporal_cluster_stats.txt
       echo ""
     fi
-    print_goroutine_stacks 1000
+    print_goroutine_summary 500
     echo "=== END HIGH GOROUTINE WARNING ==="
     echo ""
     GOROUTINE_DUMP_PRINTED=true
