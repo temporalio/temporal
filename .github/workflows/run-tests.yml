@@ -443,14 +443,12 @@ jobs:
             containers: [cassandra, elasticsearch]
             es_version: v7
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_os2
             persistence_type: nosql
             persistence_driver: cassandra
@@ -618,14 +616,12 @@ jobs:
             parallel_flags: ""
             containers: [cassandra, elasticsearch]
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch8]
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_os2
             persistence_type: nosql
             persistence_driver: cassandra
@@ -779,14 +775,12 @@ jobs:
             containers: [cassandra, elasticsearch]
             es_version: v7
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
             es_version: v8
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_os2
             persistence_type: nosql
             persistence_driver: cassandra
