@@ -114,6 +114,7 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 		s.NoError(err)
 	}
 
+	// wait for activity tasks to appear in the matching backlog (from transfer queue)
 	s.Eventually(func() bool {
 		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
 			Namespace: s.Namespace().String(),
