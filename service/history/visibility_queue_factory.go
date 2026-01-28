@@ -44,9 +44,15 @@ func NewVisibilityQueueFactory(
 					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
+						EnableWorkflowQueueScheduler:      params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
+						WorkflowQueueSchedulerQueueSize:   params.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
+											},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,

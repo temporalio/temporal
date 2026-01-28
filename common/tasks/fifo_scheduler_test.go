@@ -199,5 +199,6 @@ func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 			},
 		},
 		log.NewNoopLogger(),
+		nil, // No metrics in tests
 	)
 }
