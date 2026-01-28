@@ -41,10 +41,10 @@ on:
       test_runner:
         description: "Which runner to use. Choose higher RAM if your n_runs is high."
         type: choice
-        default: "16GB RAM (ubuntu-latest)"
+        default: "16GB RAM (ubuntu-24.04-arm)"
         options:
-          - "16GB RAM (ubuntu-latest)"
-          - "64GB RAM (ubuntu-latest-16-cores)"
+          - "16GB RAM (ubuntu-24.04-arm)"
+          - "64GB RAM (ubuntu-24.04-arm-16-cores)"
       test_dbs:
         description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
         type: string
@@ -67,7 +67,7 @@ env:
 jobs:
   set-up-single-test:
     name: Set up single test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     outputs:
       shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
       total_shards: ${{ steps.generate_output.outputs.shards }}
@@ -86,13 +86,13 @@ jobs:
         run: |
           shards=3
           timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
-          runs_on='["ubuntu-latest"]'
+          runs_on='["ubuntu-24.04-arm"]'
           if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
             shards=1
             timeout=${{ inputs.timeout_minutes }}
             single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
-            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-latest-16-cores)" ]]; then
-              runs_on='[ "ubuntu-latest-16-cores" ]'
+            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-24.04-arm-16-cores)" ]]; then
+              runs_on='[ "ubuntu-24.04-arm-16-cores" ]'
             fi
           fi
           {
@@ -137,7 +137,7 @@ jobs:
 
   pre-build:
     name: Pre-build for cache
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -179,7 +179,7 @@ jobs:
   misc-checks:
     name: Misc checks
     needs: pre-build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
@@ -227,7 +227,7 @@ jobs:
     if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
     needs: [pre-build, set-up-single-test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -318,7 +318,7 @@ jobs:
     if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
     needs: [pre-build, set-up-single-test]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -443,14 +443,14 @@ jobs:
             containers: [cassandra, elasticsearch]
             es_version: v7
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-latest-8-cores
+            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: cassandra
             containers: [cassandra, elasticsearch8]
             es_version: v8
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-latest-8-cores
+            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_os2
             persistence_type: nosql
             persistence_driver: cassandra
@@ -618,14 +618,14 @@ jobs:
             parallel_flags: ""
             containers: [cassandra, elasticsearch]
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-latest-8-cores
+            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             parallel_flags: ""
             containers: [cassandra, elasticsearch8]
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-latest-8-cores
+            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_os2
             persistence_type: nosql
             persistence_driver: cassandra
@@ -649,7 +649,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-24.04-arm' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -779,14 +779,14 @@ jobs:
             containers: [cassandra, elasticsearch]
             es_version: v7
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-latest-8-cores
+            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_es8
             persistence_type: nosql
             persistence_driver: elasticsearch
             containers: [cassandra, elasticsearch8]
             es_version: v8
             # Cassandra tests need a larger instance
-            runs_on_override: ubuntu-latest-8-cores
+            runs_on_override: ubuntu-24.04-arm-8-cores
           - name: cass_os2
             persistence_type: nosql
             persistence_driver: cassandra
@@ -807,7 +807,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    runs-on: ${{ matrix.runs_on_override || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.runs_on_override || 'ubuntu-24.04-arm' }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -912,7 +912,7 @@ jobs:
       - functional-test
       - functional-test-xdc
       - functional-test-ndc
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}
     steps:
@@ -937,7 +937,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       needs.test-status.result == 'failure'
     needs: test-status
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
       actions: read
