@@ -244,7 +244,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
@@ -274,6 +274,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled() {
 
 func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInternalRawHistory() {
 	s.config.SendRawHistoryBetweenInternalServices = func() bool { return true }
+	s.config.SendRawHistoryBytesToMatchingService = func() bool { return true }
 	fakeHistory := historypb.History{
 		Events: []*historypb.HistoryEvent{
 			{
@@ -358,7 +359,7 @@ func (s *engine3Suite) TestRecordWorkflowTaskStartedSuccessStickyEnabled_WithInt
 		},
 	}
 
-	expectedResponse := historyservice.RecordWorkflowTaskStartedResponse{}
+	expectedResponse := historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{}
 	expectedResponse.WorkflowType = ms.GetWorkflowType()
 	executionInfo = ms.GetExecutionInfo()
 	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
