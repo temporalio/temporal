@@ -14,7 +14,7 @@ import (
 var testClusterPool *clusterPool
 
 func init() {
-	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
+	sharedSize := runtime.GOMAXPROCS(0)
 	if v := os.Getenv("TEMPORAL_TEST_SHARED_CLUSTERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
