@@ -162,6 +162,18 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		return fmt.Errorf("failed to load operation args: %w", err)
 	}
 
+	logger := log.With(e.Logger,
+		tag.Operation("StartOperation"),
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.RequestID(args.requestID),
+		tag.NexusOperation(args.operation),
+		tag.Endpoint(args.endpointName),
+		tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+		tag.WorkflowRunID(ref.WorkflowKey.RunID),
+		tag.AttemptStart(time.Now().UTC()),
+		tag.Attempt(task.Attempt),
+	)
+
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
 	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
 	if args.endpointID == "" {
@@ -251,18 +263,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
-			tag.Operation("StartOperation"),
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.RequestID(args.requestID),
-			tag.NexusOperation(args.operation),
-			tag.Endpoint(args.endpointName),
-			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
-			tag.WorkflowRunID(ref.WorkflowKey.RunID),
-			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(task.Attempt),
-		)
-		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, logger); trace != nil {
 			callCtx = httptrace.WithClientTrace(callCtx, trace)
 		}
 	}
@@ -283,12 +284,13 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 			Links: []nexus.Link{args.nexusLink},
 		})
 	}
+	failureSource := failureSourceFromContext(callCtx)
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, rawResult, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(callCtx))
+	failureSourceTag := metrics.FailureSourceTag(failureSource)
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
@@ -324,11 +326,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	if callErr != nil {
-		failureSource := failureSourceFromContext(ctx)
-		if failureSource == commonnexus.FailureSourceWorker {
-			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
+		if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
+			logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
 		} else {
-			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
+			logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
 		}
 	}
 
@@ -375,6 +376,7 @@ func (e taskExecutor) loadOperationArgs(
 		args.service = operation.Service
 		args.operation = operation.Operation
 		args.requestID = operation.RequestId
+		args.scheduledTime = operation.ScheduledTime.AsTime()
 		args.scheduleToCloseTimeout = operation.ScheduleToCloseTimeout.AsDuration()
 		args.scheduleToStartTimeout = operation.ScheduleToStartTimeout.AsDuration()
 		args.startToCloseTimeout = operation.StartToCloseTimeout.AsDuration()
@@ -383,7 +385,6 @@ func (e taskExecutor) loadOperationArgs(
 		if err != nil {
 			return nil
 		}
-		args.scheduledTime = event.EventTime.AsTime()
 		attrs := event.GetNexusOperationScheduledEventAttributes()
 		args.payload = attrs.GetInput()
 		args.header = attrs.GetNexusHeader()
@@ -613,6 +614,18 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		return fmt.Errorf("failed to load args: %w", err)
 	}
 
+	logger := log.With(e.Logger,
+		tag.Operation("CancelOperation"),
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.RequestID(args.requestID),
+		tag.NexusOperation(args.operation),
+		tag.Endpoint(args.endpointName),
+		tag.WorkflowID(ref.WorkflowKey.WorkflowID),
+		tag.WorkflowRunID(ref.WorkflowKey.RunID),
+		tag.AttemptStart(time.Now().UTC()),
+		tag.Attempt(task.Attempt),
+	)
+
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
@@ -656,18 +669,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	}
 
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
-			tag.Operation("CancelOperation"),
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.RequestID(args.requestID),
-			tag.NexusOperation(args.operation),
-			tag.Endpoint(args.endpointName),
-			tag.WorkflowID(ref.WorkflowKey.WorkflowID),
-			tag.WorkflowRunID(ref.WorkflowKey.RunID),
-			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(task.Attempt),
-		)
-		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+		if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, logger); trace != nil {
 			callCtx = httptrace.WithClientTrace(callCtx, trace)
 		}
 	}
@@ -679,21 +681,20 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	} else {
 		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
 	}
-
+	failureSource := failureSourceFromContext(callCtx)
 	methodTag := metrics.NexusMethodTag("CancelOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
-	failureSourceTag := metrics.FailureSourceTag(failureSourceFromContext(ctx))
+	failureSourceTag := metrics.FailureSourceTag(failureSource)
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
 	if callErr != nil {
-		failureSource := failureSourceFromContext(ctx)
-		if failureSource == commonnexus.FailureSourceWorker {
-			e.Logger.Debug("Nexus CancelOperation request failed", tag.Error(callErr))
+		if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
+			logger.Debug("Nexus CancelOperation request failed", tag.Error(callErr))
 		} else {
-			e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
+			logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
 		}
 	}
 
@@ -748,9 +749,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 		if err != nil {
 			return err
 		}
-		if attrs := event.GetNexusOperationScheduledEventAttributes(); attrs != nil {
-			args.headers = attrs.GetNexusHeader()
-		}
+		args.headers = event.GetNexusOperationScheduledEventAttributes().GetNexusHeader()
 		return nil
 	})
 	return
