@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"fmt"
 	"os"
 	"runtime"
 	"strconv"
@@ -12,6 +13,41 @@ import (
 )
 
 var testClusterPool *clusterPool
+
+// Cluster statistics counters
+var (
+	// totalClustersCreated tracks the total number of test clusters created during this test run.
+	totalClustersCreated atomic.Int64
+	// sharedClusterAcquisitions tracks how many times a shared cluster was acquired (created or reused).
+	sharedClusterAcquisitions atomic.Int64
+	// dedicatedClusterAcquisitions tracks how many times a dedicated cluster was acquired (created or reused).
+	dedicatedClusterAcquisitions atomic.Int64
+)
+
+// TotalClustersCreated returns the total number of test clusters created during this test run.
+func TotalClustersCreated() int64 {
+	return totalClustersCreated.Load()
+}
+
+// PrintClusterStats prints cluster creation statistics to stderr.
+// Call this at the end of test runs (e.g., from TestMain) to see the total count.
+func PrintClusterStats() {
+	created := totalClustersCreated.Load()
+	sharedReq := sharedClusterAcquisitions.Load()
+	dedicatedReq := dedicatedClusterAcquisitions.Load()
+	totalReq := sharedReq + dedicatedReq
+	reused := totalReq - created
+
+	fmt.Fprintf(os.Stderr, "\n=== Test Cluster Stats ===\n")
+	fmt.Fprintf(os.Stderr, "Total cluster requests:     %d\n", totalReq)
+	fmt.Fprintf(os.Stderr, "  - Shared requests:        %d\n", sharedReq)
+	fmt.Fprintf(os.Stderr, "  - Dedicated requests:     %d\n", dedicatedReq)
+	fmt.Fprintf(os.Stderr, "Clusters created:           %d\n", created)
+	fmt.Fprintf(os.Stderr, "Clusters reused:            %d\n", reused)
+	if totalReq > 0 {
+		fmt.Fprintf(os.Stderr, "Reuse rate:                 %.1f%%\n", float64(reused)/float64(totalReq)*100)
+	}
+}
 
 func init() {
 	sharedSize := runtime.GOMAXPROCS(0)
@@ -144,12 +180,15 @@ func (p *clusterPool) get(t *testing.T, dedicated bool, dynamicConfig map[dynami
 }
 
 func (p *clusterPool) getShared(t *testing.T) *FunctionalTestBase {
+	sharedClusterAcquisitions.Add(1)
 	return p.shared.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, nil, true, nil)
 	})
 }
 
 func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, clusterOpts []TestClusterOption) *FunctionalTestBase {
+	dedicatedClusterAcquisitions.Add(1)
+
 	if len(dynamicConfig) > 0 || len(clusterOpts) > 0 {
 		// Custom dynamic config or cluster options require a fresh cluster (can't reuse).
 		p.dedicated.acquireSlot(t)
@@ -172,6 +211,9 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 }
 
 func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
+	count := totalClustersCreated.Add(1)
+	t.Logf("Creating test cluster #%d (shared=%v)", count, shared)
+
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
