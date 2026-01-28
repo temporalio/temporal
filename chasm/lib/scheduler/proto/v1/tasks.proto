@@ -26,3 +26,9 @@ message InvokerExecuteTask {}
 
 // Buffers actions based on a manually-requested backfill.
 message BackfillerTask {}
+
+// Migrates a CHASM schedule to a V1 workflow-backed schedule.
+message SchedulerMigrateToV1Task {
+  string identity = 1;
+  string request_id = 2;
+}
