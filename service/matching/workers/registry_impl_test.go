@@ -60,16 +60,26 @@ func TestUpdateAndListNamespace(t *testing.T) {
 	assert.Equal(t, len(utilizationMetrics), 1, "should have capacity utilization metric")
 	lastUtilization := utilizationMetrics[0]
 	assert.Equal(t, float64(2)/float64(10), lastUtilization.Value, "should record correct capacity utilization")
+
+	// Check new workers counter metric
+	newWorkersMetrics := snapshot["worker_registry_workers_added"]
+	assert.Len(t, newWorkersMetrics, 1, "should have new workers metric")
+	assert.Equal(t, int64(2), newWorkersMetrics[0].Value, "should record 2 new workers")
 }
 
 func TestShutdownStatusRemovesWorker(t *testing.T) {
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
 	m := newRegistryImpl(RegistryParams{
 		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
 		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:      metrics.NoopMetricsHandler,
+		MetricsHandler:      captureHandler,
 		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
 	})
 	defer m.Stop()
@@ -93,6 +103,19 @@ func TestShutdownStatusRemovesWorker(t *testing.T) {
 	assert.Len(t, list, 1, "only one worker should remain")
 	assert.Equal(t, "worker2", list[0].WorkerInstanceKey, "worker2 should remain")
 	assert.Equal(t, int64(1), m.total.Load(), "total should be 1 after shutdown")
+
+	// Verify metrics
+	snapshot := capture.Snapshot()
+
+	// Check new workers counter
+	newWorkersMetrics := snapshot["worker_registry_workers_added"]
+	assert.Len(t, newWorkersMetrics, 1, "should have new workers metric")
+	assert.Equal(t, int64(2), newWorkersMetrics[0].Value, "should record 2 new workers")
+
+	// Check removed workers counter
+	removedWorkersMetrics := snapshot["worker_registry_workers_removed"]
+	assert.Len(t, removedWorkersMetrics, 1, "should have removed workers metric")
+	assert.Equal(t, int64(1), removedWorkersMetrics[0].Value, "should record 1 removed worker")
 }
 
 func TestShutdownStatusForNonExistentWorker(t *testing.T) {
@@ -156,13 +179,18 @@ func TestListNamespacePredicate(t *testing.T) {
 }
 
 func TestEvictByTTL(t *testing.T) {
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
 	m := newRegistryImpl(RegistryParams{
 		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
 		TTL:                 dynamicconfig.GetDurationPropertyFn(1 * time.Second),
 		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
 		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
 		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:      metrics.NoopMetricsHandler,
+		MetricsHandler:      captureHandler,
 		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
 	})
 	defer m.Stop()
@@ -181,6 +209,14 @@ func TestEvictByTTL(t *testing.T) {
 	list := m.filterWorkers("ns", alwaysTrue)
 	assert.Empty(t, list, "entry should be evicted by TTL")
 	assert.Zero(t, m.total.Load(), "total counter should be decremented")
+
+	// Verify metrics
+	snapshot := capture.Snapshot()
+
+	// Check removed workers counter
+	removedWorkersMetrics := snapshot["worker_registry_workers_removed"]
+	assert.Len(t, removedWorkersMetrics, 1, "should have removed workers metric from TTL eviction")
+	assert.Equal(t, int64(1), removedWorkersMetrics[0].Value, "should record 1 removed worker via TTL eviction")
 }
 
 func TestEvictByCapacity(t *testing.T) {
@@ -224,6 +260,15 @@ func TestEvictByCapacity(t *testing.T) {
 
 	metric := evictionMetrics[0]
 	assert.Equal(t, float64(0), metric.Value, "should clear age protection issue when eviction succeeds")
+
+	// Check removed workers counter - should have recorded evictions
+	removedWorkersMetrics := snapshot["worker_registry_workers_removed"]
+	assert.NotEmpty(t, removedWorkersMetrics, "should have removed workers metric from eviction")
+	var totalRemoved int64
+	for _, m := range removedWorkersMetrics {
+		totalRemoved += m.Value.(int64)
+	}
+	assert.Equal(t, int64(2), totalRemoved, "should have removed 2 workers via capacity eviction")
 }
 
 // Tests the critical edge case where evictByCapacity() cannot evict any entries because they're all
@@ -379,6 +424,15 @@ func TestMultipleNamespaces(t *testing.T) {
 	lastUtilization := utilizationMetrics[len(utilizationMetrics)-1]
 	expectedUtilization := float64(5) / float64(10) // 5 total workers / 10 max capacity
 	assert.Equal(t, expectedUtilization, lastUtilization.Value, "capacity utilization should reflect total across all namespaces")
+
+	// Check new workers counter - should reflect total new workers across all namespaces
+	newWorkersMetrics := snapshot["worker_registry_workers_added"]
+	assert.Len(t, newWorkersMetrics, 2, "should have new workers metric for each upsert call")
+	var totalNew int64
+	for _, m := range newWorkersMetrics {
+		totalNew += m.Value.(int64)
+	}
+	assert.Equal(t, int64(5), totalNew, "should record 5 total new workers across namespaces")
 }
 
 func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
@@ -510,6 +564,59 @@ func BenchmarkRandomUpdate(b *testing.B) {
 		p := pairs[r.Intn(len(pairs))]
 		m.upsertHeartbeats(p.ns, []*workerpb.WorkerHeartbeat{p.hb})
 	}
+}
+
+// TestActivitySlotsMetric verifies that activity slots histogram is recorded correctly.
+func TestActivitySlotsMetric(t *testing.T) {
+	tv := testvars.New(t)
+
+	// Use capture handler to verify metrics
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
+		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:      captureHandler,
+		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+	})
+	defer m.Stop()
+
+	// Create workers with different activity slot usage
+	worker1 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: tv.WorkerIdentity() + "_1",
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		ActivityTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentUsedSlots: 5,
+		},
+	}
+	worker2 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: tv.WorkerIdentity() + "_2",
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		ActivityTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentUsedSlots: 10,
+		},
+	}
+	worker3 := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: tv.WorkerIdentity() + "_3",
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		// No ActivityTaskSlotsInfo - should not record metric
+	}
+
+	testNamespace := tv.NamespaceID()
+	testNamespaceName := namespace.Name(testNamespace + "_name")
+	m.RecordWorkerHeartbeats(testNamespace, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+
+	// Verify activity slots metrics
+	snapshot := capture.Snapshot()
+	activitySlotsMetrics := snapshot["worker_registry_activity_slots_used"]
+	assert.Len(t, activitySlotsMetrics, 2, "should have activity slots metric for workers with slots info")
+	assert.Equal(t, int64(5), activitySlotsMetrics[0].Value, "should record 5 slots for worker1")
+	assert.Equal(t, int64(10), activitySlotsMetrics[1].Value, "should record 10 slots for worker2")
 }
 
 // TestPluginMetricsExported verifies that plugin metrics are correctly recorded

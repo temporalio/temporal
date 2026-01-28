@@ -16,6 +16,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -215,6 +216,21 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 	s.cleanup(sid)
+
+	// describe immediately after create and verify FutureActionTimes
+	describeRespAfterCreate, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	s.NoError(err)
+	s.NotEmpty(describeRespAfterCreate.Info.FutureActionTimes, "FutureActionTimes should be set immediately after create")
+	// FutureActionTimes should be in the future (after createTime) and aligned to 5-second intervals
+	for i, fat := range describeRespAfterCreate.Info.FutureActionTimes {
+		s.True(fat.AsTime().After(createTime) || fat.AsTime().Equal(createTime),
+			"FutureActionTimes[%d] should be >= createTime", i)
+		s.Equal(int64(0), fat.AsTime().UnixNano()%int64(5*time.Second),
+			"FutureActionTimes[%d] should be aligned to 5-second intervals", i)
+	}
 
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
@@ -1354,4 +1370,48 @@ func (s *scheduleFunctionalSuiteBase) cleanup(sid string) {
 			Identity:   "test",
 		})
 	})
+}
+
+// TestCreateScheduleAlreadyExists verifies that creating a schedule with the same ID
+// returns an AlreadyExists serviceerror.
+func (s *ScheduleCHASMFunctionalSuite) TestCreateScheduleAlreadyExists() {
+	sid := "sched-test-already-exists"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-already-exists",
+					WorkflowType: &commonpb.WorkflowType{Name: "action"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+	req := &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, req)
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Try to create again with a different request ID - should fail with AlreadyExists
+	req.RequestId = uuid.NewString()
+	_, err = s.FrontendClient().CreateSchedule(ctx, req)
+	s.Error(err)
+
+	var alreadyExists *serviceerror.AlreadyExists
+	s.ErrorAs(err, &alreadyExists)
+	s.Contains(err.Error(), sid)
 }

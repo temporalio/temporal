@@ -16,7 +16,8 @@ const (
 )
 
 var (
-	ArchetypeID = chasm.GenerateTypeID(chasm.FullyQualifiedName(libraryName, componentName))
+	Archetype   = chasm.FullyQualifiedName(libraryName, componentName)
+	ArchetypeID = chasm.GenerateTypeID(Archetype)
 )
 
 func newComponentOnlyLibrary() *componentOnlyLibrary {
@@ -34,7 +35,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithSearchAttributes(
 				TypeSearchAttribute,
 				StatusSearchAttribute,
-				TaskQueueSearchAttribute,
+				chasm.SearchAttributeTaskQueue,
 			),
 			chasm.WithBusinessIDAlias("ActivityId"),
 		),

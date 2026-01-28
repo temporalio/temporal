@@ -136,11 +136,21 @@ message ActivityAttemptState {
     // will not reset it.
     LastFailureDetails last_failure_details = 5;
 
+    // An incremental version number used to validate tasks.
+    // Initially this only verifies that a task belong to the current attempt.
+    // Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
+    // updated.
+    int32 stamp = 6;
+
     string last_worker_identity = 7;
 
     // The Worker Deployment Version this activity was dispatched to most recently.
     // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
     temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 8;
+
+    // The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
+    // case of implicit retries.
+    string start_request_id = 9;
 }
 
 message ActivityHeartbeatState {

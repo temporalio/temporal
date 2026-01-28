@@ -54,6 +54,7 @@ type (
 	}
 
 	RateLimitedSchedulerOptions struct {
+		Enabled          dynamicconfig.BoolPropertyFn
 		EnableShadowMode dynamicconfig.BoolPropertyFn
 		StartupDelay     dynamicconfig.DurationPropertyFn
 	}
@@ -222,7 +223,6 @@ func NewRateLimitedScheduler(
 		if err != nil {
 			namespaceName = namespace.EmptyName
 		}
-
 		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
@@ -239,7 +239,8 @@ func NewRateLimitedScheduler(
 		taskQuotaRequestFn,
 		taskMetricsTagsFn,
 		tasks.RateLimitedSchedulerOptions{
-			EnableShadowMode: options.EnableShadowMode(),
+			Enabled:          options.Enabled,
+			EnableShadowMode: options.EnableShadowMode,
 		},
 		logger,
 		metricsHandler,

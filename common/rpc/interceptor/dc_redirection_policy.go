@@ -61,7 +61,12 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"SignalWorkflowExecution":          {},
 	"RequestCancelWorkflowExecution":   {},
 	"TerminateWorkflowExecution":       {},
+	"DeleteWorkflowExecution":          {},
 	"QueryWorkflow":                    {},
+	"StartActivityExecution":           {},
+	"RequestCancelActivityExecution":   {},
+	"TerminateActivityExecution":       {},
+	"DeleteActivityExecution":          {},
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy

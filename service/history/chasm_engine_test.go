@@ -157,8 +157,9 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -174,7 +175,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		RunID:       runID,
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
 }
 
@@ -200,7 +201,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		),
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -214,7 +215,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		RunID:       tv.RunID(),
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.False(result.Created)
 }
 
@@ -251,8 +252,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -269,7 +271,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		RunID:       runID,
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
 }
 
@@ -306,8 +308,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -324,7 +327,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		RunID:       runID,
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
 }
 
@@ -350,7 +353,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -385,7 +388,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -422,7 +425,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -439,7 +442,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		RunID:       tv.RunID(),
 	}
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
-	s.validateNewExecutionResponseRef(result.NewExecutionRef, expectedExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.False(result.Created)
 }
 
@@ -467,7 +470,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	result, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),

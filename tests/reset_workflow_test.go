@@ -36,7 +36,7 @@ import (
 )
 
 type ResetWorkflowTestSuite struct {
-	WorkflowUpdateBaseSuite
+	testcore.FunctionalTestBase
 }
 
 func TestResetWorkflowTestSuite(t *testing.T) {
@@ -432,7 +432,7 @@ func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 
 //nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 func (t *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testcore.TaskPoller) {
-	t.ResetWorkflowTestSuite.sendUpdateNoErrorWaitPolicyAccepted(tv)
+	sendUpdateNoErrorWaitPolicyAccepted(t, tv)
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -443,18 +443,13 @@ func (t *resetTest) sendStartWorkflowRequestWithOptions(
 	tv *testvars.TestVars,
 	optsFn ...func(request *workflowservice.StartWorkflowExecutionRequest),
 ) *workflowservice.StartWorkflowExecutionResponse {
-	request := t.startWorkflowRequest(tv)
+	request := startWorkflowRequest(t, tv)
 	for _, fn := range optsFn {
 		fn(request)
 	}
 	resp, err := t.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	t.NoError(err)
 	return resp
-}
-
-func (s *ResetWorkflowTestSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
-	s.T().Helper()
-	return s.sendUpdateNoErrorInternal(tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 }
 
 func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -531,7 +526,7 @@ func (t *resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	runID := t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
+	runID := mustStartWorkflow(t, t.tv)
 
 	poller := &testcore.TaskPoller{
 		Client:              t.FrontendClient(),
@@ -723,7 +718,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 		- depending on the reapply type, the buffered signal is applied post-reset or not
 	*/
 
-	runID := s.startWorkflow(tv)
+	runID := mustStartWorkflow(s, tv)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(runID))
 
 	var resetRunID string

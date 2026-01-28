@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
@@ -286,6 +287,16 @@ func NewMutableState(
 	runID string,
 	startTime time.Time,
 ) *MutableStateImpl {
+
+	namespaceName := namespaceEntry.Name().String()
+	logger = log.NewLazyLogger(logger, func() []tag.Tag {
+		return []tag.Tag{
+			tag.WorkflowNamespace(namespaceName),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+		}
+	})
+
 	s := &MutableStateImpl{
 		updateActivityInfos:            make(map[int64]*persistencespb.ActivityInfo),
 		pendingActivityTimerHeartbeats: make(map[int64]time.Time),
@@ -315,7 +326,8 @@ func NewMutableState(
 		pendingSignalRequestedIDs: make(map[string]struct{}),
 		deleteSignalRequestedIDs:  make(map[string]struct{}),
 
-		// TODO: wire up with real chasm tree implementation
+		// This field will be initialized with a real chasm tree at the end of this function
+		// when feature flag is enabled.
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
@@ -397,13 +409,13 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	if s.config.EnableChasm(namespaceEntry.Name().String()) {
+	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
 			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
-			shard.GetLogger(),
+			logger,
 		)
 	}
 
@@ -550,7 +562,7 @@ func NewMutableStateFromDB(
 			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
-			shard.GetLogger(),
+			mutableState.logger, // this logger is tagged with execution key.
 		)
 		if err != nil {
 			return nil, err
@@ -2998,7 +3010,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionPausedEvent(event *historypb.H
 		ms.executionInfo.WorkflowTaskStamp += 1
 		ms.workflowTaskManager.UpdateWorkflowTask(ms.GetPendingWorkflowTask())
 	}
-	return nil
+
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUnpausedEvent(
@@ -3058,7 +3071,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 
 	// Update approximate size of the mutable state.
 	ms.approximateSize -= pauseInfoSize
-	return nil
+
+	return ms.updatePauseInfoSearchAttribute()
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -6182,6 +6196,24 @@ func (ms *MutableStateImpl) RetryActivity(
 		return enumspb.RETRY_STATE_CANCEL_REQUESTED, nil
 	}
 
+	// ScheduleToStart and ScheduleToClose timeouts are server-enforced deadlines,
+	// not actual activity execution failures. They should return RETRY_STATE_TIMEOUT,
+	// not RETRY_STATE_NON_RETRYABLE_FAILURE.
+	//
+	// When RETRY_STATE_TIMEOUT is returned, the actual activity failure (if any) that
+	// caused retries is available in failure.Cause. SDKs should surface this cause
+	// to users since it represents the real failure, while the schedule timeout is
+	// just the trigger that finally closed the activity after exhausting retries.
+	//
+	// See: https://github.com/temporalio/temporal/issues/3667
+	if activityFailure.GetTimeoutFailureInfo() != nil {
+		timeoutType := activityFailure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START ||
+			timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
+			return enumspb.RETRY_STATE_TIMEOUT, nil
+		}
+	}
+
 	if !isRetryable(activityFailure, ai.RetryNonRetryableErrorTypes) {
 		return enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, nil
 	}
@@ -6345,21 +6377,36 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 	return nil
 }
 
-func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
-	pausedInfoMap := make(map[string]struct{})
+func (ms *MutableStateImpl) buildTemporalPauseInfoEntries() []string {
+	var entries []string
 
-	for _, ai := range ms.GetPendingActivityInfos() {
-		if !ai.Paused {
-			continue
+	// Add workflow pause entries if workflow is paused
+	if ms.executionInfo.PauseInfo != nil {
+		entries = append(entries, fmt.Sprintf("Workflow:%s", ms.GetWorkflowKey().WorkflowID))
+		if reason := ms.executionInfo.PauseInfo.Reason; reason != "" {
+			entries = append(entries, fmt.Sprintf("Reason:%s", reason))
 		}
-		pausedInfoMap[ai.ActivityType.Name] = struct{}{}
-	}
-	pausedInfo := make([]string, 0, len(pausedInfoMap))
-	for activityType := range pausedInfoMap {
-		pausedInfo = append(pausedInfo, fmt.Sprintf("property:activityType=%s", activityType))
 	}
 
-	pauseInfoPayload, err := searchattribute.EncodeValue(pausedInfo, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	// Add activity pause entries for paused activities
+	pausedActivityTypes := make(map[string]struct{})
+	for _, ai := range ms.GetPendingActivityInfos() {
+		if ai.Paused {
+			pausedActivityTypes[ai.ActivityType.Name] = struct{}{}
+		}
+	}
+
+	for activityType := range pausedActivityTypes {
+		entries = append(entries, fmt.Sprintf("property:activityType=%s", activityType))
+	}
+
+	return entries
+}
+
+func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
+	allEntries := ms.buildTemporalPauseInfoEntries()
+
+	pauseInfoPayload, err := searchattribute.EncodeValue(allEntries, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
 	if err != nil {
 		return err
 	}
@@ -6945,10 +6992,34 @@ type closeTransactionResult struct {
 	chasmNodesMutation chasm.NodesMutation
 }
 
+func (ms *MutableStateImpl) setMetaDataMap(
+	ctx context.Context,
+) {
+	switch ms.chasmTree.ArchetypeID() {
+	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
+		// Set workflow type
+		if wfType := ms.GetWorkflowType(); wfType != nil && wfType.GetName() != "" {
+			contextutil.ContextMetadataSet(ctx, "workflow-type", wfType.GetName())
+		}
+
+		// Set workflow task queue
+		if ms.executionInfo != nil && ms.executionInfo.TaskQueue != "" {
+			contextutil.ContextMetadataSet(ctx, "workflow-task-queue", ms.executionInfo.TaskQueue)
+		}
+
+		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
+		// set the relevant activity information on the metadata context before calling mutable state.
+	default:
+		// No metadata to set for other archetype types
+	}
+}
+
 func (ms *MutableStateImpl) closeTransaction(
-	ctx context.Context, // TODO Attach metadata map to context based on mutable state archetype
+	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
+	ms.setMetaDataMap(ctx)
+
 	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
 	); err != nil {
@@ -8244,34 +8315,21 @@ func (ms *MutableStateImpl) createCallerError(
 	return serviceerror.NewInvalidArgument(msg)
 }
 
+// TODO: Deprecate following logging methods and use ms.logger directly.
 func (ms *MutableStateImpl) logInfo(msg string, tags ...tag.Tag) {
-	tags = append(tags, tag.WorkflowID(ms.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(ms.executionState.RunId))
-	tags = append(tags, tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId))
 	ms.logger.Info(msg, tags...)
 }
 
 func (ms *MutableStateImpl) logWarn(msg string, tags ...tag.Tag) {
-	tags = append(tags, tag.WorkflowID(ms.executionInfo.WorkflowId))
-	tags = append(tags, tag.WorkflowRunID(ms.executionState.RunId))
-	tags = append(tags, tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId))
 	ms.logger.Warn(msg, tags...)
 }
 
 func (ms *MutableStateImpl) logError(msg string, tags ...tag.Tag) {
-	logError(ms.logger, msg, ms.executionInfo, ms.executionState, tags...)
+	ms.logger.Error(msg, tags...)
 }
 
 func (ms *MutableStateImpl) logDataInconsistency() {
-	namespaceID := ms.executionInfo.NamespaceId
-	workflowID := ms.executionInfo.WorkflowId
-	runID := ms.executionState.RunId
-
-	ms.logger.Error("encounter cassandra data inconsistency",
-		tag.WorkflowNamespaceID(namespaceID),
-		tag.WorkflowID(workflowID),
-		tag.WorkflowRunID(runID),
-	)
+	ms.logger.Error("encounter cassandra data inconsistency")
 }
 
 func (ms *MutableStateImpl) HasCompletedAnyWorkflowTask() bool {
@@ -8623,15 +8681,16 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	var workflowTaskVersionUpdated bool
 	if transitionhistory.Compare(current.WorkflowTaskLastUpdateVersionedTransition, incoming.WorkflowTaskLastUpdateVersionedTransition) != 0 {
 		ms.workflowTaskManager.UpdateWorkflowTask(&historyi.WorkflowTaskInfo{
-			Version:             incoming.WorkflowTaskVersion,
-			ScheduledEventID:    incoming.WorkflowTaskScheduledEventId,
-			StartedEventID:      incoming.WorkflowTaskStartedEventId,
-			RequestID:           incoming.WorkflowTaskRequestId,
-			WorkflowTaskTimeout: incoming.WorkflowTaskTimeout.AsDuration(),
-			Attempt:             incoming.WorkflowTaskAttempt,
-			Stamp:               incoming.WorkflowTaskStamp,
-			StartedTime:         incoming.WorkflowTaskStartedTime.AsTime(),
-			ScheduledTime:       incoming.WorkflowTaskScheduledTime.AsTime(),
+			Version:                  incoming.WorkflowTaskVersion,
+			ScheduledEventID:         incoming.WorkflowTaskScheduledEventId,
+			StartedEventID:           incoming.WorkflowTaskStartedEventId,
+			RequestID:                incoming.WorkflowTaskRequestId,
+			WorkflowTaskTimeout:      incoming.WorkflowTaskTimeout.AsDuration(),
+			Attempt:                  incoming.WorkflowTaskAttempt,
+			AttemptsSinceLastSuccess: incoming.WorkflowTaskAttemptsSinceLastSuccess,
+			Stamp:                    incoming.WorkflowTaskStamp,
+			StartedTime:              incoming.WorkflowTaskStartedTime.AsTime(),
+			ScheduledTime:            incoming.WorkflowTaskScheduledTime.AsTime(),
 
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,

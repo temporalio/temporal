@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -77,12 +77,14 @@ func (s *streamReceiverSuite) SetupTest() {
 
 	processToolBox := ProcessToolBox{
 		ClusterMetadata:           s.clusterMetadata,
+		Config:                    tests.NewDynamicConfig(),
 		HighPriorityTaskScheduler: s.taskScheduler,
 		LowPriorityTaskScheduler:  s.taskScheduler,
 		MetricsHandler:            metrics.NoopMetricsHandler,
 		Logger:                    log.NewTestLogger(),
 		DLQWriter:                 NoopDLQWriter{},
 	}
+	processToolBox.Config.ReplicationStreamSyncStatusDuration = dynamicconfig.GetDurationPropertyFn(5 * time.Millisecond)
 	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some-cluster-name").AnyTimes()
 	s.streamReceiver = NewStreamReceiver(
 		processToolBox,
@@ -428,16 +430,11 @@ func (s *streamReceiverSuite) TestProcessMessage_TrackSubmit_TieredStack() {
 }
 
 func (s *streamReceiverSuite) TestGetTaskScheduler() {
-	high := &mockScheduler{}
-	low := &mockScheduler{}
-	s.streamReceiver.ProcessToolBox.HighPriorityTaskScheduler = high
-	s.streamReceiver.ProcessToolBox.LowPriorityTaskScheduler = low
-
 	tests := []struct {
 		name         string
 		priority     enumsspb.TaskPriority
 		task         TrackableExecutableTask
-		expected     ctasks.Scheduler[TrackableExecutableTask]
+		expected     enumsspb.TaskPriority
 		expectErr    bool
 		errorMessage string
 	}{
@@ -445,25 +442,25 @@ func (s *streamReceiverSuite) TestGetTaskScheduler() {
 			name:     "Unspecified priority with ExecutableWorkflowStateTask",
 			priority: enumsspb.TASK_PRIORITY_UNSPECIFIED,
 			task:     &ExecutableWorkflowStateTask{},
-			expected: low,
+			expected: enumsspb.TASK_PRIORITY_LOW,
 		},
 		{
 			name:     "Unspecified priority with other task",
 			priority: enumsspb.TASK_PRIORITY_UNSPECIFIED,
 			task:     &ExecutableHistoryTask{},
-			expected: high,
+			expected: enumsspb.TASK_PRIORITY_HIGH,
 		},
 		{
 			name:     "High priority",
 			priority: enumsspb.TASK_PRIORITY_HIGH,
 			task:     &ExecutableHistoryTask{},
-			expected: high,
+			expected: enumsspb.TASK_PRIORITY_HIGH,
 		},
 		{
 			name:     "Low priority",
 			priority: enumsspb.TASK_PRIORITY_LOW,
 			task:     &ExecutableWorkflowStateTask{},
-			expected: low,
+			expected: enumsspb.TASK_PRIORITY_LOW,
 		},
 		{
 			name:         "Invalid priority",
@@ -476,12 +473,12 @@ func (s *streamReceiverSuite) TestGetTaskScheduler() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			scheduler, err := s.streamReceiver.getTaskScheduler(tt.priority, tt.task)
+			priority, err := s.streamReceiver.getTaskSchedulerPriority(tt.priority, tt.task)
 			if tt.expectErr {
 				s.Error(err)
 			} else {
 				s.NoError(err)
-				s.True(scheduler == tt.expected, "Expected scheduler to match")
+				s.Equal(tt.expected, priority, "Expected scheduler to match")
 			}
 		})
 	}
@@ -500,6 +497,11 @@ func (s *streamReceiverSuite) TestProcessMessage_Err() {
 }
 
 func (s *streamReceiverSuite) TestSendEventLoop_Panic_Captured() {
+	// This would never actually panic, but it's the quickest way to test that a later panic is captured.
+	s.highPriorityTaskTracker.EXPECT().LowWatermark().Do(func() {
+		panic("panic")
+	})
+
 	s.streamReceiver.sendEventLoop() // should not cause panic
 }
 

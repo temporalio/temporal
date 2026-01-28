@@ -77,7 +77,7 @@ func UpdateActivityInfoForRetries(
 	ai.RequestId = ""
 	ai.StartedTime = nil
 	// Mark per-attempt timers for recreation.
-	ai.TimerTaskStatus ^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
+	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
