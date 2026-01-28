@@ -410,17 +410,18 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 // FinishedDraining is called by a draining backlog manager when it has fully drained.
 // This updates the active backlog manager's metadata and unloads the draining manager.
 func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
+	if !softassert.That(c.logger, c.priMatcher != nil, "FinishedDraining called with old matcher") {
+		return
+	}
+
 	c.drainBacklogMgrLock.Lock()
 	drainMgr := c.drainBacklogMgr
 	c.drainBacklogMgr = nil
 	c.drainBacklogMgrLock.Unlock()
 
-	// Update active manager's OtherHasTasks field
-	c.backlogMgr.getDB().SetOtherHasTasks(false)
-
-	// Force one update now
+	// Update active manager's OtherHasTasks field and persist
 	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
-	err := c.backlogMgr.getDB().SyncState(ctx)
+	err := c.backlogMgr.getDB().SetOtherHasTasks(ctx, false)
 	cancel()
 	if err != nil {
 		c.logger.Warn("Failed to sync state after drain completion", tag.Error(err))
@@ -429,6 +430,8 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 		// it will be persisted on the next periodic sync.
 	}
 
+	// Do final gc before stopping since this is the last chance to clean up
+	drainMgr.finalGC()
 	drainMgr.Stop()
 	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }

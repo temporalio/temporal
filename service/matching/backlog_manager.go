@@ -46,6 +46,9 @@ type (
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
+		// finalGC does a final garbage collection pass before unloading. Used when
+		// unloading a draining queue that won't be reloaded.
+		finalGC()
 
 		// TODO(pri): remove
 		getDB() *taskQueueDB
@@ -296,4 +299,8 @@ func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *backlogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+// finalGC is a no-op for old backlog manager since it doesn't participate in draining.
+func (c *backlogManagerImpl) finalGC() {
 }

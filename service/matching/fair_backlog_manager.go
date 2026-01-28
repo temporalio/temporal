@@ -409,6 +409,17 @@ func (c *fairBacklogManagerImpl) hasFinishedDraining() bool {
 	return true
 }
 
+// finalGC does a final garbage collection pass on all subqueues.
+func (c *fairBacklogManagerImpl) finalGC() {
+	c.subqueueLock.Lock()
+	subqueues := slices.Clone(c.subqueues)
+	c.subqueueLock.Unlock()
+
+	for _, r := range subqueues {
+		r.finalGC()
+	}
+}
+
 func (c *fairBacklogManagerImpl) setPriority(task *internalTask) {
 	c.config.setDefaultPriority(task)
 	if c.isDraining {

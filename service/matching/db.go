@@ -418,15 +418,18 @@ func (db *taskQueueDB) getTotalApproximateBacklogCount() int64 {
 	return total
 }
 
-// SetOtherHasTasks updates the otherHasTasks flag, which indicates whether the "other"
-// (opposite queue type during migration) has pending tasks.
-func (db *taskQueueDB) SetOtherHasTasks(value bool) {
+// SetOtherHasTasks updates the otherHasTasks flag and attempts to persist immediately.
+// The in-memory state is updated regardless of whether persistence succeeds.
+// Returns any error from the persistence attempt.
+func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
 	db.Lock()
 	defer db.Unlock()
-	if db.otherHasTasks != value {
-		db.lastChange = time.Now()
-		db.otherHasTasks = value
+	if db.otherHasTasks == value {
+		return nil
 	}
+	db.lastChange = time.Now()
+	db.otherHasTasks = value
+	return db.updateTaskQueueLocked(ctx, false)
 }
 
 // CreateTasks creates a batch of given tasks for this task queue

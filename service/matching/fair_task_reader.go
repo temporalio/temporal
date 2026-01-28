@@ -644,3 +644,17 @@ func (tr *fairTaskReader) doGC(ackLevel fairLevel) {
 		tr.numToGC = max(0, tr.numToGC-n)
 	}
 }
+
+// finalGC does a synchronous GC pass, deleting all tasks up to the current ack level.
+// Used when unloading a draining queue that won't be reloaded.
+func (tr *fairTaskReader) finalGC() {
+	tr.lock.Lock()
+	ackLevel := tr.ackLevel
+	tr.lock.Unlock()
+
+	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
+	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+
+	_, _ = tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
+}

@@ -414,6 +414,17 @@ func (c *priBacklogManagerImpl) hasFinishedDraining() bool {
 	return true
 }
 
+// finalGC does a final garbage collection pass on all subqueues.
+func (c *priBacklogManagerImpl) finalGC() {
+	c.subqueueLock.Lock()
+	subqueues := slices.Clone(c.subqueues)
+	c.subqueueLock.Unlock()
+
+	for _, r := range subqueues {
+		r.finalGC()
+	}
+}
+
 func (c *priBacklogManagerImpl) setPriority(task *internalTask) {
 	c.config.setDefaultPriority(task)
 	if c.isDraining {

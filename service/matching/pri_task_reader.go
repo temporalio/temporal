@@ -523,3 +523,17 @@ func (tr *priTaskReader) doGC(ackLevel int64) {
 		tr.gcAckLevel = ackLevel
 	}
 }
+
+// finalGC does a synchronous GC pass, deleting all tasks up to the current ack level.
+// Used when unloading a draining queue that won't be reloaded.
+func (tr *priTaskReader) finalGC() {
+	tr.lock.Lock()
+	ackLevel := tr.ackLevel
+	tr.lock.Unlock()
+
+	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
+	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+
+	_, _ = tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+}
