@@ -46,6 +46,9 @@ type (
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
+		// IsDrained returns true if this is a draining backlog manager and all tasks have
+		// been fully drained (read and processed). Only relevant for draining managers.
+		IsDrained() bool
 
 		// TODO(pri): remove
 		getDB() *taskQueueDB
@@ -296,4 +299,9 @@ func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *backlogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+// IsDrained always returns false for the old backlog manager since it can't participate in draining.
+func (c *backlogManagerImpl) IsDrained() bool {
+	return false
 }

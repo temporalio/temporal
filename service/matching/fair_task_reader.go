@@ -515,6 +515,15 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+// isDrained returns true if this subqueue has been fully drained:
+// - We've read to the end of the queue (atEnd is true)
+// - No tasks are loaded in memory
+func (tr *fairTaskReader) isDrained() bool {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	return tr.atEnd && tr.loadedTasks == 0
+}
+
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
 	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
 }

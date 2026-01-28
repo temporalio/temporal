@@ -71,9 +71,10 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		backlogMgr        backlogManager
-		drainBacklogMgr   atomic.Value // backlogManager
-		liveness          *liveness
+		backlogMgr           backlogManager
+		drainBacklogMgrLock  sync.Mutex
+		drainBacklogMgr      backlogManager // protected by drainBacklogMgrLock
+		liveness             *liveness
 		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
 		priMatcher        *priTaskMatcher
 		matcher           matcherInterface // TODO(pri): old matcher cleanup
@@ -311,8 +312,8 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		m.(backlogManager).Stop()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		m.Stop()
 	}
 	c.matcher.Stop()
 	c.liveness.Stop()
@@ -328,17 +329,55 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
 }
 
+// getDrainBacklogMgr returns the draining backlog manager, or nil if none.
+func (c *physicalTaskQueueManagerImpl) getDrainBacklogMgr() backlogManager {
+	c.drainBacklogMgrLock.Lock()
+	defer c.drainBacklogMgrLock.Unlock()
+	return c.drainBacklogMgr
+}
+
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	err := c.backlogMgr.WaitUntilInitialized(ctx)
 	if err == nil {
 		// If we're also draining another, then we need to wait for that also to write.
 		// TODO: we could try to optimize this so we can _dispatch_ before loading the other
 		// but still block on writing.
-		if m := c.drainBacklogMgr.Load(); m != nil {
-			err = m.(backlogManager).WaitUntilInitialized(ctx)
+		if m := c.getDrainBacklogMgr(); m != nil {
+			err = m.WaitUntilInitialized(ctx)
 		}
 	}
 	return err
+}
+
+// DrainCompleted is called by a draining backlog manager when it has fully drained.
+// This updates the active backlog manager's metadata and unloads the draining manager.
+func (c *physicalTaskQueueManagerImpl) DrainCompleted(drainMgr backlogManager) {
+	c.drainBacklogMgrLock.Lock()
+	// Verify that the caller is actually our draining manager
+	if c.drainBacklogMgr != drainMgr {
+		c.drainBacklogMgrLock.Unlock()
+		return
+	}
+	// Clear the draining manager while holding the lock
+	c.drainBacklogMgr = nil
+	c.drainBacklogMgrLock.Unlock()
+
+	// Update active manager's DB: set OtherHasTasks = false
+	c.backlogMgr.getDB().SetOtherHasTasks(false)
+
+	// Write metadata update
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	err := c.backlogMgr.getDB().SyncState(ctx)
+	cancel()
+	if err != nil {
+		c.logger.Warn("Failed to sync state after drain completion", tag.Error(err))
+		// Note: we've already cleared drainBacklogMgr, so we won't retry.
+		// The active manager's otherHasTasks is already false in memory,
+		// it will be persisted on the next periodic sync.
+	}
+
+	drainMgr.Stop()
+	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }
 
 // Call this to set up dual-read from the other table.
@@ -388,7 +427,10 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 		return
 	}
 
-	prev := c.drainBacklogMgr.Swap(drainBacklogMgr)
+	c.drainBacklogMgrLock.Lock()
+	prev := c.drainBacklogMgr
+	c.drainBacklogMgr = drainBacklogMgr
+	c.drainBacklogMgrLock.Unlock()
 	if !softassert.That(c.logger, prev == nil, "SetupDraining called twice") {
 		return
 	}
@@ -461,8 +503,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 func (c *physicalTaskQueueManagerImpl) backlogCountHint() int64 {
 	n := c.backlogMgr.BacklogCountHint()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		n += m.(backlogManager).BacklogCountHint()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		n += m.BacklogCountHint()
 	}
 	return n
 }
@@ -610,8 +652,8 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		drainStats := m.(backlogManager).BacklogStatsByPriority()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		drainStats := m.BacklogStatsByPriority()
 		for pri, tqs := range drainStats {
 			mergeStats(util.GetOrSetNew(stats, pri), tqs)
 		}
@@ -633,8 +675,8 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	status := c.backlogMgr.InternalStatus()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		drainStatus := m.(backlogManager).InternalStatus()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		drainStatus := m.InternalStatus()
 		for _, st := range drainStatus {
 			st.Draining = true
 		}

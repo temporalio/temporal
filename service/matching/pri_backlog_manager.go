@@ -230,6 +230,12 @@ func (c *priBacklogManagerImpl) periodicSync() {
 			err := c.db.SyncState(ctx)
 			cancel()
 			c.signalIfFatal(err)
+
+			// Check if we're drained (only for draining managers)
+			if c.IsDrained() {
+				c.pqMgr.DrainCompleted(c)
+				return // exit the goroutine
+			}
 		}
 	}
 }
@@ -389,6 +395,24 @@ func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *priBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+// IsDrained returns true if this is a draining backlog manager and all tasks have been
+// fully drained (read and processed).
+func (c *priBacklogManagerImpl) IsDrained() bool {
+	if !c.isDraining {
+		return false
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	for _, r := range c.subqueues {
+		if !r.isDrained() {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *priBacklogManagerImpl) setPriority(task *internalTask) {

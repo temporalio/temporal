@@ -417,6 +417,17 @@ func (tr *priTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+// isDrained returns true if this subqueue has been fully drained:
+// - We've read to the end of the queue (readLevel >= maxReadLevel)
+// - No tasks are loaded in memory
+// - No tasks are outstanding (in flight)
+func (tr *priTaskReader) isDrained() bool {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
+	return tr.readLevel >= maxReadLevel && tr.loadedTasks == 0 && tr.outstandingTasks.Empty()
+}
+
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 	wasAlreadyAcked, found := tr.outstandingTasks.Get(taskId)
 	if !softassert.That(tr.logger, found, "completed task not found in oustandingTasks") {

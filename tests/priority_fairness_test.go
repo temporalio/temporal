@@ -611,6 +611,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	defer cancel()
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableMigration, true)
+	// Speed up periodic sync so drain completion is detected faster
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 100*time.Millisecond)
 
 	forTest := func(v any) any {
 		return []dynamicconfig.ConstrainedValue{
@@ -635,10 +637,18 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
 		s.T().Helper()
 		s.EventuallyWithT(func(c *assert.CollectT) {
-			tasksOnDraining, tasksOnActive, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			tasksOnDraining, tasksOnActive, _, err := s.countTasksByDrainingActive(ctx, tv, tp)
 			require.NoError(c, err)
 			require.Equal(c, onDraining, tasksOnDraining)
 			require.Equal(c, onActive, tasksOnActive)
+		}, 15*time.Second, 250*time.Millisecond)
+	}
+	waitForNoDraining := func(tp enumspb.TaskQueueType) {
+		s.T().Helper()
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, _, hasDraining, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			require.NoError(c, err)
+			require.False(c, hasDraining, "draining queue should be unloaded after drain completes")
 		}, 15*time.Second, 250*time.Millisecond)
 	}
 
@@ -719,6 +729,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 0)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 20)
+	// Verify wft draining queue is unloaded after drain completes
+	waitForNoDraining(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.T().Log("wfts done")
 
 	// process activities 1/3 at a time
@@ -760,10 +772,12 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 		processActivity()
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0, 0)
+	// Verify activity draining queue is unloaded after drain completes
+	waitForNoDraining(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
 
 func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *testvars.TestVars, tp enumspb.TaskQueueType) (
-	tasksOnDraining, tasksOnActive int64, retErr error,
+	tasksOnDraining, tasksOnActive int64, hasDraining bool, retErr error,
 ) {
 	for i := range s.partitions {
 		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
@@ -776,11 +790,12 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
 		})
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, false, err
 		}
 		for _, versionInfoInternal := range res.VersionsInfoInternal {
 			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
 				if st.Draining {
+					hasDraining = true
 					tasksOnDraining += st.ApproximateBacklogCount
 				} else {
 					tasksOnActive += st.ApproximateBacklogCount

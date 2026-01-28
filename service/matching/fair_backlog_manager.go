@@ -215,6 +215,12 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 			err := c.db.SyncState(ctx)
 			cancel()
 			c.signalIfFatal(err)
+
+			// Check if we're drained (only for draining managers)
+			if c.IsDrained() {
+				c.pqMgr.DrainCompleted(c)
+				return // exit the goroutine
+			}
 		}
 	}
 }
@@ -384,6 +390,24 @@ func (c *fairBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *fairBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+// IsDrained returns true if this is a draining backlog manager and all tasks have been
+// fully drained (read and processed).
+func (c *fairBacklogManagerImpl) IsDrained() bool {
+	if !c.isDraining {
+		return false
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	for _, r := range c.subqueues {
+		if !r.isDrained() {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *fairBacklogManagerImpl) setPriority(task *internalTask) {

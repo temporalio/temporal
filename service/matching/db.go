@@ -829,3 +829,14 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }
+
+// SetOtherHasTasks updates the otherHasTasks flag, which indicates whether the "other"
+// (opposite queue type during migration) has pending tasks.
+func (db *taskQueueDB) SetOtherHasTasks(value bool) {
+	db.Lock()
+	defer db.Unlock()
+	if db.otherHasTasks != value {
+		db.lastChange = time.Now()
+		db.otherHasTasks = value
+	}
+}
