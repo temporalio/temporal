@@ -3,7 +3,6 @@ package testcore
 import (
 	"fmt"
 	"os"
-	"runtime"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -72,7 +71,7 @@ func init() {
 		sharedSize = n
 	}
 
-	dedicatedSize := runtime.GOMAXPROCS(0)
+	dedicatedSize := 2
 	if v := os.Getenv("TEMPORAL_TEST_DEDICATED_CLUSTERS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n <= 0 {
