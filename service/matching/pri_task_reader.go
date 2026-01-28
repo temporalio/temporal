@@ -500,12 +500,7 @@ func (tr *priTaskReader) shouldGCLocked() bool {
 
 // called in new goroutine
 func (tr *priTaskReader) doGC(ackLevel int64) {
-	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
-
-	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
-	defer cancel()
-
-	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+	wasComplete, err := tr.doGCAt(ackLevel)
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -514,26 +509,37 @@ func (tr *priTaskReader) doGC(ackLevel int64) {
 	if err != nil {
 		return
 	}
+	if wasComplete {
+		tr.gcAckLevel = ackLevel
+	}
+}
+
+func (tr *priTaskReader) doGCAt(ackLevel int64) (bool, error) {
+	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
+
+	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+
+	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+	if err != nil {
+		tr.logger.Warn("failed to gc tasks", tag.Error(err))
+		return false, err
+	}
+
 	// implementation behavior for CompleteTasksLessThan:
 	// - unit test, cassandra: always return UnknownNumRowsAffected (in this case means "all")
 	// - sql: return number of rows affected (should be <= batchSize)
 	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
 	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
-	if n == persistence.UnknownNumRowsAffected || n < batchSize {
-		tr.gcAckLevel = ackLevel
-	}
+	wasComplete := n == persistence.UnknownNumRowsAffected || n < batchSize
+	return wasComplete, err
 }
 
-// finalGC does a synchronous GC pass, deleting all tasks up to the current ack level.
+// finalGC does a single synchronous gc.
 // Used when unloading a draining queue that won't be reloaded.
 func (tr *priTaskReader) finalGC() {
 	tr.lock.Lock()
 	ackLevel := tr.ackLevel
 	tr.lock.Unlock()
-
-	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
-	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
-	defer cancel()
-
-	_, _ = tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+	_, _ = tr.doGCAt(ackLevel)
 }

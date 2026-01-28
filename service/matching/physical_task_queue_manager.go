@@ -431,7 +431,7 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 	}
 
 	// Do final gc before stopping since this is the last chance to clean up
-	drainMgr.finalGC()
+	drainMgr.FinalGC()
 	drainMgr.Stop()
 	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }

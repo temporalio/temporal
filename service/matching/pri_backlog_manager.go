@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -414,8 +415,11 @@ func (c *priBacklogManagerImpl) hasFinishedDraining() bool {
 	return true
 }
 
-// finalGC does a final garbage collection pass on all subqueues.
-func (c *priBacklogManagerImpl) finalGC() {
+// FinalGC does a final gc pass on all subqueues.
+func (c *priBacklogManagerImpl) FinalGC() {
+	if !softassert.That(c.logger, c.isDraining, "FinalGC called on non-draining backlog manager") {
+		return
+	}
 	c.subqueueLock.Lock()
 	subqueues := slices.Clone(c.subqueues)
 	c.subqueueLock.Unlock()

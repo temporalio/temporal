@@ -427,8 +427,8 @@ func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
 	if db.otherHasTasks == value {
 		return nil
 	}
-	db.lastChange = time.Now()
 	db.otherHasTasks = value
+	db.lastChange = time.Now()
 	return db.updateTaskQueueLocked(ctx, false)
 }
 
