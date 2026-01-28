@@ -1,0 +1,7 @@
+=== RUN   TestFoo1
+    foo_test.go:5: assertion failed
+--- FAIL: TestFoo1 (0.01s)
+=== RUN   TestFoo2
+--- PASS: TestFoo2 (0.01s)
+FAIL
+FAIL	go.temporal.io/server/tools/testrunner2/testdata/fakepkg1	0.02s
