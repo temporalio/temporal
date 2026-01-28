@@ -49,8 +49,8 @@ VISIBILITY_DB ?= temporal_visibility
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
-BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
-TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
+BUILD_TAG_FLAG := -tags=$(ALL_BUILD_TAGS)
+TEST_TAG_FLAG := -tags=$(ALL_TEST_TAGS)
 
 # 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 14:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
@@ -59,7 +59,7 @@ TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 TEST_TIMEOUT ?= 35m
 
 # Number of retries for *-coverage targets.
-MAX_TEST_ATTEMPTS ?= 3
+MAX_TEST_ATTEMPTS ?= 4
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
@@ -124,7 +124,15 @@ DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
 ifeq ($(UNIT_TEST_DIRS),)
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
+UNIT_TEST_DIRS := $(filter-out \
+	$(FUNCTIONAL_TEST_ROOT)% \
+	$(FUNCTIONAL_TEST_XDC_ROOT)% \
+	$(FUNCTIONAL_TEST_NDC_ROOT)% \
+	$(DB_INTEGRATION_TEST_ROOT)% \
+	$(DB_TOOL_INTEGRATION_TEST_ROOT)% \
+	./temporaltest% \
+	./tools/testrunner2/testpkg/% \
+,$(TEST_DIRS))
 endif
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
@@ -472,45 +480,39 @@ test: unit-test integration-test functional-test
 $(TEST_OUTPUT_ROOT):
 	@mkdir -p $(TEST_OUTPUT_ROOT)
 
-prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
+prepare-coverage-test: $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=2m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=none -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
-
-# This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
-pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
-report-test-crash: $(TEST_OUTPUT_ROOT)
-	@printf $(COLOR) "Generate test crash junit report..."
-	@go run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
-		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
-		--crashreportname=$(CRASH_REPORT_NAME)
+report-test-logs: $(TEST_OUTPUT_ROOT)
+	@printf $(COLOR) "Print test logs..."
+	@go run ./cmd/tools/test-runner2 report-logs --log-dir=$(TEST_OUTPUT_ROOT)
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
