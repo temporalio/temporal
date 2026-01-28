@@ -2157,11 +2157,25 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	}
 	var opErr *nexus.OperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
-		opErr = &nexus.OperationError{
-			State: nexus.OperationState(request.GetState()),
-			Cause: &nexus.FailureError{
-				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
-			},
+		failure := commonnexus.ProtoFailureToNexusFailure(request.GetFailure())
+		recvdErr, err := nexus.DefaultFailureConverter().FailureToError(failure)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("unable to convert failure to error")
+		}
+		// Backward compatibility: if the received error is not of type OperationError, wrap the error in OperationError.
+		var ok bool
+		if opErr, ok = recvdErr.(*nexus.OperationError); !ok {
+			opErr = &nexus.OperationError{
+				State: nexus.OperationState(request.GetState()),
+				// Setting a message here will bypass the Nexus SDK's failure converter backward compatibility logic.
+				Message: "nexus operation completed unsuccessfully",
+				Cause:   recvdErr,
+			}
+			origFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(opErr)
+			if err != nil {
+				return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
+			}
+			opErr.OriginalFailure = &origFailure
 		}
 	}
 	err = nexusoperations.CompletionHandler(

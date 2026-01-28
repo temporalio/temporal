@@ -201,15 +201,8 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	}
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		failureErr, ok := r.Error.(*nexus.FailureError)
-		if !ok {
-			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
-			// FailureErrors.
-			logger.Error("result error is not a FailureError", tag.Error(err))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
-		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(failureErr.Failure),
+			Failure: commonnexus.NexusFailureToProtoFailure(*r.Error.OriginalFailure),
 		}
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
@@ -284,19 +277,14 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
 		// the failure, so we must construct a new completion to forward.
-		var failureErr *nexus.FailureError
-		if !errors.As(r.Error, &failureErr) {
-			// This shouldn't happen as the Nexus SDK is always expected to convert Failures from the wire to
-			// FailureErrors.
-			h.Logger.Error("received unexpected error type when trying to forward Nexus operation completion", tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
 		c := &nexusrpc.OperationCompletionUnsuccessful{
 			State:          r.State,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
 			Links:          r.Links,
-			Failure:        failureErr.Failure,
+		}
+		if r.Error != nil && r.Error.OriginalFailure != nil {
+			c.Failure = *r.Error.OriginalFailure
 		}
 		forwardReq, err = nexusrpc.NewCompletionHTTPRequest(ctx, forwardURL, c)
 		if err != nil {

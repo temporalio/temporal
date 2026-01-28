@@ -165,10 +165,13 @@ type OperationCompletionUnsuccessful struct {
 type OperationCompletionUnsuccessfulOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
+	//
+	// NOTE: To call server versions <= 1.31.0, use a FailureConverter that unwraps the error cause if message is not
+	// present. That is is the default FailureConverter behavior, this comment applies to custom failure converters only.
 	FailureConverter nexus.FailureConverter
 	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
 	//
-	// Deprecated: Use OperatonToken instead.
+	// Deprecated: Use OperationToken instead.
 	OperationID string
 	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
 	// started response.
@@ -186,7 +189,10 @@ func NewOperationCompletionUnsuccessful(opErr *nexus.OperationError, options Ope
 	if options.FailureConverter == nil {
 		options.FailureConverter = nexus.DefaultFailureConverter()
 	}
-	failure := options.FailureConverter.ErrorToFailure(opErr.Cause)
+	failure, err := options.FailureConverter.ErrorToFailure(opErr)
+	if err != nil {
+		return nil, err
+	}
 
 	return &OperationCompletionUnsuccessful{
 		Header:         make(nexus.Header),
@@ -206,6 +212,8 @@ func (c *OperationCompletionUnsuccessful) applyToHTTPRequest(request *http.Reque
 	if c.Header != nil {
 		addNexusHeaderToHTTPHeader(c.Header, request.Header)
 	}
+
+	// Set the operation state header for backwards compatibility.
 	request.Header.Set(headerOperationState, string(c.State))
 	request.Header.Set("Content-Type", contentTypeJSON)
 
@@ -249,7 +257,7 @@ type CompletionRequest struct {
 	// Links are used to link back to the operation when a completion callback is received before a started response.
 	Links []nexus.Link
 	// Parsed from request and set if State is failed or canceled.
-	Error error
+	Error *nexus.OperationError
 	// Extracted from request and set if State is succeeded.
 	Result *nexus.LazyValue
 }
@@ -322,7 +330,27 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to read Failure from request body"))
 			return
 		}
-		completion.Error = h.failureConverter.FailureToError(failure)
+		completionErr, err := h.failureConverter.FailureToError(failure)
+		if err != nil {
+			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode failure from request body"))
+			return
+		}
+		opErr, ok := completionErr.(*nexus.OperationError)
+		if !ok {
+			// Backwards compatibility: wrap non-OperationError errors in an OperationError with the appropriate state.
+			completion.Error = &nexus.OperationError{
+				State: completion.State,
+				Cause: completionErr,
+			}
+			originalFailure, err := h.failureConverter.ErrorToFailure(completion.Error)
+			if err != nil {
+				h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode failure from request body"))
+				return
+			}
+			completion.Error.OriginalFailure = &originalFailure
+		} else {
+			completion.Error = opErr
+		}
 	case nexus.OperationStateSucceeded:
 		completion.Result = nexus.NewLazyValue(
 			h.options.Serializer,

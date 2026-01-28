@@ -436,11 +436,11 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
-	var opFailedErr *nexus.OperationError
+	var opErr *nexus.OperationError
 
 	switch {
-	case errors.As(callErr, &opFailedErr):
-		return handleOperationError(node, operation, opFailedErr)
+	case errors.As(callErr, &opErr):
+		return handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
@@ -482,15 +482,17 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 	if err != nil {
 		return err
 	}
-	failure, err := callErrToFailure(callErr, true)
+	failure, err := callErrToFailure(callErr, false)
 	if err != nil {
 		return err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
-		Failure: nexusOperationFailure(
+		Failure: convertToNexusOperationFailure(
 			operation,
 			eventID,
-			failure,
+			&failurepb.Failure{
+				Cause: failure,
+			},
 		),
 		ScheduledEventId: eventID,
 		RequestId:        operation.RequestId,
@@ -527,14 +529,16 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node) error {
 			// nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-					Failure: nexusOperationFailure(
+					Failure: convertToNexusOperationFailure(
 						op,
 						eventID,
 						&failurepb.Failure{
-							Message: "operation timed out",
-							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-									TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+							Cause: &failurepb.Failure{
+								Message: "operation timed out",
+								FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+									TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+										TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+									},
 								},
 							},
 						},
@@ -780,9 +784,13 @@ func (e taskExecutor) lookupEndpoint(ctx context.Context, namespaceID namespace.
 	return entry, nil
 }
 
-func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
-	return &failurepb.Failure{
-		Message: "nexus operation completed unsuccessfully",
+// Copy over message and stack trace if present since to preserve as much as possible from the original operation
+// error.
+func convertToNexusOperationFailure(operation Operation, scheduledEventID int64, originalFailure *failurepb.Failure) *failurepb.Failure {
+	f := &failurepb.Failure{
+		Message:           originalFailure.GetMessage(),
+		StackTrace:        originalFailure.GetStackTrace(),
+		EncodedAttributes: originalFailure.GetEncodedAttributes(),
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
 				Endpoint:       operation.Endpoint,
@@ -794,8 +802,12 @@ func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *f
 				ScheduledEventId: scheduledEventID,
 			},
 		},
-		Cause: cause,
+		Cause: originalFailure.GetCause(),
 	}
+	if originalFailure.GetMessage() == "" {
+		f.Message = "nexus operation completed unsuccessfully"
+	}
+	return f
 }
 
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue], callErr error) string {
@@ -863,44 +875,25 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
-		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
-		// nolint:exhaustive // unspecified is the default
-		switch handlerErr.RetryBehavior {
-		case nexus.HandlerErrorRetryBehaviorRetryable:
-			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
-		case nexus.HandlerErrorRetryBehaviorNonRetryable:
-			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
-		}
-		failure := &failurepb.Failure{
-			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type:          string(handlerErr.Type),
-					RetryBehavior: retryBehavior,
-				},
-			},
-		}
-		var failureError *nexus.FailureError
-		if errors.As(handlerErr.Cause, &failureError) {
+		var nf nexus.Failure
+		if handlerErr.OriginalFailure != nil {
+			nf = *handlerErr.OriginalFailure
+		} else {
 			var err error
-			failure.Cause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
+			// Ensure the error message is set to ensure the failure converter does not unwrap the cause.
+			if handlerErr.Message == "" {
+				handlerErr.Message = "handler error"
+			}
+			nf, err = nexus.DefaultFailureConverter().ErrorToFailure(handlerErr)
 			if err != nil {
 				return nil, err
 			}
-		} else {
-			cause := handlerErr.Cause
-			if cause == nil {
-				cause = errors.New("unknown cause")
-			}
-			failure.Cause = &failurepb.Failure{
-				Message: cause.Error(),
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
-				},
-			}
 		}
-
-		return failure, nil
+		f, err := commonnexus.NexusFailureToTemporalFailure(nf)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
 	}
 
 	return &failurepb.Failure{
