@@ -20,6 +20,7 @@ HISTORY_FILE="/tmp/memory_history.txt"
 HIGH_MEMORY_THRESHOLD=95
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 HEAP_PRINTED=false
+HIGH_WATER_MARK=0
 
 # Clear history on start
 : > "$HISTORY_FILE"
@@ -33,32 +34,35 @@ fetch_pprof() {
   curl -s --max-time 10 "http://${PPROF_HOST}/debug/pprof/${profile_type}" -o "$output_file" 2>/dev/null
 }
 
-# Print heap analysis from `go tool pprof`.
-# Usage: print_heap_analysis <profile_file> <mode> <lines>
-# mode: inuse_space, alloc_space, inuse_objects, alloc_objects
-print_heap_analysis() {
+# Print pprof top analysis.
+# Usage: pprof_top <profile_file> <lines> [extra_flags...]
+pprof_top() {
   local profile_file="$1"
-  local mode="$2"
-  local lines="${3:-40}"
+  local lines="$2"
+  shift 2
 
-  go tool pprof -top "-${mode}" "$profile_file" 2>/dev/null | head -"$lines" || true
+  go tool pprof -top "$@" "$profile_file" 2>/dev/null | head -"$lines" || true
 }
 
-# Get goroutine count from pprof.
-print_goroutine_count() {
+# Print goroutine profile analysis.
+print_goroutines() {
   local tmp_file
   tmp_file="$(mktemp)"
   trap 'rm -f "$tmp_file"' RETURN
 
-  local count="?"
-  if curl -s --max-time 5 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=1" -o "$tmp_file" 2>/dev/null; then
-    count="$(head -1 "$tmp_file" | grep -o '[0-9]*' || echo '?')"
+  if fetch_pprof "goroutine" "$tmp_file"; then
+    echo "=== top functions by goroutine count ==="
+    pprof_top "$tmp_file" 30
   fi
-  echo "$count"
 }
 
-# Print pprof heap analysis.
-print_pprof_analysis() {
+# Extract goroutine count from pprof output ("... of N total").
+count_goroutines() {
+  sed -n 's/.*of \([0-9]*\) total.*/\1/p' | head -1 || echo '?'
+}
+
+# Print heap profile analysis.
+print_heap() {
   local tmp_file
   tmp_file="$(mktemp)"
   trap 'rm -f "$tmp_file"' RETURN
@@ -66,13 +70,13 @@ print_pprof_analysis() {
   echo "--- Go Heap Profile ---"
   if fetch_pprof "heap" "$tmp_file"; then
     echo "=== inuse_space (what's currently held) ==="
-    print_heap_analysis "$tmp_file" "inuse_space" 30
+    pprof_top "$tmp_file" 30 -inuse_space
     echo ""
     echo "=== alloc_space (total allocations) ==="
-    print_heap_analysis "$tmp_file" "alloc_space" 30
+    pprof_top "$tmp_file" 30 -alloc_space
     echo ""
     echo "=== alloc_objects (total objects allocated) ==="
-    print_heap_analysis "$tmp_file" "alloc_objects" 30
+    pprof_top "$tmp_file" 30 -alloc_objects
   else
     echo "(pprof endpoint not available)"
   fi
@@ -86,8 +90,11 @@ snapshot() {
   memused_mb=$(( memused_kb / 1024 ))
   pct=$(( memused_kb * 100 / memtotal_kb ))
 
-  local goroutines
-  goroutines="$(print_goroutine_count)"
+  # Collect pprof data once per tick.
+  local goroutine_output goroutine_count pprof_output
+  goroutine_output="$(print_goroutines)"
+  goroutine_count="$(count_goroutines <<< "$goroutine_output")"
+  pprof_output="$(print_heap)"
 
   # Get processes with >=1% memory, format as "name (MB)"
   local top_procs
@@ -98,36 +105,40 @@ snapshot() {
 
   # stdout preserves info in CI logs in case of crash; history file is used for snapshot.
   printf "%s used=%s%% mem=%sMB goroutines=%s procs=[%s]\n" \
-    "$timestamp" "$pct" "$memused_mb" "$goroutines" "$top_procs" | tee -a "$HISTORY_FILE"
+    "$timestamp" "$pct" "$memused_mb" "$goroutine_count" "$top_procs" | tee -a "$HISTORY_FILE"
 
-  # Collect pprof analysis once per tick.
-  local pprof_output
-  pprof_output="$(print_pprof_analysis)"
+  # Build report.
+  local report
+  report="$(cat <<EOF
+Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S') (usage ${pct}%)
 
-  # If memory threshold was reached, print Go heap details to stdout. But only once per run.
+$(cat "$HISTORY_FILE")
+
+--- Top Processes ---
+$(ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20)
+
+--- Memory Summary ---
+$(free -m)
+
+$pprof_output
+
+$goroutine_output
+EOF
+)"
+
+  # Print report to stdout when memory threshold is reached (only once per run).
   if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
     echo ""
-    echo "=== HIGH MEMORY WARNING: ${pct}% used (threshold: ${HIGH_MEMORY_THRESHOLD}%) ==="
-    echo "$pprof_output"
-    echo "=== END HIGH MEMORY WARNING ==="
+    echo "$report"
     echo ""
     HEAP_PRINTED=true
   fi
 
-  # Write snapshot to disk.
-  {
-    echo "Memory snapshot at $(date '+%Y-%m-%d %H:%M:%S')"
-    echo ""
-    cat "$HISTORY_FILE"
-    echo ""
-    echo "--- Top Processes ---"
-    ps -eo pid,%mem,rss:10,comm --sort=-%mem | head -20
-    echo ""
-    echo "--- Memory Summary ---"
-    free -m
-    echo ""
-    echo "$pprof_output"
-  } > "$SNAPSHOT_FILE"
+  # Write report to disk only if memory usage is at or above high water mark.
+  if [[ "$pct" -ge "$HIGH_WATER_MARK" ]]; then
+    echo "$report" > "$SNAPSHOT_FILE"
+    HIGH_WATER_MARK="$pct"
+  fi
 }
 
 # Take snapshots every 30s until killed.
