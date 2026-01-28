@@ -1447,8 +1447,6 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	err error,
 ) error {
 	var invalidArgument *serviceerror.InvalidArgument
-	// usecases like ValidateContinueAsNewWorkflowExecutionAttributes use fmt.Errorf to
-	// wrap the invalid argument so we need to check the real error type
 	if errors.As(err, &invalidArgument) {
 		return handler.failWorkflowTask(wtFailedCause, err)
 	}
