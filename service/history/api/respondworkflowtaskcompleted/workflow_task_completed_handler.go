@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -81,6 +80,7 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
+		chasmCommandRegistry   *chasmcommand.Registry
 		matchingClient         matchingservice.MatchingServiceClient
 	}
 
@@ -120,6 +120,7 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
+	chasmCommandRegistry *chasmcommand.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
@@ -152,6 +153,7 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
+		chasmCommandRegistry:   chasmCommandRegistry,
 		matchingClient:         matchingClient,
 	}
 }
@@ -326,15 +328,14 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		// TODO: need to handle migration between HSM and CHASM
 
 		if handler.mutableState.ChasmEnabled() {
-			// Use CHASM command handler from the Workflow component.
-			var wf *chasmworkflow.Workflow
-			wf, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
+			// Use CHASM command handler.
+			_, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
 			if err != nil {
 				return nil, err
 			}
 
 			var ok bool
-			commandHandler, ok = wf.Handler(command.GetCommandType())
+			commandHandler, ok = handler.chasmCommandRegistry.Handler(command.GetCommandType())
 			if !ok {
 				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
 			}

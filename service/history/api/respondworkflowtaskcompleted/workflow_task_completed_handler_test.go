@@ -45,10 +45,10 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms          *historyi.MockMutableState
-		updates     update.Registry
-		handler     *workflowTaskCompletedHandler
-		workflowLib *chasmworkflow.Library
+		ms                   *historyi.MockMutableState
+		updates              update.Registry
+		handler              *workflowTaskCompletedHandler
+		chasmCommandRegistry *chasmcommand.Registry
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -81,21 +81,8 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		if opts.chasmEnabled {
 			out.ms.EXPECT().ChasmEnabled().Return(true)
-
-			// Create CHASM registry with workflow library
-			chasmRegistry := chasm.NewRegistry(logger)
-			out.workflowLib = chasmworkflow.NewLibrary()
-			err := chasmRegistry.Register(out.workflowLib)
-			require.NoError(t, err)
-
-			// Create workflow using mock context that returns the library
-			mockCtx := &chasm.MockMutableContext{
-				MockContext: chasm.MockContext{
-					HandleLibrary: func(name string) (chasm.Library, bool) {
-						return chasmRegistry.Library(name)
-					},
-				},
-			}
+			out.chasmCommandRegistry = chasmcommand.NewRegistry()
+			mockCtx := &chasm.MockMutableContext{}
 			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
 		}
@@ -140,6 +127,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			nil, // searchattribute.MapperProvider
 			false,
 			nil,
+			out.chasmCommandRegistry,
 			nil,
 		)
 	}
@@ -409,7 +397,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		// Register a test handler that returns a sentinel error
 		sentinelErr := errors.New("sentinel: CHASM handler invoked")
-		err := tc.workflowLib.RegisterHandler(
+		err := tc.chasmCommandRegistry.Register(
 			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 			func(chasm.MutableContext, chasmcommand.Validator, int64, *commandpb.Command) error {
 				return sentinelErr
