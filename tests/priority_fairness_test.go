@@ -114,6 +114,28 @@ func (s *PrioritySuite) TestPriority_Activity_Basic() {
 		s.NoError(err)
 	}
 
+	s.Eventually(func() bool {
+		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tv.TaskQueue().Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+			},
+			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+		})
+		if err != nil {
+			return false
+		}
+		var count int64
+		for _, versionInfoInternal := range res.VersionsInfoInternal {
+			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
+				count += st.ApproximateBacklogCount
+			}
+		}
+		return count == N*Levels
+	}, 10*time.Second, 100*time.Millisecond)
+
 	// process activity tasks
 	var runs []int
 	for range N * Levels {
