@@ -121,7 +121,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	ns := s.createGlobalNamespace()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
+	// Set URL template after httpAPIAddress is set, see commonnexus.RouteCompletionCallback.
 	for _, cluster := range s.clusters {
 		cluster.OverrideDynamicConfig(
 			s.T(),
@@ -274,7 +274,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	ns := s.createGlobalNamespace()
 	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
 
-	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
+	// Set URL template after httpAPIAddress is set, see commonnexus.RouteCompletionCallback.
 	// We don't actually want to deliver callbacks in this test, the config just has to be set for nexus task execution.
 	for _, cluster := range s.clusters {
 		cluster.OverrideDynamicConfig(
