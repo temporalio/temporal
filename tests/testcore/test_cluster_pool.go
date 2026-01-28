@@ -141,6 +141,7 @@ func (p *pool) get(t *testing.T, createCluster func() *FunctionalTestBase) *Func
 			p.clusterMu[idx].Lock()
 			// Double-check after acquiring lock
 			if p.usageCounts[idx].Load() > int64(p.maxUsage) && p.clusters[idx] != nil {
+				clustersRecycled.Add(1)
 				if err := p.clusters[idx].testCluster.TearDownCluster(); err != nil {
 					t.Logf("Failed to tear down cluster %d: %v", idx, err)
 				}
