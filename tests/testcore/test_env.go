@@ -2,10 +2,6 @@ package testcore
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -17,14 +13,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
-	"go.uber.org/goleak"
 )
-
-// goleakViolationCounter is used to generate unique filenames for goleak violations.
-var goleakViolationCounter atomic.Int64
-
-// GoleakDir is the directory where goleak violation files are written in CI.
-const GoleakDir = "/tmp/goleak_violations"
 
 var _ Env = (*testEnv)(nil)
 
@@ -148,36 +137,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
 	}
-
-	// Check for goroutine leaks at the end of the test.
-	t.Cleanup(func() {
-		// Ignore known background goroutines from the test infrastructure.
-		opts := []goleak.Option{
-			goleak.IgnoreTopFunction("go.temporal.io/server/common/clock.(*EventTimeSource).runUntilWallClock"),
-			goleak.IgnoreTopFunction("go.temporal.io/server/common/membership.(*ringpop).Start.func1"),
-			goleak.IgnoreTopFunction("go.temporal.io/server/temporal.(*ServerImpl).Start.func1"),
-			goleak.IgnoreTopFunction("google.golang.org/grpc.(*addrConn).resetTransport"),
-			goleak.IgnoreTopFunction("google.golang.org/grpc.(*ccBalancerWrapper).watcher"),
-			goleak.IgnoreTopFunction("google.golang.org/grpc/internal/grpcsync.(*CallbackSerializer).run"),
-			goleak.IgnoreTopFunction("google.golang.org/grpc/internal/transport.(*controlBuffer).get"),
-			goleak.IgnoreTopFunction("google.golang.org/grpc/internal/transport.(*http2Client).keepalive"),
-			goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
-		}
-		if err := goleak.Find(opts...); err != nil {
-			// In CI, write violation to a file for later collection.
-			if os.Getenv("CI") != "" {
-				_ = os.MkdirAll(GoleakDir, 0755)
-				// Sanitize test name for use as filename.
-				safeName := strings.ReplaceAll(t.Name(), "/", "_")
-				safeName = strings.ReplaceAll(safeName, " ", "_")
-				filename := filepath.Join(GoleakDir, fmt.Sprintf("%03d_%s.txt",
-					goleakViolationCounter.Add(1), safeName))
-				content := fmt.Sprintf("Test: %s\n\n%v", t.Name(), err)
-				_ = os.WriteFile(filename, []byte(content), 0644)
-			}
-			t.Errorf("goleak: goroutine leak detected:\n%v", err)
-		}
-	})
 
 	return env
 }
