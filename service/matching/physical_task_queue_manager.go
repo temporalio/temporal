@@ -71,19 +71,19 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		backlogMgr           backlogManager
-		drainBacklogMgrLock  sync.Mutex
-		drainBacklogMgr      backlogManager // protected by drainBacklogMgrLock
-		liveness             *liveness
-		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
-		priMatcher        *priTaskMatcher
-		matcher           matcherInterface // TODO(pri): old matcher cleanup
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		throttledLogger   log.ThrottledLogger
-		matchingClient    matchingservice.MatchingServiceClient
-		clusterMeta       cluster.Metadata
-		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
+		backlogMgr          backlogManager
+		drainBacklogMgrLock sync.Mutex
+		drainBacklogMgr     backlogManager // protected by drainBacklogMgrLock
+		liveness            *liveness
+		oldMatcher          *TaskMatcher // TODO(pri): old matcher cleanup
+		priMatcher          *priTaskMatcher
+		matcher             matcherInterface // TODO(pri): old matcher cleanup
+		namespaceRegistry   namespace.Registry
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		clusterMeta         cluster.Metadata
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory               *pollerHistory
 		currentPolls                atomic.Int64
@@ -349,37 +349,6 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 	return err
 }
 
-// DrainCompleted is called by a draining backlog manager when it has fully drained.
-// This updates the active backlog manager's metadata and unloads the draining manager.
-func (c *physicalTaskQueueManagerImpl) DrainCompleted(drainMgr backlogManager) {
-	c.drainBacklogMgrLock.Lock()
-	// Verify that the caller is actually our draining manager
-	if c.drainBacklogMgr != drainMgr {
-		c.drainBacklogMgrLock.Unlock()
-		return
-	}
-	// Clear the draining manager while holding the lock
-	c.drainBacklogMgr = nil
-	c.drainBacklogMgrLock.Unlock()
-
-	// Update active manager's DB: set OtherHasTasks = false
-	c.backlogMgr.getDB().SetOtherHasTasks(false)
-
-	// Write metadata update
-	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
-	err := c.backlogMgr.getDB().SyncState(ctx)
-	cancel()
-	if err != nil {
-		c.logger.Warn("Failed to sync state after drain completion", tag.Error(err))
-		// Note: we've already cleared drainBacklogMgr, so we won't retry.
-		// The active manager's otherHasTasks is already false in memory,
-		// it will be persisted on the next periodic sync.
-	}
-
-	drainMgr.Stop()
-	c.logger.Info("Drain completed, unloaded draining backlog manager")
-}
-
 // Call this to set up dual-read from the other table.
 // Must be called by the active backlog manager before it sets itself initialized.
 // Must only be called when using new matcher.
@@ -436,6 +405,32 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	}
 	logger.Info("Starting draining")
 	drainBacklogMgr.Start()
+}
+
+// FinishedDraining is called by a draining backlog manager when it has fully drained.
+// This updates the active backlog manager's metadata and unloads the draining manager.
+func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
+	c.drainBacklogMgrLock.Lock()
+	drainMgr := c.drainBacklogMgr
+	c.drainBacklogMgr = nil
+	c.drainBacklogMgrLock.Unlock()
+
+	// Update active manager's OtherHasTasks field
+	c.backlogMgr.getDB().SetOtherHasTasks(false)
+
+	// Force one update now
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	err := c.backlogMgr.getDB().SyncState(ctx)
+	cancel()
+	if err != nil {
+		c.logger.Warn("Failed to sync state after drain completion", tag.Error(err))
+		// Note: we've already cleared drainBacklogMgr, so we won't retry.
+		// The active manager's otherHasTasks is already false in memory,
+		// it will be persisted on the next periodic sync.
+	}
+
+	drainMgr.Stop()
+	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {

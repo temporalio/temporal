@@ -418,6 +418,17 @@ func (db *taskQueueDB) getTotalApproximateBacklogCount() int64 {
 	return total
 }
 
+// SetOtherHasTasks updates the otherHasTasks flag, which indicates whether the "other"
+// (opposite queue type during migration) has pending tasks.
+func (db *taskQueueDB) SetOtherHasTasks(value bool) {
+	db.Lock()
+	defer db.Unlock()
+	if db.otherHasTasks != value {
+		db.lastChange = time.Now()
+		db.otherHasTasks = value
+	}
+}
+
 // CreateTasks creates a batch of given tasks for this task queue
 func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
@@ -828,15 +839,4 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 	}
 	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
-}
-
-// SetOtherHasTasks updates the otherHasTasks flag, which indicates whether the "other"
-// (opposite queue type during migration) has pending tasks.
-func (db *taskQueueDB) SetOtherHasTasks(value bool) {
-	db.Lock()
-	defer db.Unlock()
-	if db.otherHasTasks != value {
-		db.lastChange = time.Now()
-		db.otherHasTasks = value
-	}
 }

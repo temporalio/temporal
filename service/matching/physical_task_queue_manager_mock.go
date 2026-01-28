@@ -115,16 +115,16 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchSpooledTask(ctx, tas
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchSpooledTask), ctx, task, userDataChanged)
 }
 
-// DrainCompleted mocks base method.
-func (m *MockphysicalTaskQueueManager) DrainCompleted(arg0 backlogManager) {
+// FinishedDraining mocks base method.
+func (m *MockphysicalTaskQueueManager) FinishedDraining() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DrainCompleted", arg0)
+	m.ctrl.Call(m, "FinishedDraining")
 }
 
-// DrainCompleted indicates an expected call of DrainCompleted.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DrainCompleted(arg0 any) *gomock.Call {
+// FinishedDraining indicates an expected call of FinishedDraining.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) FinishedDraining() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DrainCompleted", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DrainCompleted), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishedDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).FinishedDraining))
 }
 
 // GetAllPollerInfo mocks base method.

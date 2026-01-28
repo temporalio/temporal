@@ -216,10 +216,9 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 			cancel()
 			c.signalIfFatal(err)
 
-			// Check if we're drained (only for draining managers)
-			if c.IsDrained() {
-				c.pqMgr.DrainCompleted(c)
-				return // exit the goroutine
+			if c.hasFinishedDraining() {
+				c.pqMgr.FinishedDraining()
+				return
 			}
 		}
 	}
@@ -392,9 +391,9 @@ func (c *fairBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
 }
 
-// IsDrained returns true if this is a draining backlog manager and all tasks have been
-// fully drained (read and processed).
-func (c *fairBacklogManagerImpl) IsDrained() bool {
+// hasFinishedDraining returns true if this is a draining backlog manager and all tasks have
+// been fully drained (read and acked).
+func (c *fairBacklogManagerImpl) hasFinishedDraining() bool {
 	if !c.isDraining {
 		return false
 	}
