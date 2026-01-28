@@ -22,6 +22,8 @@ var (
 	sharedClusterAcquisitions atomic.Int64
 	// dedicatedClusterAcquisitions tracks how many times a dedicated cluster was acquired (created or reused).
 	dedicatedClusterAcquisitions atomic.Int64
+	// clustersRecycled tracks how many times a cluster was torn down and recreated due to maxUsage limit.
+	clustersRecycled atomic.Int64
 )
 
 // TotalClustersCreated returns the total number of test clusters created during this test run.
@@ -33,6 +35,7 @@ func TotalClustersCreated() int64 {
 // Call this at the end of test runs (e.g., from TestMain) to see the total count.
 func PrintClusterStats() {
 	created := totalClustersCreated.Load()
+	recycled := clustersRecycled.Load()
 	sharedReq := sharedClusterAcquisitions.Load()
 	dedicatedReq := dedicatedClusterAcquisitions.Load()
 	totalReq := sharedReq + dedicatedReq
@@ -43,6 +46,7 @@ func PrintClusterStats() {
 	fmt.Fprintf(os.Stderr, "  - Shared requests:        %d\n", sharedReq)
 	fmt.Fprintf(os.Stderr, "  - Dedicated requests:     %d\n", dedicatedReq)
 	fmt.Fprintf(os.Stderr, "Clusters created:           %d\n", created)
+	fmt.Fprintf(os.Stderr, "Clusters recycled:          %d\n", recycled)
 	fmt.Fprintf(os.Stderr, "Clusters reused:            %d\n", reused)
 	if totalReq > 0 {
 		fmt.Fprintf(os.Stderr, "Reuse rate:                 %.1f%%\n", float64(reused)/float64(totalReq)*100)
