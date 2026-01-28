@@ -51,9 +51,12 @@ func newTaggedLogger(baseLogger log.Logger, scheduler *Scheduler) log.Logger {
 	)
 }
 
-// newTaggedMetricsHandler returns a metrics handler tagged with the Scheduler's namespace.
+// newTaggedMetricsHandler returns a metrics handler tagged with the Scheduler's namespace and backend.
 func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) metrics.Handler {
-	return baseHandler.WithTags(metrics.NamespaceTag(scheduler.Namespace))
+	return baseHandler.WithTags(
+		metrics.NamespaceTag(scheduler.Namespace),
+		metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendChasm),
+	)
 }
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
