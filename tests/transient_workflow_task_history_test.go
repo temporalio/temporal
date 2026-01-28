@@ -401,7 +401,8 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 		// 2. Success if the workflow completed before the second pagination call
 		// We verify that if there's an error, it's the expected type
 		if err != nil {
-			s.ErrorAs(err, &serviceerror.Unavailable{})
+			var unavailableErr *serviceerror.Unavailable
+			s.ErrorAs(err, &unavailableErr)
 		} else {
 			// If no error, the pagination completed successfully
 			// This can happen if the workflow completed before the second page was fetched
