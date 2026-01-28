@@ -15,19 +15,21 @@ var testClusterPool *clusterPool
 
 // Cluster statistics counters
 var (
-	// totalClustersCreated tracks the total number of test clusters created during this test run.
-	totalClustersCreated atomic.Int64
-	// sharedClusterAcquisitions tracks how many times a shared cluster was acquired (created or reused).
+	// sharedClusterAcquisitions tracks how many times a shared cluster was requested.
 	sharedClusterAcquisitions atomic.Int64
-	// dedicatedClusterAcquisitions tracks how many times a dedicated cluster was acquired (created or reused).
+	// dedicatedClusterAcquisitions tracks how many times a dedicated cluster was requested.
 	dedicatedClusterAcquisitions atomic.Int64
+	// sharedClustersCreated tracks how many shared clusters were created.
+	sharedClustersCreated atomic.Int64
+	// dedicatedClustersCreated tracks how many dedicated clusters were created.
+	dedicatedClustersCreated atomic.Int64
 	// clustersRecycled tracks how many times a cluster was torn down and recreated due to maxUsage limit.
 	clustersRecycled atomic.Int64
 )
 
 // TotalClustersCreated returns the total number of test clusters created during this test run.
 func TotalClustersCreated() int64 {
-	return totalClustersCreated.Load()
+	return sharedClustersCreated.Load() + dedicatedClustersCreated.Load()
 }
 
 // ClusterStatsFile is the path where cluster statistics are written.
@@ -36,27 +38,35 @@ const ClusterStatsFile = "/tmp/temporal_cluster_stats.txt"
 // writeClusterStats writes current cluster statistics to the stats file.
 // Called on every significant change (creation, recycling, acquisition).
 func writeClusterStats() {
-	created := totalClustersCreated.Load()
-	recycled := clustersRecycled.Load()
 	sharedReq := sharedClusterAcquisitions.Load()
+	sharedCreated := sharedClustersCreated.Load()
 	dedicatedReq := dedicatedClusterAcquisitions.Load()
-	totalReq := sharedReq + dedicatedReq
-	reused := totalReq - created
+	dedicatedCreated := dedicatedClustersCreated.Load()
+	recycled := clustersRecycled.Load()
 
-	var reusePct float64
+	totalReq := sharedReq + dedicatedReq
+	totalCreated := sharedCreated + dedicatedCreated
+
+	var sharedReusePct, dedicatedReusePct, totalReusePct float64
+	if sharedReq > 0 {
+		sharedReusePct = float64(sharedReq-sharedCreated) / float64(sharedReq) * 100
+	}
+	if dedicatedReq > 0 {
+		dedicatedReusePct = float64(dedicatedReq-dedicatedCreated) / float64(dedicatedReq) * 100
+	}
 	if totalReq > 0 {
-		reusePct = float64(reused) / float64(totalReq) * 100
+		totalReusePct = float64(totalReq-totalCreated) / float64(totalReq) * 100
 	}
 
 	content := fmt.Sprintf(`=== Test Cluster Stats ===
-Total cluster requests:     %d
-  - Shared requests:        %d
-  - Dedicated requests:     %d
-Clusters created:           %d
-Clusters recycled:          %d
-Clusters reused:            %d
-Reuse rate:                 %.1f%%
-`, totalReq, sharedReq, dedicatedReq, created, recycled, reused, reusePct)
+Shared:      %3d requests, %3d created (reuse %.1f%%)
+Dedicated:   %3d requests, %3d created (reuse %.1f%%)
+Total:       %3d requests, %3d created (reuse %.1f%%)
+Recycled:    %3d
+`, sharedReq, sharedCreated, sharedReusePct,
+		dedicatedReq, dedicatedCreated, dedicatedReusePct,
+		totalReq, totalCreated, totalReusePct,
+		recycled)
 
 	_ = os.WriteFile(ClusterStatsFile, []byte(content), 0644)
 }
@@ -227,7 +237,12 @@ func (p *clusterPool) getDedicated(t *testing.T, dynamicConfig map[dynamicconfig
 }
 
 func (p *clusterPool) createCluster(t *testing.T, dynamicConfig map[dynamicconfig.Key]any, shared bool, clusterOpts []TestClusterOption) *FunctionalTestBase {
-	count := totalClustersCreated.Add(1)
+	var count int64
+	if shared {
+		count = sharedClustersCreated.Add(1)
+	} else {
+		count = dedicatedClustersCreated.Add(1)
+	}
 	writeClusterStats()
 	t.Logf("Creating test cluster #%d (shared=%v)", count, shared)
 
