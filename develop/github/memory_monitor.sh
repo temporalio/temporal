@@ -108,6 +108,10 @@ snapshot() {
   if [[ "$pct" -ge "$HIGH_MEMORY_THRESHOLD" ]] && [[ "$HEAP_PRINTED" == "false" ]]; then
     echo ""
     echo "=== HIGH MEMORY WARNING: ${pct}% used (threshold: ${HIGH_MEMORY_THRESHOLD}%) ==="
+    if [[ -f /tmp/temporal_cluster_stats.txt ]]; then
+      cat /tmp/temporal_cluster_stats.txt
+      echo ""
+    fi
     echo "$pprof_output"
     echo "=== END HIGH MEMORY WARNING ==="
     echo ""
