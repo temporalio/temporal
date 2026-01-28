@@ -1342,6 +1342,11 @@ message UpdateWorkflowExecutionOptionsRequest {
 
     string namespace_id = 1;
     temporal.api.workflowservice.v1.UpdateWorkflowExecutionOptionsRequest update_request = 2;
+    // Optional completion callbacks to attach to the workflow. These will be triggered
+    // when the workflow closes. Used internally by system operations like WaitExternalWorkflow.
+    repeated temporal.api.common.v1.Callback completion_callbacks = 3;
+    // Request ID for attaching callbacks. Used for idempotency.
+    string attach_request_id = 4;
 }
 
 message UpdateWorkflowExecutionOptionsResponse {

@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -412,4 +413,11 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 
 func (e *stateMachineEnvironment) Now() time.Time {
 	return e.shardContext.GetTimeSource().Now()
+}
+
+// GetSystemResources returns the shard context and a workflow consistency checker
+// for system operations that need to access other workflows.
+// This implements the nexusoperations.SystemResourceProvider interface.
+func (e *stateMachineEnvironment) GetSystemResources() (interface{}, interface{}) {
+	return e.shardContext, api.NewWorkflowConsistencyChecker(e.shardContext, e.cache)
 }

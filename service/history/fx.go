@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
+	nexussystem "go.temporal.io/server/components/nexusoperations/system"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
@@ -89,12 +91,24 @@ var Module = fx.Options(
 
 	callbacks.Module,
 	nexusoperations.Module,
-	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
+	nexussystem.Module,
+	fx.Invoke(registerNexusCommandHandlers),
 	activity.HistoryModule,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
+}
+
+// registerNexusCommandHandlers is a wrapper that converts the system.Registry to the
+// nexusworkflow.SystemOperationRegistry interface for registration.
+func registerNexusCommandHandlers(
+	reg *workflow.CommandHandlerRegistry,
+	endpointRegistry commonnexus.EndpointRegistry,
+	systemRegistry *nexussystem.Registry,
+	config *nexusoperations.Config,
+) error {
+	return nexusworkflow.RegisterCommandHandlers(reg, endpointRegistry, systemRegistry, config)
 }
 
 func ServiceResolverProvider(

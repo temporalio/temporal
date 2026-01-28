@@ -156,16 +156,31 @@ func (e taskExecutor) loadInvocationArgs(
 			return err
 		}
 
-		// CHASM internal callbacks make use of Nexus as their callback delivery
-		// mechanism, but with the internal delivery URL.
-		if variant.Url == chasm.NexusCompletionHandlerURL {
+		// Route internal callbacks based on URL type:
+		// - CHASM callbacks use the internal CHASM completion handler
+		// - HSM Nexus callbacks complete HSM-based Nexus operations
+		// - All other callbacks are external HTTP callbacks
+		switch variant.Url {
+		case chasm.NexusCompletionHandlerURL:
+			// CHASM internal callbacks make use of Nexus as their callback delivery
+			// mechanism, but with the internal delivery URL.
 			invokable = chasmInvocation{
 				nexus:      variant,
 				attempt:    callback.Attempt,
 				completion: completion,
 				requestID:  callback.RequestId,
 			}
-		} else {
+		case commonnexus.SystemNexusCompletionURL:
+			// System Nexus callbacks complete Nexus operations via CompleteNexusOperation.
+			// Used by system operations like WaitExternalWorkflow.
+			invokable = systemNexusInvocation{
+				nexus:      variant,
+				completion: completion,
+				attempt:    callback.Attempt,
+				requestID:  callback.RequestId,
+			}
+		default:
+			// External HTTP callbacks are delivered via the Nexus completion protocol.
 			invokable = nexusInvocation{
 				nexus:      variant,
 				completion: completion,

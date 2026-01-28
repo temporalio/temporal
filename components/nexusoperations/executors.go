@@ -39,17 +39,69 @@ var errRequestTimedOut = errors.New("request timed out")
 // ClientProvider provides a nexus client for a given endpoint.
 type ClientProvider func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error)
 
+// SystemOperationExecutor is the interface for executing system operations.
+// It is implemented by system.Registry.
+type SystemOperationExecutor interface {
+	Execute(ctx context.Context, execCtx SystemExecutionContext, args SystemOperationArgs) (SystemOperationResult, error)
+}
+
+// SystemResourceProvider is an optional interface that hsm.Environment implementations
+// can implement to provide access to shard-level resources for system operations.
+type SystemResourceProvider interface {
+	// GetSystemResources returns the shard context and workflow consistency checker
+	// needed for system operations that access other workflows.
+	GetSystemResources() (shardContext interface{}, workflowConsistencyChecker interface{})
+}
+
+// SystemExecutionContext provides access to history service internals for system operation handlers.
+type SystemExecutionContext struct {
+	// ShardContext provides access to shard-level services.
+	// This is an opaque interface{} to avoid import cycles - concrete implementations
+	// should type-assert to the appropriate shard context interface.
+	ShardContext interface{}
+	// WorkflowConsistencyChecker for getting workflow leases.
+	// This is an opaque interface{} to avoid import cycles.
+	WorkflowConsistencyChecker interface{}
+	// CallbackTokenGenerator generates a callback token for async completion.
+	// Called lazily only when the operation needs to go async.
+	CallbackTokenGenerator func() (string, error)
+}
+
+// SystemOperationArgs contains the arguments passed to a system operation handler.
+type SystemOperationArgs struct {
+	NamespaceID      namespace.ID
+	NamespaceName    namespace.Name
+	CallerWorkflowID string
+	CallerRunID      string
+	CallerRef        hsm.Ref
+	Service          string
+	Operation        string
+	Input            *commonpb.Payload
+	Header           map[string]string
+	RequestID        string
+}
+
+// SystemOperationResult contains the result of a system operation execution.
+// Completion is inferred: if Output or Failure is set, the operation completed synchronously.
+// If both are nil, the operation is async and OperationToken should be set.
+type SystemOperationResult struct {
+	Output         *commonpb.Payload
+	Failure        *failurepb.Failure
+	OperationToken string
+}
+
 type TaskExecutorOptions struct {
 	fx.In
 
-	Config                 *Config
-	NamespaceRegistry      namespace.Registry
-	MetricsHandler         metrics.Handler
-	Logger                 log.Logger
-	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	ClientProvider         ClientProvider
-	EndpointRegistry       commonnexus.EndpointRegistry
-	HTTPTraceProvider      commonnexus.HTTPClientTraceProvider
+	Config                  *Config
+	NamespaceRegistry       namespace.Registry
+	MetricsHandler          metrics.Handler
+	Logger                  log.Logger
+	CallbackTokenGenerator  *commonnexus.CallbackTokenGenerator
+	ClientProvider          ClientProvider
+	EndpointRegistry        commonnexus.EndpointRegistry
+	HTTPTraceProvider       commonnexus.HTTPClientTraceProvider
+	SystemOperationExecutor SystemOperationExecutor `optional:"true"`
 }
 
 func RegisterExecutor(
@@ -139,6 +191,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	args, err := e.loadOperationArgs(ctx, ns, env, ref)
 	if err != nil {
 		return fmt.Errorf("failed to load operation args: %w", err)
+	}
+
+	// Check if this is a system endpoint operation
+	if commonnexus.IsSystemEndpoint(args.endpointName) {
+		return e.executeSystemOperation(ctx, env, ref, ns, args)
 	}
 
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
@@ -302,6 +359,150 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	}
 
 	return err
+}
+
+// executeSystemOperation handles invocation of system operations (e.g., WaitExternalWorkflowCompletion).
+// System operations can complete synchronously (if target workflow is already closed) or asynchronously
+// (by attaching a completion callback to the target workflow).
+func (e taskExecutor) executeSystemOperation(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	ns *namespace.Namespace,
+	args startArgs,
+) error {
+	if e.SystemOperationExecutor == nil {
+		// System operations not configured, fail the operation
+		e.Logger.Error("executeSystemOperation: SystemOperationExecutor is nil")
+		handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "system operations not available")
+		return e.saveResult(ctx, env, ref, nil, handlerError)
+	}
+
+	// Build system operation args (pure data)
+	sysArgs := SystemOperationArgs{
+		NamespaceID:      ns.ID(),
+		NamespaceName:    ns.Name(),
+		CallerWorkflowID: ref.WorkflowKey.WorkflowID,
+		CallerRunID:      ref.WorkflowKey.RunID,
+		CallerRef:        ref,
+		Service:          args.service,
+		Operation:        args.operation,
+		Input:            args.payload,
+		Header:           args.header,
+		RequestID:        args.requestID,
+	}
+
+	// Build execution context with shard resources and callback token generator
+	execCtx := SystemExecutionContext{
+		CallbackTokenGenerator: func() (string, error) {
+			smRef := common.CloneProto(ref.StateMachineRef)
+			smRef.MachineTransitionCount = 0
+			smRef.MutableStateVersionedTransition = smRef.MachineInitialVersionedTransition
+
+			return e.CallbackTokenGenerator.Tokenize(&tokenspb.NexusOperationCompletion{
+				NamespaceId: ref.WorkflowKey.NamespaceID,
+				WorkflowId:  ref.WorkflowKey.WorkflowID,
+				RunId:       ref.WorkflowKey.RunID,
+				Ref:         smRef,
+				RequestId:   args.requestID,
+			})
+		},
+	}
+	if provider, ok := env.(SystemResourceProvider); ok {
+		shardCtx, wfChecker := provider.GetSystemResources()
+		execCtx.ShardContext = shardCtx
+		execCtx.WorkflowConsistencyChecker = wfChecker
+	}
+
+	// Execute the system operation
+	result, err := e.SystemOperationExecutor.Execute(ctx, execCtx, sysArgs)
+	if err != nil {
+		// Convert error to a failure and record it
+		failure := &failurepb.Failure{
+			Message: err.Error(),
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type:         "SystemOperationError",
+					NonRetryable: true,
+				},
+			},
+		}
+		return e.saveSystemOperationResult(ctx, env, ref, &SystemOperationResult{
+			Failure: failure,
+		})
+	}
+
+	// Save the result - the handler is responsible for providing the operation token for async operations
+	return e.saveSystemOperationResult(ctx, env, ref, &result)
+}
+
+// saveSystemOperationResult saves the result of a system operation execution.
+func (e taskExecutor) saveSystemOperationResult(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	result *SystemOperationResult,
+) error {
+	return env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
+		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return err
+		}
+
+		eventID, err := hsm.EventIDFromToken(operation.ScheduledEventToken)
+		if err != nil {
+			return err
+		}
+
+		if result.Failure != nil {
+			// Operation failed - record failure
+			attrs := &historypb.NexusOperationFailedEventAttributes{
+				Failure: nexusOperationFailure(
+					operation,
+					eventID,
+					result.Failure,
+				),
+				ScheduledEventId: eventID,
+				RequestId:        operation.RequestId,
+			}
+			node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+				e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+					NexusOperationFailedEventAttributes: attrs,
+				}
+			})
+			return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+				return TransitionFailed.Apply(operation, EventFailed{
+					Time:       env.Now(),
+					Attributes: attrs,
+					Node:       node,
+				})
+			})
+		}
+
+		if result.Output != nil {
+			// Operation completed synchronously - record success
+			return handleSuccessfulOperationResult(node, operation, result.Output, nil)
+		}
+
+		// Operation started asynchronously - transition to started state
+		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+			e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+					ScheduledEventId: eventID,
+					OperationToken:   result.OperationToken,
+					OperationId:      result.OperationToken, // For backwards compatibility
+					RequestId:        operation.RequestId,
+				},
+			}
+		})
+		return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
+			return TransitionStarted.Apply(operation, EventStarted{
+				Time:       env.Now(),
+				Node:       node,
+				Attributes: event.GetNexusOperationStartedEventAttributes(),
+			})
+		})
+	})
 }
 
 type startArgs struct {
