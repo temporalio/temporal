@@ -9,13 +9,13 @@ import (
 type (
 	Library struct {
 		chasm.UnimplementedLibrary
-		commandHandlers *command.Registry
+		commandRegistry *command.Registry
 	}
 )
 
 func NewLibrary() *Library {
 	return &Library{
-		commandHandlers: command.NewRegistry(),
+		commandRegistry: command.NewRegistry(),
 	}
 }
 
@@ -31,10 +31,10 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 
 // RegisterHandler registers a command handler for the given command type.
 func (l *Library) RegisterHandler(t enumspb.CommandType, handler command.Handler) error {
-	return l.commandHandlers.Register(t, handler)
+	return l.commandRegistry.Register(t, handler)
 }
 
 // CommandRegistry returns the command handler registry.
 func (l *Library) CommandRegistry() *command.Registry {
-	return l.commandHandlers
+	return l.commandRegistry
 }
