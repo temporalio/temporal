@@ -7,8 +7,13 @@ services:
       CASSANDRA_LISTEN_ADDRESS: 127.0.0.1
       MAX_HEAP_SIZE: "2G"
       HEAP_NEWSIZE: "200M"
-      # Increase native transport threads for handling more concurrent connections
-      JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
+      # ARM64 optimizations: Use G1GC with tuned settings, enable ARM crypto intrinsics
+      # -XX:+UseG1GC: Better than CMS for ARM64 (lower pause times)
+      # -XX:MaxGCPauseMillis=100: Target max GC pause
+      # -XX:+UseNUMA: Enable NUMA-aware allocation
+      # -XX:+AlwaysPreTouch: Pre-touch heap pages to avoid page faults
+      # -XX:+UseCRC32/UseAES/UseSHA: Enable ARM crypto intrinsics
+      JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512 -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+UseNUMA -XX:+AlwaysPreTouch -XX:+UseCRC32 -XX:+UseAES -XX:+UseSHA -XX:+UseStringDeduplication"
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -16,7 +21,17 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
-    command: --max-connections=500
+    # ARM64 optimizations for test workloads:
+    # --innodb-flush-log-at-trx-commit=0: Faster writes (OK for tests, not prod)
+    # --innodb-buffer-pool-size=512M: Larger buffer pool
+    # --skip-log-bin: Disable binary logging (not needed for tests)
+    # --innodb-doublewrite=0: Disable doublewrite buffer (OK for tests)
+    command: >
+      --max-connections=500
+      --innodb-flush-log-at-trx-commit=0
+      --innodb-buffer-pool-size=512M
+      --skip-log-bin
+      --innodb-doublewrite=0
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
 
@@ -27,7 +42,27 @@ services:
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    command: postgres -c max_connections=500
+    # PostgreSQL optimizations for test workloads:
+    # shared_buffers: 256MB for caching (default 128MB)
+    # work_mem: 64MB for sorting/hashing operations
+    # synchronous_commit=off: Faster writes (OK for tests)
+    # fsync=off: Skip fsync (OK for tests, not prod!)
+    # full_page_writes=off: Skip full page writes (OK for tests)
+    # random_page_cost=1.1: Assume fast storage (SSD/RAM)
+    # effective_io_concurrency=200: Higher for SSDs
+    command: >
+      postgres
+      -c max_connections=500
+      -c shared_buffers=256MB
+      -c work_mem=64MB
+      -c maintenance_work_mem=128MB
+      -c synchronous_commit=off
+      -c fsync=off
+      -c full_page_writes=off
+      -c random_page_cost=1.1
+      -c effective_io_concurrency=200
+      -c wal_level=minimal
+      -c max_wal_senders=0
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
 
@@ -41,7 +76,8 @@ services:
       - cluster.routing.allocation.disk.watermark.high=256mb
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      # ARM64 optimizations: G1GC with tuned pause target, pre-touch heap
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+AlwaysPreTouch -XX:+UseStringDeduplication
 
   elasticsearch8:
     image: elasticsearch:8.0.0
@@ -54,7 +90,8 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - xpack.security.enabled=false
-      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      # ARM64 optimizations: G1GC with tuned pause target, pre-touch heap
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+AlwaysPreTouch -XX:+UseStringDeduplication
 
   opensearch2:
     image: opensearchproject/opensearch:2
@@ -67,7 +104,8 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      # ARM64 optimizations: G1GC with tuned pause target, pre-touch heap
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+AlwaysPreTouch -XX:+UseStringDeduplication
 
   opensearch3:
     image: opensearchproject/opensearch:3
@@ -80,4 +118,5 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
-      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+      # ARM64 optimizations: G1GC with tuned pause target, pre-touch heap
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=100 -XX:+AlwaysPreTouch -XX:+UseStringDeduplication
