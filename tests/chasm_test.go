@@ -813,7 +813,7 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_UpdateExisting() {
 	// Call UpdateWithStartExecution - should update existing running execution.
 	newFnCalled := false
 	updateFnCalled := false
-	_, _, executionKey, executionRef, err := chasm.UpdateWithStartExecution(
+	result, err := chasm.UpdateWithStartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: s.NamespaceID().String(),
@@ -835,8 +835,8 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_UpdateExisting() {
 	s.NoError(err)
 	s.False(newFnCalled, "newFn should not be called")
 	s.True(updateFnCalled, "updateFn should be called")
-	s.Equal(originalRunID, executionKey.RunID, "RunID should be the same as original")
-	s.NotNil(executionRef)
+	s.Equal(originalRunID, result.ExecutionKey.RunID, "RunID should be the same as original")
+	s.NotNil(result.ExecutionRef)
 
 	// Verify the store was updated (closed flag set).
 	descResp, err := tests.DescribePayloadStoreHandler(
@@ -862,7 +862,7 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_CreateNew() {
 	// Call UpdateWithStartExecution without creating execution first - should create new.
 	newFnCalled := false
 	updateFnCalled := false
-	_, _, executionKey, executionRef, err := chasm.UpdateWithStartExecution(
+	result, err := chasm.UpdateWithStartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: s.NamespaceID().String(),
@@ -884,8 +884,8 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_CreateNew() {
 	s.NoError(err)
 	s.True(newFnCalled, "newFn should be called")
 	s.True(updateFnCalled, "updateFn should be called after newFn")
-	s.NotEmpty(executionKey.RunID)
-	s.NotNil(executionRef)
+	s.NotEmpty(result.ExecutionKey.RunID)
+	s.NotNil(result.ExecutionRef)
 
 	// Verify the store was created with the update applied.
 	descResp, err := tests.DescribePayloadStoreHandler(

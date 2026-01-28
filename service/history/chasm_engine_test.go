@@ -1052,7 +1052,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 	).Times(1)
 	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	resultKey, resultRef, err := s.engine.UpdateWithStartExecution(
+	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -1069,13 +1069,13 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 	s.NoError(err)
 
 	// Verify returned key is for the existing execution.
-	s.Equal(string(tests.NamespaceID), resultKey.NamespaceID)
-	s.Equal(tv.WorkflowID(), resultKey.BusinessID)
-	s.Equal(tv.RunID(), resultKey.RunID)
+	s.Equal(string(tests.NamespaceID), result.ExecutionKey.NamespaceID)
+	s.Equal(tv.WorkflowID(), result.ExecutionKey.BusinessID)
+	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
 
-	deserializedRef, err := chasm.DeserializeComponentRef(resultRef)
+	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
 	s.NoError(err)
-	s.Equal(resultKey, deserializedRef.ExecutionKey)
+	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
@@ -1119,7 +1119,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 
 	newFnCalled := false
 	updateFnCalled := false
-	resultKey, resultRef, err := s.engine.UpdateWithStartExecution(
+	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -1143,13 +1143,13 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 	s.True(updateFnCalled, "updateFn should be called after newFn")
 
 	// Verify returned key is for the new execution.
-	s.Equal(string(tests.NamespaceID), resultKey.NamespaceID)
-	s.Equal(tv.WorkflowID(), resultKey.BusinessID)
-	s.Equal(createdRunID, resultKey.RunID)
+	s.Equal(string(tests.NamespaceID), result.ExecutionKey.NamespaceID)
+	s.Equal(tv.WorkflowID(), result.ExecutionKey.BusinessID)
+	s.Equal(createdRunID, result.ExecutionKey.RunID)
 
-	deserializedRef, err := chasm.DeserializeComponentRef(resultRef)
+	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
 	s.NoError(err)
-	s.Equal(resultKey, deserializedRef.ExecutionKey)
+	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
@@ -1209,7 +1209,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 
 	newFnCalled := false
 	updateFnCalled := false
-	resultKey, resultRef, err := s.engine.UpdateWithStartExecution(
+	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -1234,13 +1234,13 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	s.True(updateFnCalled, "updateFn should be called after newFn")
 
 	// Verify returned key is for the new execution.
-	s.Equal(string(tests.NamespaceID), resultKey.NamespaceID)
-	s.Equal(tv.WorkflowID(), resultKey.BusinessID)
-	s.Equal(createdRunID, resultKey.RunID)
+	s.Equal(string(tests.NamespaceID), result.ExecutionKey.NamespaceID)
+	s.Equal(tv.WorkflowID(), result.ExecutionKey.BusinessID)
+	s.Equal(createdRunID, result.ExecutionKey.RunID)
 
-	deserializedRef, err := chasm.DeserializeComponentRef(resultRef)
+	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
 	s.NoError(err)
-	s.Equal(resultKey, deserializedRef.ExecutionKey)
+	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {
@@ -1277,7 +1277,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {
 		}, nil).Times(1)
 
 	expectedErr := serviceerror.NewInvalidArgument("update failed")
-	_, _, err := s.engine.UpdateWithStartExecution(
+	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -1304,7 +1304,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NewFnError() {
 		Return(nil, serviceerror.NewNotFound("execution not found")).Times(1)
 
 	expectedErr := serviceerror.NewInvalidArgument("new execution failed")
-	_, _, err := s.engine.UpdateWithStartExecution(
+	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -1332,7 +1332,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnErrorOnCreate() 
 
 	newFnCalled := false
 	expectedErr := serviceerror.NewInvalidArgument("updateFn failed on create")
-	_, _, err := s.engine.UpdateWithStartExecution(
+	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
@@ -1398,7 +1398,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 		Return("remote-cluster").AnyTimes()
 
 	updateFnCalled := false
-	_, _, err := s.engine.UpdateWithStartExecution(
+	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
 		func(ctx chasm.MutableContext) (chasm.Component, error) {
