@@ -10,9 +10,9 @@ import (
 func TestMain(m *testing.M) {
 	code := m.Run()
 
-	// Print cluster stats at the end of the test run (useful for CI)
+	// Write cluster stats to file for CI aggregation
 	if os.Getenv("CI") != "" {
-		testcore.PrintClusterStats()
+		testcore.WriteClusterStats()
 	}
 
 	os.Exit(code)

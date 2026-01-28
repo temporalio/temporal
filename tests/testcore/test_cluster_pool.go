@@ -31,25 +31,39 @@ func TotalClustersCreated() int64 {
 	return totalClustersCreated.Load()
 }
 
-// PrintClusterStats prints cluster creation statistics to stderr.
-// Call this at the end of test runs (e.g., from TestMain) to see the total count.
-func PrintClusterStats() {
+// ClusterStatsFile is the path where cluster statistics are written.
+const ClusterStatsFile = "/tmp/temporal_cluster_stats.txt"
+
+// WriteClusterStats writes cluster statistics to a file.
+func WriteClusterStats() {
 	created := totalClustersCreated.Load()
 	recycled := clustersRecycled.Load()
 	sharedReq := sharedClusterAcquisitions.Load()
 	dedicatedReq := dedicatedClusterAcquisitions.Load()
+
+	// Skip if no clusters were requested
+	if sharedReq == 0 && dedicatedReq == 0 {
+		return
+	}
+
+	f, err := os.OpenFile(ClusterStatsFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
 	totalReq := sharedReq + dedicatedReq
 	reused := totalReq - created
 
-	fmt.Fprintf(os.Stderr, "\n=== Test Cluster Stats ===\n")
-	fmt.Fprintf(os.Stderr, "Total cluster requests:     %d\n", totalReq)
-	fmt.Fprintf(os.Stderr, "  - Shared requests:        %d\n", sharedReq)
-	fmt.Fprintf(os.Stderr, "  - Dedicated requests:     %d\n", dedicatedReq)
-	fmt.Fprintf(os.Stderr, "Clusters created:           %d\n", created)
-	fmt.Fprintf(os.Stderr, "Clusters recycled:          %d\n", recycled)
-	fmt.Fprintf(os.Stderr, "Clusters reused:            %d\n", reused)
+	fmt.Fprintf(f, "\n=== Test Cluster Stats ===\n")
+	fmt.Fprintf(f, "Total cluster requests:     %d\n", totalReq)
+	fmt.Fprintf(f, "  - Shared requests:        %d\n", sharedReq)
+	fmt.Fprintf(f, "  - Dedicated requests:     %d\n", dedicatedReq)
+	fmt.Fprintf(f, "Clusters created:           %d\n", created)
+	fmt.Fprintf(f, "Clusters recycled:          %d\n", recycled)
+	fmt.Fprintf(f, "Clusters reused:            %d\n", reused)
 	if totalReq > 0 {
-		fmt.Fprintf(os.Stderr, "Reuse rate:                 %.1f%%\n", float64(reused)/float64(totalReq)*100)
+		fmt.Fprintf(f, "Reuse rate:                 %.1f%%\n", float64(reused)/float64(totalReq)*100)
 	}
 }
 
