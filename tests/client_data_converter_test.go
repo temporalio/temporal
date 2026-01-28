@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -21,15 +21,6 @@ import (
 var (
 	ErrInvalidRunCount = errors.New("invalid run count")
 )
-
-type ClientDataConverterTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestClientDataConverterTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(ClientDataConverterTestSuite))
-}
 
 func testActivity(_ workflow.Context, msg string) (string, error) {
 	return "hello_" + msg, nil
@@ -80,23 +71,6 @@ func testChildWorkflow(ctx workflow.Context, totalCount, runCount int) (string, 
 	return "", workflow.NewContinueAsNewError(ctx, testChildWorkflow, totalCount, runCount)
 }
 
-func (s *ClientDataConverterTestSuite) startWorkerWithDataConverter(tl string, dataConverter converter.DataConverter) (sdkclient.Client, worker.Worker) {
-	sdkClient, err := sdkclient.Dial(sdkclient.Options{
-		HostPort:      s.FrontendGRPCAddress(),
-		Namespace:     s.Namespace().String(),
-		DataConverter: dataConverter,
-	})
-	s.NoError(err)
-
-	newWorker := worker.New(sdkClient, tl, worker.Options{})
-	newWorker.RegisterActivity(testActivity)
-	newWorker.RegisterWorkflow(testChildWorkflow)
-
-	err = newWorker.Start()
-	s.NoError(err)
-	return sdkClient, newWorker
-}
-
 var childTaskQueue = "client-func-data-converter-child-taskqueue"
 
 func testParentWorkflow(ctx workflow.Context) (string, error) {
@@ -135,123 +109,206 @@ func testParentWorkflow(ctx workflow.Context) (string, error) {
 	return res, nil
 }
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
-	s.T().SkipNow() // need to figure out what is going on
-	tl := "client-func-data-converter-activity-taskqueue"
-	dc := testcore.NewTestDataConverter()
-	sdkClient, testWorker := s.startWorkerWithDataConverter(tl, dc)
-	defer func() {
-		testWorker.Stop()
-		sdkClient.Close()
-	}()
+func TestClientDataConverter(t *testing.T) {
+	t.Run("Basic", func(t *testing.T) {
+		t.SkipNow() // need to figure out what is going on
+		s := testcore.NewEnv(t)
 
-	id := "client-func-data-converter-workflow"
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
-		WorkflowRunTimeout: time.Minute,
-	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
-	s.Worker().RegisterWorkflow(testDataConverterWorkflow)
-	s.Worker().RegisterActivity(testActivity)
-	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
-	s.NoError(err)
-	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+		// Set up SDK client and worker for the main task queue
+		mainSdkClient, err := sdkclient.Dial(sdkclient.Options{
+			HostPort:  s.FrontendGRPCAddress(),
+			Namespace: s.Namespace().String(),
+			Logger:    log.NewSdkLogger(s.Logger),
+		})
+		require.NoError(t, err)
+		defer mainSdkClient.Close()
 
-	var res string
-	err = we.Get(ctx, &res)
-	s.NoError(err)
-	s.Equal("hello_world,hello_world1", res)
+		mainTaskQueue := s.Tv().TaskQueue().Name
+		mainWorker := worker.New(mainSdkClient, mainTaskQueue, worker.Options{})
+		mainWorker.RegisterWorkflow(testDataConverterWorkflow)
+		mainWorker.RegisterActivity(testActivity)
+		require.NoError(t, mainWorker.Start())
+		defer mainWorker.Stop()
 
-	// to ensure custom data converter is used, this number might be different if client changed.
-	d := dc.(*testcore.TestDataConverter) //nolint:revive // unchecked-type-assertion
-	s.Equal(1, d.NumOfCallToPayloads)
-	s.Equal(1, d.NumOfCallFromPayloads)
-}
+		// Set up SDK client and worker for the activity task queue with custom data converter
+		tl := "client-func-data-converter-activity-taskqueue"
+		dc := testcore.NewTestDataConverter()
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
-	s.T().SkipNow()
-	tl := "client-func-data-converter-activity-failed-taskqueue"
-	sdkClient, newWorker := s.startWorkerWithDataConverter(tl, nil) // mismatch of data converter
-	defer func() {
-		newWorker.Stop()
-		sdkClient.Close()
-	}()
+		activitySdkClient, err := sdkclient.Dial(sdkclient.Options{
+			HostPort:      s.FrontendGRPCAddress(),
+			Namespace:     s.Namespace().String(),
+			DataConverter: dc,
+			Logger:        log.NewSdkLogger(s.Logger),
+		})
+		require.NoError(t, err)
+		defer activitySdkClient.Close()
 
-	id := "client-func-data-converter-failed-workflow"
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
-		WorkflowRunTimeout: time.Minute,
-	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
+		activityWorker := worker.New(activitySdkClient, tl, worker.Options{})
+		activityWorker.RegisterActivity(testActivity)
+		activityWorker.RegisterWorkflow(testChildWorkflow)
+		require.NoError(t, activityWorker.Start())
+		defer activityWorker.Stop()
 
-	s.Worker().RegisterWorkflow(testDataConverterWorkflow)
-	s.Worker().RegisterActivity(testActivity)
-	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
-	s.NoError(err)
-	s.NotNil(we)
-	s.True(we.GetRunID() != "")
-
-	var res string
-	err = we.Get(ctx, &res)
-	s.Error(err)
-
-	// Get history to make sure only the 2nd activity is failed because of mismatch of data converter
-	iter := s.SdkClient().GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
-	completedAct := 0
-	failedAct := 0
-	for iter.HasNext() {
-		event, err := iter.Next()
-		s.NoError(err)
-		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
-			completedAct++
+		id := "client-func-data-converter-workflow"
+		workflowOptions := sdkclient.StartWorkflowOptions{
+			ID:                 id,
+			TaskQueue:          mainTaskQueue,
+			WorkflowRunTimeout: time.Minute,
 		}
-		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED {
-			failedAct++
-			s.NotNil(event.GetActivityTaskFailedEventAttributes().GetFailure().GetApplicationFailureInfo())
-			s.True(strings.HasPrefix(event.GetActivityTaskFailedEventAttributes().GetFailure().GetMessage(), "unable to decode the activity function input payload with error"))
+		ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
+		defer cancel()
+
+		we, err := mainSdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
+		require.NoError(t, err)
+		require.NotNil(t, we)
+		require.True(t, we.GetRunID() != "")
+
+		var res string
+		err = we.Get(ctx, &res)
+		require.NoError(t, err)
+		require.Equal(t, "hello_world,hello_world1", res)
+
+		// to ensure custom data converter is used, this number might be different if client changed.
+		d := dc.(*testcore.TestDataConverter) //nolint:revive // unchecked-type-assertion
+		require.Equal(t, 1, d.NumOfCallToPayloads)
+		require.Equal(t, 1, d.NumOfCallFromPayloads)
+	})
+
+	t.Run("Failed", func(t *testing.T) {
+		t.SkipNow()
+		s := testcore.NewEnv(t)
+
+		// Set up SDK client and worker for the main task queue
+		mainSdkClient, err := sdkclient.Dial(sdkclient.Options{
+			HostPort:  s.FrontendGRPCAddress(),
+			Namespace: s.Namespace().String(),
+			Logger:    log.NewSdkLogger(s.Logger),
+		})
+		require.NoError(t, err)
+		defer mainSdkClient.Close()
+
+		mainTaskQueue := s.Tv().TaskQueue().Name
+		mainWorker := worker.New(mainSdkClient, mainTaskQueue, worker.Options{})
+		mainWorker.RegisterWorkflow(testDataConverterWorkflow)
+		mainWorker.RegisterActivity(testActivity)
+		require.NoError(t, mainWorker.Start())
+		defer mainWorker.Stop()
+
+		// Set up SDK client and worker for the activity task queue with NO data converter (mismatch)
+		tl := "client-func-data-converter-activity-failed-taskqueue"
+
+		activitySdkClient, err := sdkclient.Dial(sdkclient.Options{
+			HostPort:  s.FrontendGRPCAddress(),
+			Namespace: s.Namespace().String(),
+			Logger:    log.NewSdkLogger(s.Logger),
+		})
+		require.NoError(t, err)
+		defer activitySdkClient.Close()
+
+		activityWorker := worker.New(activitySdkClient, tl, worker.Options{})
+		activityWorker.RegisterActivity(testActivity)
+		activityWorker.RegisterWorkflow(testChildWorkflow)
+		require.NoError(t, activityWorker.Start())
+		defer activityWorker.Stop()
+
+		id := "client-func-data-converter-failed-workflow"
+		workflowOptions := sdkclient.StartWorkflowOptions{
+			ID:                 id,
+			TaskQueue:          mainTaskQueue,
+			WorkflowRunTimeout: time.Minute,
 		}
-	}
-	s.Equal(1, completedAct)
-	s.Equal(1, failedAct)
-}
+		ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
+		defer cancel()
 
-func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
-	s.T().SkipNow()
-	dc := testcore.NewTestDataConverter()
-	sdkClient, testWorker := s.startWorkerWithDataConverter(childTaskQueue, dc)
-	defer func() {
-		testWorker.Stop()
-		sdkClient.Close()
-	}()
+		we, err := mainSdkClient.ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
+		require.NoError(t, err)
+		require.NotNil(t, we)
+		require.True(t, we.GetRunID() != "")
 
-	id := "client-func-data-converter-with-child-workflow"
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                 id,
-		TaskQueue:          s.TaskQueue(),
-		WorkflowRunTimeout: time.Minute,
-	}
-	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
-	defer cancel()
-	s.Worker().RegisterWorkflow(testParentWorkflow)
-	s.Worker().RegisterWorkflow(testChildWorkflow)
+		var res string
+		err = we.Get(ctx, &res)
+		require.Error(t, err)
 
-	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
-	s.NoError(err)
-	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+		// Get history to make sure only the 2nd activity is failed because of mismatch of data converter
+		iter := mainSdkClient.GetWorkflowHistory(ctx, id, we.GetRunID(), false, 0)
+		completedAct := 0
+		failedAct := 0
+		for iter.HasNext() {
+			event, err := iter.Next()
+			require.NoError(t, err)
+			if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED {
+				completedAct++
+			}
+			if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED {
+				failedAct++
+				require.NotNil(t, event.GetActivityTaskFailedEventAttributes().GetFailure().GetApplicationFailureInfo())
+				require.True(t, strings.HasPrefix(event.GetActivityTaskFailedEventAttributes().GetFailure().GetMessage(), "unable to decode the activity function input payload with error"))
+			}
+		}
+		require.Equal(t, 1, completedAct)
+		require.Equal(t, 1, failedAct)
+	})
 
-	var res string
-	err = we.Get(ctx, &res)
-	s.NoError(err)
-	s.Equal("Complete child1 3 times, complete child2 2 times", res)
+	t.Run("WithChild", func(t *testing.T) {
+		t.SkipNow()
+		s := testcore.NewEnv(t)
 
-	// to ensure custom data converter is used, this number might be different if client changed.
-	d := dc.(*testcore.TestDataConverter) //nolint:revive // unchecked-type-assertion
-	s.Equal(2, d.NumOfCallToPayloads)
-	s.Equal(2, d.NumOfCallFromPayloads)
+		// Set up SDK client and worker for the main task queue
+		mainSdkClient, err := sdkclient.Dial(sdkclient.Options{
+			HostPort:  s.FrontendGRPCAddress(),
+			Namespace: s.Namespace().String(),
+			Logger:    log.NewSdkLogger(s.Logger),
+		})
+		require.NoError(t, err)
+		defer mainSdkClient.Close()
+
+		mainTaskQueue := s.Tv().TaskQueue().Name
+		mainWorker := worker.New(mainSdkClient, mainTaskQueue, worker.Options{})
+		mainWorker.RegisterWorkflow(testParentWorkflow)
+		mainWorker.RegisterWorkflow(testChildWorkflow)
+		require.NoError(t, mainWorker.Start())
+		defer mainWorker.Stop()
+
+		// Set up SDK client and worker for the child task queue with custom data converter
+		dc := testcore.NewTestDataConverter()
+
+		childSdkClient, err := sdkclient.Dial(sdkclient.Options{
+			HostPort:      s.FrontendGRPCAddress(),
+			Namespace:     s.Namespace().String(),
+			DataConverter: dc,
+			Logger:        log.NewSdkLogger(s.Logger),
+		})
+		require.NoError(t, err)
+		defer childSdkClient.Close()
+
+		childWorker := worker.New(childSdkClient, childTaskQueue, worker.Options{})
+		childWorker.RegisterActivity(testActivity)
+		childWorker.RegisterWorkflow(testChildWorkflow)
+		require.NoError(t, childWorker.Start())
+		defer childWorker.Stop()
+
+		id := "client-func-data-converter-with-child-workflow"
+		workflowOptions := sdkclient.StartWorkflowOptions{
+			ID:                 id,
+			TaskQueue:          mainTaskQueue,
+			WorkflowRunTimeout: time.Minute,
+		}
+		ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
+		defer cancel()
+
+		we, err := mainSdkClient.ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
+		require.NoError(t, err)
+		require.NotNil(t, we)
+		require.True(t, we.GetRunID() != "")
+
+		var res string
+		err = we.Get(ctx, &res)
+		require.NoError(t, err)
+		require.Equal(t, "Complete child1 3 times, complete child2 2 times", res)
+
+		// to ensure custom data converter is used, this number might be different if client changed.
+		d := dc.(*testcore.TestDataConverter) //nolint:revive // unchecked-type-assertion
+		require.Equal(t, 2, d.NumOfCallToPayloads)
+		require.Equal(t, 2, d.NumOfCallFromPayloads)
+	})
 }
