@@ -573,7 +573,6 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	// unload
 	prtnMgr.Stop(unloadCauseUnspecified)
-	// FIXME tqMgr.Stop(unloadCauseUnspecified)
 
 	// record current counts
 	prevPriStats, prevFairStats := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
