@@ -325,10 +325,25 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	if callErr != nil {
 		failureSource := failureSourceFromContext(ctx)
+		// TODO(bergundy): Debug level for "not enough time" errors.
 		if failureSource == commonnexus.FailureSourceWorker {
-			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
+			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr),
+				tag.NewDurationTag("scheduleToCloseTimeout", args.scheduleToCloseTimeout),
+				tag.NewDurationTag("startToCloseTimeout", args.startToCloseTimeout),
+				tag.NewDurationTag("scheduleToStartTimeout", args.scheduleToStartTimeout),
+				tag.NewDurationTag("scheduleToCloseFromEvent", args.scheduleToCloseTimeoutFromEvent),
+				tag.NewDurationTag("callTimeout", callTimeout),
+				tag.NewDurationTag("dcMinTimeout", e.Config.MinRequestTimeout(ns.Name().String())),
+			)
 		} else {
-			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
+			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr),
+				tag.NewDurationTag("scheduleToCloseTimeout", args.scheduleToCloseTimeout),
+				tag.NewDurationTag("startToCloseTimeout", args.startToCloseTimeout),
+				tag.NewDurationTag("scheduleToStartTimeout", args.scheduleToStartTimeout),
+				tag.NewDurationTag("scheduleToCloseFromEvent", args.scheduleToCloseTimeoutFromEvent),
+				tag.NewDurationTag("callTimeout", callTimeout),
+				tag.NewDurationTag("dcMinTimeout", e.Config.MinRequestTimeout(ns.Name().String())),
+			)
 		}
 	}
 
@@ -342,19 +357,20 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 }
 
 type startArgs struct {
-	service                  string
-	operation                string
-	requestID                string
-	endpointName             string
-	endpointID               string
-	scheduledTime            time.Time
-	scheduleToStartTimeout   time.Duration
-	scheduleToCloseTimeout   time.Duration
-	startToCloseTimeout      time.Duration
-	header                   map[string]string
-	payload                  *commonpb.Payload
-	nexusLink                nexus.Link
-	namespaceFailoverVersion int64
+	service                         string
+	operation                       string
+	requestID                       string
+	endpointName                    string
+	endpointID                      string
+	scheduledTime                   time.Time
+	scheduleToStartTimeout          time.Duration
+	scheduleToCloseTimeout          time.Duration
+	startToCloseTimeout             time.Duration
+	scheduleToCloseTimeoutFromEvent time.Duration
+	header                          map[string]string
+	payload                         *commonpb.Payload
+	nexusLink                       nexus.Link
+	namespaceFailoverVersion        int64
 }
 
 func (e taskExecutor) loadOperationArgs(
@@ -385,6 +401,7 @@ func (e taskExecutor) loadOperationArgs(
 		}
 		args.scheduledTime = event.EventTime.AsTime()
 		attrs := event.GetNexusOperationScheduledEventAttributes()
+		args.scheduleToCloseTimeoutFromEvent = attrs.GetScheduleToCloseTimeout().AsDuration()
 		args.payload = attrs.GetInput()
 		args.header = attrs.GetNexusHeader()
 		args.nexusLink = ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
