@@ -18,8 +18,10 @@ fi
 SNAPSHOT_FILE="$1"
 HISTORY_FILE="/tmp/memory_history.txt"
 HIGH_MEMORY_THRESHOLD=95
+HIGH_GOROUTINE_THRESHOLD=10000
 PPROF_HOST="${PPROF_HOST:-localhost:7000}"
 HEAP_PRINTED=false
+GOROUTINE_DUMP_PRINTED=false
 
 # Clear history on start
 : > "$HISTORY_FILE"
@@ -55,6 +57,13 @@ print_goroutine_count() {
     count="$(head -1 "$tmp_file" | grep -o '[0-9]*' || echo '?')"
   fi
   echo "$count"
+}
+
+# Print goroutine stacks (debug=2 gives full stacks).
+print_goroutine_stacks() {
+  local lines="${1:-500}"
+  echo "--- Goroutine Stacks (top $lines lines) ---"
+  curl -s --max-time 30 "http://${PPROF_HOST}/debug/pprof/goroutine?debug=2" 2>/dev/null | head -"$lines" || echo "(pprof endpoint not available)"
 }
 
 # Print pprof heap analysis.
@@ -116,6 +125,20 @@ snapshot() {
     echo "=== END HIGH MEMORY WARNING ==="
     echo ""
     HEAP_PRINTED=true
+  fi
+
+  # If goroutine count is too high, dump goroutine stacks to help debug leaks. But only once per run.
+  if [[ "$goroutines" != "?" ]] && [[ "$goroutines" -ge "$HIGH_GOROUTINE_THRESHOLD" ]] && [[ "$GOROUTINE_DUMP_PRINTED" == "false" ]]; then
+    echo ""
+    echo "=== HIGH GOROUTINE WARNING: ${goroutines} goroutines (threshold: ${HIGH_GOROUTINE_THRESHOLD}) ==="
+    if [[ -f /tmp/temporal_cluster_stats.txt ]]; then
+      cat /tmp/temporal_cluster_stats.txt
+      echo ""
+    fi
+    print_goroutine_stacks 1000
+    echo "=== END HIGH GOROUTINE WARNING ==="
+    echo ""
+    GOROUTINE_DUMP_PRINTED=true
   fi
 
   # Write snapshot to disk.
