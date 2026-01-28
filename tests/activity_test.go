@@ -174,7 +174,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	err = workflowRun.Get(ctx, &out)
 	var activityError *temporal.ActivityError
 	s.True(errors.As(err, &activityError))
-	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 	var timeoutError *temporal.TimeoutError
 	s.True(errors.As(activityError.Unwrap(), &timeoutError))
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
