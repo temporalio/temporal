@@ -34,8 +34,8 @@ Convert remaining test files in `tests/` from testify suite pattern to `testcore
 | 25 | `poller_scaling_test.go` | 435 | Completed |
 | 26 | `workflow_delete_execution_test.go` | 435 | Completed |
 | 27 | `namespace_delete_test.go` | 451 | Completed |
-| 28 | `http_api_test.go` | 452 | Pending |
-| 29 | `query_workflow_test.go` | 457 | Pending |
+| 28 | `http_api_test.go` | 452 | Skipped (namespace names with slashes break HTTP URLs) |
+| 29 | `query_workflow_test.go` | 457 | Completed |
 
 ## Skipped Files
 
