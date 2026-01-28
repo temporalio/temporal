@@ -1121,7 +1121,10 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
-	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY || !pm.defaultQueueFuture.Ready() {
+	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+		return
+	}
+	if !pm.defaultQueueFuture.Ready() {
 		return // not initialized yet
 	}
 

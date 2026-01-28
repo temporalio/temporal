@@ -108,7 +108,7 @@ func TestCheckInternalTaskQueueForUserNsAllowed(t *testing.T) {
 			wantErr:         false,
 		},
 		{
-			name:            "Child is empty, parent is internal - allowed",
+			name:            "Child is empty, parent is internal - not allowed",
 			parentTaskQueue: PerNSWorkerTaskQueue,
 			targetTaskQueue: "",
 			wantErr:         true,
