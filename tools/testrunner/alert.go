@@ -9,7 +9,15 @@ import (
 	"github.com/maruel/panicparse/v2/stack"
 )
 
-// parseTestTimeouts parses the stdout of a test run and returns the stacktrace and names of tests that timed out.
+const (
+	alertKindDataRace alertKind = "DATA RACE"
+	alertKindPanic    alertKind = "PANIC"
+	alertKindFatal    alertKind = "FATAL"
+	alertKindTimeout  alertKind = "TIMEOUT"
+)
+
+// parseTestTimeouts parses the stdout of a test run and returns the stacktrace
+// and names of tests that timed out.
 func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string) {
 	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
 	for i := 0; i < len(lines); i++ {
@@ -20,6 +28,9 @@ func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string
 			// parse names of tests that timed out
 			for {
 				i++
+				if i >= len(lines) {
+					break
+				}
 				line = strings.TrimSpace(lines[i])
 				if strings.HasPrefix(line, "Test") {
 					timedoutTests = append(timedoutTests, strings.Split(line, " ")[0])
@@ -29,13 +40,15 @@ func parseTestTimeouts(stdout string) (stacktrace string, timedoutTests []string
 				}
 			}
 		} else if len(timedoutTests) > 0 {
-			// collect stracktrace
+			// collect stacktrace
 			stacktrace += line + "\n"
 		}
 	}
 
-	stacktrace = fmt.Sprintf("%d timed out test(s):\n\t%v\n\n%v",
-		len(timedoutTests), strings.Join(timedoutTests, "\n\t"), testOnlyStacktrace(stacktrace))
+	if len(timedoutTests) > 0 {
+		stacktrace = fmt.Sprintf("%d timed out test(s):\n\t%v\n\n%v",
+			len(timedoutTests), strings.Join(timedoutTests, "\n\t"), testOnlyStacktrace(stacktrace))
+	}
 	return
 }
 
@@ -68,12 +81,6 @@ func testOnlyStacktrace(stacktrace string) string {
 
 // alertKind represents a category of high-priority alert detected in test output.
 type alertKind string
-
-const (
-	alertKindDataRace alertKind = "DATA RACE"
-	alertKindPanic    alertKind = "PANIC"
-	alertKindFatal    alertKind = "FATAL"
-)
 
 // alert captures a prominent issue detected from stdout/stderr of test runs.
 type alert struct {
@@ -119,8 +126,7 @@ func preferFullyQualifiedTestName(tests []string) string {
 }
 
 // parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
-// alerts such as data races and panics. It returns a slice of alerts in the
-// order they were encountered.
+// alerts such as data races, panics, and timeouts.
 func parseAlerts(stdout string) []alert {
 	lines := strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n")
 	var alerts []alert
@@ -139,6 +145,11 @@ func parseAlerts(stdout string) []alert {
 			continue
 		}
 		if a, next, ok := tryParseFatal(lines, i, line); ok {
+			alerts = append(alerts, a)
+			i = next
+			continue
+		}
+		if a, next, ok := tryParseTimeout(lines, i, line); ok {
 			alerts = append(alerts, a)
 			i = next
 			continue
@@ -206,7 +217,6 @@ func parseFullyQualifiedTestName(line string) (string, bool) {
 	if idx < 0 {
 		return "", false
 	}
-	// Include the package/path qualifier preceding ".Test"
 	start := 0
 	if sp := strings.LastIndex(line[:idx], " "); sp >= 0 {
 		start = sp + 1
@@ -291,6 +301,27 @@ func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
 		Details: block,
 		Tests:   extractTestNames(block),
+	}, end, true
+}
+
+func tryParseTimeout(lines []string, i int, line string) (alert, int, bool) {
+	if !strings.HasPrefix(line, "panic: test timed out after") {
+		return alert{}, i, false
+	}
+	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
+	// Extract timed out test names from the block
+	var tests []string
+	for _, l := range strings.Split(block, "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, "Test") && strings.Contains(l, " ") {
+			tests = append(tests, strings.Split(l, " ")[0])
+		}
+	}
+	return alert{
+		Kind:    alertKindTimeout,
+		Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
+		Details: block,
+		Tests:   tests,
 	}, end, true
 }
 

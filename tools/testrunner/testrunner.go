@@ -1,20 +1,21 @@
 package testrunner
 
 import (
+	"bufio"
 	"context"
-	"errors"
 	"fmt"
-	"io"
+	"hash/fnv"
 	"log"
+	"math"
+	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
+	"runtime"
 	"strconv"
 	"strings"
-
-	"github.com/google/uuid"
+	"time"
 )
 
 const (
@@ -24,10 +25,11 @@ const (
 	junitReportFlag       = "--junitfile="
 	crashReportNameFlag   = "--crashreportname="
 	gotestsumPathFlag     = "--gotestsum-path="
-
-	// fullRerunThreshold is the number of test failures above which we do a full
-	// rerun instead of retrying only the failed tests.
-	fullRerunThreshold = 20
+	runTimeoutFlag        = "--run-timeout="
+	parallelismFlag       = "--parallelism="
+	parallelFlag          = "--parallel"
+	timeoutFlag           = "-timeout="
+	tagsFlag              = "-tags="
 )
 
 const (
@@ -35,87 +37,157 @@ const (
 	crashReportCommand = "report-crash"
 )
 
-type attempt struct {
-	runner           *runner
-	number           int
-	exitErr          *exec.ExitError
-	junitReport      *junitReport
-	coverProfilePath string
+// testFile represents a test file and its test functions.
+// It also serves as a work item in the test queue.
+type testFile struct {
+	path      string
+	pkg       string
+	testNames []string // tests to run (all tests on first attempt, only failed tests on retry)
+	attempt   int      // current attempt number (1-based)
 }
 
-func (a *attempt) run(ctx context.Context, args []string) (string, error) {
-	for i, arg := range args {
-		if strings.HasPrefix(arg, coverProfileFlag) {
-			args[i] = coverProfileFlag + a.coverProfilePath
-		} else if strings.HasPrefix(arg, junitReportFlag) {
-			args[i] = junitReportFlag + a.junitReport.path
-		}
-	}
-	log.Printf("starting test attempt #%d: %v %v",
-		a.number, a.runner.gotestsumPath, strings.Join(args, " "))
-	cmd := exec.CommandContext(ctx, a.runner.gotestsumPath, args...)
-	var output strings.Builder
-	cmd.Stdout = io.MultiWriter(os.Stdout, &output)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &output)
-	cmd.Stdin = os.Stdin
-	err := cmd.Run()
-	return output.String(), err
-}
+// testFuncRegex matches test functions like "func TestFoo(t *testing.T)"
+var testFuncRegex = regexp.MustCompile(`^func\s+(Test\w+)\s*\(\s*t\s+\*testing\.T\s*\)`)
 
-type runner struct {
+type runConfig struct {
 	gotestsumPath    string
 	junitOutputPath  string
 	coverProfilePath string
-	attempts         []*attempt
-	maxAttempts      int
+	buildTags        string
 	crashName        string
-	alerts           []alert
+	timeout          time.Duration // overall timeout for the test run
+	runTimeout       time.Duration // timeout per test file
+	maxAttempts      int
+	parallelism      int
+	filesPerWorker   int
+	totalShards      int  // for CI sharding
+	shardIndex       int  // for CI sharding
+	parallel         bool // run tests in parallel (one process per test file)
+}
+
+type runner struct {
+	runConfig
+	alerts []alert
 }
 
 func newRunner() *runner {
-	return &runner{
-		attempts:    make([]*attempt, 0),
-		maxAttempts: 1,
+	r := &runner{
+		runConfig: runConfig{
+			maxAttempts:    1,
+			parallelism:    runtime.NumCPU(),
+			filesPerWorker: 1,
+			totalShards:    1,
+			shardIndex:     0,
+		},
 	}
+
+	// Read sharding config from environment (used by CI)
+	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			r.totalShards = n
+		}
+	}
+	if v := os.Getenv("TEST_RUNNER_SHARD_INDEX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			r.shardIndex = n
+		}
+	}
+	// Read parallelism config from environment
+	if v := os.Getenv("TEST_RUNNER_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			r.parallelism = n
+		}
+	}
+	if v := os.Getenv("TEST_RUNNER_FILES_PER_WORKER"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			r.filesPerWorker = n
+		}
+	}
+
+	return r
 }
 
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
-		if strings.HasPrefix(arg, maxAttemptsFlag) {
-			var err error
-			r.maxAttempts, err = strconv.Atoi(strings.Split(arg, "=")[1])
+		if after, ok := strings.CutPrefix(arg, maxAttemptsFlag); ok {
+			n, err := strconv.Atoi(after)
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %q: %w", maxAttemptsFlag, err)
+				return nil, fmt.Errorf("invalid argument %s: %w", maxAttemptsFlag, err)
 			}
-			if r.maxAttempts == 0 {
-				return nil, fmt.Errorf("invalid argument %q: must be greater than zero", maxAttemptsFlag)
+			if n == 0 {
+				return nil, fmt.Errorf("invalid argument %s: must be greater than zero", maxAttemptsFlag)
 			}
+			r.maxAttempts = n
+			log.Printf("max attempts set to %d", r.maxAttempts)
 			continue // this is a `testrunner` only arg and not passed through
 		}
 
-		if strings.HasPrefix(arg, gotestsumPathFlag) {
-			r.gotestsumPath = strings.Split(arg, "=")[1]
-			continue
+		if after, ok := strings.CutPrefix(arg, gotestsumPathFlag); ok {
+			r.gotestsumPath = after
+			continue // this is a `testrunner` only arg and not passed through
 		}
 
-		if strings.HasPrefix(arg, crashReportNameFlag) {
-			r.crashName = strings.Split(arg, "=")[1]
-			if r.crashName == "" {
-				return nil, fmt.Errorf("invalid argument %q: must not be empty", crashReportNameFlag)
+		if after, ok := strings.CutPrefix(arg, crashReportNameFlag); ok {
+			if after == "" {
+				return nil, fmt.Errorf("invalid argument %s: must not be empty", crashReportNameFlag)
 			}
 			if command != crashReportCommand {
-				return nil, fmt.Errorf("argument %q is only valid for command %q", crashReportNameFlag, crashReportCommand)
+				return nil, fmt.Errorf("argument %s is only valid for command %q", crashReportNameFlag, crashReportCommand)
 			}
+			r.crashName = after
 			continue // this is a `testrunner` only arg and not passed through
 		}
 
-		if strings.HasPrefix(arg, coverProfileFlag) {
-			r.coverProfilePath = strings.Split(arg, "=")[1]
-		} else if strings.HasPrefix(arg, junitReportFlag) {
-			// --junitfile is used by gotestsum
-			r.junitOutputPath = strings.Split(arg, "=")[1]
+		if after, ok := strings.CutPrefix(arg, parallelismFlag); ok {
+			n, err := strconv.Atoi(after)
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %s: %w", parallelismFlag, err)
+			}
+			if n <= 0 {
+				return nil, fmt.Errorf("invalid argument %s: must be greater than zero", parallelismFlag)
+			}
+			r.parallelism = n
+			log.Printf("parallelism set to %d", r.parallelism)
+			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if after, ok := strings.CutPrefix(arg, runTimeoutFlag); ok {
+			d, err := time.ParseDuration(after)
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %s: %w", runTimeoutFlag, err)
+			}
+			r.runTimeout = d
+			log.Printf("run timeout set to %v", r.runTimeout)
+			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if arg == parallelFlag {
+			r.parallel = true
+			log.Printf("parallel mode enabled")
+			continue // this is a `testrunner` only arg and not passed through
+		}
+
+		if after, ok := strings.CutPrefix(arg, timeoutFlag); ok {
+			d, err := time.ParseDuration(after)
+			if err != nil {
+				return nil, fmt.Errorf("invalid argument %s: %w", timeoutFlag, err)
+			}
+			r.timeout = d
+			log.Printf("total timeout set to %v", r.timeout)
+			// let it pass through to `go test`
+		}
+
+		if after, ok := strings.CutPrefix(arg, tagsFlag); ok {
+			r.buildTags = after
+			continue // testrunner manages this flag explicitly
+		}
+
+		if after, ok := strings.CutPrefix(arg, coverProfileFlag); ok {
+			r.coverProfilePath = after
+		} else if after, ok := strings.CutPrefix(arg, junitReportFlag); ok {
+			r.junitOutputPath = after
 		}
 
 		sanitizedArgs = append(sanitizedArgs, arg)
@@ -123,6 +195,12 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 
 	if r.junitOutputPath == "" {
 		return nil, fmt.Errorf("missing required argument %q", junitReportFlag)
+	}
+
+	// When --parallel is not set, run all files together in a single batch
+	if !r.parallel {
+		r.parallelism = 1
+		r.filesPerWorker = math.MaxInt
 	}
 
 	switch command {
@@ -147,43 +225,20 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 	return sanitizedArgs, nil
 }
 
-func (r *runner) newAttempt() *attempt {
-	a := &attempt{
-		runner: r,
-		number: len(r.attempts) + 1,
-		coverProfilePath: fmt.Sprintf(
-			"%v_%v%v",
-			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
-			len(r.attempts),
-			codeCoverageExtension),
-		junitReport: &junitReport{
-			path: filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
-		},
-	}
-	r.attempts = append(r.attempts, a)
-	return a
-}
-
-func (r *runner) allReports() []*junitReport {
-	var reports []*junitReport
-	for _, a := range r.attempts {
-		reports = append(reports, a.junitReport)
-	}
-	return reports
-}
-
 // Main is the entry point for the testrunner tool.
 // nolint:revive,deep-exit
 func Main() {
-	log.SetPrefix("[testrunner] ")
+	log.SetPrefix("[runner] ")
+	log.SetFlags(log.Ltime)
 	ctx := context.Background()
 
 	if len(os.Args) < 2 {
 		log.Fatalf("expected at least 2 arguments")
 	}
-	r := newRunner()
 
 	command := os.Args[1]
+
+	r := newRunner()
 	args, err := r.sanitizeAndParseArgs(command, os.Args[2:])
 	if err != nil {
 		log.Fatalf("failed to parse command line options: %v", err)
@@ -208,73 +263,84 @@ func (r *runner) reportCrash() {
 	}
 }
 
+// nolint:revive,cognitive-complexity,deep-exit
 func (r *runner) runTests(ctx context.Context, args []string) {
-	var currentAttempt *attempt
-	for a := 1; a <= r.maxAttempts; a++ {
-		currentAttempt = r.newAttempt()
+	// Apply overall timeout if set
+	if r.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, r.timeout)
+		defer cancel()
+	}
 
-		// Run tests.
-		stdout, err := currentAttempt.run(ctx, args)
-		// Extract prominent alerts from this attempt's output.
-		r.alerts = append(r.alerts, parseAlerts(stdout)...)
-		if err != nil && !errors.As(err, &currentAttempt.exitErr) {
-			log.Fatalf("test run failed with an unexpected error: %v", err)
-		}
+	// Parse args to extract test directories and base args
+	testDirs, baseArgs := r.parseTestArgs(args)
+	if len(testDirs) == 0 {
+		log.Fatalf("no test directories specified")
+	}
 
-		stacktrace, timedoutTests := parseTestTimeouts(stdout)
-		if len(timedoutTests) > 0 {
-			// Run timed out and was aborted.
-			// Update JUnit XML output for timed out tests since none will have been generated.
-			currentAttempt.junitReport = generateStatic(timedoutTests, "timed out", "Timeout")
-			log.Print(stacktrace)
+	// Find all test files
+	var testFiles []testFile
+	for _, dir := range testDirs {
+		files, err := findTestFiles(dir)
+		if err != nil {
+			log.Fatalf("failed to find test files in %s: %v", dir, err)
+		}
+		testFiles = append(testFiles, files...)
+	}
 
-			// Don't retry.
-			break
-		}
+	if len(testFiles) == 0 {
+		log.Fatalf("no test files found in directories: %v", testDirs)
+	}
 
-		// All tests were run, parse JUnit XML output.
-		if err = currentAttempt.junitReport.read(); err != nil {
-			log.Fatal(err)
-		}
+	// Filter by shard if sharding is enabled
+	if r.totalShards > 1 {
+		testFiles = r.filterByShard(testFiles)
+		log.Printf("shard %d/%d: running %d test files", r.shardIndex+1, r.totalShards, len(testFiles))
+	}
 
-		// If the run completely successfull, no need to retry.
-		if currentAttempt.exitErr == nil {
-			break
-		}
+	// Shuffle test files to distribute load and catch ordering-dependent bugs
+	rand.Shuffle(len(testFiles), func(i, j int) {
+		testFiles[i], testFiles[j] = testFiles[j], testFiles[i]
+	})
 
-		// Sanity check: make sure failures are reported when the run failed.
-		failures := currentAttempt.junitReport.collectTestCaseFailures()
-		if len(failures) == 0 {
-			log.Fatalf("tests failed but no failures have been detected, not rerunning tests")
-		}
+	// Print test files
+	var sb strings.Builder
+	for _, tf := range testFiles {
+		sb.WriteString("\n  ")
+		sb.WriteString(tf.path)
+	}
+	log.Printf("test files:%s", sb.String())
 
-		// Rerun all tests from previous attempt if there are too many failures in a single suite.
-		if len(failures) > fullRerunThreshold && a < r.maxAttempts {
-			log.Printf(
-				"number of failures exceeds configured threshold (%d/%d) for narrowing down tests to retry, retrying with previous attempt's args",
-				len(failures), fullRerunThreshold)
-			continue
-		}
-		args = stripRunFromArgs(args)
-		for i, failure := range failures {
-			failures[i] = goTestNameToRunFlagRegexp(failure)
-		}
-		failureArg := strings.Join(failures, "|")
-		// -args has special semantics in Go.
-		argsIdx := slices.Index(args, "-args")
-		if argsIdx == -1 {
-			args = append(args, "-run", failureArg)
-		} else {
-			args = slices.Insert(args, argsIdx, "-run", failureArg)
+	// Compile tests first (only in parallel mode - sequential mode compiles on demand)
+	if r.parallel {
+		if err := r.compileTests(ctx, testFiles, baseArgs); err != nil {
+			log.Fatalf("failed to compile tests: %v", err)
 		}
 	}
 
-	// Merge reports from all attempts and write the final JUnit report.
-	mergedReport, err := mergeReports(r.allReports())
+	// Run tests
+	result := newWorkerPool(ctx, r.runConfig, testFiles, baseArgs).run()
+
+	// Finalize report
+	r.alerts = result.alerts
+	r.finalizeReport(result.junitReports)
+
+	// Print summary
+	if result.failed > 0 {
+		log.Printf("test run completed: %d/%d passed",
+			result.total-result.failed, result.total)
+		os.Exit(1)
+	}
+	log.Printf("test run completed: %d/%d passed", result.total, result.total)
+}
+
+// finalizeReport merges junit reports, appends alerts, and writes the final report.
+// nolint:revive,deep-exit
+func (r *runner) finalizeReport(junitReports []*junitReport) {
+	mergedReport, err := mergeReports(junitReports)
 	if err != nil {
 		log.Fatal(err)
 	}
-	// Append ALERTS suite to the merged JUnit if any were found.
 	if len(r.alerts) > 0 {
 		mergedReport.appendAlertsSuite(r.alerts)
 	}
@@ -282,15 +348,156 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if err = mergedReport.write(); err != nil {
 		log.Fatal(err)
 	}
-	if len(mergedReport.reportingErrs) > 0 {
-		log.Fatal(mergedReport.reportingErrs)
+}
+
+// parseTestArgs separates test directories from other args.
+func (r *runner) parseTestArgs(args []string) (testDirs []string, baseArgs []string) {
+	var inTestArgs bool
+	for _, arg := range args {
+		if arg == "-args" {
+			inTestArgs = true
+			baseArgs = append(baseArgs, arg)
+			continue
+		}
+		if inTestArgs {
+			baseArgs = append(baseArgs, arg)
+			continue
+		}
+		// Test directories start with ./ or /
+		if strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "/") {
+			testDirs = append(testDirs, arg)
+		} else {
+			baseArgs = append(baseArgs, arg)
+		}
+	}
+	return
+}
+
+// filterByShard filters test files to only include those belonging to the current shard.
+func (r *runner) filterByShard(files []testFile) []testFile {
+	var filtered []testFile
+	for _, f := range files {
+		if getShardForFile(f.path, r.totalShards) == r.shardIndex {
+			filtered = append(filtered, f)
+		}
+	}
+	return filtered
+}
+
+// compileTests compiles all test packages upfront.
+func (r *runner) compileTests(ctx context.Context, testFiles []testFile, baseArgs []string) error {
+	// Get unique packages to compile
+	pkgSet := make(map[string]bool)
+	for _, tf := range testFiles {
+		pkgSet[tf.pkg] = true
 	}
 
-	// Exit with the exit code of the last attempt.
-	if currentAttempt.exitErr != nil {
-		log.Printf("exiting with failure after running %d attempt(s)", len(r.attempts))
-		os.Exit(currentAttempt.exitErr.ExitCode())
+	// Extract compile-relevant flags from baseArgs (e.g., -race, -tags, -cover)
+	var compileFlags []string
+	hasCover := false
+	for _, arg := range baseArgs {
+		if arg == "-race" || strings.HasPrefix(arg, "-tags=") {
+			compileFlags = append(compileFlags, arg)
+		} else if arg == "-cover" || strings.HasPrefix(arg, "-coverprofile=") {
+			hasCover = true
+		}
 	}
+	// Coverage instrumentation is done at compile time
+	if hasCover {
+		compileFlags = append(compileFlags, "-cover")
+	}
+
+	// Compile each package
+	for pkg := range pkgSet {
+		args := []string{"test", "-c", "-o", "/dev/null"}
+		args = append(args, compileFlags...)
+		if r.buildTags != "" {
+			args = append(args, "-tags="+r.buildTags)
+		}
+		args = append(args, pkg)
+		log.Printf("🔨 go %s", strings.Join(args, " "))
+
+		cmd := exec.CommandContext(ctx, "go", args...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to compile %s: %w", pkg, err)
+		}
+	}
+	return nil
+}
+
+// findTestFiles finds all test files in a directory (non-recursive) and extracts their test function names.
+func findTestFiles(dir string) ([]testFile, error) {
+	var files []testFile
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+
+		path := filepath.Join(dir, entry.Name())
+
+		// Extract test function names from the file
+		testNames, err := extractTestFuncNames(path)
+		if err != nil {
+			log.Printf("warning: failed to extract test names from %s: %v", path, err)
+			continue
+		}
+		if len(testNames) == 0 {
+			// No test functions found in this file, skip it
+			continue
+		}
+
+		// Get the package path
+		pkg := dir
+		if !strings.HasPrefix(pkg, "./") && !strings.HasPrefix(pkg, "/") {
+			pkg = "./" + pkg
+		}
+
+		files = append(files, testFile{
+			path:      path,
+			pkg:       pkg,
+			testNames: testNames,
+		})
+	}
+	return files, nil
+}
+
+// extractTestFuncNames extracts all test function names from a test file.
+func extractTestFuncNames(path string) (names []string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = closeErr
+		}
+	}()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		matches := testFuncRegex.FindStringSubmatch(line)
+		if len(matches) >= 2 {
+			names = append(names, matches[1])
+		}
+	}
+	return names, scanner.Err()
+}
+
+// getShardForFile returns the shard index for a given file path using consistent hashing.
+func getShardForFile(path string, totalShards int) int {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(path))
+	return int(h.Sum32() % uint32(totalShards))
 }
 
 func stripRunFromArgs(args []string) (argsNoRun []string) {
@@ -308,18 +515,4 @@ func stripRunFromArgs(args []string) (argsNoRun []string) {
 		argsNoRun = append(argsNoRun, arg)
 	}
 	return
-}
-
-func goTestNameToRunFlagRegexp(test string) string {
-	parts := strings.Split(test, "/")
-	var sb strings.Builder
-	for i, p := range parts {
-		if i > 0 {
-			sb.WriteByte('/')
-		}
-		sb.WriteByte('^')
-		sb.WriteString(regexp.QuoteMeta(p))
-		sb.WriteByte('$')
-	}
-	return sb.String()
 }
