@@ -1,0 +1,22 @@
+<testsuites time="14.760843" tests="7" failures="2">
+    <testsuite name="go.temporal.io/server/tools/testrunner2/testdata/fakepkg1" tests="7" failures="2" errors="0" id="0" time="9.426000" timestamp="2024-11-18T14:05:44-08:00">
+        <properties>
+            <property name="go.version" value="go1.23.2 darwin/arm64"></property>
+        </properties>
+        <testcase name="TestFooSuite/TestFoo_CarriedOver/ContinueAsNew" classname="go.temporal.io/server/tools/testrunner2/testdata/fakepkg1" time="2.029000"></testcase>
+        <testcase name="TestFooSuite/TestFoo_CarriedOver/FailureRetry" classname="go.temporal.io/server/tools/testrunner2/testdata/fakepkg1" time="2.040000"></testcase>
+        <testcase name="TestFooSuite/TestFoo_CarriedOver/Timeout" classname="go.temporal.io/server/tools/testrunner2/testdata/fakepkg1" time="3.030000"></testcase>
+        <testcase name="TestFooSuite/TestFoo_InvalidArgument" classname="go.temporal.io/server/tools/testrunner2/testdata/fakepkg1" time="0.000000">
+            <failure message="Failed"><![CDATA[=== RUN   TestFooSuite/TestFoo_InvalidArgument
+    foo_test.go:99:
+        	Error Trace:	/temporal/tools/testrunner2/testdata/fakepkg1/foo_test.go:99
+        	Error:      	Not equal:
+        	            	expected: 1
+        	            	actual  : 2
+        	Test:       	TestFooSuite/TestFoo_InvalidArgument
+    --- FAIL: TestFooSuite/TestFoo_InvalidArgument (0.00s)
+]]></failure>
+        </testcase>
+        <testcase name="TestFooSuite/TestFoo_Reset" classname="go.temporal.io/server/tools/testrunner2/testdata/fakepkg1" time="0.020000"></testcase>
+    </testsuite>
+</testsuites>

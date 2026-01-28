@@ -97,7 +97,7 @@ snapshot() {
   timestamp="$(date '+%H:%M:%S')"
 
   # stdout preserves info in CI logs in case of crash; history file is used for snapshot.
-  printf "%s used=%s%% mem=%sMB goroutines=%s procs=[%s]\n" \
+  printf "[monitor] %s used=%s%% mem=%sMB goroutines=%s procs=[%s]\n" \
     "$timestamp" "$pct" "$memused_mb" "$goroutines" "$top_procs" | tee -a "$HISTORY_FILE"
 
   # Collect pprof analysis once per tick.

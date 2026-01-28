@@ -31,7 +31,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.10.9
-	github.com/maruel/panicparse/v2 v2.4.0
+	github.com/maruel/panicparse/v2 v2.5.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/sdk-go v0.5.1
 	github.com/olekukonko/tablewriter v0.0.5
