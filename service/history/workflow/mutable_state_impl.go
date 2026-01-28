@@ -342,7 +342,7 @@ func NewMutableState(
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
 		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
-		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
+		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(namespaceName),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
 		workflowTaskUpdated:          false,
@@ -6835,7 +6835,7 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 
-	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory()
+	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory(namespaceEntry.Name().String())
 
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
