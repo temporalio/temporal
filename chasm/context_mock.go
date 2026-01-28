@@ -71,13 +71,6 @@ func (c *MockContext) Logger() log.Logger {
 	)
 }
 
-func (c *MockContext) Library(name string) (Library, bool) {
-	if c.HandleLibrary != nil {
-		return c.HandleLibrary(name)
-	}
-	return nil, false
-}
-
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in
 // tests.
 type MockMutableContext struct {
