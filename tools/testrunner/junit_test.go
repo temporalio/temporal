@@ -2,7 +2,6 @@ package testrunner
 
 import (
 	"encoding/xml"
-	"errors"
 	"os"
 	"slices"
 	"testing"
@@ -76,9 +75,9 @@ func TestMergeReports_SingleReport(t *testing.T) {
 }
 
 func TestMergeReports_MultipleReports(t *testing.T) {
-	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
+	j1 := &junitReport{path: "testdata/junit-attempt-1.xml", attempt: 1}
 	require.NoError(t, j1.read())
-	j2 := &junitReport{path: "testdata/junit-attempt-2.xml"}
+	j2 := &junitReport{path: "testdata/junit-attempt-2.xml", attempt: 2}
 	require.NoError(t, j2.read())
 
 	report, err := mergeReports([]*junitReport{j1, j2})
@@ -99,21 +98,37 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1)")
 }
 
-func TestMergeReports_MissingRerun(t *testing.T) {
-	j1 := &junitReport{path: "testdata/junit-attempt-1.xml"}
+func TestMergeReports_IndependentReports(t *testing.T) {
+	// Test merging independent reports from parallel execution (no retries)
+	j1 := &junitReport{path: "testdata/junit-attempt-1.xml", attempt: 1}
 	require.NoError(t, j1.read())
-	j2 := &junitReport{path: "testdata/junit-empty.xml"}
+	j2 := &junitReport{path: "testdata/junit-empty.xml", attempt: 1}
 	require.NoError(t, j2.read())
-	j3 := &junitReport{path: "testdata/junit-attempt-2.xml"}
+	j3 := &junitReport{path: "testdata/junit-attempt-2.xml", attempt: 1}
 	require.NoError(t, j3.read())
-	j4 := &junitReport{path: "testdata/junit-empty.xml"}
-	require.NoError(t, j4.read())
 
-	report, err := mergeReports([]*junitReport{j1, j2, j3, j4})
+	report, err := mergeReports([]*junitReport{j1, j2, j3})
 	require.NoError(t, err)
-	require.Len(t, report.reportingErrs, 2)
-	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[0])
-	require.Equal(t, errors.New("expected rerun of all failures from previous attempt, missing: [TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument]"), report.reportingErrs[1])
+	require.Empty(t, report.reportingErrs)
+
+	// All suites should have no suffix since they're all first attempts
+	for _, suite := range report.Suites {
+		require.NotContains(t, suite.Name, "retry")
+	}
+}
+
+func TestMergeReports_MissingRetry(t *testing.T) {
+	// Test that validation catches when a failed test is not retried
+	j1 := &junitReport{path: "testdata/junit-attempt-1.xml", attempt: 1}
+	require.NoError(t, j1.read())
+	// j2 uses empty report (no tests), so the failure from j1 won't be retried
+	j2 := &junitReport{path: "testdata/junit-empty.xml", attempt: 2}
+	require.NoError(t, j2.read())
+
+	report, err := mergeReports([]*junitReport{j1, j2})
+	require.NoError(t, err)
+	require.NotEmpty(t, report.reportingErrs, "should report missing retry")
+	require.Contains(t, report.reportingErrs[0].Error(), "missing in attempt 2")
 }
 
 func TestAppendAlertsSuite(t *testing.T) {

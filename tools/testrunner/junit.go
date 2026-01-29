@@ -9,6 +9,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
@@ -16,6 +17,7 @@ import (
 type junitReport struct {
 	junit.Testsuites
 	path          string
+	attempt       int // 1-based attempt number (1 = first run, 2+ = retry)
 	reportingErrs []error
 }
 
@@ -31,6 +33,12 @@ func (j *junitReport) read() error {
 		return fmt.Errorf("failed to read junit report file: %w", err)
 	}
 	return nil
+}
+
+func (j *junitReport) duration() time.Duration {
+	var seconds float64
+	_, _ = fmt.Sscanf(j.Time, "%f", &seconds)
+	return time.Duration(seconds * float64(time.Second))
 }
 
 func generateStatic(names []string, suffix string, message string) *junitReport {
@@ -166,12 +174,11 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		return nil, errors.New("no reports to merge")
 	}
 
-	var reportingErrs []error
 	var combined junit.Testsuites
 	combined.XMLName = reports[0].Testsuites.XMLName
 	combined.Name = reports[0].Testsuites.Name
 
-	for i, report := range reports {
+	for _, report := range reports {
 		combined.Tests += report.Testsuites.Tests
 		combined.Errors += report.Testsuites.Errors
 		combined.Failures += report.Testsuites.Failures
@@ -179,23 +186,10 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		combined.Disabled += report.Testsuites.Disabled
 		combined.Time += report.Testsuites.Time
 
-		// If the report is for a retry ...
+		// Add retry suffix only for actual retries (attempt > 1)
 		var suffix string
-		if i > 0 {
-			suffix = fmt.Sprintf(" (retry %d)", i)
-			prevFailures := reports[i-1].collectTestCaseFailures()
-			currCases := report.collectTestCases()
-
-			var missing []string
-			for _, f := range prevFailures {
-				if _, ok := currCases[f]; !ok {
-					missing = append(missing, f)
-				}
-			}
-			if len(missing) > 0 {
-				reportingErrs = append(reportingErrs, fmt.Errorf(
-					"expected rerun of all failures from previous attempt, missing: %v", missing))
-			}
+		if report.attempt > 1 {
+			suffix = fmt.Sprintf(" (retry %d)", report.attempt-1)
 		}
 
 		for _, suite := range report.Testsuites.Suites {
@@ -224,6 +218,44 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 				newSuite.Testcases = append(newSuite.Testcases, testCase)
 			}
 			combined.Suites = append(combined.Suites, newSuite)
+		}
+	}
+
+	// Validate that all failures from attempt N were retried in attempt N+1
+	var reportingErrs []error
+	byAttempt := make(map[int][]*junitReport)
+	for _, r := range reports {
+		byAttempt[r.attempt] = append(byAttempt[r.attempt], r)
+	}
+	var attempts []int
+	for a := range byAttempt {
+		attempts = append(attempts, a)
+	}
+	slices.Sort(attempts)
+	for i := 0; i < len(attempts)-1; i++ {
+		currAttempt, nextAttempt := attempts[i], attempts[i+1]
+		prevFailures := make(map[string]bool)
+		for _, r := range byAttempt[currAttempt] {
+			for _, f := range r.collectTestCaseFailures() {
+				prevFailures[f] = true
+			}
+		}
+		nextCases := make(map[string]bool)
+		for _, r := range byAttempt[nextAttempt] {
+			for k := range r.collectTestCases() {
+				nextCases[k] = true
+			}
+		}
+		var missing []string
+		for f := range prevFailures {
+			if !nextCases[f] {
+				missing = append(missing, f)
+			}
+		}
+		if len(missing) > 0 {
+			reportingErrs = append(reportingErrs, fmt.Errorf(
+				"expected rerun of all failures from attempt %d, missing in attempt %d: %v",
+				currAttempt, nextAttempt, missing))
 		}
 	}
 

@@ -477,11 +477,12 @@ jobs:
             containers: [postgresql]
     runs-on: ${{ matrix.runs_on_override || matrix.runs-on }}
     env:
-      TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
-      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      TEST_RUNNER_SHARDS_TOTAL: ${{ needs.set-up-single-test.outputs.total_shards }}
+      TEST_RUNNER_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+      TEST_RUNNER_WORKERS: ${{ startsWith(matrix.name, 'cass_') && '4' || '' }} # Cassandra-based tests benefit from reducing parallelism
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}

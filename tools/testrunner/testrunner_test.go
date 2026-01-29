@@ -62,7 +62,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
-		require.ErrorContains(t, err, `invalid argument "--max-attempts=": must be greater than zero`)
+		require.ErrorContains(t, err, `invalid argument --max-attempts=: must be greater than zero`)
 	})
 
 	t.Run("AttemptsInvalid2", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		})
-		require.ErrorContains(t, err, `invalid argument "--max-attempts=": strconv.Atoi: parsing "invalid"`)
+		require.ErrorContains(t, err, `invalid argument --max-attempts=: strconv.Atoi: parsing "invalid"`)
 	})
 
 	t.Run("JunitfileMissing", func(t *testing.T) {
