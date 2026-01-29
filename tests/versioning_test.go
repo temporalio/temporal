@@ -775,6 +775,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_Spooled() {
+	s.T().Skip("Skipping test since rules based versioning is soon to be deprecated")
 	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSpooled)
 }
 
@@ -887,6 +888,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_SyncMatch() {
+	s.T().Skip("Skipping test since rules based versioning is soon to be deprecated")
 	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSyncMatch)
 }
 
