@@ -2,10 +2,11 @@ package tests
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
@@ -20,12 +21,6 @@ import (
 )
 
 type (
-	PurgeDLQTasksSuite struct {
-		testcore.FunctionalTestBase
-
-		dlq              *faultyDLQ
-		sdkClientFactory sdk.ClientFactory
-	}
 	purgeDLQTasksTestCase struct {
 		name      string
 		configure func(p *purgeDLQTasksTestParams)
@@ -45,11 +40,6 @@ type (
 	}
 )
 
-func TestPurgeDLQTasksSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(PurgeDLQTasksSuite))
-}
-
 func (q *faultyDLQ) DeleteTasks(
 	ctx context.Context,
 	request *persistence.DeleteTasksRequest,
@@ -61,21 +51,61 @@ func (q *faultyDLQ) DeleteTasks(
 	return q.HistoryTaskQueueManager.DeleteTasks(ctx, request)
 }
 
-func (s *PurgeDLQTasksSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
-		testcore.WithFxOptionsForService(primitives.HistoryService,
-			fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
-				s.dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
-				return s.dlq
-			}),
-		),
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Populate(&s.sdkClientFactory),
+func TestPurgeDLQTasks(t *testing.T) {
+	var dlq *faultyDLQ
+	var sdkClientFactory sdk.ClientFactory
+
+	s := testcore.NewEnv(t,
+		testcore.WithClusterOptions(
+			testcore.WithFxOptionsForService(primitives.HistoryService,
+				fx.Decorate(func(manager persistence.HistoryTaskQueueManager) persistence.HistoryTaskQueueManager {
+					dlq = &faultyDLQ{HistoryTaskQueueManager: manager}
+					return dlq
+				}),
+			),
+			testcore.WithFxOptionsForService(primitives.FrontendService,
+				fx.Populate(&sdkClientFactory),
+			),
 		),
 	)
-}
 
-func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
+	defaultDlqTestParams := func() purgeDLQTasksTestParams {
+		queueKey := persistencetest.GetQueueKey(t)
+
+		return purgeDLQTasksTestParams{
+			category:      tasks.CategoryTransfer,
+			sourceCluster: queueKey.SourceCluster,
+			targetCluster: queueKey.TargetCluster,
+		}
+	}
+
+	enqueueTasks := func(ctx context.Context, queueKey persistence.QueueKey, task *tasks.WorkflowTask) error {
+		if dlq == nil {
+			return fmt.Errorf("dlq is nil")
+		}
+		_, err := dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
+			QueueKey: queueKey,
+		})
+		// Ignore "already exists" errors as multiple test cases may try to create the same queue
+		if err != nil && !strings.Contains(err.Error(), "already exists") && !strings.Contains(err.Error(), "AlreadyExists") {
+			return fmt.Errorf("CreateQueue failed: %w", err)
+		}
+
+		for i := 0; i < 3; i++ {
+			_, err := dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+				QueueType:     queueKey.QueueType,
+				SourceCluster: queueKey.SourceCluster,
+				TargetCluster: queueKey.TargetCluster,
+				Task:          task,
+				SourceShardID: tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)),
+			})
+			if err != nil {
+				return fmt.Errorf("EnqueueTask failed: %w", err)
+			}
+		}
+		return nil
+	}
+
 	for _, tc := range []purgeDLQTasksTestCase{
 		{
 			name: "HappyPath",
@@ -122,8 +152,8 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			},
 		},
 	} {
-		s.Run(tc.name, func() {
-			defaultParams := s.defaultDlqTestParams()
+		t.Run(tc.name, func(st *testing.T) {
+			defaultParams := defaultDlqTestParams()
 
 			params := defaultParams
 			if tc.configure != nil {
@@ -141,7 +171,9 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 				SourceCluster: defaultParams.sourceCluster,
 				TargetCluster: defaultParams.targetCluster,
 			}
-			s.enqueueTasks(ctx, queueKey, &tasks.WorkflowTask{})
+			if err := enqueueTasks(ctx, queueKey, &tasks.WorkflowTask{}); err != nil {
+				st.Fatalf("enqueueTasks failed: %v", err)
+			}
 
 			purgeDLQTasksResponse, err := s.AdminClient().PurgeDLQTasks(ctx, &adminservice.PurgeDLQTasksRequest{
 				DlqKey: &commonspb.HistoryDLQKey{
@@ -159,7 +191,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			}
 
 			s.NoError(err)
-			client := s.sdkClientFactory.GetSystemClient()
+			client := sdkClientFactory.GetSystemClient()
 
 			var jobToken adminservice.DLQJobToken
 			err = jobToken.Unmarshal(purgeDLQTasksResponse.JobToken)
@@ -174,7 +206,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			}
 
 			s.NoError(err)
-			readRawTasksResponse, err := s.dlq.ReadRawTasks(ctx, &persistence.ReadRawTasksRequest{
+			readRawTasksResponse, err := dlq.ReadRawTasks(ctx, &persistence.ReadRawTasksRequest{
 				QueueKey: queueKey,
 				PageSize: 10,
 			})
@@ -182,33 +214,5 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			s.Len(readRawTasksResponse.Tasks, 1)
 			s.Assert().Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
 		})
-	}
-}
-
-func (s *PurgeDLQTasksSuite) defaultDlqTestParams() purgeDLQTasksTestParams {
-	queueKey := persistencetest.GetQueueKey(s.T())
-
-	return purgeDLQTasksTestParams{
-		category:      tasks.CategoryTransfer,
-		sourceCluster: queueKey.SourceCluster,
-		targetCluster: queueKey.TargetCluster,
-	}
-}
-
-func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persistence.QueueKey, task *tasks.WorkflowTask) {
-	_, err := s.dlq.CreateQueue(ctx, &persistence.CreateQueueRequest{
-		QueueKey: queueKey,
-	})
-	s.NoError(err)
-
-	for i := 0; i < 3; i++ {
-		_, err := s.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
-			QueueType:     queueKey.QueueType,
-			SourceCluster: queueKey.SourceCluster,
-			TargetCluster: queueKey.TargetCluster,
-			Task:          task,
-			SourceShardID: tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)),
-		})
-		s.NoError(err)
 	}
 }

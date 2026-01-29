@@ -4,34 +4,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
 
-type UserMetadataSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestUserMetadataSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(UserMetadataSuite))
-}
-
-func (s *UserMetadataSuite) TestUserMetadata() {
-	getDescribeWorkflowExecutionInfo := func(client workflowservice.WorkflowServiceClient, namespace string, workflowID string, runID string) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return client.DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-				RunId:      runID,
-			},
-		})
-	}
+func TestUserMetadata(t *testing.T) {
 	prepareTestUserMetadata := func() *sdkpb.UserMetadata {
 		return &sdkpb.UserMetadata{
 			Summary: &commonpb.Payload{
@@ -45,15 +25,15 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		}
 	}
 
-	s.Run("StartWorkflowExecution records UserMetadata", func() {
-		tv := testvars.New(s.T())
+	t.Run("StartWorkflowExecution records UserMetadata", func(t *testing.T) {
+		s := testcore.NewEnv(t)
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   tv.WorkflowID(),
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
+			WorkflowId:   s.Tv().WorkflowID(),
+			WorkflowType: s.Tv().WorkflowType(),
+			TaskQueue:    s.Tv().TaskQueue(),
 			UserMetadata: metadata,
 		}
 
@@ -61,20 +41,26 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace().String(), tv.WorkflowID(), we.RunId)
+		describeInfo, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: s.Tv().WorkflowID(),
+				RunId:      we.RunId,
+			},
+		})
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
 
-	s.Run("SignalWithStartWorkflowExecution records UserMetadata", func() {
-		tv := testvars.New(s.T())
+	t.Run("SignalWithStartWorkflowExecution records UserMetadata", func(t *testing.T) {
+		s := testcore.NewEnv(t)
 		metadata := prepareTestUserMetadata()
 		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   tv.WorkflowID(),
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
+			WorkflowId:   s.Tv().WorkflowID(),
+			WorkflowType: s.Tv().WorkflowType(),
+			TaskQueue:    s.Tv().TaskQueue(),
 			SignalName:   "TEST-SIGNAL",
 			UserMetadata: metadata,
 		}
@@ -83,25 +69,31 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace().String(), tv.WorkflowID(), we.RunId)
+		describeInfo, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: s.Tv().WorkflowID(),
+				RunId:      we.RunId,
+			},
+		})
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
 
-	s.Run("ExecuteMultiOperation records UserMetadata", func() {
-		tv := testvars.New(s.T())
+	t.Run("ExecuteMultiOperation records UserMetadata", func(t *testing.T) {
+		s := testcore.NewEnv(t)
 		metadata := prepareTestUserMetadata()
 		startWorkflowRequest := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    s.Namespace().String(),
-			WorkflowId:   tv.WorkflowID(),
-			WorkflowType: tv.WorkflowType(),
-			TaskQueue:    tv.TaskQueue(),
+			WorkflowId:   s.Tv().WorkflowID(),
+			WorkflowType: s.Tv().WorkflowType(),
+			TaskQueue:    s.Tv().TaskQueue(),
 			UserMetadata: metadata,
 		}
 		updateWorkflowRequest := &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         s.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: s.Tv().WorkflowID()},
 			Request: &updatepb.Request{
 				Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
 				Input: &updatepb.Input{Name: "NAME"},
@@ -127,9 +119,14 @@ func (s *UserMetadataSuite) TestUserMetadata() {
 		s.NoError(err)
 
 		// Verify that the UserMetadata associated with the start event is returned in the describe response.
-		describeInfo, err := getDescribeWorkflowExecutionInfo(s.FrontendClient(), s.Namespace().String(), tv.WorkflowID(), "")
+		describeInfo, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: s.Tv().WorkflowID(),
+				RunId:      "",
+			},
+		})
 		s.NoError(err)
 		s.EqualExportedValues(metadata, describeInfo.ExecutionConfig.UserMetadata)
 	})
-
 }

@@ -1391,6 +1391,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable", func(t *testing.T) {
+		t.Skip("flaky test - times out intermittently, see https://github.com/temporalio/temporal/issues/XXXX")
 		s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 

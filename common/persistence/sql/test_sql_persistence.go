@@ -56,6 +56,8 @@ func NewTestCluster(
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
 		ConnectAttributes:  connectAttributes,
+		MaxConns:           20,
+		MaxIdleConns:       20,
 	}
 
 	result.faultInjection = faultInjection
