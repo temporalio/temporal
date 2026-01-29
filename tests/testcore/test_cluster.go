@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -36,9 +35,6 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
@@ -145,37 +141,15 @@ type PersistenceTestBaseFactory interface {
 
 type defaultPersistenceTestBaseFactory struct{}
 
+// GetPersistenceTestDefaults returns the default persistence options based on CLI flags.
+// Use this when creating TestClusterConfig to ensure proper database configuration.
+func GetPersistenceTestDefaults() persistencetests.TestBaseOptions {
+	return *persistencetests.GetTestClusterOption(cliFlags.persistenceType, cliFlags.persistenceDriver)
+}
+
 func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetests.TestBaseOptions) *persistencetests.TestBase {
-	options.StoreType = cliFlags.persistenceType
-	switch cliFlags.persistenceType {
-	case config.StoreTypeSQL:
-		var ops *persistencetests.TestBaseOptions
-		switch cliFlags.persistenceDriver {
-		case mysql.PluginName:
-			ops = persistencetests.GetMySQLTestClusterOption()
-		case postgresql.PluginName:
-			ops = persistencetests.GetPostgreSQLTestClusterOption()
-		case postgresql.PluginNamePGX:
-			ops = persistencetests.GetPostgreSQLPGXTestClusterOption()
-		case sqlite.PluginName:
-			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
-		default:
-			//nolint:forbidigo // test code
-			panic(fmt.Sprintf("unknown sql store driver: %v", cliFlags.persistenceDriver))
-		}
-		options.SQLDBPluginName = cliFlags.persistenceDriver
-		options.DBUsername = ops.DBUsername
-		options.DBPassword = ops.DBPassword
-		options.DBHost = ops.DBHost
-		options.DBPort = ops.DBPort
-		options.SchemaDir = ops.SchemaDir
-		options.ConnectAttributes = ops.ConnectAttributes
-	case config.StoreTypeNoSQL:
-		// noop for now
-	default:
-		//nolint:forbidigo // test code
-		panic(fmt.Sprintf("unknown store type: %v", options.StoreType))
-	}
+	defaults := GetPersistenceTestDefaults()
+	options.ApplyDefaults(&defaults)
 
 	if cliFlags.enableFaultInjection != "" && options.FaultInjection == nil {
 		// If -enableFaultInjection is passed to the test runner, then default fault injection config is added to the persistence options.
@@ -246,8 +220,10 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	var (
 		indexName string
 		esClient  esclient.Client
+		saTypeMap searchattribute.NameTypeMap
 	)
 	if !UseSQLVisibility() {
+		saTypeMap = searchattribute.TestEsNameTypeMap()
 		clusterConfig.ESConfig = &esclient.Config{
 			Indices: map[string]string{
 				esclient.VisibilityAppName: RandomizeStr("temporal_visibility_v1_test"),
@@ -256,7 +232,8 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 				Host:   fmt.Sprintf("%s:%d", environment.GetESAddress(), environment.GetESPort()),
 				Scheme: "http",
 			},
-			Version: environment.GetESVersion(),
+			Version:     environment.GetESVersion(),
+			DisableGzip: true, // lowers memory and CPU usage significantly in tests
 		}
 
 		err := setupIndex(clusterConfig.ESConfig, logger)
@@ -274,6 +251,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 			return nil, err
 		}
 	} else {
+		saTypeMap = searchattribute.TestNameTypeMap()
 		clusterConfig.ESConfig = nil
 		storeConfig := pConfig.DataStores[pConfig.VisibilityStore]
 		if storeConfig.SQL != nil {
@@ -284,7 +262,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	clusterInfoMap := make(map[string]cluster.ClusterInformation)
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
 		clusterInfo.ShardCount = clusterConfig.HistoryConfig.NumHistoryShards
-		clusterInfo.ClusterID = uuid.New()
+		clusterInfo.ClusterID = uuid.NewString()
 		clusterInfoMap[clusterName] = clusterInfo
 		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -292,6 +270,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 				ClusterName:              clusterName,
 				ClusterId:                clusterInfo.ClusterID,
 				IsConnectionEnabled:      clusterInfo.Enabled,
+				IsReplicationEnabled:     clusterInfo.ReplicationEnabled,
 				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
 				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
 				ClusterAddress:           clusterInfo.RPCAddress,
@@ -309,7 +288,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	err := testBase.SearchAttributesManager.SaveSearchAttributes(
 		context.Background(),
 		indexName,
-		searchattribute.TestNameTypeMap.Custom(),
+		saTypeMap.Custom(),
 	)
 	if err != nil {
 		return nil, err
@@ -320,11 +299,6 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		if tlsConfigProvider, err = createFixedTLSConfigProvider(); err != nil {
 			return nil, err
 		}
-	}
-
-	chasmRegistry := chasm.NewRegistry(logger)
-	if err := chasmRegistry.Register(&chasm.CoreLibrary{}); err != nil {
-		return nil, err
 	}
 
 	temporalParams := &TemporalParams{
@@ -353,7 +327,6 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
-		ChasmRegistry:                    chasmRegistry,
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
 	}
@@ -444,7 +417,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
 
 	logger.Info("Add custom search attributes for tests.")
-	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestNameTypeMap.Custom())
+	_, err = esClient.PutMapping(ctx, esConfig.GetVisibilityIndex(), searchattribute.TestEsNameTypeMap().Custom())
 	if err != nil {
 		return err
 	}
@@ -601,12 +574,20 @@ func (tc *TestCluster) Host() *TemporalImpl {
 	return tc.host
 }
 
+func (tc *TestCluster) WorkerGRPCAddress() string {
+	return tc.host.WorkerGRPCAddress()
+}
+
 func (tc *TestCluster) ClusterName() string {
 	return tc.host.clusterMetadataConfig.CurrentClusterName
 }
 
 func (tc *TestCluster) GetReplicationStreamRecorder() *ReplicationStreamRecorder {
 	return tc.host.replicationStreamRecorder
+}
+
+func (tc *TestCluster) GetTaskQueueRecorder() *TaskQueueRecorder {
+	return tc.host.GetTaskQueueRecorder()
 }
 
 func (tc *TestCluster) OverrideDynamicConfig(t *testing.T, key dynamicconfig.GenericSetting, value any) (cleanup func()) {

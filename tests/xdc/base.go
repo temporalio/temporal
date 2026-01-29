@@ -101,6 +101,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.VisibilityProcessorMaxPollInterval.Key()] = time.Second * 3
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
+	persistenceDefaults := testcore.GetPersistenceTestDefaults()
 	clusterConfigs := []*testcore.TestClusterConfig{
 		{
 			ClusterMetadata: cluster.Config{
@@ -110,6 +111,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			HistoryConfig: testcore.HistoryConfig{
 				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
 			},
+			Persistence: persistenceDefaults,
 		},
 		{
 			ClusterMetadata: cluster.Config{
@@ -119,6 +121,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			HistoryConfig: testcore.HistoryConfig{
 				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
 			},
+			Persistence: persistenceDefaults,
 		},
 	}
 
@@ -131,7 +134,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[clusterIndex].Persistence.DBName = "func_tests_" + clusterName
+		clusterConfigs[clusterIndex].Persistence.DBName += "_" + clusterName
 		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
 			clusterName: {
 				Enabled:                true,
@@ -158,6 +161,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 						FrontendAddress:               remoteC.Host().RemoteFrontendGRPCAddress(),
 						FrontendHttpAddress:           remoteC.Host().FrontendHTTPAddress(),
 						EnableRemoteClusterConnection: true,
+						EnableReplication:             true,
 					})
 				s.Require().NoError(err)
 			}
@@ -279,7 +283,7 @@ func (s *xdcBaseSuite) createNamespace(
 					require.NoError(t, err)
 					require.NotNil(t, resp)
 					require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-					require.Equal(t, clusterNames, resp.ClusterNames())
+					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -376,7 +380,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 			resp, err := r.GetNamespace(namespace.Name(ns))
 			require.NoError(t, err)
 			require.NotNil(t, resp)
-			require.Equal(t, clusterNames, resp.ClusterNames())
+			require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 			isGlobalNamespace = resp.IsGlobalNamespace()
 		}
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
@@ -393,7 +397,7 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 					resp, err := r.GetNamespace(namespace.Name(ns))
 					require.NoError(t, err)
 					require.NotNil(t, resp)
-					require.Equal(t, clusterNames, resp.ClusterNames())
+					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
 				}
 			}
 		}, replicationWaitTime, replicationCheckInterval)
@@ -448,7 +452,7 @@ func (s *xdcBaseSuite) failover(
 				resp, err := r.GetNamespace(namespace.Name(ns))
 				require.NoError(t, err)
 				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName())
+				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.EmptyBusinessID))
 			}
 		}
 	}, replicationWaitTime, replicationCheckInterval)

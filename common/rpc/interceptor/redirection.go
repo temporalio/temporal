@@ -85,6 +85,8 @@ var (
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
+		"PauseWorkflowExecution":             func() any { return &workflowservice.PauseWorkflowExecutionResponse{} },
+		"UnpauseWorkflowExecution":           func() any { return &workflowservice.UnpauseWorkflowExecutionResponse{} },
 
 		"CreateSchedule":                   func() any { return &workflowservice.CreateScheduleResponse{} },
 		"DescribeSchedule":                 func() any { return &workflowservice.DescribeScheduleResponse{} },
@@ -92,6 +94,7 @@ var (
 		"PatchSchedule":                    func() any { return &workflowservice.PatchScheduleResponse{} },
 		"DeleteSchedule":                   func() any { return &workflowservice.DeleteScheduleResponse{} },
 		"ListSchedules":                    func() any { return &workflowservice.ListSchedulesResponse{} },
+		"CountSchedules":                   func() any { return &workflowservice.CountSchedulesResponse{} },
 		"ListScheduleMatchingTimes":        func() any { return &workflowservice.ListScheduleMatchingTimesResponse{} },
 		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
 		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
@@ -135,6 +138,15 @@ var (
 		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 		"FetchWorkerConfig":     func() any { return &workflowservice.FetchWorkerConfigResponse{} },
 		"UpdateWorkerConfig":    func() any { return &workflowservice.UpdateWorkerConfigResponse{} },
+
+		"StartActivityExecution":         func() any { return &workflowservice.StartActivityExecutionResponse{} },
+		"CountActivityExecutions":        func() any { return &workflowservice.CountActivityExecutionsResponse{} },
+		"ListActivityExecutions":         func() any { return &workflowservice.ListActivityExecutionsResponse{} },
+		"DescribeActivityExecution":      func() any { return &workflowservice.DescribeActivityExecutionResponse{} },
+		"PollActivityExecution":          func() any { return &workflowservice.PollActivityExecutionResponse{} },
+		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
+		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
+		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
 	}
 )
 
@@ -248,7 +260,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
 		clusterName = targetDC
 		if targetDC == i.currentClusterName {
 			resp, err = handler(ctx, req)

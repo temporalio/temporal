@@ -15,6 +15,7 @@ import (
 
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
+	chasm "go.temporal.io/server/chasm"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,17 +44,17 @@ func (m *MockWorkflowStateReplicator) EXPECT() *MockWorkflowStateReplicatorMockR
 }
 
 // ReplicateVersionedTransition mocks base method.
-func (m *MockWorkflowStateReplicator) ReplicateVersionedTransition(ctx context.Context, versionedTransition *repication.VersionedTransitionArtifact, sourceClusterName string) error {
+func (m *MockWorkflowStateReplicator) ReplicateVersionedTransition(ctx context.Context, archetypeID chasm.ArchetypeID, versionedTransition *repication.VersionedTransitionArtifact, sourceClusterName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, versionedTransition, sourceClusterName)
+	ret := m.ctrl.Call(m, "ReplicateVersionedTransition", ctx, archetypeID, versionedTransition, sourceClusterName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ReplicateVersionedTransition indicates an expected call of ReplicateVersionedTransition.
-func (mr *MockWorkflowStateReplicatorMockRecorder) ReplicateVersionedTransition(ctx, versionedTransition, sourceClusterName any) *gomock.Call {
+func (mr *MockWorkflowStateReplicatorMockRecorder) ReplicateVersionedTransition(ctx, archetypeID, versionedTransition, sourceClusterName any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockWorkflowStateReplicator)(nil).ReplicateVersionedTransition), ctx, versionedTransition, sourceClusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReplicateVersionedTransition", reflect.TypeOf((*MockWorkflowStateReplicator)(nil).ReplicateVersionedTransition), ctx, archetypeID, versionedTransition, sourceClusterName)
 }
 
 // SyncWorkflowState mocks base method.

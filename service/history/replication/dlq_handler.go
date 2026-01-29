@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -52,7 +51,7 @@ type (
 		shard                historyi.ShardContext
 		deleteManager        deletemanager.DeleteManager
 		workflowCache        wcache.Cache
-		resender             eventhandler.ResendHandler
+		remoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		taskExecutorProvider TaskExecutorProvider
 		logger               log.Logger
 	}
@@ -87,24 +86,15 @@ func newDLQHandler(
 	if taskExecutors == nil {
 		panic("Failed to initialize replication DLQ handler due to nil task executors")
 	}
-	historyFetcher := eventhandler.NewHistoryPaginatedFetcher(shard.GetNamespaceRegistry(), clientBean, shard.GetPayloadSerializer(), shard.GetLogger())
-	engineProvider := func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
-		return shard.GetEngine(ctx)
-	}
 	return &dlqHandlerImpl{
 		shard:         shard,
 		deleteManager: deleteManager,
 		workflowCache: workflowCache,
-		resender: eventhandler.NewResendHandler(
+		remoteHistoryFetcher: eventhandler.NewHistoryPaginatedFetcher(
 			shard.GetNamespaceRegistry(),
 			clientBean,
 			shard.GetPayloadSerializer(),
-			shard.GetClusterMetadata(),
-			engineProvider,
-			historyFetcher,
-			eventhandler.NewEventImporter(historyFetcher, engineProvider, shard.GetPayloadSerializer(), shard.GetLogger()),
 			shard.GetLogger(),
-			shard.GetConfig(),
 		),
 		taskExecutors:        taskExecutors,
 		taskExecutorProvider: taskExecutorProvider,
@@ -328,11 +318,11 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecut
 		return executor, nil
 	}
 	taskExecutor := r.taskExecutorProvider(TaskExecutorParams{
-		RemoteCluster:   clusterName,
-		Shard:           r.shard,
-		HistoryResender: r.resender,
-		DeleteManager:   r.deleteManager,
-		WorkflowCache:   r.workflowCache,
+		RemoteCluster:        clusterName,
+		Shard:                r.shard,
+		RemoteHistoryFetcher: r.remoteHistoryFetcher,
+		DeleteManager:        r.deleteManager,
+		WorkflowCache:        r.workflowCache,
 	})
 	r.taskExecutors[clusterName] = taskExecutor
 	return taskExecutor, nil

@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -19,6 +20,7 @@ func Invoke(
 	ctx context.Context,
 	request *historyservice.ForceDeleteWorkflowExecutionRequest,
 	shardID int32,
+	chasmRegistry *chasm.Registry,
 	persistenceExecutionMgr persistence.ExecutionManager,
 	persistenceVisibilityMgr manager.VisibilityManager,
 	logger log.Logger,
@@ -32,11 +34,17 @@ func Invoke(
 		tag.WorkflowRunID(execution.RunId),
 	)
 
+	archetypeID := request.GetArchetypeId()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+
 	if execution.RunId == "" {
 		resp, err := persistenceExecutionMgr.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: request.NamespaceId,
 			WorkflowID:  execution.WorkflowId,
+			ArchetypeID: archetypeID,
 		})
 		if err != nil {
 			return nil, err
@@ -52,6 +60,7 @@ func Invoke(
 		NamespaceID: request.NamespaceId,
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
@@ -66,8 +75,12 @@ func Invoke(
 		executionInfo := resp.State.GetExecutionInfo()
 		histories := executionInfo.GetVersionHistories().GetHistories()
 		branchTokens = make([][]byte, 0, len(histories))
-		for _, historyItem := range histories {
-			branchTokens = append(branchTokens, historyItem.GetBranchToken())
+		for _, versionHistory := range histories {
+			branchToken := versionHistory.GetBranchToken()
+			if len(branchToken) != 0 {
+				// non-workflow executions have empty version history and empty branch token
+				branchTokens = append(branchTokens, branchToken)
+			}
 		}
 	}
 
@@ -89,6 +102,7 @@ func Invoke(
 		NamespaceID: request.NamespaceId,
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
+		ArchetypeID: archetypeID,
 	}); err != nil {
 		return nil, err
 	}
@@ -98,6 +112,7 @@ func Invoke(
 		NamespaceID: request.NamespaceId,
 		WorkflowID:  execution.WorkflowId,
 		RunID:       execution.RunId,
+		ArchetypeID: archetypeID,
 	}); err != nil {
 		return nil, err
 	}

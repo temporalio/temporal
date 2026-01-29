@@ -99,6 +99,13 @@ func livenessMonitor(
 	stopStream func(),
 	logger log.Logger,
 ) {
+	select {
+	case <-shutdownChan.Channel():
+		return
+	case <-signalChan:
+		// Wait for the first message into stream before monitoring.
+	}
+
 	heartbeatTimeout := time.NewTimer(timeoutFn() * time.Duration(timeoutMultiplier()))
 	defer heartbeatTimeout.Stop()
 

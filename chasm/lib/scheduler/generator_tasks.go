@@ -3,12 +3,13 @@ package scheduler
 import (
 	"fmt"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -22,6 +23,7 @@ type (
 		MetricsHandler metrics.Handler
 		BaseLogger     log.Logger
 		SpecProcessor  SpecProcessor
+		SpecBuilder    *scheduler.SpecBuilder
 	}
 
 	GeneratorTaskExecutor struct {
@@ -29,6 +31,7 @@ type (
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
 		SpecProcessor  SpecProcessor
+		specBuilder    *scheduler.SpecBuilder
 	}
 )
 
@@ -38,6 +41,7 @@ func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskE
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
 		SpecProcessor:  opts.SpecProcessor,
+		specBuilder:    opts.SpecBuilder,
 	}
 }
 
@@ -47,20 +51,10 @@ func (g *GeneratorTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) error {
-	scheduler, err := generator.Scheduler.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
-	}
+	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
-
-	invoker, err := scheduler.Invoker.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
-	}
+	metricsHandler := newTaggedMetricsHandler(g.metricsHandler, scheduler)
+	invoker := scheduler.Invoker.Get(ctx)
 
 	// If we have no last processed time, this is a new schedule.
 	if generator.LastProcessedTime == nil {
@@ -71,11 +65,17 @@ func (g *GeneratorTaskExecutor) Execute(
 		g.logSchedule(logger, "starting schedule", scheduler)
 	}
 
+	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
+	// yet been processed.
+	if scheduler.Info.GetUpdateTime().AsTime().After(generator.LastProcessedTime.AsTime()) {
+		generator.LastProcessedTime = scheduler.Info.GetUpdateTime()
+	}
+
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()
 	t2 := ctx.Now(generator).UTC()
 	if t2.Before(t1) {
-		logger.Warn("time went backwards",
+		logger.Error("time went backwards",
 			tag.NewStringerTag("time", t1),
 			tag.NewStringerTag("time", t2))
 		t2 = t1
@@ -92,10 +92,16 @@ func (g *GeneratorTaskExecutor) Execute(
 	)
 	if err != nil {
 		// An error here should be impossible, send to the DLQ.
-		logger.Error("error processing time range", tag.Error(err))
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternalf("failed to process a time range"),
-			err)
+		return queueerrors.NewUnprocessableTaskError(
+			fmt.Sprintf("failed to process a time range: %s", err.Error()))
+	}
+
+	// Emit metrics and update state for any dropped actions.
+	if result.DroppedCount > 0 {
+		logger.Warn("Buffer overrun, dropping actions",
+			tag.NewInt64("dropped-count", result.DroppedCount))
+		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
+		scheduler.Info.BufferDropped += result.DroppedCount
 	}
 
 	// Enqueue newly-generated buffered starts.
@@ -103,8 +109,9 @@ func (g *GeneratorTaskExecutor) Execute(
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
 	}
 
-	// Write the new high water mark.
+	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
+	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
 	// Check if the schedule has gone idle.
 	idleTimeTotal := g.config.Tweakables(scheduler.Namespace).IdleTime
@@ -129,9 +136,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	}
 
 	// Another buffering task is added if we aren't completely out of actions or paused.
-	ctx.AddTask(generator, chasm.TaskAttributes{
-		ScheduledTime: result.NextWakeupTime,
-	}, &schedulerpb.GeneratorTask{})
+	generator.scheduleTask(ctx, result.NextWakeupTime)
 
 	return nil
 }
@@ -145,8 +150,11 @@ func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, sched
 func (g *GeneratorTaskExecutor) Validate(
 	ctx chasm.Context,
 	generator *Generator,
-	_ chasm.TaskAttributes,
+	attrs chasm.TaskAttributes,
 	_ *schedulerpb.GeneratorTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(generator.GetLastProcessedTime(), ctx.Now(generator))
+	return validateTaskHighWaterMark(
+		generator.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }

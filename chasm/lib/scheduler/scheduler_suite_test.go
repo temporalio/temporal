@@ -15,7 +15,9 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // schedulerSuite sets up a suite that has a basic CHASM tree ready
@@ -51,12 +53,17 @@ func (s *schedulerSuite) SetupTest() {
 	s.nodePathEncoder = chasm.DefaultPathEncoder
 
 	s.registry = chasm.NewRegistry(s.logger)
-	err := s.registry.Register(&scheduler.Library{})
+	err := s.registry.Register(newTestLibrary(s.logger, s.specProcessor))
+	s.NoError(err)
+
+	// Register the Core library as well, which we use for Visibility.
+	err = s.registry.Register(&chasm.CoreLibrary{})
 	s.NoError(err)
 
 	// Advance here, because otherwise ctx.Now().IsZero() will be true.
 	s.timeSource = clock.NewEventTimeSource()
-	s.timeSource.Update(time.Now())
+	now := time.Now()
+	s.timeSource.Update(now)
 
 	// Stub NodeBackend for NewEmptytree
 	tv := testvars.New(s.T())
@@ -77,6 +84,27 @@ func (s *schedulerSuite) SetupTest() {
 	ctx := s.newMutableContext()
 	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	s.node.SetRootComponent(s.scheduler)
+
+	// Advance Generator's high water mark to 'now'.
+	generator := s.scheduler.Generator.Get(ctx)
+	generator.LastProcessedTime = timestamppb.New(now)
+
+	// Set up future action times.
+	futureTime := now.Add(time.Hour)
+	s.specProcessor.EXPECT().NextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{
+		Next:    futureTime,
+		Nominal: futureTime,
+	}, nil).MaxTimes(1)
+	s.specProcessor.EXPECT().NextTime(s.scheduler, gomock.Any()).Return(legacyscheduler.GetNextTimeResult{}, nil).AnyTimes()
+
+	// Allow ProcessTimeRange to be called once during setup.
+	s.specProcessor.EXPECT().ProcessTimeRange(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(&scheduler.ProcessedTimeRange{
+		NextWakeupTime: futureTime,
+		LastActionTime: now,
+	}, nil).Times(1)
+
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
 }

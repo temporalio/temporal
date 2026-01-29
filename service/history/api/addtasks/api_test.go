@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -85,7 +85,7 @@ func TestInvoke(t *testing.T) {
 					workflowKey := definition.NewWorkflowKey(
 						string(tests.NamespaceID),
 						strconv.Itoa(i),
-						uuid.New(),
+						uuid.NewString(),
 					)
 					// each workflow has two transfer tasks and one timer task
 					for _, task := range []tasks.Task{
@@ -99,7 +99,7 @@ func TestInvoke(t *testing.T) {
 							WorkflowKey: workflowKey,
 						},
 					} {
-						serializer := serialization.NewTaskSerializer()
+						serializer := serialization.NewSerializer()
 						blob, err := serializer.SerializeTask(task)
 						require.NoError(t, err)
 						params.req.Tasks = append(params.req.Tasks, &historyservice.AddTasksRequest_Task{
@@ -237,7 +237,7 @@ func getDefaultTestParams(t *testing.T) *testParams {
 	task := &tasks.WorkflowTask{
 		WorkflowKey: definition.NewWorkflowKey(string(tests.NamespaceID), tests.WorkflowID, tests.RunID),
 	}
-	serializer := serialization.NewTaskSerializer()
+	serializer := serialization.NewSerializer()
 	blob, err := serializer.SerializeTask(task)
 	require.NoError(t, err)
 	ctrl := gomock.NewController(t)

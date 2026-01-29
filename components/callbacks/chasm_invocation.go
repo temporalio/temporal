@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -16,8 +17,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -29,10 +30,6 @@ type chasmInvocation struct {
 }
 
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
-	if failure, ok := result.(invocationResultFail); ok {
-		return queues.NewUnprocessableTaskError(failure.err.Error())
-	}
-
 	return result.error()
 }
 
@@ -47,8 +44,13 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
-	if !ok {
+	header := nexus.Header(c.nexus.GetHeader())
+	if header == nil {
+		header = nexus.Header{}
+	}
+
+	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedRef == "" {
 		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}
 
@@ -57,13 +59,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
-	ref := &persistencespb.ChasmComponentRef{}
-	err = proto.Unmarshal(decodedRef, ref)
-	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef: %v", err)}
-	}
-
-	request, err := c.getHistoryRequest(ref)
+	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
@@ -71,18 +67,18 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
-		if isRetryableRpcResponse(err) {
-			return invocationResultRetry{msg}
+		redactedErr := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
+		if isRetryableRPCResponse(err) {
+			return invocationResultRetry{redactedErr}
 		}
-		return invocationResultFail{msg}
+		return invocationResultFail{redactedErr}
 	}
 
 	return invocationResultOK{}
 }
 
 func (c chasmInvocation) getHistoryRequest(
-	ref *persistencespb.ChasmComponentRef,
+	ref []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
@@ -98,17 +94,21 @@ func (c chasmInvocation) getHistoryRequest(
 			return nil, fmt.Errorf("failed to read payload: %v", err)
 		}
 
-		var payload commonpb.Payload
+		var payload *commonpb.Payload
 		if payloadBody != nil {
-			err := proto.Unmarshal(payloadBody, &payload)
+			content := &nexus.Content{
+				Header: op.Reader.Header,
+				Data:   payloadBody,
+			}
+			err := commonnexus.PayloadSerializer.Deserialize(content, &payload)
 			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal payload body: %v", err)
+				return nil, fmt.Errorf("failed to deserialize payload: %v", err)
 			}
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: &payload,
+				Success: payload,
 			},
 			CloseTime:  timestamppb.New(op.CloseTime),
 			Completion: completion,
@@ -131,4 +131,31 @@ func (c chasmInvocation) getHistoryRequest(
 	}
 
 	return req, nil
+}
+
+func isRetryableRPCResponse(err error) bool {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
+			return false
+		}
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
 }

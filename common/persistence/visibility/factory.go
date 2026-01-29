@@ -1,12 +1,14 @@
 package visibility
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -21,6 +23,7 @@ type VisibilityStoreFactory interface {
 		saProvider searchattribute.Provider,
 		saMapperProvider searchattribute.MapperProvider,
 		nsRegistry namespace.Registry,
+		chasmRegistry *chasm.Registry,
 		r resolver.ServiceResolver,
 		logger log.Logger,
 		metricsHandler metrics.Handler,
@@ -36,6 +39,7 @@ func NewManager(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
@@ -46,9 +50,11 @@ func NewManager(
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	visibilityManager, err := newVisibilityManagerFromDataStoreConfig(
 		persistenceCfg.GetVisibilityStoreConfig(),
@@ -58,14 +64,17 @@ func NewManager(
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 	if err != nil {
 		return nil, err
@@ -83,14 +92,17 @@ func NewManager(
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		maxReadQPS,
 		maxWriteQPS,
 		operatorRPSRatio,
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 	if err != nil {
 		return nil, err
@@ -124,6 +136,8 @@ func newVisibilityManager(
 	visibilityPluginNameTag metrics.Tag,
 	visibilityIndexNameTag metrics.Tag,
 	logger log.Logger,
+	searchAttributesMapperProvider searchattribute.MapperProvider,
+	chasmRegistry *chasm.Registry,
 ) manager.VisibilityManager {
 	if visStore == nil {
 		return nil
@@ -133,7 +147,12 @@ func newVisibilityManager(
 		tag.NewStringTag(visibilityPluginNameTag.Key, visibilityPluginNameTag.Value),
 		tag.NewStringTag(visibilityIndexNameTag.Key, visibilityIndexNameTag.Value),
 	)
-	var visManager manager.VisibilityManager = newVisibilityManagerImpl(visStore, logger)
+	var visManager manager.VisibilityManager = newVisibilityManagerImpl(
+		visStore,
+		logger,
+		searchAttributesMapperProvider,
+		chasmRegistry,
+	)
 
 	// wrap with rate limiter
 	visManager = NewVisibilityManagerRateLimited(
@@ -164,6 +183,7 @@ func newVisibilityManagerFromDataStoreConfig(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 
 	maxReadQPS dynamicconfig.IntPropertyFn,
 	maxWriteQPS dynamicconfig.IntPropertyFn,
@@ -171,9 +191,11 @@ func newVisibilityManagerFromDataStoreConfig(
 	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	visStore, err := newVisibilityStoreFromDataStoreConfig(
 		dsConfig,
@@ -183,10 +205,13 @@ func newVisibilityManagerFromDataStoreConfig(
 		searchAttributesProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
+		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 	if err != nil {
 		return nil, err
@@ -204,6 +229,8 @@ func newVisibilityManagerFromDataStoreConfig(
 		metrics.VisibilityPluginNameTag(visStore.GetName()),
 		metrics.VisibilityIndexNameTag(visStore.GetIndexName()),
 		logger,
+		searchAttributesMapperProvider,
+		chasmRegistry,
 	), nil
 }
 
@@ -216,11 +243,14 @@ func newVisibilityStoreFromDataStoreConfig(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) (store.VisibilityStore, error) {
 	var (
 		visStore store.VisibilityStore
@@ -232,8 +262,11 @@ func newVisibilityStoreFromDataStoreConfig(
 			persistenceResolver,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
+			chasmRegistry,
+			visibilityEnableUnifiedQueryConverter,
 			logger,
 			metricsHandler,
+			serializer,
 		)
 	} else if dsConfig.Elasticsearch != nil {
 		visStore, err = elasticsearch.NewVisibilityStore(
@@ -241,8 +274,10 @@ func newVisibilityStoreFromDataStoreConfig(
 			esProcessorConfig,
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
+			chasmRegistry,
 			visibilityDisableOrderByClause,
 			visibilityEnableManualPagination,
+			visibilityEnableUnifiedQueryConverter,
 			metricsHandler,
 			logger,
 		)
@@ -256,6 +291,7 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
 			namespaceRegistry,
+			chasmRegistry,
 			persistenceResolver,
 			logger,
 			metricsHandler,

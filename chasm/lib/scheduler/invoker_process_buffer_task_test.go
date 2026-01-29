@@ -31,6 +31,7 @@ func (s *invokerProcessBufferTaskSuite) SetupTest() {
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
+		SpecProcessor:  s.specProcessor,
 	})
 }
 
@@ -299,26 +300,45 @@ func (s *invokerProcessBufferTaskSuite) TestProcessBufferTask_NeedsCancel() {
 
 func (s *invokerProcessBufferTaskSuite) runProcessBufferTestCase(c *processBufferTestCase) {
 	ctx := s.newMutableContext()
-	invoker, err := s.scheduler.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := s.scheduler.Invoker.Get(ctx)
 
-	// Set up initial state
+	// Set up initial state. Note: InitialRunningWorkflows is now represented by
+	// BufferedStarts that have RunId set but no Completed field.
 	invoker.BufferedStarts = c.InitialBufferedStarts
 	invoker.CancelWorkflows = c.InitialCancelWorkflows
 	invoker.TerminateWorkflows = c.InitialTerminateWorkflows
-	s.scheduler.Info.RunningWorkflows = c.InitialRunningWorkflows
+
+	// Add initial running workflows as BufferedStarts with RunId set
+	for _, wf := range c.InitialRunningWorkflows {
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+			RequestId:  wf.WorkflowId + "-req",
+			WorkflowId: wf.WorkflowId,
+			RunId:      wf.RunId,
+			Attempt:    1,
+		})
+	}
 
 	// Set LastProcessedTime to current time to ensure time checks pass
 	invoker.LastProcessedTime = timestamppb.New(s.timeSource.Now())
 
-	err = s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
+	err := s.executor.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{})
 	s.NoError(err)
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
 
 	// Validate the results
-	s.Equal(c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
-	s.Equal(c.ExpectedRunningWorkflows, len(s.scheduler.Info.RunningWorkflows))
+	// Count BufferedStarts (excluding running ones added from InitialRunningWorkflows)
+	s.Len(invoker.GetBufferedStarts(), c.ExpectedBufferedStarts+len(c.InitialRunningWorkflows))
+
+	// Count running workflows from BufferedStarts (has RunId but no Completed)
+	runningCount := 0
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetRunId() != "" && start.GetCompleted() == nil {
+			runningCount++
+		}
+	}
+	s.Equal(c.ExpectedRunningWorkflows, runningCount)
+
 	s.Equal(c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
 	s.Equal(c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
 	s.Equal(c.ExpectedOverlapSkipped, s.scheduler.Info.OverlapSkipped)

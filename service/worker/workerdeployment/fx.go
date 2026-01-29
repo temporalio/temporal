@@ -1,6 +1,8 @@
 package workerdeployment
 
 import (
+	"time"
+
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -16,6 +18,20 @@ import (
 	"go.uber.org/fx"
 )
 
+type DeploymentWorkflowVersion int64
+
+const (
+	// Versions of workflow logic. When introducing a new version, consider generating a new
+	// history for TestReplays using generate_history.sh.
+
+	// Represents the state before the versioning API's received the option of becoming async in nature
+	InitialVersion DeploymentWorkflowVersion = iota
+	// SetCurrent and SetRamping and DeleteVersion APIs are async
+	AsyncSetCurrentAndRamping
+	// Version Data has its own revision number with TaskQueue registration being async as well
+	VersionDataRevisionNumber
+)
+
 type (
 	workerComponent struct {
 		activityDeps  activityDeps
@@ -28,6 +44,7 @@ type (
 		Logger                 log.Logger
 		ClientFactory          sdk.ClientFactory
 		MatchingClient         resource.MatchingClient
+		HistoryClient          resource.HistoryClient
 		WorkerDeploymentClient Client
 	}
 
@@ -49,6 +66,7 @@ func ClientProvider(
 	visibilityManager manager.VisibilityManager,
 	dc *dynamicconfig.Collection,
 	testHooks testhooks.TestHooks,
+	metricsHandler metrics.Handler,
 ) Client {
 	return &ClientImpl{
 		logger:                           logger,
@@ -60,6 +78,7 @@ func ClientProvider(
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
 		testHooks:                        testHooks,
+		metricsHandler:                   metricsHandler,
 	}
 }
 
@@ -82,14 +101,19 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
+	workflowVersionGetter := func() DeploymentWorkflowVersion {
+		val := DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
+		return val
+	}
+
 	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
-		refreshIntervalGetter := func() any {
+		refreshIntervalGetter := func() time.Duration {
 			return dynamicconfig.VersionDrainageStatusRefreshInterval.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		visibilityGracePeriodGetter := func() any {
+		visibilityGracePeriodGetter := func() time.Duration {
 			return dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		return VersionWorkflow(ctx, refreshIntervalGetter, visibilityGracePeriodGetter, args)
+		return VersionWorkflow(ctx, workflowVersionGetter, refreshIntervalGetter, visibilityGracePeriodGetter, args)
 	}
 	registry.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
 
@@ -97,21 +121,19 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		maxVersionsGetter := func() int {
 			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		return Workflow(ctx, maxVersionsGetter, args)
+		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
 	}
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 
 	versionActivities := &VersionActivities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(versionActivities)
 
 	activities := &Activities{
-		namespace:        ns,
-		deploymentClient: s.activityDeps.WorkerDeploymentClient,
-		matchingClient:   s.activityDeps.MatchingClient,
+		activityDeps: s.activityDeps,
+		namespace:    ns,
 	}
 	registry.RegisterActivity(activities)
 	return nil

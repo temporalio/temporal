@@ -6,6 +6,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +49,7 @@ func NewTransaction(
 func (t *TransactionImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	createMode persistence.CreateWorkflowMode,
+	archetypeID chasm.ArchetypeID,
 	newWorkflowFailoverVersion int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -67,13 +69,14 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 			ShardID: t.shard.GetShardID(),
 			// RangeID , this is set by shard context
 			Mode:                createMode,
+			ArchetypeID:         archetypeID,
 			NewWorkflowSnapshot: *newWorkflowSnapshot,
 			NewWorkflowEvents:   newWorkflowEventsSeq,
 		},
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, err
@@ -89,6 +92,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
+	archetypeID chasm.ArchetypeID,
 	resetWorkflowFailoverVersion int64,
 	resetWorkflowSnapshot *persistence.WorkflowSnapshot,
 	resetWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -116,6 +120,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 			ShardID: t.shard.GetShardID(),
 			// RangeID , this is set by shard context
 			Mode:                    conflictResolveMode,
+			ArchetypeID:             archetypeID,
 			ResetWorkflowSnapshot:   *resetWorkflowSnapshot,
 			ResetWorkflowEvents:     resetWorkflowEventsSeq,
 			NewWorkflowSnapshot:     newWorkflowSnapshot,
@@ -126,9 +131,9 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+		NotifyOnExecutionSnapshot(engine, resetWorkflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
+		NotifyOnExecutionMutation(engine, currentWorkflowMutation)
 	}
 	if err != nil {
 		return 0, 0, 0, err
@@ -158,6 +163,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 func (t *TransactionImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	updateMode persistence.UpdateWorkflowMode,
+	archetypeID chasm.ArchetypeID,
 	currentWorkflowFailoverVersion int64,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -180,6 +186,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			ShardID: t.shard.GetShardID(),
 			// RangeID , this is set by shard context
 			Mode:                   updateMode,
+			ArchetypeID:            archetypeID,
 			UpdateWorkflowMutation: *currentWorkflowMutation,
 			UpdateWorkflowEvents:   currentWorkflowEventsSeq,
 			NewWorkflowSnapshot:    newWorkflowSnapshot,
@@ -188,8 +195,8 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		isWorkflow,
 	)
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+		NotifyOnExecutionMutation(engine, currentWorkflowMutation)
+		NotifyOnExecutionSnapshot(engine, newWorkflowSnapshot)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -211,6 +218,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 
 func (t *TransactionImpl) SetWorkflowExecution(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) error {
 
@@ -221,10 +229,11 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	_, err = setWorkflowExecution(ctx, t.shard, &persistence.SetWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
+		ArchetypeID:         archetypeID,
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
 	if persistence.OperationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot)
+		NotifyOnExecutionSnapshot(engine, workflowSnapshot)
 	}
 	if err != nil {
 		return err
@@ -572,7 +581,7 @@ func setWorkflowExecution(
 	return resp, nil
 }
 
-func NotifyWorkflowSnapshotTasks(
+func NotifyOnExecutionSnapshot(
 	engine historyi.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 ) {
@@ -580,9 +589,16 @@ func NotifyWorkflowSnapshotTasks(
 		return
 	}
 	engine.NotifyNewTasks(workflowSnapshot.Tasks)
+	if len(workflowSnapshot.ChasmNodes) > 0 {
+		engine.NotifyChasmExecution(chasm.ExecutionKey{
+			NamespaceID: workflowSnapshot.ExecutionInfo.NamespaceId,
+			BusinessID:  workflowSnapshot.ExecutionInfo.WorkflowId,
+			RunID:       workflowSnapshot.ExecutionState.RunId,
+		}, nil)
+	}
 }
 
-func NotifyWorkflowMutationTasks(
+func NotifyOnExecutionMutation(
 	engine historyi.Engine,
 	workflowMutation *persistence.WorkflowMutation,
 ) {
@@ -590,6 +606,14 @@ func NotifyWorkflowMutationTasks(
 		return
 	}
 	engine.NotifyNewTasks(workflowMutation.Tasks)
+	if len(workflowMutation.UpsertChasmNodes) > 0 ||
+		len(workflowMutation.DeleteChasmNodes) > 0 {
+		engine.NotifyChasmExecution(chasm.ExecutionKey{
+			NamespaceID: workflowMutation.ExecutionInfo.NamespaceId,
+			BusinessID:  workflowMutation.ExecutionInfo.WorkflowId,
+			RunID:       workflowMutation.ExecutionState.RunId,
+		}, nil)
+	}
 }
 
 func NotifyNewHistorySnapshotEvent(

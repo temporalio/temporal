@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -36,7 +36,9 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests/testcore"
@@ -58,11 +60,18 @@ type AdvancedVisibilitySuite struct {
 
 	// client for the system namespace
 	sysSDKClient sdkclient.Client
+
+	enableUnifiedQueryConverter bool
 }
 
 func TestAdvancedVisibilitySuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(AdvancedVisibilitySuite))
+	suite.Run(t, &AdvancedVisibilitySuite{enableUnifiedQueryConverter: true})
+}
+
+func TestAdvancedVisibilitySuiteLegacy(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &AdvancedVisibilitySuite{enableUnifiedQueryConverter: false})
 }
 
 // This cluster use customized threshold for history config
@@ -77,6 +86,10 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.BuildIdScavengerEnabled.Key():                    true,
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
+		// Enable the unified query converter
+		dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
+		// Enable external payload tracking for TestListWorkflow_ExternalPayloadSearchAttributes
+		dynamicconfig.ExternalPayloadsEnabled.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
@@ -148,7 +161,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	attrPayloadFromResponse, attrExist := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
 	s.True(attrExist)
 	s.Equal(attrPayload.GetData(), attrPayloadFromResponse.GetData())
-	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[searchattribute.MetadataType]
+	attrType, typeSet := attrPayloadFromResponse.GetMetadata()[sadefs.MetadataType]
 	s.True(typeSet)
 	s.True(len(attrType) > 0)
 }
@@ -225,7 +238,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
-	s.testHelperForReadOnce(we.GetRunId(), query)
+	openExecution := s.testHelperForReadOnce(we.GetRunId(), query)
+	searchValBytes, ok := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
+	s.True(ok)
+	var searchVal string
+	_ = payload.Decode(searchValBytes, &searchVal)
+	s.Equal(testSearchAttributeVal, searchVal)
 
 	searchAttributes := s.createSearchAttributes()
 	// test upsert
@@ -285,7 +303,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 		respAttr, ok := descResp.WorkflowExecutionInfo.GetSearchAttributes().GetIndexedFields()[attrName]
 		s.True(ok)
 		s.Equal(expectedPayload.GetData(), respAttr.GetData())
-		attrType, typeSet := respAttr.GetMetadata()[searchattribute.MetadataType]
+		attrType, typeSet := respAttr.GetMetadata()[sadefs.MetadataType]
 		s.True(typeSet)
 		s.True(len(attrType) > 0)
 	}
@@ -333,14 +351,14 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	we1, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowId = id + "-2"
 	attrValBytes, _ = payload.Encode(2)
 	searchAttr.IndexedFields[key] = attrValBytes
 	we2, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 
-	request.RequestId = uuid.New()
+	request.RequestId = uuid.NewString()
 	request.WorkflowId = id + "-3"
 	attrValBytes, _ = payload.Encode(3)
 	searchAttr.IndexedFields[key] = attrValBytes
@@ -429,19 +447,15 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
 	request := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	searchAttr, err := searchattribute.Encode(
-		map[string]any{
-			"CustomKeywordField": "justice for all",
-		},
-		&searchattribute.TestNameTypeMap,
-	)
+	searchAttr := map[string]any{
+		"CustomKeywordField": "justice for all",
+	}
+	encodedSearchAttr, err := searchattribute.Encode(searchAttr, nil)
 	s.NoError(err)
 
-	request.SearchAttributes = searchAttr
+	request.SearchAttributes = encodedSearchAttr
 	we1, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
-
-	time.Sleep(testcore.WaitForESToSettle) //nolint:forbidigo
 
 	// Exact match Keyword (supported)
 	var openExecution *workflowpb.WorkflowExecutionInfo
@@ -450,15 +464,16 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomKeywordField = "justice for all"`,
 	}
-	for i := 0; i < numOfRetry; i++ {
-		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
-		s.NoError(err)
-		if len(resp.GetExecutions()) == 1 {
+	s.EventuallyWithT(
+		func(c *assert.CollectT) {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
+			require.NoError(c, err)
+			require.Len(c, resp.GetExecutions(), 1)
 			openExecution = resp.GetExecutions()[0]
-			break
-		}
-		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo
-	}
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
 	s.NotNil(openExecution)
 	s.Equal(we1.GetRunId(), openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
@@ -499,7 +514,10 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
 	s.Len(resp.GetExecutions(), 1)
 	s.Equal(id, resp.Executions[0].GetExecution().GetWorkflowId())
 	s.Equal(wt, resp.Executions[0].GetType().GetName())
-	s.ProtoEqual(searchAttr, resp.Executions[0].GetSearchAttributes())
+
+	decodedSearchAttr, err := searchattribute.Decode(resp.Executions[0].GetSearchAttributes(), nil, false)
+	s.NoError(err)
+	s.Equal(searchAttr, decodedSearchAttr)
 
 	listRequest = &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -582,7 +600,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
 	for i := 0; i < testcore.DefaultPageSize; i++ {
-		startRequest.RequestId = uuid.New()
+		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 		s.NoError(err)
@@ -633,7 +651,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	initialTime := time.Now().UTC()
 	for i := 0; i < testcore.DefaultPageSize+1; i++ { // start 6
 		startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
-		startRequest.RequestId = uuid.New()
+		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 
 		if i < testcore.DefaultPageSize-1 { // 4 workflows have search attributes.
@@ -686,7 +704,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	pageSize := int32(testcore.DefaultPageSize)
 
 	// order by CloseTime asc
-	query1 := fmt.Sprintf(queryTemplate, wt, searchattribute.CloseTime, asc)
+	query1 := fmt.Sprintf(queryTemplate, wt, sadefs.CloseTime, asc)
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -784,7 +802,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 ) {
 	// start enough number of workflows
 	for i := 0; i < numOfWorkflows; i++ {
-		startRequest.RequestId = uuid.New()
+		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = wid + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
 		s.NoError(err)
@@ -836,7 +854,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	s.Nil(nextPageToken)
 }
 
-func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) {
+func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) *workflowpb.WorkflowExecutionInfo {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -857,12 +875,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
-	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
-		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[testSearchAttributeKey]
-		var searchVal string
-		_ = payload.Decode(searchValBytes, &searchVal)
-		s.Equal(testSearchAttributeVal, searchVal)
-	}
+	return openExecution
 }
 
 func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
@@ -977,13 +990,13 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause is only supported for ExecutionStatus search attribute")
+	s.Contains(strings.ToLower(err.Error()), "'group by' clause is only supported for")
 
 	query = `GROUP BY ExecutionStatus, WorkflowType`
 	countRequest.Query = query
 	_, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 	s.Error(err)
-	s.Contains(err.Error(), "'group by' clause supports only a single field")
+	s.Contains(strings.ToLower(err.Error()), "'group by' clause supports only a single field")
 }
 
 func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {
@@ -991,7 +1004,7 @@ func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(id, wt, tl
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1015,7 +1028,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1238,9 +1251,9 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	s.NoError(err)
 	expectedSearchAttributes, _ := searchattribute.Encode(
 		map[string]interface{}{
-			"CustomDoubleField":             22.0878,
-			searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
-			searchattribute.BuildIds:        []string{worker_versioning.UnversionedSearchAttribute},
+			"CustomDoubleField":    22.0878,
+			sadefs.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+			sadefs.BuildIds:        []string{worker_versioning.UnversionedSearchAttribute},
 		},
 		nil,
 	)
@@ -1306,7 +1319,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1533,13 +1546,13 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 				s.NoError(err)
 				s.Equal(22.0878, doubleVal)
 
-				binaryChecksumsBytes := fields[searchattribute.BinaryChecksums]
+				binaryChecksumsBytes := fields[sadefs.BinaryChecksums]
 				var binaryChecksums []string
 				err = payload.Decode(binaryChecksumsBytes, &binaryChecksums)
 				s.NoError(err)
 				s.Equal([]string{"binary-v1", "binary-v2"}, binaryChecksums)
 
-				buildIdsBytes := fields[searchattribute.BuildIds]
+				buildIdsBytes := fields[sadefs.BuildIds]
 				var buildIds []string
 				err = payload.Decode(buildIdsBytes, &buildIds)
 				s.NoError(err)
@@ -1556,10 +1569,10 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 
 func (s *AdvancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttributes {
 	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
-		"CustomTextField":               "another string",
-		"CustomIntField":                123,
-		"CustomDoubleField":             22.0878,
-		searchattribute.BinaryChecksums: []string{"binary-v1", "binary-v2"},
+		"CustomTextField":      "another string",
+		"CustomIntField":       123,
+		"CustomDoubleField":    22.0878,
+		sadefs.BinaryChecksums: []string{"binary-v1", "binary-v2"},
 	}, nil)
 	s.NoError(err)
 	return searchAttributes
@@ -1576,7 +1589,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -2225,7 +2238,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
 
 	// Start a workflow on tq1 and verify it affects the reachability of v0.1
 	_, err = s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   testcore.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
@@ -2367,7 +2380,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	tq := s.T().Name()
 
 	_, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:    uuid.New(),
+		RequestId:    uuid.NewString(),
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   testcore.RandomizeStr(s.T().Name()),
 		WorkflowType: &commonpb.WorkflowType{Name: "dont-care"},
@@ -2467,17 +2480,73 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
 }
 
+func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttributes() {
+	id := "es-functional-external-payload-test"
+	wt := "es-functional-external-payload-test-type"
+	tl := "es-functional-external-payload-test-taskqueue"
+
+	// Create workflow input with external payload
+	externalPayloadSize := int64(1024)
+	workflowInput := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
+			Data: []byte("workflow input"),
+			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+				{SizeBytes: externalPayloadSize},
+			},
+		}},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:               workflowInput,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "test-identity",
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+
+	// Complete the workflow using the new taskpoller API
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: payloads.EncodeString("Done"),
+						},
+					},
+				}},
+			}, nil
+		},
+	)
+	s.NoError(err)
+
+	query := fmt.Sprintf(`WorkflowId = "%s" AND %s = 1`, id, sadefs.TemporalExternalPayloadCount)
+	s.testHelperForReadOnce(we.GetRunId(), query)
+
+	query = fmt.Sprintf(`WorkflowId = "%s" AND %s = %d`, id, sadefs.TemporalExternalPayloadSizeBytes, externalPayloadSize)
+	s.testHelperForReadOnce(we.GetRunId(), query)
+}
+
 func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	ctx := testcore.NewContext()
 
 	// Test 1: List schedule with "scheduleId" query
-	scheduleID := "test-schedule-" + uuid.New()
+	scheduleID := "test-schedule-" + uuid.NewString()
 	workflowType := "test-workflow-type"
-	workflowID := "test-schedule-" + uuid.New()
+	workflowID := "test-schedule-" + uuid.NewString()
 
 	schedule := &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
-		RequestId:  uuid.New(),
+		RequestId:  uuid.NewString(),
 		ScheduleId: scheduleID,
 		Schedule: &schedulepb.Schedule{
 			Action: &schedulepb.ScheduleAction{
@@ -2504,7 +2573,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 	listRequest := &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 1,
-		Query:           fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, scheduleID),
+		Query:           fmt.Sprintf(`%s = "%s"`, sadefs.ScheduleID, scheduleID),
 	}
 
 	s.Eventually(func() bool {
@@ -2516,31 +2585,31 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		return listResponse.Schedules[0].ScheduleId == scheduleID
 	}, 30*time.Second, 1*time.Second)
 
-	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, scheduleID)
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, sadefs.ScheduleID, scheduleID)
 	listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
 	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
 
 	// Test 2: List schedule with custom "scheduleId" search attribute
-	s.addCustomKeywordSearchAttribute(ctx, searchattribute.ScheduleID)
+	s.addCustomKeywordSearchAttribute(ctx, sadefs.ScheduleID)
 
 	// Create the schedule with the new search attribute and verify it can be listed
-	customScheduleID := "test-schedule-" + uuid.New()
+	customScheduleID := "test-schedule-" + uuid.NewString()
 	customSearchAttrValue := "testScheduleId"
 
-	schedule.RequestId = uuid.New()
+	schedule.RequestId = uuid.NewString()
 	schedule.ScheduleId = customScheduleID
 	schedule.SearchAttributes = &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			searchattribute.ScheduleID: payload.EncodeString(customSearchAttrValue),
+			sadefs.ScheduleID: payload.EncodeString(customSearchAttrValue),
 		},
 	}
 
 	_, err = s.FrontendClient().CreateSchedule(ctx, schedule)
 	s.NoError(err)
 
-	listRequest.Query = fmt.Sprintf(`%s = "%s"`, searchattribute.ScheduleID, customSearchAttrValue)
+	listRequest.Query = fmt.Sprintf(`%s = "%s"`, sadefs.ScheduleID, customSearchAttrValue)
 	s.Eventually(func() bool {
 		listResponse, err := s.FrontendClient().ListSchedules(ctx, listRequest)
 		if err != nil || len(listResponse.Schedules) != 1 {
@@ -2550,7 +2619,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
 		return listResponse.Schedules[0].ScheduleId == customScheduleID
 	}, 30*time.Second, 1*time.Second)
 
-	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, searchattribute.ScheduleID, customSearchAttrValue)
+	listRequest.Query = fmt.Sprintf(`%s IN ("%s", "foo", "bar")`, sadefs.ScheduleID, customSearchAttrValue)
 	listResponse, err = s.FrontendClient().ListSchedules(ctx, listRequest)
 	s.NoError(err)
 	s.Len(listResponse.Schedules, 1)
@@ -2593,7 +2662,7 @@ func (s *AdvancedVisibilitySuite) getBuildIds(ctx context.Context, execution *co
 		Execution: execution,
 	})
 	s.NoError(err)
-	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[searchattribute.BuildIds]
+	attr, found := description.WorkflowExecutionInfo.SearchAttributes.IndexedFields[sadefs.BuildIds]
 	if !found {
 		return []string{}
 	}

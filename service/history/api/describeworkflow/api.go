@@ -15,9 +15,12 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -86,6 +89,7 @@ func Invoke(
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
+	namespaceName := mutableState.GetNamespaceEntry().Name().String()
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 
@@ -143,8 +147,23 @@ func Invoke(
 		},
 	}
 
+	// copy pause info to the response if it exists
+	if executionInfo.PauseInfo != nil {
+		result.WorkflowExtendedInfo.PauseInfo = &workflowpb.WorkflowExecutionPauseInfo{
+			PausedTime: executionInfo.PauseInfo.PauseTime,
+			Identity:   executionInfo.PauseInfo.Identity,
+			Reason:     executionInfo.PauseInfo.Reason,
+		}
+	}
+
 	if mutableState.IsResetRun() {
 		result.WorkflowExtendedInfo.LastResetTime = executionState.StartTime
+	}
+
+	if shard.GetConfig().ExternalPayloadsEnabled(namespaceName) {
+		executionStats := executionInfo.GetExecutionStats()
+		result.WorkflowExecutionInfo.ExternalPayloadSizeBytes = executionStats.GetExternalPayloadSize()
+		result.WorkflowExecutionInfo.ExternalPayloadCount = executionStats.GetExternalPayloadCount()
 	}
 
 	for requestID, requestIDInfo := range mutableState.GetExecutionState().GetRequestIds() {
@@ -235,38 +254,37 @@ func Invoke(
 		IndexedFields: clonePayloadMap(relocatableAttributes.SearchAttributes.GetIndexedFields()),
 	}
 
-	cbColl := callbacks.MachineCollection(mutableState.HSM())
-	cbs := cbColl.List()
-	result.Callbacks = make([]*workflowpb.CallbackInfo, 0, len(cbs))
-	for _, node := range cbs {
-		callback, err := cbColl.Data(node.Key.ID)
+	// Check for CHASM callbacks (regardless of feature flag setting)
+	// Only process CHASM callbacks if we have an actual chasm.Node (not a noopChasmTree)
+	if mutableState.ChasmEnabled() {
+		chasmCallbackInfos, err := buildCallbackInfosFromChasm(
+			ctx,
+			namespaceID,
+			mutableState,
+			executionInfo,
+			executionState,
+			outboundQueueCBPool,
+			shard.GetLogger(),
+		)
 		if err != nil {
-			shard.GetLogger().Error(
-				"failed to load callback data while building describe response",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
-				tag.Error(err),
-			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
+			return nil, err
 		}
-
-		callbackInfo, err := buildCallbackInfo(namespaceID, callback, outboundQueueCBPool)
-		if err != nil {
-			shard.GetLogger().Error(
-				"failed to build callback info while building describe response",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(executionInfo.WorkflowId),
-				tag.WorkflowRunID(executionState.RunId),
-				tag.Error(err),
-			)
-			return nil, serviceerror.NewInternal("failed to construct describe response")
-		}
-		if callbackInfo == nil {
-			continue
-		}
-		result.Callbacks = append(result.Callbacks, callbackInfo)
+		result.Callbacks = append(result.Callbacks, chasmCallbackInfos...)
 	}
+
+	// Check for HSM callbacks
+	hsmCallbackInfos, err := buildCallbackInfosFromHSM(
+		namespaceID,
+		mutableState,
+		executionInfo,
+		executionState,
+		outboundQueueCBPool,
+		shard.GetLogger(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	result.Callbacks = append(result.Callbacks, hsmCallbackInfos...)
 
 	opColl := nexusoperations.MachineCollection(mutableState.HSM())
 	ops := opColl.List()
@@ -305,12 +323,12 @@ func Invoke(
 	return result, nil
 }
 
-func buildCallbackInfo(
+func buildCallbackInfoFromHSM(
 	namespaceID namespace.ID,
 	callback callbacks.Callback,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
-	if callback.Callback.GetNexus() == nil {
+	if callback.GetCallback().GetNexus() == nil {
 		// Ignore non-nexus callbacks for now (there aren't any just yet).
 		return nil, nil
 	}
@@ -334,6 +352,8 @@ func buildCallbackInfo(
 		state = enumspb.CALLBACK_STATE_FAILED
 	case enumsspb.CALLBACK_STATE_SUCCEEDED:
 		state = enumspb.CALLBACK_STATE_SUCCEEDED
+	default:
+		return nil, fmt.Errorf("unknown callback state: %v", callback.State())
 	}
 
 	blockedReason := ""
@@ -364,6 +384,180 @@ func buildCallbackInfo(
 		LastAttemptCompleteTime: callback.LastAttemptCompleteTime,
 		LastAttemptFailure:      callback.LastAttemptFailure,
 		NextAttemptScheduleTime: callback.NextAttemptScheduleTime,
+		BlockedReason:           blockedReason,
+	}, nil
+}
+
+// buildCallbackInfosFromHSM reads callbacks from HSM and converts them to API format.
+func buildCallbackInfosFromHSM(
+	namespaceID namespace.ID,
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	logger log.Logger,
+) ([]*workflowpb.CallbackInfo, error) {
+	cbColl := callbacks.MachineCollection(mutableState.HSM())
+	cbs := cbColl.List()
+	result := make([]*workflowpb.CallbackInfo, 0, len(cbs))
+
+	for _, node := range cbs {
+		callback, err := cbColl.Data(node.Key.ID)
+		if err != nil {
+			logger.Error(
+				"failed to load callback data while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+
+		callbackInfo, err := buildCallbackInfoFromHSM(namespaceID, callback, outboundQueueCBPool)
+		if err != nil {
+			logger.Error(
+				"failed to build callback info while building describe response",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		if callbackInfo == nil {
+			continue
+		}
+		result = append(result, callbackInfo)
+	}
+
+	return result, nil
+}
+
+// buildCallbackInfosFromChasm reads callbacks from the CHASM tree and converts them to API format.
+func buildCallbackInfosFromChasm(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionState *persistencespb.WorkflowExecutionState,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+	logger log.Logger,
+) ([]*workflowpb.CallbackInfo, error) {
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponentReadOnly(ctx)
+	if err != nil {
+		logger.Error(
+			"failed to get workflow component from CHASM tree",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(executionInfo.WorkflowId),
+			tag.WorkflowRunID(executionState.RunId),
+			tag.Error(err),
+		)
+		return nil, serviceerror.NewInternal("failed to construct describe response")
+	}
+
+	result := make([]*workflowpb.CallbackInfo, 0, len(wf.Callbacks))
+	for _, field := range wf.Callbacks {
+		callback := field.Get(chasmCtx)
+
+		callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, outboundQueueCBPool)
+		if err != nil {
+			logger.Error(
+				"failed to build callback info from CHASM callback",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(executionInfo.WorkflowId),
+				tag.WorkflowRunID(executionState.RunId),
+				tag.Error(err),
+			)
+			return nil, serviceerror.NewInternal("failed to construct describe response")
+		}
+		if callbackInfo == nil {
+			continue
+		}
+		result = append(result, callbackInfo)
+	}
+
+	return result, nil
+}
+
+// buildCallbackInfoFromChasm converts a single CHASM callback to API format.
+func buildCallbackInfoFromChasm(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	callback *chasmcallback.Callback,
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) (*workflowpb.CallbackInfo, error) {
+	// Create a circuit breaker state checker function
+	circuitBreakerState := func(destination string) bool {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   callbacks.TaskTypeInvocation,
+			NamespaceID: namespaceID.String(),
+			Destination: destination,
+		})
+		return cb.State() != gobreaker.StateClosed
+	}
+
+	return buildChasmCallbackInfo(ctx, namespaceID.String(), callback, circuitBreakerState)
+}
+
+// buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
+// Returns nil if the callback should not be included in the response.
+func buildChasmCallbackInfo(
+	ctx context.Context,
+	namespaceID string,
+	cb *chasmcallback.Callback,
+	circuitBreakerState func(destination string) bool,
+) (*workflowpb.CallbackInfo, error) {
+	nexusVariant := cb.GetCallback().GetNexus()
+	if nexusVariant == nil {
+		// Only Nexus callbacks are supported
+		return nil, nil
+	}
+
+	cbSpec, err := cb.ToAPICallback()
+	if err != nil {
+		return nil, err
+	}
+
+	var state enumspb.CallbackState
+	switch cb.Status {
+	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+		return nil, serviceerror.NewInternal("callback with UNSPECIFIED state")
+	case callbackspb.CALLBACK_STATUS_STANDBY:
+		state = enumspb.CALLBACK_STATE_STANDBY
+	case callbackspb.CALLBACK_STATUS_SCHEDULED:
+		state = enumspb.CALLBACK_STATE_SCHEDULED
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		state = enumspb.CALLBACK_STATE_BACKING_OFF
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		state = enumspb.CALLBACK_STATE_FAILED
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		state = enumspb.CALLBACK_STATE_SUCCEEDED
+	default:
+		return nil, serviceerror.NewInternalf("unknown callback state: %v", cb.Status)
+	}
+
+	blockedReason := ""
+	if state == enumspb.CALLBACK_STATE_SCHEDULED {
+		if circuitBreakerState(cbSpec.GetNexus().GetUrl()) {
+			state = enumspb.CALLBACK_STATE_BLOCKED
+			blockedReason = "The circuit breaker is open."
+		}
+	}
+
+	trigger := &workflowpb.CallbackInfo_Trigger{
+		Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
+	}
+
+	return &workflowpb.CallbackInfo{
+		Callback:                cbSpec,
+		Trigger:                 trigger,
+		RegistrationTime:        cb.RegistrationTime,
+		State:                   state,
+		Attempt:                 cb.Attempt,
+		LastAttemptCompleteTime: cb.LastAttemptCompleteTime,
+		LastAttemptFailure:      cb.LastAttemptFailure,
+		NextAttemptScheduleTime: cb.NextAttemptScheduleTime,
 		BlockedReason:           blockedReason,
 	}, nil
 }

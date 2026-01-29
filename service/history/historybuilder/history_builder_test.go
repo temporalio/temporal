@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -47,23 +47,23 @@ type (
 )
 
 var (
-	testNamespaceID   = namespace.ID(uuid.New())
+	testNamespaceID   = namespace.ID(uuid.NewString())
 	testNamespaceName = namespace.Name("test namespace")
 	testWorkflowID    = "test workflow ID"
-	testRunID         = uuid.New()
+	testRunID         = uuid.NewString()
 
-	testParentNamespaceID      = uuid.New()
+	testParentNamespaceID      = uuid.NewString()
 	testParentNamespaceName    = "test parent namespace"
 	testParentWorkflowID       = "test parent workflow ID"
-	testParentRunID            = uuid.New()
+	testParentRunID            = uuid.NewString()
 	testParentInitiatedID      = rand.Int63()
 	testParentInitiatedVersion = rand.Int63()
 
 	testRootWorkflowID = "test root workflow ID"
-	testRootRunID      = uuid.New()
+	testRootRunID      = uuid.NewString()
 
 	testIdentity  = "test identity"
-	testRequestID = uuid.New()
+	testRequestID = uuid.NewString()
 
 	testPayload = &commonpb.Payload{
 		Metadata: map[string][]byte{
@@ -170,9 +170,9 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	workflowTaskStartToCloseTimeout := durationpb.New(time.Duration(rand.Int63()))
 
 	resetPoints := &workflowpb.ResetPoints{}
-	prevRunID := uuid.New()
-	firstRunID := uuid.New()
-	originalRunID := uuid.New()
+	prevRunID := uuid.NewString()
+	firstRunID := uuid.NewString()
+	originalRunID := uuid.NewString()
 
 	request := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId: testNamespaceID.String(),
@@ -657,6 +657,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		123678,
 		nil,
 		int64(0),
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -667,11 +668,12 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
 			WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-				ScheduledEventId:     scheduledEventID,
-				Identity:             testIdentity,
-				RequestId:            testRequestID,
-				SuggestContinueAsNew: false,
-				HistorySizeBytes:     123678,
+				ScheduledEventId:            scheduledEventID,
+				Identity:                    testIdentity,
+				RequestId:                   testRequestID,
+				SuggestContinueAsNew:        false,
+				SuggestContinueAsNewReasons: nil,
+				HistorySizeBytes:            123678,
 			},
 		},
 	}, event)
@@ -720,8 +722,8 @@ func (s *historyBuilderSuite) TestWorkflowTaskFailed() {
 	scheduledEventID := rand.Int63()
 	startedEventID := rand.Int63()
 	cause := enumspb.WorkflowTaskFailedCause(rand.Int31n(int32(len(enumspb.WorkflowTaskFailedCause_name))))
-	baseRunID := uuid.New()
-	newRunID := uuid.New()
+	baseRunID := uuid.NewString()
+	newRunID := uuid.NewString()
 	forkEventVersion := rand.Int63()
 	checksum := "random checksum"
 	event := s.historyBuilder.AddWorkflowTaskFailedEvent(

@@ -14,7 +14,7 @@ import (
 	"github.com/iancoleman/strcase"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 var (
@@ -192,7 +192,7 @@ func ParseCountGroupByRows(rows dbRowsIf, groupBy []string) ([]VisibilityCountRo
 
 func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 	switch fieldName {
-	case searchattribute.ExecutionStatus:
+	case sadefs.ExecutionStatus:
 		v := reflect.ValueOf(value)
 		if v.CanInt() {
 			return enumspb.WorkflowExecutionStatus(v.Int()).String(), nil
@@ -204,12 +204,16 @@ func parseCountGroupByGroupValue(fieldName string, value any) (any, error) {
 		return nil, serviceerror.NewInternal(
 			fmt.Sprintf(
 				"Unable to parse %s value from DB (got: %v of type: %T, expected type: integer)",
-				searchattribute.ExecutionStatus,
+				sadefs.ExecutionStatus,
 				value,
 				value,
 			),
 		)
 	default:
+		// MySQL driver returns VARCHAR columns as []byte when scanning into *any.
+		if bs, ok := value.([]byte); ok {
+			return string(bs), nil
+		}
 		return value, nil
 	}
 }
@@ -240,14 +244,14 @@ func GenerateSelectQuery(
 
 	whereClauses = append(
 		whereClauses,
-		fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.NamespaceID)),
+		fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.NamespaceID)),
 	)
 	queryArgs = append(queryArgs, filter.NamespaceID)
 
 	if filter.WorkflowID != nil {
 		whereClauses = append(
 			whereClauses,
-			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.WorkflowID)),
+			fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.WorkflowID)),
 		)
 		queryArgs = append(queryArgs, *filter.WorkflowID)
 	}
@@ -255,25 +259,25 @@ func GenerateSelectQuery(
 	if filter.WorkflowTypeName != nil {
 		whereClauses = append(
 			whereClauses,
-			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.WorkflowType)),
+			fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.WorkflowType)),
 		)
 		queryArgs = append(queryArgs, *filter.WorkflowTypeName)
 	}
 
-	timeAttr := searchattribute.StartTime
+	timeAttr := sadefs.StartTime
 	if filter.Status != int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
-		timeAttr = searchattribute.CloseTime
+		timeAttr = sadefs.CloseTime
 	}
 	if filter.Status == int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED) {
 		whereClauses = append(
 			whereClauses,
-			fmt.Sprintf("%s != ?", searchattribute.GetSqlDbColName(searchattribute.ExecutionStatus)),
+			fmt.Sprintf("%s != ?", sadefs.GetSqlDbColName(sadefs.ExecutionStatus)),
 		)
 		queryArgs = append(queryArgs, int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 	} else {
 		whereClauses = append(
 			whereClauses,
-			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.ExecutionStatus)),
+			fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.ExecutionStatus)),
 		)
 		queryArgs = append(queryArgs, filter.Status)
 	}
@@ -282,7 +286,7 @@ func GenerateSelectQuery(
 	case filter.RunID != nil && filter.MinTime == nil && filter.Status != 1:
 		whereClauses = append(
 			whereClauses,
-			fmt.Sprintf("%s = ?", searchattribute.GetSqlDbColName(searchattribute.RunID)),
+			fmt.Sprintf("%s = ?", sadefs.GetSqlDbColName(sadefs.RunID)),
 		)
 		queryArgs = append(
 			queryArgs,
@@ -295,13 +299,13 @@ func GenerateSelectQuery(
 		*filter.MaxTime = convertToDbDateTime(*filter.MaxTime)
 		whereClauses = append(
 			whereClauses,
-			fmt.Sprintf("%s >= ?", searchattribute.GetSqlDbColName(timeAttr)),
-			fmt.Sprintf("%s <= ?", searchattribute.GetSqlDbColName(timeAttr)),
+			fmt.Sprintf("%s >= ?", sadefs.GetSqlDbColName(timeAttr)),
+			fmt.Sprintf("%s <= ?", sadefs.GetSqlDbColName(timeAttr)),
 			fmt.Sprintf(
 				"((%s = ? AND %s > ?) OR %s < ?)",
-				searchattribute.GetSqlDbColName(timeAttr),
-				searchattribute.GetSqlDbColName(searchattribute.RunID),
-				searchattribute.GetSqlDbColName(timeAttr),
+				sadefs.GetSqlDbColName(timeAttr),
+				sadefs.GetSqlDbColName(sadefs.RunID),
+				sadefs.GetSqlDbColName(timeAttr),
 			),
 		)
 		queryArgs = append(
@@ -324,8 +328,8 @@ func GenerateSelectQuery(
 		LIMIT ?`,
 		strings.Join(DbFields, ", "),
 		strings.Join(whereClauses, " AND "),
-		searchattribute.GetSqlDbColName(timeAttr),
-		searchattribute.GetSqlDbColName(searchattribute.RunID),
+		sadefs.GetSqlDbColName(timeAttr),
+		sadefs.GetSqlDbColName(sadefs.RunID),
 	)
 	filter.QueryArgs = queryArgs
 	return nil

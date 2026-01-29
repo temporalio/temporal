@@ -86,6 +86,21 @@ func (c *retryableClient) CheckTaskQueueUserDataPropagation(
 	return resp, err
 }
 
+func (c *retryableClient) CheckTaskQueueVersionMembership(
+	ctx context.Context,
+	request *matchingservice.CheckTaskQueueVersionMembershipRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
+	var resp *matchingservice.CheckTaskQueueVersionMembershipResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CreateNexusEndpoint(
 	ctx context.Context,
 	request *matchingservice.CreateNexusEndpointRequest,
@@ -485,6 +500,21 @@ func (c *retryableClient) SyncDeploymentUserData(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.SyncDeploymentUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	var resp *matchingservice.UpdateFairnessStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateFairnessState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

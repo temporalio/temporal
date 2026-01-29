@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historypb "go.temporal.io/api/history/v1"
@@ -55,19 +55,19 @@ func NewHistoryEventsSuite(
 	store p.ExecutionStore,
 	logger log.Logger,
 ) *HistoryEventsSuite {
-	eventSerializer := serialization.NewSerializer()
+	serializer := serialization.NewSerializer()
 	return &HistoryEventsSuite{
 		Assertions:      require.New(t),
 		ProtoAssertions: protorequire.New(t),
 		store: p.NewExecutionManager(
 			store,
-			eventSerializer,
+			serializer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
-		serializer: eventSerializer,
+		serializer: serializer,
 		logger:     logger,
 	}
 }
@@ -93,12 +93,12 @@ func (s *HistoryEventsSuite) TearDownTest() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_First() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -120,12 +120,12 @@ func (s *HistoryEventsSuite) TestAppendSelect_First() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -158,12 +158,12 @@ func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -208,12 +208,12 @@ func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -260,12 +260,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -329,12 +329,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -388,12 +388,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendSelectTrim() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -432,12 +432,12 @@ func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -501,12 +501,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -552,12 +552,12 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 }
 
 func (s *HistoryEventsSuite) TestAppendBatches() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	branchToken, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -593,12 +593,12 @@ func (s *HistoryEventsSuite) TestAppendBatches() {
 }
 
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -661,12 +661,12 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 }
 
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
-	treeID := uuid.New()
-	branchID := uuid.New()
+	treeID := uuid.NewString()
+	branchID := uuid.NewString()
 	br1Token, err := s.store.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		&branchID,
 		[]*persistencespb.HistoryBranchRange{},
@@ -770,11 +770,11 @@ func (s *HistoryEventsSuite) forkHistoryBranch(
 ) []byte {
 	resp, err := s.store.ForkHistoryBranch(s.Ctx, &p.ForkHistoryBranchRequest{
 		ShardID:         shardID,
-		NamespaceID:     uuid.New(),
+		NamespaceID:     uuid.NewString(),
 		ForkBranchToken: branchToken,
 		ForkNodeID:      newNodeID,
 		Info:            "",
-		NewRunID:        uuid.New(),
+		NewRunID:        uuid.NewString(),
 	})
 	s.NoError(err)
 	return resp.NewBranchToken

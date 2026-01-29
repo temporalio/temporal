@@ -6,11 +6,19 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
+
+var elasticsearchQueryInvalidComparisonCounter = metrics.NewCounterDef("elasticsearch_query_invalid_comparison")
 
 type (
 	nameInterceptor struct {
@@ -18,11 +26,16 @@ type (
 		searchAttributesTypeMap        searchattribute.NameTypeMap
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		seenNamespaceDivision          bool
+		chasmMapper                    *chasm.VisibilitySearchAttributesMapper
+		archetypeID                    chasm.ArchetypeID
 	}
 
 	valuesInterceptor struct {
-		namespace               namespace.Name
-		searchAttributesTypeMap searchattribute.NameTypeMap
+		namespace      namespace.Name
+		saTypeMap      searchattribute.NameTypeMap
+		chasmMapper    *chasm.VisibilitySearchAttributesMapper
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 )
 
@@ -30,21 +43,33 @@ func NewNameInterceptor(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	archetypeID chasm.ArchetypeID,
 ) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      namespaceName,
 		searchAttributesTypeMap:        saTypeMap,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		seenNamespaceDivision:          false,
+		chasmMapper:                    chasmMapper,
+		archetypeID:                    archetypeID,
 	}
 }
 
 func NewValuesInterceptor(
 	namespaceName namespace.Name,
-	saTypeMap searchattribute.NameTypeMap,
+	csaTypeMap searchattribute.NameTypeMap,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *valuesInterceptor {
+	saTypeMap := store.CombineTypeMaps(csaTypeMap, chasmMapper)
 	return &valuesInterceptor{
-		namespace:               namespaceName,
-		searchAttributesTypeMap: saTypeMap,
+		namespace:      namespaceName,
+		saTypeMap:      saTypeMap,
+		chasmMapper:    chasmMapper,
+		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
+		logger:         logger,
 	}
 }
 
@@ -54,14 +79,20 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	if err != nil {
 		return "", err
 	}
-	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper, ni.searchAttributesTypeMap)
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
+		ni.searchAttributesTypeMap, ni.chasmMapper)
 	if err != nil {
-		return "", err
+		// Check for special aliases that require archetypeID context.
+		if ni.archetypeID != chasm.SchedulerArchetypeID || name != "TemporalSystemExecutionStatus" {
+			return "", err
+		}
+		fieldName = sadefs.ExecutionStatus
+		fieldType, _ = ni.searchAttributesTypeMap.GetType(fieldName)
 	}
 
 	switch usage {
 	case query.FieldNameFilter:
-		if fieldName == searchattribute.TemporalNamespaceDivision {
+		if fieldName == sadefs.TemporalNamespaceDivision {
 			ni.seenNamespaceDivision = true
 		}
 	case query.FieldNameSorter:
@@ -73,10 +104,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 			)
 		}
 	case query.FieldNameGroupBy:
-		if fieldName != searchattribute.ExecutionStatus {
+		if !query.IsGroupByFieldAllowed(fieldName) {
 			return "", query.NewConverterError(
-				"'group by' clause is only supported for %s search attribute",
-				searchattribute.ExecutionStatus,
+				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				query.NotSupportedErrMessage,
 			)
 		}
 	}
@@ -85,7 +116,10 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 }
 
 func (vi *valuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
-	fieldType, err := vi.searchAttributesTypeMap.GetType(fieldName)
+	var fieldType enumspb.IndexedValueType
+	var err error
+
+	fieldType, err = vi.saTypeMap.GetType(fieldName)
 	if err != nil {
 		return nil, query.NewConverterError("invalid search attribute: %s", name)
 	}
@@ -97,11 +131,11 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 			return nil, err
 		}
 
-		if name == searchattribute.ScheduleID && fieldName == searchattribute.WorkflowID {
+		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID {
 			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
-		value, err = validateValueType(name, value, fieldType)
+		value, err = vi.validateValueType(name, value, fieldType)
 		if err != nil {
 			return nil, err
 		}
@@ -112,18 +146,18 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...int
 
 func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 	switch name {
-	case searchattribute.StartTime, searchattribute.CloseTime, searchattribute.ExecutionTime:
+	case sadefs.StartTime, sadefs.CloseTime, sadefs.ExecutionTime:
 		if nanos, isNumber := value.(int64); isNumber {
 			value = time.Unix(0, nanos).UTC().Format(time.RFC3339Nano)
 		}
-	case searchattribute.ExecutionStatus:
+	case sadefs.ExecutionStatus:
 		if status, isNumber := value.(int64); isNumber {
 			if _, ok := enumspb.WorkflowExecutionStatus_name[int32(status)]; !ok {
 				return nil, query.NewConverterError("invalid value for search attribute %s: %v", name, value)
 			}
 			value = enumspb.WorkflowExecutionStatus(status).String()
 		}
-	case searchattribute.ExecutionDuration:
+	case sadefs.ExecutionDuration:
 		if durationStr, isString := value.(string); isString {
 			duration, err := query.ParseExecutionDurationStr(durationStr)
 			if err != nil {
@@ -137,7 +171,7 @@ func parseSystemSearchAttributeValues(name string, value any) (any, error) {
 	return value, nil
 }
 
-func validateValueType(name string, value any, fieldType enumspb.IndexedValueType) (any, error) {
+func (vi *valuesInterceptor) validateValueType(name string, value any, fieldType enumspb.IndexedValueType) (any, error) {
 	switch fieldType {
 	case enumspb.INDEXED_VALUE_TYPE_INT, enumspb.INDEXED_VALUE_TYPE_DOUBLE:
 		switch v := value.(type) {
@@ -149,6 +183,17 @@ func validateValueType(name string, value any, fieldType enumspb.IndexedValueTyp
 				return nil, query.NewConverterError(
 					"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
 			}
+			elasticsearchQueryInvalidComparisonCounter.With(vi.metricsHandler).Record(1)
+			vi.logger.Warn(
+				fmt.Sprintf(
+					"[Visibility] invalid value type comparison: value `%v` of type %T comparing against search attribute %q of type %s",
+					value,
+					value,
+					name,
+					fieldType.String(),
+				),
+				tag.WorkflowNamespace(vi.namespace.String()),
+			)
 		default:
 			return nil, query.NewConverterError(
 				"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
@@ -173,6 +218,22 @@ func validateValueType(name string, value any, fieldType enumspb.IndexedValueTyp
 		default:
 			return nil, query.NewConverterError(
 				"invalid value for search attribute %s of type %s: %#v", name, fieldType.String(), value)
+		}
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if _, ok := value.(string); !ok {
+			elasticsearchQueryInvalidComparisonCounter.With(vi.metricsHandler).Record(1)
+			vi.logger.Warn(
+				fmt.Sprintf(
+					"[Visibility] invalid value type comparison: value `%v` of type %T comparing against search attribute %q of type %s",
+					value,
+					value,
+					name,
+					fieldType.String(),
+				),
+				tag.WorkflowNamespace(vi.namespace.String()),
+			)
 		}
 	}
 	return value, nil

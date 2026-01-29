@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	sqliteschema "go.temporal.io/server/schema/sqlite"
 )
@@ -22,6 +23,7 @@ type db struct {
 	tx        *sqlx.Tx
 	conn      sqlplugin.Conn
 	converter DataConverter
+	logger    log.Logger
 }
 
 var _ sqlplugin.AdminDB = (*db)(nil)
@@ -35,6 +37,7 @@ func newDB(
 	dbName string,
 	xdb *sqlx.DB,
 	tx *sqlx.Tx,
+	logger log.Logger,
 ) *db {
 	mdb := &db{
 		dbKind:  dbKind,
@@ -42,6 +45,7 @@ func newDB(
 		onClose: make([]func(), 0),
 		db:      xdb,
 		tx:      tx,
+		logger:  logger,
 	}
 	mdb.conn = xdb
 	if tx != nil {
@@ -57,7 +61,7 @@ func (mdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return newDB(mdb.dbKind, mdb.dbName, mdb.db, xtx), nil
+	return newDB(mdb.dbKind, mdb.dbName, mdb.db, xtx, mdb.logger), nil
 }
 
 // Commit commits a previously started transaction

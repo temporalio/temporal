@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -15,11 +16,27 @@ import (
 	"github.com/olekukonko/tablewriter"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/proto"
 )
+
+var envKeysForUserName = []string{
+	"USER",
+	"LOGNAME",
+	"HOME",
+}
+
+func getCurrentUserFromEnv() string {
+	for _, n := range envKeysForUserName {
+		if len(os.Getenv(n)) > 0 {
+			return os.Getenv(n)
+		}
+	}
+	return "unknown"
+}
 
 func prettyPrintJSONObject(c *cli.Context, o interface{}) {
 	var b []byte
@@ -290,4 +307,15 @@ func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespac
 	}
 
 	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
+}
+
+func getArchetypeWithDefault(
+	c *cli.Context,
+	defaultAchetype chasm.Archetype,
+) chasm.Archetype {
+	archetype := c.String(FlagArchetype)
+	if archetype != "" {
+		return archetype
+	}
+	return defaultAchetype
 }

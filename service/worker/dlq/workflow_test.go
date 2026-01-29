@@ -376,7 +376,7 @@ func TestModule(t *testing.T) {
 				params.workflowParams.MergeParams.Key.TaskCategoryID = tasks.CategoryIDReplication
 				params.expectedQueryResp.DlqKey = params.workflowParams.MergeParams.Key
 				var replicationTask tasks.HistoryReplicationTask
-				blob, err := serialization.NewTaskSerializer().SerializeTask(&replicationTask)
+				blob, err := serialization.NewSerializer().SerializeTask(&replicationTask)
 				require.NoError(t, err)
 				params.client.getTasksFn = func(req *historyservice.GetDLQTasksRequest) (*historyservice.GetDLQTasksResponse, error) {
 					return &historyservice.GetDLQTasksResponse{

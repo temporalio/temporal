@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -359,8 +359,8 @@ func (s *ContextImpl) GetQueueState(
 		return nil, false
 	}
 	// need to make a deep copy, in case UpdateReplicationQueueReaderState does a partial update
-	blob, _ := serialization.QueueStateToBlob(queueState)
-	queueState, _ = serialization.QueueStateFromBlob(blob)
+	blob, _ := s.payloadSerializer.QueueStateToBlob(queueState)
+	queueState, _ = s.payloadSerializer.QueueStateFromBlob(blob)
 	return queueState, ok
 }
 
@@ -940,6 +940,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
@@ -1027,6 +1028,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
+					ArchetypeID: archetypeID,
 
 					Tasks: newTasks,
 				}
@@ -1047,10 +1049,12 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 				defer cancel()
+
 				delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
 					ShardID:     s.shardID,
 					NamespaceID: key.NamespaceID,
 					WorkflowID:  key.WorkflowID,
+					ArchetypeID: archetypeID,
 					RunID:       key.RunID,
 				}
 				if err := s.GetExecutionManager().DeleteCurrentWorkflowExecution(
@@ -1069,13 +1073,16 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 					return err
 				}
 				defer cancel()
-				delRequest := &persistence.DeleteWorkflowExecutionRequest{
-					ShardID:     s.shardID,
-					NamespaceID: key.NamespaceID,
-					WorkflowID:  key.WorkflowID,
-					RunID:       key.RunID,
-				}
-				if err = s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest); err != nil {
+				if err := s.GetExecutionManager().DeleteWorkflowExecution(
+					ctx,
+					&persistence.DeleteWorkflowExecutionRequest{
+						ShardID:     s.shardID,
+						NamespaceID: key.NamespaceID,
+						WorkflowID:  key.WorkflowID,
+						RunID:       key.RunID,
+						ArchetypeID: archetypeID,
+					},
+				); err != nil {
 					return err
 				}
 			}
@@ -1088,7 +1095,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 
 	// Stage 4. Delete history branch.
-	if branchToken != nil && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageHistory) {
+	if len(branchToken) != 0 && !stage.IsProcessed(tasks.DeleteWorkflowExecutionStageHistory) {
 		delHistoryRequest := &persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
 			ShardID:     s.shardID,
@@ -1168,7 +1175,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	// before calling this method.
 	s.taskKeyManager.drainTaskRequests()
 
-	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
 	updatedShardInfo.RangeId++
 	if isStealing {
 		updatedShardInfo.StolenSinceRenew++
@@ -1199,7 +1206,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		tag.PreviousShardRangeID(s.shardInfo.RangeId),
 	)
 
-	s.shardInfo = trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(updatedShardInfo))
+	s.shardInfo = trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(updatedShardInfo))
 	s.taskKeyManager.setRangeID(s.shardInfo.RangeId)
 
 	return nil
@@ -1256,7 +1263,7 @@ func (s *ContextImpl) updateShardInfo(
 	s.lastUpdated = now
 	s.tasksCompletedSinceLastUpdate = 0
 
-	updatedShardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo))
+	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
@@ -1289,7 +1296,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogs() {
 	s.rLock()
 	defer s.rUnlock()
 
-	queueStates := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(s.shardInfo)).QueueStates
+	queueStates := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo)).QueueStates
 	emitShardLagLog := s.config.EmitShardLagLog()
 
 	metricsHandler := s.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.ShardInfoScope))
@@ -1802,7 +1809,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		return err
 	}
 	*ownershipChanged = resp.ShardInfo.Owner != s.owner
-	shardInfo := trimShardInfo(s.clusterMetadata.GetAllClusterInfo(), copyShardInfo(resp.ShardInfo))
+	shardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(resp.ShardInfo))
 	shardInfo.Owner = s.owner
 
 	// initialize the cluster current time to be the same as ack level
@@ -1832,7 +1839,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		// taskMinScheduledTime = util.MaxTime(taskMinScheduledTime, maxReadTime)
 		taskMinScheduledTime = util.MaxTime(
 			taskMinScheduledTime,
-			exclusiveMaxReadTime.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+			exclusiveMaxReadTime.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		)
 
 		if clusterName != currentClusterName {
@@ -2088,7 +2095,7 @@ func newContext(
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
-		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.New()),
+		owner:                   fmt.Sprintf("%s-%v-%v", hostIdentity, sequenceID, uuid.NewString()),
 		stringRepr:              fmt.Sprintf("Shard(%d)", shardID),
 		executionManager:        persistenceExecutionManager,
 		metricsHandler:          metricsHandler,
@@ -2156,12 +2163,12 @@ func (s *ContextImpl) initLastUpdatesTime() {
 }
 
 // TODO: why do we need a deep copy here?
-func copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
+func (s *ContextImpl) copyShardInfo(shardInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
 	// need to ser/de to make a deep copy of queue state
 	queueStates := make(map[int32]*persistencespb.QueueState, len(shardInfo.QueueStates))
 	for k, v := range shardInfo.QueueStates {
-		blob, _ := serialization.QueueStateToBlob(v)
-		queueState, _ := serialization.QueueStateFromBlob(blob)
+		blob, _ := s.payloadSerializer.QueueStateToBlob(v)
+		queueState, _ := s.payloadSerializer.QueueStateFromBlob(blob)
 		queueStates[k] = queueState
 	}
 
@@ -2286,6 +2293,7 @@ func (s *ContextImpl) newShardClosedErrorWithShardID() *persistence.ShardOwnersh
 }
 
 func trimShardInfo(
+	cfg *configs.Config,
 	allClusterInfo map[string]cluster.ClusterInformation,
 	shardInfo *persistencespb.ShardInfo,
 ) *persistencespb.ShardInfo {
@@ -2293,7 +2301,7 @@ func trimShardInfo(
 		for readerID := range shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates {
 			clusterID, _ := ReplicationReaderIDToClusterShardID(readerID)
 			_, clusterInfo, found := clusterNameInfoFromClusterID(allClusterInfo, clusterID)
-			if !found || !clusterInfo.Enabled {
+			if !found || !cluster.IsReplicationEnabledForCluster(clusterInfo, cfg.EnableSeparateReplicationEnableFlag()) {
 				delete(shardInfo.QueueStates[int32(tasks.CategoryIDReplication)].ReaderStates, readerID)
 			}
 		}

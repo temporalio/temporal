@@ -11,6 +11,7 @@ const (
 type (
 	ServerSchedulerRateLimiter quotas.RequestRateLimiter
 	ClientSchedulerRateLimiter quotas.RequestRateLimiter
+	PersistenceRateLimiter     quotas.RequestRateLimiter
 )
 
 func ClientSchedulerRateLimiterProvider() ClientSchedulerRateLimiter {
@@ -20,5 +21,9 @@ func ClientSchedulerRateLimiterProvider() ClientSchedulerRateLimiter {
 
 func ServerSchedulerRateLimiterProvider() ServerSchedulerRateLimiter {
 	// Experiment with no op rate limiter
+	return quotas.NoopRequestRateLimiter
+}
+
+func PersistenceRateLimiterProvider() PersistenceRateLimiter {
 	return quotas.NoopRequestRateLimiter
 }

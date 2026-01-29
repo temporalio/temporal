@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	chasm "go.temporal.io/server/chasm"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -41,15 +42,15 @@ func (m *MocktransactionMgrForExistingWorkflow) EXPECT() *MocktransactionMgrForE
 }
 
 // dispatchForExistingWorkflow mocks base method.
-func (m *MocktransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, isWorkflowRebuilt bool, targetWorkflow, newWorkflow Workflow) error {
+func (m *MocktransactionMgrForExistingWorkflow) dispatchForExistingWorkflow(ctx context.Context, isWorkflowRebuilt bool, archetypeID chasm.ArchetypeID, targetWorkflow, newWorkflow Workflow) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "dispatchForExistingWorkflow", ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	ret := m.ctrl.Call(m, "dispatchForExistingWorkflow", ctx, isWorkflowRebuilt, archetypeID, targetWorkflow, newWorkflow)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // dispatchForExistingWorkflow indicates an expected call of dispatchForExistingWorkflow.
-func (mr *MocktransactionMgrForExistingWorkflowMockRecorder) dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow any) *gomock.Call {
+func (mr *MocktransactionMgrForExistingWorkflowMockRecorder) dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, archetypeID, targetWorkflow, newWorkflow any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForExistingWorkflow", reflect.TypeOf((*MocktransactionMgrForExistingWorkflow)(nil).dispatchForExistingWorkflow), ctx, isWorkflowRebuilt, targetWorkflow, newWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "dispatchForExistingWorkflow", reflect.TypeOf((*MocktransactionMgrForExistingWorkflow)(nil).dispatchForExistingWorkflow), ctx, isWorkflowRebuilt, archetypeID, targetWorkflow, newWorkflow)
 }

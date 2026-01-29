@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -48,7 +48,10 @@ func (b *BackfillerTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		backfiller.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (b *BackfillerTaskExecutor) Execute(
@@ -59,30 +62,23 @@ func (b *BackfillerTaskExecutor) Execute(
 ) error {
 	defer func() { backfiller.Attempt++ }()
 
-	scheduler, err := backfiller.Scheduler.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
-	}
+	scheduler := backfiller.Scheduler.Get(ctx)
 	logger := newTaggedLogger(b.baseLogger, scheduler)
 
-	invoker, err := scheduler.Invoker.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("%w: %w",
-			serviceerror.NewInternal("scheduler tree missing node"),
-			err)
-	}
+	invoker := scheduler.Invoker.Get(ctx)
 
 	// If the buffer is already full, don't move the watermark at all, just back off
 	// and retry.
 	tweakables := b.config.Tweakables(scheduler.Namespace)
-	limit, err := b.allowedBufferedStarts(ctx, backfiller, scheduler, invoker, tweakables)
+	limit, err := b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
 	if err != nil {
 		return err
 	}
 	if limit <= 0 {
-		// Fire a timer task to retry after backoff.
+		// Buffer is full, back off and retry later. Unlike the generator, the
+		// backfiller doesn't drop actions - it will retry after backoff.
+		logger.Debug("Buffer full, backing off backfill",
+			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
 		b.rescheduleBackfill(ctx, backfiller)
 		return nil
 	}
@@ -95,11 +91,10 @@ func (b *BackfillerTaskExecutor) Execute(
 	case RequestTypeTrigger:
 		result, err = b.processTrigger(ctx, scheduler, backfiller)
 	default:
-		return serviceerror.NewInternalf("unknown backfill type: %v", backfiller.RequestType())
+		return queueerrors.NewUnprocessableTaskError(fmt.Sprintf("unknown backfill type: %v", backfiller.RequestType()))
 	}
 	if err != nil {
-		logger.Error("failed to process backfill", tag.Error(err))
-		return err
+		return queueerrors.NewUnprocessableTaskError(fmt.Sprintf("failed to process backfill: %s", err.Error()))
 	}
 
 	// Enqueue new BufferedStarts on the Invoker, if we have any.
@@ -125,14 +120,12 @@ func (b *BackfillerTaskExecutor) Execute(
 
 func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
-	ctx.AddTask(backfiller, chasm.TaskAttributes{
-		ScheduledTime: backoffTime,
-	}, &schedulerpb.BackfillerTask{})
+	backfiller.scheduleTask(ctx, backoffTime)
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.
 func (b *BackfillerTaskExecutor) processBackfill(
-	ctx chasm.MutableContext,
+	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
 	limit int,
@@ -186,7 +179,7 @@ func (b *BackfillerTaskExecutor) backoffDelay(backfiller *Backfiller) time.Durat
 
 // processTrigger processes a Backfiller's TriggerImmediatelyRequest.
 func (b *BackfillerTaskExecutor) processTrigger(
-	ctx chasm.MutableContext,
+	_ chasm.MutableContext,
 	scheduler *Scheduler,
 	backfiller *Backfiller,
 ) (result backfillProgressResult, err error) {
@@ -201,6 +194,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
+	workflowID := generateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -209,6 +203,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 			OverlapPolicy: overlapPolicy,
 			Manual:        true,
 			RequestId:     requestID,
+			WorkflowId:    workflowID,
 		},
 	}
 	result.Complete = true
@@ -220,7 +215,6 @@ func (b *BackfillerTaskExecutor) processTrigger(
 // buffer, taking into account buffer limits and concurrent backfills.
 func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	ctx chasm.Context,
-	backfiller *Backfiller,
 	scheduler *Scheduler,
 	invoker *Invoker,
 	tweakables Tweakables,
@@ -228,10 +222,7 @@ func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	// Count the number of Backfillers active.
 	backfillerCount := 0
 	for _, field := range scheduler.Backfillers {
-		b, err := field.Get(ctx)
-		if err != nil {
-			return 0, err
-		}
+		b := field.Get(ctx)
 
 		// Don't count trigger-immediately requests, as they only fire a single start.
 		if b.RequestType() == RequestTypeBackfill {
@@ -242,6 +233,7 @@ func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	// Prevents a division by 0.
 	backfillerCount = max(1, backfillerCount)
 
-	// Give half the available buffer to backfillers, distributed evenly.
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())), nil
+	// Give half the available buffer to backfillers, distributed evenly, minus
+	// Generator reserve space.
+	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())-tweakables.GeneratorBufferReserveSize), nil
 }

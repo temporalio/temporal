@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -46,6 +47,7 @@ type (
 		rateLimiter    quotas.RateLimiter
 		metricsHandler metrics.Handler
 		logger         log.Logger
+		serializer     serialization.Serializer
 		isInTest       bool
 		// only clean up history branches that older than this age
 		// Our history archiver delete mutable state, and then upload history to blob store and then delete history.
@@ -92,8 +94,8 @@ func NewScavenger(
 	enableRetentionVerification dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) *Scavenger {
-
 	return &Scavenger{
 		numShards:   numShards,
 		db:          db,
@@ -108,8 +110,8 @@ func NewScavenger(
 		enableRetentionVerification: enableRetentionVerification,
 		metricsHandler:              metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryScavengerScope)),
 		logger:                      logger,
-
-		hbd: hbd,
+		serializer:                  serializer,
+		hbd:                         hbd,
 	}
 }
 
@@ -226,7 +228,7 @@ func (s *Scavenger) filterTask(
 	}
 	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
-	branchToken, err := serialization.HistoryBranchToBlob(branch.BranchInfo)
+	branchToken, err := s.serializer.HistoryBranchToBlob(branch.BranchInfo)
 	if err != nil {
 		s.logger.Error("unable to serialize the history branch token", tag.DetailInfo(branch.Info), tag.Error(err))
 		metrics.HistoryScavengerErrorCount.With(s.metricsHandler).Record(1)
@@ -258,6 +260,7 @@ func (s *Scavenger) handleTask(
 			WorkflowId: task.workflowID,
 			RunId:      task.runID,
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})
 	switch err.(type) {
 	case nil:
@@ -354,6 +357,7 @@ func (s *Scavenger) cleanUpWorkflowPastRetention(
 				WorkflowId: executionInfo.GetWorkflowId(),
 				RunId:      mutableState.GetExecutionState().GetRunId(),
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		if err != nil {
 			// This is experimental. Ignoring the error so it will not block the history scavenger.

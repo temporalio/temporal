@@ -11,6 +11,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -19,6 +20,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -103,12 +105,14 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "CreateWorkflowExecution")
 	newRequest := &InternalCreateWorkflowExecutionRequest{
 		ShardID:                  request.ShardID,
 		RangeID:                  request.RangeID,
 		Mode:                     request.Mode,
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
+		ArchetypeID:              archetypeID,
 		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
 		NewWorkflowNewEvents:     newWorkflowNewEvents,
 	}
@@ -186,11 +190,14 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}
 	}
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "UpdateWorkflowExecution")
 	newRequest := &InternalUpdateWorkflowExecutionRequest{
 		ShardID: request.ShardID,
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
+
+		ArchetypeID: archetypeID,
 
 		UpdateWorkflowMutation:  *serializedWorkflowMutation,
 		UpdateWorkflowNewEvents: updateWorkflowNewEvents,
@@ -223,6 +230,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 			updateMutation.ExecutionInfo.NamespaceId,
 			updateMutation.ExecutionInfo.WorkflowId,
 			updateMutation.ExecutionState.RunId,
+			archetypeID,
 		)
 		return nil, err
 	default:
@@ -342,11 +350,14 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}
 	}
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "ConflictResolveWorkflowExecution")
 	newRequest := &InternalConflictResolveWorkflowExecutionRequest{
 		ShardID: request.ShardID,
 		RangeID: request.RangeID,
 
 		Mode: request.Mode,
+
+		ArchetypeID: archetypeID,
 
 		ResetWorkflowSnapshot:        *serializedResetWorkflowSnapshot,
 		ResetWorkflowEventsNewEvents: resetWorkflowEvents,
@@ -387,6 +398,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 			resetSnapshot.ExecutionInfo.NamespaceId,
 			resetSnapshot.ExecutionInfo.WorkflowId,
 			resetSnapshot.ExecutionState.RunId,
+			archetypeID,
 		)
 		if currentMutation != nil {
 			m.trimHistoryNode(
@@ -395,6 +407,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 				currentMutation.ExecutionInfo.NamespaceId,
 				currentMutation.ExecutionInfo.WorkflowId,
 				currentMutation.ExecutionState.RunId,
+				archetypeID,
 			)
 		}
 		return nil, err
@@ -407,6 +420,15 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	ctx context.Context,
 	request *GetWorkflowExecutionRequest,
 ) (*GetWorkflowExecutionResponse, error) {
+	if archetypeID, converted := m.assertAndConvertArchetypeID(request.ArchetypeID, "GetWorkflowExecution"); converted {
+		request = &GetWorkflowExecutionRequest{
+			ShardID:     request.ShardID,
+			NamespaceID: request.NamespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       request.RunID,
+			ArchetypeID: archetypeID,
+		}
+	}
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
 
 	var notFound *serviceerror.NotFound
@@ -446,9 +468,12 @@ func (m *executionManagerImpl) SetWorkflowExecution(
 		return nil, err
 	}
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(request.ArchetypeID, "SetWorkflowExecution")
 	newRequest := &InternalSetWorkflowExecutionRequest{
 		ShardID: request.ShardID,
 		RangeID: request.RangeID,
+
+		ArchetypeID: archetypeID,
 
 		SetWorkflowSnapshot: *serializedWorkflowSnapshot,
 	}
@@ -461,7 +486,7 @@ func (m *executionManagerImpl) SetWorkflowExecution(
 }
 
 func (m *executionManagerImpl) serializeWorkflowEventBatches(
-	ctx context.Context,
+	_ context.Context,
 	shardID int32,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	eventBatches []*WorkflowEvents,
@@ -564,7 +589,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -601,7 +626,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		ExecutionInfo:  input.ExecutionInfo,
 		ExecutionState: input.ExecutionState,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -685,8 +710,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
-
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -707,7 +731,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: make(map[string]struct{}),
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -783,6 +807,16 @@ func (m *executionManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *DeleteWorkflowExecutionRequest,
 ) error {
+	if archetypeID, converted := m.assertAndConvertArchetypeID(request.ArchetypeID, "DeleteWorkflowExecution"); converted {
+		request = &DeleteWorkflowExecutionRequest{
+			ShardID:     request.ShardID,
+			NamespaceID: request.NamespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       request.RunID,
+			ArchetypeID: archetypeID,
+		}
+	}
+
 	return m.persistence.DeleteWorkflowExecution(ctx, request)
 }
 
@@ -790,6 +824,16 @@ func (m *executionManagerImpl) DeleteCurrentWorkflowExecution(
 	ctx context.Context,
 	request *DeleteCurrentWorkflowExecutionRequest,
 ) error {
+	if archetypeID, converted := m.assertAndConvertArchetypeID(request.ArchetypeID, "DeleteCurrentWorkflowExecution"); converted {
+		request = &DeleteCurrentWorkflowExecutionRequest{
+			ShardID:     request.ShardID,
+			NamespaceID: request.NamespaceID,
+			WorkflowID:  request.WorkflowID,
+			RunID:       request.RunID,
+			ArchetypeID: archetypeID,
+		}
+	}
+
 	return m.persistence.DeleteCurrentWorkflowExecution(ctx, request)
 }
 
@@ -797,6 +841,15 @@ func (m *executionManagerImpl) GetCurrentExecution(
 	ctx context.Context,
 	request *GetCurrentExecutionRequest,
 ) (*GetCurrentExecutionResponse, error) {
+	if archetypeID, converted := m.assertAndConvertArchetypeID(request.ArchetypeID, "GetCurrentExecution"); converted {
+		request = &GetCurrentExecutionRequest{
+			ShardID:     request.ShardID,
+			NamespaceID: request.NamespaceID,
+			WorkflowID:  request.WorkflowID,
+			ArchetypeID: archetypeID,
+		}
+	}
+
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
 
 	var notFound *serviceerror.NotFound
@@ -843,19 +896,21 @@ func (m *executionManagerImpl) AddHistoryTasks(
 	ctx context.Context,
 	input *AddHistoryTasksRequest,
 ) error {
-	tasks, err := serializeTasks(m.serializer, input.Tasks)
+	serializedTasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return err
 	}
 
+	archetypeID, _ := m.assertAndConvertArchetypeID(input.ArchetypeID, "AddHistoryTasks")
 	return m.persistence.AddHistoryTasks(ctx, &InternalAddHistoryTasksRequest{
 		ShardID: input.ShardID,
 		RangeID: input.RangeID,
 
 		NamespaceID: input.NamespaceID,
 		WorkflowID:  input.WorkflowID,
+		ArchetypeID: archetypeID,
 
-		Tasks: tasks,
+		Tasks: serializedTasks,
 	})
 }
 
@@ -989,12 +1044,21 @@ func (m *executionManagerImpl) trimHistoryNode(
 	namespaceID string,
 	workflowID string,
 	runID string,
+	archetypeID chasm.ArchetypeID,
 ) {
+	if archetypeID != chasm.WorkflowArchetypeID {
+		// TODO: [chasm-events] remove this check when history events are supported
+		// in chasm framework.
+		// For now, we can return early and avoid unnecessary GetWorkflowExecution call.
+		return
+	}
+
 	response, err := m.GetWorkflowExecution(ctx, &GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
+		ArchetypeID: archetypeID,
 	})
 	if err != nil {
 		m.logger.Error("ExecutionManager unable to get mutable state for trimming history branch",
@@ -1011,6 +1075,11 @@ func (m *executionManagerImpl) trimHistoryNode(
 	if err != nil {
 		return
 	}
+	if len(branchToken) == 0 {
+		// Branch token can be empty if there is no history for chasm executions.
+		return
+	}
+
 	mutableStateLastNodeID := executionInfo.LastFirstEventId
 	mutableStateLastNodeTransactionID := executionInfo.LastFirstEventTxnId
 	if _, err := m.TrimHistoryBranch(ctx, &TrimHistoryBranchRequest{
@@ -1117,6 +1186,22 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 	}
 
 	return state, nil
+}
+
+func (m *executionManagerImpl) assertAndConvertArchetypeID(
+	archetypeID chasm.ArchetypeID,
+	methodName string,
+) (chasm.ArchetypeID, bool) {
+	if !softassert.That(
+		m.logger,
+		archetypeID != chasm.UnspecifiedArchetypeID,
+		"ArchetypeID not specified, defaulting to Workflow.",
+		tag.Operation(methodName),
+	) {
+		return chasm.WorkflowArchetypeID, true
+	}
+
+	return archetypeID, false
 }
 
 func getCurrentBranchToken(

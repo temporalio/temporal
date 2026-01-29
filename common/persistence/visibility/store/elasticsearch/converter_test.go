@@ -78,15 +78,15 @@ var supportedWhereOrderCases = map[string]struct {
 }{
 	"id > 1 order by id asc, order_id desc": {
 		query:  `{"bool":{"filter":{"range":{"id":{"from":1,"include_lower":false,"include_upper":true,"to":null}}}}}`,
-		sorter: `[{"id":{"order":"asc"}},{"order_id":{"order":"desc"}}]`,
+		sorter: `[{"id":{"missing":"_last","order":"asc"}},{"order_id":{"missing":"_last","order":"desc"}}]`,
 	},
 	"id is null order by `order`.abc": {
 		query:  `{"bool":{"must_not":{"exists":{"field":"id"}}}}`,
-		sorter: `[{"order.abc":{"order":"asc"}}]`,
+		sorter: `[{"order.abc":{"missing":"_last","order":"asc"}}]`,
 	},
 	"id beTweeN 1 AnD 3 ORdeR BY random_id DESC": {
 		query:  `{"bool":{"filter":{"range":{"id":{"from":1,"include_lower":true,"include_upper":true,"to":3}}}}}`,
-		sorter: `[{"random_id":{"order":"desc"}}]`,
+		sorter: `[{"random_id":{"missing":"_last","order":"desc"}}]`,
 	},
 }
 
@@ -126,7 +126,7 @@ var testNameTypeMap = searchattribute.NewNameTypeMapStub(
 )
 
 func TestSupportedSelectWhere(t *testing.T) {
-	c := NewQueryConverter(nil, nil, testNameTypeMap)
+	c := NewQueryConverterLegacy(nil, nil, testNameTypeMap, nil)
 
 	for sql, expectedJson := range supportedWhereCases {
 		queryParams, err := c.ConvertWhereOrderBy(sql)
@@ -140,7 +140,7 @@ func TestSupportedSelectWhere(t *testing.T) {
 }
 
 func TestEmptySelectWhere(t *testing.T) {
-	c := NewQueryConverter(nil, nil, testNameTypeMap)
+	c := NewQueryConverterLegacy(nil, nil, testNameTypeMap, nil)
 
 	queryParams, err := c.ConvertWhereOrderBy("")
 	assert.NoError(t, err)
@@ -153,11 +153,11 @@ func TestEmptySelectWhere(t *testing.T) {
 	assert.Len(t, queryParams.Sorter, 1)
 	actualSorterMap, _ := queryParams.Sorter[0].Source()
 	actualSorterJson, _ := json.Marshal([]interface{}{actualSorterMap})
-	assert.Equal(t, `[{"Id":{"order":"desc"}}]`, string(actualSorterJson))
+	assert.JSONEq(t, `[{"Id":{"missing":"_last","order":"desc"}}]`, string(actualSorterJson))
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {
-	c := NewQueryConverter(nil, nil, testNameTypeMap)
+	c := NewQueryConverterLegacy(nil, nil, testNameTypeMap, nil)
 
 	for sql, expectedJson := range supportedWhereOrderCases {
 		queryParams, err := c.ConvertWhereOrderBy(sql)
@@ -178,7 +178,7 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 }
 
 func TestSupportedSelectWhereGroupBy(t *testing.T) {
-	c := NewQueryConverter(nil, nil, testNameTypeMap)
+	c := NewQueryConverterLegacy(nil, nil, testNameTypeMap, nil)
 
 	for sql, expectedJson := range supportedWhereGroupByCases {
 		queryParams, err := c.ConvertWhereOrderBy(sql)
@@ -196,7 +196,7 @@ func TestSupportedSelectWhereGroupBy(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	c := NewQueryConverter(nil, nil, testNameTypeMap)
+	c := NewQueryConverterLegacy(nil, nil, testNameTypeMap, nil)
 	for sql, expectedErrMessage := range errorCases {
 		_, err := c.ConvertSql(sql)
 		assert.Contains(t, err.Error(), expectedErrMessage, sql)

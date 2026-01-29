@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -12,12 +13,13 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -36,6 +38,7 @@ type (
 		ensureCloseBeforeDelete       dynamicconfig.BoolPropertyFn
 		enableCloseWorkflowCleanup    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+		externalPayloadsEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -50,6 +53,7 @@ func newVisibilityQueueTaskExecutor(
 	ensureCloseBeforeDelete dynamicconfig.BoolPropertyFn,
 	enableCloseWorkflowCleanup dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	relocateAttributesMinBlobSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	externalPayloadsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) queues.Executor {
 	return &visibilityQueueTaskExecutor{
 		shardContext:   shardContext,
@@ -61,6 +65,7 @@ func newVisibilityQueueTaskExecutor(
 		ensureCloseBeforeDelete:       ensureCloseBeforeDelete,
 		enableCloseWorkflowCleanup:    enableCloseWorkflowCleanup,
 		relocateAttributesMinBlobSize: relocateAttributesMinBlobSize,
+		externalPayloadsEnabled:       externalPayloadsEnabled,
 	}
 }
 
@@ -268,7 +273,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 		mutableState.GetExecutionInfo().Memo,
 		mutableState.GetExecutionInfo().SearchAttributes,
 	)
-	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
 		return err
 	}
@@ -389,49 +394,86 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return serviceerror.NewInternalf("expected visibility component, but got %T", visComponent)
 	}
 
-	searchattributes, err := visComponent.GetSearchAttributes(visTaskContext)
+	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
+		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err != nil {
 		return err
 	}
-	if searchattributes == nil {
-		searchattributes = make(map[string]*commonpb.Payload)
-	}
-	memo, err := visComponent.GetMemo(visTaskContext)
+
+	customSaMapperProvider := t.shardContext.GetSearchAttributesMapperProvider()
+	customSaMapper, err := customSaMapperProvider.GetMapper(namespaceEntry.Name())
 	if err != nil {
 		return err
 	}
-	if memo == nil {
-		memo = make(map[string]*commonpb.Payload)
+
+	searchattributes := make(map[string]*commonpb.Payload)
+
+	aliasedCustomSearchAttributes := visComponent.CustomSearchAttributes(visTaskContext)
+	for alias, value := range aliasedCustomSearchAttributes {
+		fieldName, err := customSaMapper.GetFieldName(alias, namespaceEntry.Name().String())
+		if err != nil {
+			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
+			// or there are delays in propagating search attribute mappings to History.
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			continue
+		}
+		searchattributes[fieldName] = value
 	}
 
 	rootComponent, err := tree.ComponentByPath(visTaskContext, nil)
 	if err != nil {
 		return err
 	}
-	if saProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
-		for key, value := range saProvider.SearchAttributes(visTaskContext) {
-			searchattributes[key] = value.MustEncode()
-		}
-	}
-	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
-		for key, value := range memoProvider.Memo(visTaskContext) {
-			memo[key] = value.MustEncode()
+
+	var chasmTaskQueue string
+	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
+		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {
+			if chasmSA.Field == sadefs.TaskQueue {
+				if strVal, ok := chasmSA.Value.Value().(string); ok {
+					chasmTaskQueue = strVal
+				}
+				continue
+			}
+			searchattributes[chasmSA.Field] = chasmSA.Value.MustEncode()
 		}
 	}
 
-	namespaceEntry, err := t.shardContext.GetNamespaceRegistry().
-		GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-	if err != nil {
-		return err
+	combinedMemo := make(map[string]*commonpb.Payload, 2)
+	userMemoMap := visComponent.CustomMemo(visTaskContext)
+	if len(userMemoMap) > 0 {
+		userMemoProto := &commonpb.Memo{Fields: userMemoMap}
+		userMemoPayload, err := payload.Encode(userMemoProto)
+		if err != nil {
+			return err
+		}
+		combinedMemo[chasm.UserMemoKey] = userMemoPayload
 	}
+	if memoProvider, ok := rootComponent.(chasm.VisibilityMemoProvider); ok {
+		chasmMemo := memoProvider.Memo(visTaskContext)
+		if chasmMemo != nil {
+			chasmMemoPayload, err := payload.Encode(chasmMemo)
+			if err != nil {
+				return err
+			}
+			combinedMemo[chasm.ChasmMemoKey] = chasmMemoPayload
+		}
+	}
+
 	requestBase := t.getVisibilityRequestBase(
 		task,
 		namespaceEntry,
 		mutableState,
-		memo,
+		combinedMemo,
 		searchattributes,
 	)
-	requestBase.SearchAttributes.IndexedFields[searchattribute.TemporalNamespaceDivision] = payload.EncodeString(tree.Archetype().String())
+
+	// We reuse the TemporalNamespaceDivision column to store the string representation of ArchetypeID.
+	requestBase.SearchAttributes.IndexedFields[sadefs.TemporalNamespaceDivision] = payload.EncodeString(strconv.FormatUint(uint64(tree.ArchetypeID()), 10))
+
+	// Override TaskQueue if provided by CHASM search attributes.
+	if chasmTaskQueue != "" {
+		requestBase.TaskQueue = chasmTaskQueue
+	}
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		release(nil)
@@ -443,7 +485,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		)
 	}
 
-	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState)
+	closedRequest, err := t.getClosedVisibilityRequest(ctx, requestBase, mutableState, namespaceEntry)
 	if err != nil {
 		return err
 	}
@@ -506,6 +548,7 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	ctx context.Context,
 	base *manager.VisibilityRequestBase,
 	mutableState historyi.MutableState,
+	namespaceEntry *namespace.Namespace,
 ) (*manager.RecordWorkflowExecutionClosedRequest, error) {
 	wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 	if err != nil {
@@ -519,6 +562,24 @@ func (t *visibilityQueueTaskExecutor) getClosedVisibilityRequest(
 	executionInfo := mutableState.GetExecutionInfo()
 	stateTransitionCount := executionInfo.GetStateTransitionCount()
 	historySizeBytes := executionInfo.GetExecutionStats().GetHistorySize()
+
+	if base.SearchAttributes == nil {
+		base.SearchAttributes = &commonpb.SearchAttributes{
+			IndexedFields: make(map[string]*commonpb.Payload),
+		}
+	} else if base.SearchAttributes.IndexedFields == nil {
+		base.SearchAttributes.IndexedFields = make(map[string]*commonpb.Payload)
+	}
+
+	if t.externalPayloadsEnabled(namespaceEntry.Name().String()) {
+		externalPayloadCount := executionInfo.GetExecutionStats().GetExternalPayloadCount()
+		externalPayloadSizeBytes := executionInfo.GetExecutionStats().GetExternalPayloadSize()
+		externalPayloadCountPayload, _ := payload.Encode(externalPayloadCount)
+		externalPayloadSizeBytesPayload, _ := payload.Encode(externalPayloadSizeBytes)
+		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadCount] = externalPayloadCountPayload
+		base.SearchAttributes.IndexedFields[sadefs.TemporalExternalPayloadSizeBytes] = externalPayloadSizeBytesPayload
+	}
+
 	return &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: base,
 		CloseTime:             wfCloseTime,

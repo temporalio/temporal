@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -25,10 +25,11 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -48,9 +49,9 @@ func TestClientMiscTestSuite(t *testing.T) {
 func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	// To ensure that there is one pending child workflow before we try to create the next one,
 	// we create a child workflow here that signals the parent when it has started and then blocks forever.
-	parentWorkflowId := "client-func-too-many-child-workflows"
+	parentWorkflowID := "client-func-too-many-child-workflows"
 	blockingChildWorkflow := func(ctx workflow.Context) error {
-		workflow.SignalExternalWorkflow(ctx, parentWorkflowId, "", "blocking-child-started", nil)
+		workflow.SignalExternalWorkflow(ctx, parentWorkflowID, "", "blocking-child-started", nil)
 		workflow.GetSignalChannel(ctx, "unblock-child").Receive(ctx, nil)
 		return nil
 	}
@@ -87,7 +88,7 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(timeout)
 	defer cancel()
 	options := sdkclient.StartWorkflowOptions{
-		ID:                 parentWorkflowId,
+		ID:                 parentWorkflowID,
 		TaskQueue:          s.TaskQueue(),
 		WorkflowRunTimeout: timeout,
 	}
@@ -99,7 +100,7 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
  WorkflowTaskStarted // 26 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED
  WorkflowTaskFailed {"Cause":26,"Failure":{"Message":"PendingChildWorkflowsLimitExceeded: the number of pending child workflow executions, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
-		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowId})
+		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowID})
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// unblock the last child, allowing it to complete, which lowers the number of pending child workflows
@@ -153,10 +154,11 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	}
 	s.Worker().RegisterWorkflow(myWorkflow)
 
-	workflowId := uuid.New()
+	workflowID := uuid.NewString()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        workflowId,
-		TaskQueue: s.TaskQueue(),
+		ID:                  workflowID,
+		TaskQueue:           s.TaskQueue(),
+		WorkflowTaskTimeout: time.Second, // Use shorter timeout so test completes faster.
 	}, myWorkflow)
 	s.NoError(err)
 
@@ -165,7 +167,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	for i := 0; i < testcore.ClientSuiteLimit; i++ {
 		activityInfo = <-pendingActivities
 	}
-	s.NoError(s.SdkClient().SignalWorkflow(ctx, workflowId, "", readyToScheduleLastActivity, nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, workflowID, "", readyToScheduleLastActivity, nil))
 
 	// verify that we can't finish the workflow yet
 	{
@@ -187,9 +189,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	// mark one of the pending activities as complete and verify that the workflow can now complete
 	s.NoError(s.SdkClient().CompleteActivity(ctx, activityInfo.TaskToken, nil, nil))
-	s.Eventually(func() bool {
-		return workflowRun.Get(ctx, nil) == nil
-	}, 10*time.Second, 500*time.Millisecond)
+	s.NoError(workflowRun.Get(ctx, nil))
 }
 
 func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
@@ -198,7 +198,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 	defer cancel()
 
 	// create a large number of blocked workflows
-	numTargetWorkflows := 50 // should be much greater than s.maxPendingCancelRequests
+	numTargetWorkflows := testcore.ClientSuiteLimit + 1
 	targetWorkflow := func(ctx workflow.Context) error {
 		return workflow.Await(ctx, func() bool {
 			return false
@@ -245,46 +245,36 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
-		}, 3*time.Second, 500*time.Millisecond)
+		}, 5*time.Second, 500*time.Millisecond)
 
-		{
-			ctx, cancel := context.WithTimeout(ctx, time.Second*3)
-			defer cancel()
-			s.Error(run.Get(ctx, nil))
-		}
 		shardID := common.WorkflowIDToHistoryShard(s.NamespaceID().String(), cancelerWorkflowId, s.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 		workflowExecution, err := s.GetTestCluster().ExecutionManager().GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: s.NamespaceID().String(),
 			WorkflowID:  cancelerWorkflowId,
 			RunID:       run.GetRunID(),
+			ArchetypeID: chasm.WorkflowArchetypeID,
 		})
 		s.NoError(err)
-		numCancelRequests := len(workflowExecution.State.RequestCancelInfos)
-		s.Assert().Zero(numCancelRequests)
-		err = s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, "")
-		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, workflowExecution.State.ExecutionState.Status)
+		s.Empty(workflowExecution.State.RequestCancelInfos)
+		s.NoError(s.SdkClient().CancelWorkflow(ctx, cancelerWorkflowId, ""))
 	})
 
 	// try to cancel all the workflows in separate batches of cancel workflows and verify that it works
 	s.Run("CancelWorkflowsInSeparateBatches", func() {
-		var runs []sdkclient.WorkflowRun
-		var stop int
-		for start := 0; start < numTargetWorkflows; start = stop {
-			stop = start + testcore.ClientSuiteLimit
-			if stop > numTargetWorkflows {
-				stop = numTargetWorkflows
-			}
-			run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-				TaskQueue: s.TaskQueue(),
-			}, cancelWorkflowsInRange, start, stop)
-			s.NoError(err)
-			runs = append(runs, run)
-		}
+		batch1, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: s.TaskQueue(),
+		}, cancelWorkflowsInRange, 0, numTargetWorkflows/2)
+		s.NoError(err)
 
-		for _, run := range runs {
-			s.NoError(run.Get(ctx, nil))
-		}
+		batch2, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			TaskQueue: s.TaskQueue(),
+		}, cancelWorkflowsInRange, numTargetWorkflows/2, numTargetWorkflows)
+		s.NoError(err)
+
+		s.NoError(batch1.Get(ctx, nil))
+		s.NoError(batch2.Get(ctx, nil))
 	})
 }
 
@@ -429,6 +419,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: future.GetID(),
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.NoError(err)
 		stickyQueue = ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue
@@ -463,6 +454,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: future.GetID(),
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	s.NotEmpty(ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue)
@@ -843,6 +835,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 				WorkflowId: id,
 				RunId:      workflowRun.GetRunID(),
 			},
+			Archetype: chasm.WorkflowArchetype,
 		})
 		s.Assert().NoError(err)
 	}()
@@ -1094,7 +1087,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 	s.Worker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
-		ID:                       uuid.New(),
+		ID:                       uuid.NewString(),
 		TaskQueue:                s.TaskQueue(),
 		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn)
@@ -1121,7 +1114,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 				RunId:      workflowRun.GetRunID(),
 			},
 		},
-		JobId:  uuid.New(),
+		JobId:  uuid.NewString(),
 		Reason: "test",
 	})
 	s.NoError(err)
@@ -1157,7 +1150,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 	s.Worker().RegisterActivity(activityFn)
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
-		ID:                       uuid.New(),
+		ID:                       uuid.NewString(),
 		TaskQueue:                s.TaskQueue(),
 		WorkflowExecutionTimeout: 10 * time.Second,
 	}, workflowFn)
@@ -1183,7 +1176,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 				RunId:      workflowRun.GetRunID(),
 			},
 		},
-		JobId:  uuid.New(),
+		JobId:  uuid.NewString(),
 		Reason: "test",
 	})
 	s.NoError(err)
@@ -1198,7 +1191,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 
 func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	tq := testcore.RandomizeStr(s.T().Name())
-	buildPrefix := uuid.New()[:6] + "-"
+	buildPrefix := uuid.NewString()[:6] + "-"
 	buildIdv1 := buildPrefix + "v1"
 	buildIdv2 := buildPrefix + "v2"
 	buildIdv3 := buildPrefix + "v3"
@@ -1317,8 +1310,8 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 
 	// wait for it to appear in visibility
 	query := fmt.Sprintf(`%s = "%s" and %s = "%s"`,
-		searchattribute.ExecutionStatus, "Running",
-		searchattribute.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
+		sadefs.ExecutionStatus, "Running",
+		sadefs.BuildIds, worker_versioning.UnversionedBuildIdSearchAttribute(buildIdv2))
 	s.Eventually(func() bool {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: s.Namespace().String(),
@@ -1331,7 +1324,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	_, err = s.FrontendClient().StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
 		Namespace:       s.Namespace().String(),
 		VisibilityQuery: query,
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
 			ResetOperation: &batchpb.BatchOperationReset{

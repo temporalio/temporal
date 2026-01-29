@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -47,6 +47,12 @@ type (
 		stateChanged  bool
 		signalHandler *SignalHandler
 		forceCAN      bool
+		// Optional override state for force-CaN
+		overrideState *deploymentspb.WorkerDeploymentLocalState
+		// workflowVersion is set at workflow start based on the dynamic config of the worker
+		// that completes the first task. It remains constant for the lifetime of the run and
+		// only updates when the workflow performs continue-as-new.
+		workflowVersion DeploymentWorkflowVersion
 	}
 )
 
@@ -55,15 +61,15 @@ type (
 // history clean so that we have less concern about backwards and forwards compatibility.
 // In steady state (i.e. absence of ongoing updates or signals) the wf should only have
 // a single wft in the history.
-func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+func Workflow(ctx workflow.Context, unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
 	workflowRunner := &WorkflowRunner{
 		WorkerDeploymentWorkflowArgs: args,
-
-		a:                nil,
-		logger:           sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
-		metrics:          workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
-		lock:             workflow.NewMutex(ctx),
-		unsafeMaxVersion: unsafeMaxVersion,
+		workflowVersion:              getWorkflowVersion(ctx, unsafeWorkflowVersionGetter),
+		a:                            nil,
+		logger:                       sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
+		metrics:                      workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
+		lock:                         workflow.NewMutex(ctx),
+		unsafeMaxVersion:             unsafeMaxVersion,
 		signalHandler: &SignalHandler{
 			signalSelector: workflow.NewSelector(ctx),
 		},
@@ -72,15 +78,41 @@ func Workflow(ctx workflow.Context, unsafeMaxVersion func() int, args *deploymen
 	return workflowRunner.run(ctx)
 }
 
+func getWorkflowVersion(ctx workflow.Context, unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion) DeploymentWorkflowVersion {
+	if workflow.GetVersion(ctx, "workflowVersionAdded", workflow.DefaultVersion, 0) >= 0 {
+		var ver DeploymentWorkflowVersion
+		err := workflow.MutableSideEffect(ctx, "workflowVersion",
+			func(_ workflow.Context) interface{} { return unsafeWorkflowVersionGetter() },
+			func(a, b interface{}) bool { return a == b }).
+			Get(&ver)
+		if err == nil {
+			return ver
+		}
+	}
+	return 0
+}
+
+func (d *WorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion) bool {
+	return d.workflowVersion >= version
+}
+
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	forceCANSignalChannel := workflow.GetSignalChannel(ctx, ForceCANSignalName)
 	syncVersionSummaryChannel := workflow.GetSignalChannel(ctx, SyncVersionSummarySignal)
+	propagationCompleteChannel := workflow.GetSignalChannel(ctx, PropagationCompleteSignal)
 
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
-		c.Receive(ctx, nil)
+
+		var args *deploymentspb.ForceCANDeploymentSignalArgs
+		c.Receive(ctx, &args)
 		d.forceCAN = true
+
+		// Apply override state if provided
+		if args.GetOverrideState() != nil {
+			d.overrideState = args.GetOverrideState()
+		}
 	})
 	d.signalHandler.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
@@ -88,6 +120,14 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 		var summary *deploymentspb.WorkerDeploymentVersionSummary
 		c.Receive(ctx, &summary)
 		d.syncVersionSummaryFromVersionWorkflow(summary)
+		d.setStateChanged()
+	})
+	d.signalHandler.signalSelector.AddReceive(propagationCompleteChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
+		var completion *deploymentspb.PropagationCompletionInfo
+		c.Receive(ctx, &completion)
+		d.handlePropagationComplete(completion)
 		d.setStateChanged()
 	})
 
@@ -106,6 +146,53 @@ func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deployme
 	}
 
 	d.State.Versions[summary.GetVersion()] = summary
+}
+
+// handlePropagationComplete handles the propagation complete signal from version workflows
+func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.PropagationCompletionInfo) {
+	buildID := completion.BuildId
+	revisionNumber := completion.RevisionNumber
+
+	if d.State.PropagatingRevisions == nil {
+		d.logger.Error("Received propagation complete signal, but no in-progress propagations found",
+			"revision", revisionNumber,
+			"build_id", buildID)
+		return
+	}
+
+	// Remove this revision from in-progress tracking for this build
+	if revisions, ok := d.State.PropagatingRevisions[buildID]; ok {
+		found := false
+		// Find and remove the revision number
+		filteredRevisions := make([]int64, 0, len(revisions.RevisionNumbers))
+		for _, rev := range revisions.RevisionNumbers {
+			if rev != revisionNumber {
+				filteredRevisions = append(filteredRevisions, rev)
+			} else {
+				found = true
+			}
+		}
+		if !found {
+			d.logger.Error("Received propagation complete signal, but this propagation is not in-progress",
+				"revision", revisionNumber,
+				"build_id", buildID)
+		}
+
+		if len(filteredRevisions) == 0 {
+			// Clean up empty build id entries
+			delete(d.State.PropagatingRevisions, buildID)
+		} else {
+			revisions.RevisionNumbers = filteredRevisions
+		}
+	} else {
+		d.logger.Error("Received propagation complete signal, but no in-progress propagations found for this version",
+			"revision", revisionNumber,
+			"build_id", buildID)
+	}
+
+	d.logger.Info("Propagation completed for revision",
+		"revision", revisionNumber,
+		"build_id", buildID)
 }
 
 func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeploymentVersionSummary) {
@@ -174,6 +261,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		"ramping_version", d.State.GetRoutingConfig().GetRampingVersion())
 
 	err := workflow.SetQueryHandler(ctx, QueryDescribeDeployment, func() (*deploymentspb.QueryDescribeWorkerDeploymentResponse, error) {
+		if d.deleteDeployment {
+			return nil, errors.New(errDeploymentDeleted)
+		}
 		return &deploymentspb.QueryDescribeWorkerDeploymentResponse{
 			State: d.State,
 		}, nil
@@ -219,18 +309,6 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.handleSetManager,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateSetManager,
-		},
-	); err != nil {
-		return err
-	}
-
-	// to-be-deprecated
-	if err := workflow.SetUpdateHandlerWithOptions(
-		ctx,
-		AddVersionToWorkerDeployment,
-		d.handleAddVersionToWorkerDeployment,
-		workflow.UpdateHandlerOptions{
-			Validator: d.validateAddVersionToWorkerDeployment,
 		},
 	); err != nil {
 		return err
@@ -310,7 +388,33 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// we pass the current state as input to the next workflow execution, resulting in a new
 	// workflow history with just two initial events. This minimizes the risk of NDE (Non-Deterministic Execution)
 	// errors during server rollbacks.
+
+	// Apply override state if provided during force-CaN
+	if d.overrideState != nil {
+		d.State = d.overrideState
+	}
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
+}
+
+func (d *WorkflowRunner) preUpdateChecks(ctx workflow.Context) error {
+	err := d.ensureNotDeleted()
+	if err != nil {
+		return err
+	}
+
+	if workflow.GetInfo(ctx).GetContinueAsNewSuggested() {
+		// History is too large, do not accept new updates until wf CaNs.
+		// Since this needs workflow context we cannot do it in validators.
+		return temporal.NewApplicationError(errLongHistory, errLongHistory)
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) ensureNotDeleted() error {
+	if d.deleteDeployment {
+		return temporal.NewNonRetryableApplicationError(errDeploymentDeleted, errDeploymentDeleted, nil)
+	}
+	return nil
 }
 
 func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
@@ -344,6 +448,14 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+	// TODO: there is a small race condition where the deployment is just deleted and got a register update before closing itself.
+	// In that case, we should ideally not reject the update, but revive the workflow so that the caller does not need to retry.
+	// In practice this should be fine because the polls will retry and Deployment workflows are short-lived.
+	// Same principle applies for Version workflows, but they can be slightly more long-lived of they are handling long propagations.
+	// Hence, the revive logic is implemented in Version workflow but not here yet.
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
 
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
@@ -365,6 +477,10 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	if err != nil {
 		return err
 	}
+	var routingConfigToSync *deploymentpb.RoutingConfig
+	if d.hasMinVersion(AsyncSetCurrentAndRamping) {
+		routingConfigToSync = d.GetState().GetRoutingConfig()
+	}
 
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
@@ -373,6 +489,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
 		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
+		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
 		var appError *temporal.ApplicationError
@@ -399,8 +516,17 @@ func (d *WorkflowRunner) validateDeleteDeployment() error {
 }
 
 func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
-	// Even if the update doesn't change the state we mark it as dirty because of created history events.
-	defer d.setStateChanged()
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
 
 	if len(d.State.Versions) == 0 {
 		d.deleteDeployment = true
@@ -423,6 +549,7 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 	if args.ConflictToken != nil && !bytes.Equal(args.ConflictToken, d.State.GetConflictToken()) {
 		return temporal.NewApplicationError("conflict token mismatch", errFailedPrecondition)
 	}
+
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if args.Version == d.State.GetRoutingConfig().GetCurrentVersion() &&
 		!(args.Version == worker_versioning.UnversionedVersionId && args.Percentage == 0) {
@@ -445,11 +572,19 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingRampingUpdate(args *deploym
 }
 
 func (d *WorkflowRunner) validateSetRampingVersion(args *deploymentspb.SetRampingVersionArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
 	return d.validateStateBeforeAcceptingRampingUpdate(args)
 }
 
 //revive:disable-next-line:cognitive-complexity
+//nolint:staticcheck // deprecated stuff will be cleaned
 func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *deploymentspb.SetRampingVersionArgs) (*deploymentspb.SetRampingVersionResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -502,102 +637,77 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 	var rampingSinceTime *timestamppb.Timestamp
 	var rampingVersionUpdateTime *timestamppb.Timestamp
 
-	// unsetting ramp
-	if newRampingVersion == "" {
+	asyncMode := d.hasMinVersion(AsyncSetCurrentAndRamping)
 
-		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: routingUpdateTime,
-			RampingSinceTime:  nil, // remove ramp
-			RampPercentage:    0,   // remove ramp
-		}
+	if prevRampingVersion != newRampingVersion || prevRampingVersionPercentage != args.Percentage || !asyncMode {
+		// In async mode we do not touch routing config and versions if this is not changing the
+		// ramping version or percentage (but could still come here because modifier identity is changing).
 
-		if !d.rampingVersionStringUnversioned(prevRampingVersion) {
-			if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
-				return nil, err
-			}
-		} else {
-			if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-				return nil, err
-			}
-		}
-
-		rampingVersionUpdateTime = routingUpdateTime // ramp was updated to ""
-
-		// Set summary drainage status immediately to draining.
-		// We know prevRampingVersion cannot have been current, so it must now be draining
-		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
-	} else {
-		// setting ramp
-
-		if prevRampingVersion == newRampingVersion { // the version was already ramping, user changing ramp %
+		// Determine timestamps based on whether we're setting or unsetting ramp
+		if newRampingVersion == "" {
+			// unsetting ramp
+			rampingVersionUpdateTime = routingUpdateTime
+		} else if prevRampingVersion == newRampingVersion {
+			// version was already ramping, user changing ramp %
 			rampingSinceTime = d.State.RoutingConfig.RampingVersionChangedTime
 			rampingVersionUpdateTime = d.State.RoutingConfig.RampingVersionChangedTime
 		} else {
 			// version ramping for the first time
-
-			currentVersion := d.State.RoutingConfig.CurrentVersion
-			if !args.IgnoreMissingTaskQueues &&
-				currentVersion != worker_versioning.UnversionedVersionId &&
-				newRampingVersion != worker_versioning.UnversionedVersionId {
-				isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
-				if err != nil {
-					d.logger.Info("Error verifying poller presence in version", "error", err)
-					return nil, err
-				}
-				if isMissingTaskQueues {
-					return nil, serviceerror.NewFailedPrecondition(ErrRampingVersionDoesNotHaveAllTaskQueues)
-				}
-			}
 			rampingSinceTime = routingUpdateTime
 			rampingVersionUpdateTime = routingUpdateTime
-
-			// Erase summary drainage status immediately, so it is not draining/drained.
-			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
 		}
 
-		setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: routingUpdateTime,
-			RampingSinceTime:  rampingSinceTime,
-			RampPercentage:    args.Percentage,
+		// Build pending routing config with the updated ramping version
+		// Initialize for both sync and async modes to simplify state update logic
+		// Ensure CurrentDeploymentVersion is populated from deprecated field if needed for backward compatibility
+		currentDeploymentVersion := d.State.RoutingConfig.CurrentDeploymentVersion
+		if currentDeploymentVersion == nil {
+			currentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(d.State.RoutingConfig.CurrentVersion)
 		}
-		if !d.rampingVersionStringUnversioned(newRampingVersion) {
-			if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs, true); err != nil {
+		pendingRoutingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:            currentDeploymentVersion,
+			CurrentVersion:                      d.State.RoutingConfig.CurrentVersion,
+			RampingDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion),
+			RampingVersion:                      newRampingVersion,
+			RampingVersionPercentage:            args.Percentage,
+			CurrentVersionChangedTime:           d.State.RoutingConfig.CurrentVersionChangedTime,
+			RampingVersionChangedTime:           rampingVersionUpdateTime,
+			RampingVersionPercentageChangedTime: routingUpdateTime,
+			RevisionNumber:                      d.State.RoutingConfig.RevisionNumber,
+		}
+
+		var routingConfigToSync *deploymentpb.RoutingConfig
+
+		if asyncMode {
+			pendingRoutingConfig.RevisionNumber++
+			// only setting it in the request if it's async mode
+			routingConfigToSync = pendingRoutingConfig
+		}
+
+		if newRampingVersion == "" {
+			err = d.unsetRamp(ctx, routingUpdateTime, routingConfigToSync, prevRampingVersion, asyncMode, pendingRoutingConfig)
+			if err != nil {
 				return nil, err
 			}
 		} else {
-			if err := d.syncUnversionedRamp(ctx, setRampUpdateArgs); err != nil {
+			err = d.setRamp(ctx,
+				args,
+				prevRampingVersion,
+				newRampingVersion,
+				routingUpdateTime,
+				rampingSinceTime,
+				routingConfigToSync,
+				asyncMode,
+				pendingRoutingConfig)
+			if err != nil {
 				return nil, err
 			}
 		}
 
-		// tell previous ramping version, if present, that it's no longer ramping
-		if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
-			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-				RoutingUpdateTime: routingUpdateTime,
-				RampingSinceTime:  nil, // remove ramp
-				RampPercentage:    0,   // remove ramp
-			}
-			if !d.rampingVersionStringUnversioned(prevRampingVersion) {
-				if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs, false); err != nil {
-					return nil, err
-				}
-			} else {
-				if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-					return nil, err
-				}
-			}
-			// Set summary drainage status immediately to draining.
-			// We know prevRampingVersion cannot have been current, so it must now be draining
-			d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
-		}
+		// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
+		d.State.RoutingConfig = pendingRoutingConfig
 	}
 
-	// update local state
-	d.State.RoutingConfig.RampingVersion = newRampingVersion
-	d.State.RoutingConfig.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newRampingVersion)
-	d.State.RoutingConfig.RampingVersionPercentage = args.Percentage
-	d.State.RoutingConfig.RampingVersionChangedTime = rampingVersionUpdateTime
-	d.State.RoutingConfig.RampingVersionPercentageChangedTime = routingUpdateTime
 	d.State.ConflictToken, _ = routingUpdateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
 
@@ -614,6 +724,151 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 
 }
 
+//nolint:staticcheck // SA1019
+func (d *WorkflowRunner) unsetRamp(
+	ctx workflow.Context,
+	routingUpdateTime *timestamppb.Timestamp,
+	routingConfigToSync *deploymentpb.RoutingConfig,
+	prevRampingVersion string,
+	asyncMode bool,
+	pendingRoutingConfig *deploymentpb.RoutingConfig,
+) error {
+	unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		RoutingUpdateTime: routingUpdateTime,
+		RampingSinceTime:  nil, // remove ramp
+		RampPercentage:    0,   // remove ramp
+		RoutingConfig:     routingConfigToSync,
+	}
+
+	if !d.rampingVersionStringUnversioned(prevRampingVersion) {
+		if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs); err != nil {
+			return err
+		}
+	} else if asyncMode {
+		// Here, we are unsetting unversioned ramp in async mode. This only can happen if there IS a current version, so we
+		// propagate the ramp status in routing config through the current version.
+		if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, unsetRampUpdateArgs); err != nil {
+			return err
+		}
+	} else {
+		// Only should call this in sync mode
+		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+			return err
+		}
+	}
+
+	// Set summary drainage status immediately to draining.
+	// We know prevRampingVersion cannot have been current, so it must now be draining
+	d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+	return nil
+}
+
+//nolint:staticcheck // SA1019
+func (d *WorkflowRunner) setRamp(
+	ctx workflow.Context,
+	args *deploymentspb.SetRampingVersionArgs,
+	prevRampingVersion string,
+	newRampingVersion string,
+	routingUpdateTime *timestamppb.Timestamp,
+	rampingSinceTime *timestamppb.Timestamp,
+	routingConfigToSync *deploymentpb.RoutingConfig,
+	asyncMode bool,
+	pendingRoutingConfig *deploymentpb.RoutingConfig,
+) error {
+	if prevRampingVersion != newRampingVersion {
+		// version ramping for the first time - need to check for missing task queues
+
+		currentVersion := d.State.RoutingConfig.CurrentVersion
+		if !args.IgnoreMissingTaskQueues &&
+			currentVersion != worker_versioning.UnversionedVersionId &&
+			newRampingVersion != worker_versioning.UnversionedVersionId {
+			isMissingTaskQueues, err := d.isVersionMissingTaskQueues(ctx, currentVersion, newRampingVersion)
+			if err != nil {
+				d.logger.Info("Error verifying poller presence in version", "error", err)
+				return err
+			}
+			if isMissingTaskQueues {
+				newRampingVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(newRampingVersion)
+				return serviceerror.NewFailedPreconditionf(
+					ErrRampingVersionDoesNotHaveAllTaskQueues,
+					worker_versioning.WorkerDeploymentVersionToStringV32(newRampingVersionObj),
+				)
+			}
+		}
+		if !asyncMode {
+			// Erase summary drainage status immediately, so it is not draining/drained.
+			d.setDrainageStatus(newRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, routingUpdateTime)
+		}
+	}
+
+	setRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		RoutingUpdateTime: routingUpdateTime,
+		RampingSinceTime:  rampingSinceTime,
+		RampPercentage:    args.Percentage,
+		RoutingConfig:     routingConfigToSync,
+	}
+	if !d.rampingVersionStringUnversioned(newRampingVersion) {
+		if _, err := d.syncVersion(ctx, newRampingVersion, setRampUpdateArgs); err != nil {
+			return err
+		}
+	} else if asyncMode {
+		// Here, we are setting unversioned ramp in async mode. This only can happen if there IS a current version, so we
+		// propagate the ramp status in routing config through the current version.
+		if _, err := d.syncVersion(ctx, pendingRoutingConfig.CurrentVersion, setRampUpdateArgs); err != nil {
+			return err
+		}
+	} else {
+		// Only should call this in sync mode
+		if err := d.syncUnversionedRamp(ctx, setRampUpdateArgs); err != nil {
+			return err
+		}
+	}
+
+	// tell previous ramping version, if present, that it's no longer ramping
+	if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
+		err := d.unsetPreviousRamp(ctx, routingUpdateTime, routingConfigToSync, prevRampingVersion, asyncMode)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+//nolint:staticcheck // SA1019
+func (d *WorkflowRunner) unsetPreviousRamp(
+	ctx workflow.Context,
+	routingUpdateTime *timestamppb.Timestamp,
+	routingConfigToSync *deploymentpb.RoutingConfig,
+	prevRampingVersion string,
+	asyncMode bool,
+) error {
+	unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+		RoutingUpdateTime: routingUpdateTime,
+		RampingSinceTime:  nil, // remove ramp
+		RampPercentage:    0,   // remove ramp
+		RoutingConfig:     routingConfigToSync,
+	}
+	if !d.rampingVersionStringUnversioned(prevRampingVersion) {
+		if _, err := d.syncVersion(ctx, prevRampingVersion, unsetRampUpdateArgs); err != nil {
+			return err
+		}
+	} else if asyncMode {
+		// Here, we are setting a versioned ramp on top of an unversioned ramp in async mode. In this case we
+		// already synced the ramp status through the new ramping version so there is no need for another sync.
+	} else {
+		// Only should call this in sync mode
+		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+			return err
+		}
+	}
+	if !asyncMode {
+		// Set summary drainage status immediately to draining.
+		// We know prevRampingVersion cannot have been current, so it must now be draining
+		d.setDrainageStatus(prevRampingVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, routingUpdateTime)
+	}
+	return nil
+}
+
 func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.VersionDrainageStatus, routingUpdateTime *timestamppb.Timestamp) {
 	if summary := d.State.GetVersions()[version]; summary != nil {
 		summary.DrainageStatus = status
@@ -626,6 +881,10 @@ func (d *WorkflowRunner) setDrainageStatus(version string, status enumspb.Versio
 }
 
 func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersionArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
+
 	if _, ok := d.State.Versions[args.Version]; !ok {
 		return temporal.NewApplicationError("version not found in deployment", errVersionNotFound)
 	}
@@ -634,12 +893,14 @@ func (d *WorkflowRunner) validateDeleteVersion(args *deploymentspb.DeleteVersion
 	// deployment workflow because that's the source of truth for routing config.
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	if d.State.RoutingConfig.CurrentVersion == args.Version || d.State.RoutingConfig.RampingVersion == args.Version {
+		versionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(args.Version)
 		// activity won't retry on this error since version not eligible for deletion
-		return serviceerror.NewFailedPrecondition(ErrVersionIsCurrentOrRamping)
+		return serviceerror.NewFailedPreconditionf(ErrVersionIsCurrentOrRamping, worker_versioning.WorkerDeploymentVersionToStringV32(versionObj))
 	}
 
-	if d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
-		return serviceerror.NewFailedPrecondition(fmt.Sprintf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity))
+	// Ignore the manager identity check if the delete operation is initiated by the server internally
+	if !args.GetServerDelete() && d.State.ManagerIdentity != "" && d.State.ManagerIdentity != args.Identity {
+		return serviceerror.NewFailedPreconditionf(ErrManagerIdentityMismatch, d.State.ManagerIdentity, args.Identity)
 	}
 	return nil
 }
@@ -649,23 +910,38 @@ func (d *WorkflowRunner) deleteVersion(ctx workflow.Context, args *deploymentspb
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.DeleteWorkerDeploymentVersion, &deploymentspb.DeleteVersionActivityArgs{
-		Identity:       args.Identity,
-		DeploymentName: d.DeploymentName,
-		Version:        args.Version,
-		RequestId:      uuid.New(),
-		SkipDrainage:   args.SkipDrainage,
+		Identity:         args.Identity,
+		DeploymentName:   d.DeploymentName,
+		Version:          args.Version,
+		RequestId:        uuid.NewString(),
+		SkipDrainage:     args.SkipDrainage,
+		AsyncPropagation: d.hasMinVersion(AsyncSetCurrentAndRamping),
 	}).Get(ctx, &res)
 	if err != nil {
+		var activityError *temporal.ActivityError
+		var applicationError *temporal.ApplicationError
+		if errors.As(err, &activityError) && errors.As(activityError.Unwrap(), &applicationError) &&
+			(applicationError.Type() == errVersionHasPollers || applicationError.Type() == errVersionIsDraining) {
+			return serviceerror.NewFailedPrecondition(applicationError.Message())
+		}
 		return err
 	}
 	// update local state
 	delete(d.State.Versions, args.Version)
-	d.State.LastModifierIdentity = args.Identity
+	// remove from propagating versions if it's there
+	delete(d.State.PropagatingRevisions, worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(args.GetVersion()).GetBuildId())
+	if !args.GetServerDelete() {
+		d.State.LastModifierIdentity = args.Identity
+	}
 	// update memo
 	return d.updateMemo(ctx)
 }
 
 func (d *WorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *deploymentspb.DeleteVersionArgs) error {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -702,10 +978,17 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetManager(args *deployment
 }
 
 func (d *WorkflowRunner) validateSetManager(args *deploymentspb.SetManagerIdentityArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
 	return d.validateStateBeforeAcceptingSetManager(args)
 }
 
 func (d *WorkflowRunner) handleSetManager(ctx workflow.Context, args *deploymentspb.SetManagerIdentityArgs) (*deploymentspb.SetManagerIdentityResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -758,10 +1041,19 @@ func (d *WorkflowRunner) validateStateBeforeAcceptingSetCurrent(args *deployment
 }
 
 func (d *WorkflowRunner) validateSetCurrent(args *deploymentspb.SetCurrentVersionArgs) error {
+	if err := d.ensureNotDeleted(); err != nil {
+		return err
+	}
+
 	return d.validateStateBeforeAcceptingSetCurrent(args)
 }
 
+//nolint:staticcheck // deprecated stuff will be cleaned
 func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deploymentspb.SetCurrentVersionArgs) (*deploymentspb.SetCurrentVersionResponse, error) {
+	if err := d.preUpdateChecks(ctx); err != nil {
+		return nil, err
+	}
+
 	// use lock to enforce only one update at a time
 	err := d.lock.Lock(ctx)
 	if err != nil {
@@ -825,81 +1117,123 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			return nil, err
 		}
 		if isMissingTaskQueues {
-			return nil, serviceerror.NewFailedPrecondition(ErrCurrentVersionDoesNotHaveAllTaskQueues)
+			newCurrentVersionObj, _ := worker_versioning.WorkerDeploymentVersionFromStringV31(newCurrentVersion)
+			return nil, serviceerror.NewFailedPreconditionf(
+				ErrCurrentVersionDoesNotHaveAllTaskQueues,
+				worker_versioning.WorkerDeploymentVersionToStringV32(newCurrentVersionObj),
+			)
 		}
 	}
 
-	// TODO (Shivam): remove the empty string check once canary stops flaking out
-	if newCurrentVersion != worker_versioning.UnversionedVersionId && newCurrentVersion != "" {
-		// Tell new current version that it's current
-		currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			CurrentSinceTime:  updateTime,
-			RampingSinceTime:  nil, // remove ramp for that version if it was ramping
-			RampPercentage:    0,   // remove ramp for that version if it was ramping
+	asyncMode := d.hasMinVersion(AsyncSetCurrentAndRamping)
+
+	if prevCurrentVersion != newCurrentVersion || !asyncMode {
+		// In async mode we do not touch routing config and versions if this is not changing the
+		// current version (but could still come here because modifier identity is changing).
+
+		// Build pending routing config with the updated current version
+		// Initialize for both sync and async modes to simplify state update logic
+		// Ensure RampingDeploymentVersion is populated from deprecated field if needed for backward compatibility
+		rampingDeploymentVersion := d.State.RoutingConfig.RampingDeploymentVersion
+		if rampingDeploymentVersion == nil {
+			rampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(d.State.RoutingConfig.RampingVersion)
 		}
-		if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs, true); err != nil {
-			return nil, err
+		pendingRoutingConfig := &deploymentpb.RoutingConfig{
+			CurrentDeploymentVersion:            worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(newCurrentVersion),
+			CurrentVersion:                      newCurrentVersion,
+			RampingDeploymentVersion:            rampingDeploymentVersion,
+			RampingVersion:                      d.State.RoutingConfig.RampingVersion,
+			RampingVersionPercentage:            d.State.RoutingConfig.RampingVersionPercentage,
+			CurrentVersionChangedTime:           updateTime,
+			RampingVersionChangedTime:           d.State.RoutingConfig.RampingVersionChangedTime,
+			RampingVersionPercentageChangedTime: d.State.RoutingConfig.RampingVersionPercentageChangedTime,
+			RevisionNumber:                      d.State.RoutingConfig.RevisionNumber,
 		}
-		// Erase summary drainage status immediately (in case it was previously drained/draining)
-		d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, updateTime)
+
+		var routingConfigToSync *deploymentpb.RoutingConfig
+		if asyncMode {
+			pendingRoutingConfig.RevisionNumber++
+			// only setting it in the request if it's async mode
+			routingConfigToSync = pendingRoutingConfig
+		}
+
+		// Unset ramping if it's being promoted to current
+		if newCurrentVersion == d.State.RoutingConfig.RampingVersion {
+			pendingRoutingConfig.RampingVersion = ""
+			pendingRoutingConfig.RampingDeploymentVersion = nil
+			pendingRoutingConfig.RampingVersionPercentage = 0
+			pendingRoutingConfig.RampingVersionChangedTime = updateTime
+			pendingRoutingConfig.RampingVersionPercentageChangedTime = updateTime
+		}
+
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if newCurrentVersion != worker_versioning.UnversionedVersionId && newCurrentVersion != "" {
+			// Tell new current version that it's current
+			currUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				CurrentSinceTime:  updateTime,
+				RampingSinceTime:  nil, // remove ramp for that version if it was ramping
+				RampPercentage:    0,   // remove ramp for that version if it was ramping
+				RoutingConfig:     routingConfigToSync,
+			}
+			if _, err := d.syncVersion(ctx, newCurrentVersion, currUpdateArgs); err != nil {
+				return nil, err
+			}
+			// Erase summary drainage status immediately (in case it was previously drained/draining)
+			d.setDrainageStatus(newCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_UNSPECIFIED, updateTime)
+		}
+		// If the new current version is unversioned and there was no unversioned ramp, all we need to
+		// do is tell the previous current version that it is not current. Then, the task queues in the
+		// previous current version will have no current version and will become unversioned implicitly.
+
+		// TODO (Shivam): remove the empty string check once canary stops flaking out
+		if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
+			// Tell previous current that it's no longer current
+			prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				CurrentSinceTime:  nil, // remove current
+				RampingSinceTime:  nil, // no change, the prev current was not ramping
+				RampPercentage:    0,   // no change, the prev current was not ramping
+				RoutingConfig:     routingConfigToSync,
+			}
+			if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs); err != nil {
+				return nil, err
+			}
+			if !asyncMode {
+				// Set summary drainage status immediately to draining.
+				// We know prevCurrentVersion cannot have been ramping, so it must now be draining
+				d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
+			}
+		}
+
+		//nolint:staticcheck // deprecated stuff will be cleaned
+		if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId &&
+			// this step is not needed in async mode because the task queues got full routing info (including removed ramp) through the previous version.
+			!asyncMode {
+			// If the new current is unversioned, and it was previously ramping, we need to tell
+			// all the task queues with unversioned ramp that they no longer have unversioned ramp.
+			// The task queues with unversioned ramp are the task queues of the previous current version.
+			// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
+			unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
+				RoutingUpdateTime: updateTime,
+				RampingSinceTime:  nil, // remove ramp
+				RampPercentage:    0,   // remove ramp
+			}
+			if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
+				return nil, err
+			}
+		}
+
+		// If the previous current version was unversioned, there is nothing in the task queues
+		// to remove, because they were implicitly unversioned. We don't have to remove any
+		// unversioned ramps, because current and ramping cannot both be unversioned.
+
+		// update local state - use pendingRoutingConfig (initialized for both sync and async modes)
+		d.State.RoutingConfig = pendingRoutingConfig
 	}
-	// If the new current version is unversioned and there was no unversioned ramp, all we need to
-	// do is tell the previous current version that it is not current. Then, the task queues in the
-	// previous current version will have no current version and will become unversioned implicitly.
 
-	// TODO (Shivam): remove the empty string check once canary stops flaking out
-	if prevCurrentVersion != worker_versioning.UnversionedVersionId && prevCurrentVersion != "" {
-		// Tell previous current that it's no longer current
-		prevUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			CurrentSinceTime:  nil, // remove current
-			RampingSinceTime:  nil, // no change, the prev current was not ramping
-			RampPercentage:    0,   // no change, the prev current was not ramping
-		}
-		if _, err := d.syncVersion(ctx, prevCurrentVersion, prevUpdateArgs, false); err != nil {
-			return nil, err
-		}
-		// Set summary drainage status immediately to draining.
-		// We know prevCurrentVersion cannot have been ramping, so it must now be draining
-		d.setDrainageStatus(prevCurrentVersion, enumspb.VERSION_DRAINAGE_STATUS_DRAINING, updateTime)
-	}
-
-	//nolint:staticcheck // deprecated stuff will be cleaned
-	if newCurrentVersion == worker_versioning.UnversionedVersionId && d.State.RoutingConfig.RampingVersion == worker_versioning.UnversionedVersionId {
-		// If the new current is unversioned, and it was previously ramping, we need to tell
-		// all the task queues with unversioned ramp that they no longer have unversioned ramp.
-		// The task queues with unversioned ramp are the task queues of the previous current version.
-		// TODO (Carly): Should we ban people from changing the task queues in the current version while they have an unversioned ramp?
-		unsetRampUpdateArgs := &deploymentspb.SyncVersionStateUpdateArgs{
-			RoutingUpdateTime: updateTime,
-			RampingSinceTime:  nil, // remove ramp
-			RampPercentage:    0,   // remove ramp
-		}
-		if err := d.syncUnversionedRamp(ctx, unsetRampUpdateArgs); err != nil {
-			return nil, err
-		}
-	}
-
-	// If the previous current version was unversioned, there is nothing in the task queues
-	// to remove, because they were implicitly unversioned. We don't have to remove any
-	// unversioned ramps, because current and ramping cannot both be unversioned.
-
-	// update local state
-	d.State.RoutingConfig.CurrentVersion = args.Version
-	d.State.RoutingConfig.CurrentDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(args.Version)
-	d.State.RoutingConfig.CurrentVersionChangedTime = updateTime
 	d.State.ConflictToken, _ = updateTime.AsTime().MarshalBinary()
 	d.State.LastModifierIdentity = args.Identity
-
-	// unset ramping version if it was set to current version
-	if d.State.RoutingConfig.CurrentVersion == d.State.RoutingConfig.RampingVersion {
-		d.State.RoutingConfig.RampingVersion = ""
-		d.State.RoutingConfig.RampingDeploymentVersion = nil
-		d.State.RoutingConfig.RampingVersionPercentage = 0
-		d.State.RoutingConfig.RampingVersionChangedTime = updateTime           // since ramp was removed
-		d.State.RoutingConfig.RampingVersionPercentageChangedTime = updateTime // since ramp was removed
-	}
 
 	// update memo
 	if err = d.updateMemo(ctx); err != nil {
@@ -910,7 +1244,6 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		PreviousVersion: prevCurrentVersion,
 		ConflictToken:   d.State.ConflictToken,
 	}, nil
-
 }
 
 // to-be-deprecated
@@ -942,34 +1275,13 @@ func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
 	return maxVersions
 }
 
-// to-be-deprecated
-func (d *WorkflowRunner) handleAddVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
-	// Even if the update doesn't change the state we mark it as dirty because of created history events.
-	defer d.setStateChanged()
-
-	maxVersions := d.getMaxVersions(ctx)
-
-	if len(d.State.Versions) >= maxVersions {
-		err := d.tryDeleteVersion(ctx)
-		if err != nil {
-			return temporal.NewApplicationError(fmt.Sprintf("cannot add version, already at max versions %d", maxVersions), errTooManyVersions)
-		}
-	}
-
-	d.State.Versions[args.Version] = &deploymentspb.WorkerDeploymentVersionSummary{
-		Version:    args.Version,
-		CreateTime: args.CreateTime,
-	}
-
-	return nil
-}
-
 func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	sortedSummaries := d.sortedSummaries()
 	for _, v := range sortedSummaries {
 		args := &deploymentspb.DeleteVersionArgs{
-			Identity: "try-delete-for-add-version",
-			Version:  v.Version,
+			Identity:     serverDeleteVersionIdentity,
+			Version:      v.Version,
+			ServerDelete: true,
 		}
 		if err := d.validateDeleteVersion(args); err == nil {
 			// this might hang on the lock
@@ -981,45 +1293,53 @@ func (d *WorkflowRunner) tryDeleteVersion(ctx workflow.Context) error {
 	return serviceerror.NewFailedPrecondition("could not add version: too many versions in deployment and none are eligible for deletion")
 }
 
-func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs, activated bool) (*deploymentspb.VersionLocalState, error) {
+func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) (*deploymentspb.VersionLocalState, error) {
+	bld := worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(targetVersion).GetBuildId()
+	revisionNumber := versionUpdateArgs.GetRoutingConfig().GetRevisionNumber()
+	if revisionNumber > 0 {
+		// track revision number until propagation finishes
+		if len(d.State.PropagatingRevisions) == 0 {
+			d.State.PropagatingRevisions = make(map[string]*deploymentspb.PropagatingRevisions)
+		}
+		revs, ok := d.State.PropagatingRevisions[bld]
+		if !ok {
+			revs = &deploymentspb.PropagatingRevisions{}
+			d.State.PropagatingRevisions[bld] = revs
+		}
+		revs.RevisionNumbers = append(revs.RevisionNumbers, revisionNumber)
+	}
+
+	var reqID string
+	if d.hasMinVersion(VersionDataRevisionNumber) && revisionNumber > 0 {
+		// Don't send repetitive sync requests for the same revision number to the same version.
+		reqID = fmt.Sprintf("SyncWorkerDeploymentVersion-%d", revisionNumber)
+	} else {
+		reqID = d.newUUID(ctx)
+	}
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	var res deploymentspb.SyncVersionStateActivityResult
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncWorkerDeploymentVersion, &deploymentspb.SyncVersionStateActivityArgs{
 		DeploymentName: d.DeploymentName,
 		Version:        targetVersion,
 		UpdateArgs:     versionUpdateArgs,
-		RequestId:      d.newUUID(ctx),
+		RequestId:      reqID,
 	}).Get(ctx, &res)
 
-	// Update the VersionSummary, stored as part of the WorkerDeploymentLocalState, for this version.
 	if err == nil {
-		summary := &deploymentspb.WorkerDeploymentVersionSummary{
-			Version:           targetVersion,
-			RoutingUpdateTime: versionUpdateArgs.RoutingUpdateTime,
-			CurrentSinceTime:  versionUpdateArgs.CurrentSinceTime,
-			RampingSinceTime:  versionUpdateArgs.RampingSinceTime,
-		}
-		if activated {
-			summary.FirstActivationTime = versionUpdateArgs.RoutingUpdateTime
+		if sum := res.GetSummary(); sum != nil {
+			d.updateVersionSummary(sum)
 		} else {
-			summary.LastDeactivationTime = versionUpdateArgs.RoutingUpdateTime
+			//nolint:staticcheck // SA1019
+			d.updateVersionSummary(versionStateToSummary(res.GetVersionState()))
 		}
-
-		// Setting the appropriate status for the version. The status of a version is never set to
-		// DRAINED from within the deployment workflow since the version workflow is responsible for
-		// querying visibility after which it signals the deployment workflow if the version is drained.
-		if summary.CurrentSinceTime != nil {
-			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT
-		} else if summary.RampingSinceTime != nil {
-			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING
-		} else {
-			summary.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
-		}
-		d.updateVersionSummary(summary)
+	} else if revisionNumber > 0 {
+		// Activity failed meaning the synchronous part of the sync request failed. we need to untrack the revision number.
+		d.handlePropagationComplete(&deploymentspb.PropagationCompletionInfo{RevisionNumber: revisionNumber, BuildId: bld})
 	}
 	return res.VersionState, err
 }
 
+// syncUnversionedRamp should not be called in async mode
 func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdateArgs *deploymentspb.SyncVersionStateUpdateArgs) error {
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 
@@ -1082,9 +1402,10 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 
 		err = workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserDataFromWorkerDeployment, &deploymentspb.SyncDeploymentVersionUserDataRequest{
-			Version:       nil,
-			ForgetVersion: false,
-			Sync:          batch,
+			DeploymentName: d.DeploymentName,
+			Version:        nil,
+			ForgetVersion:  false,
+			Sync:           batch,
 		}).Get(ctx, &syncRes)
 		if err != nil {
 			// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.
@@ -1127,7 +1448,7 @@ func (d *WorkflowRunner) startVersion(ctx workflow.Context, args *deploymentspb.
 func (d *WorkflowRunner) newUUID(ctx workflow.Context) string {
 	var val string
 	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-		return uuid.New()
+		return uuid.NewString()
 	}).Get(&val)
 	return val
 }
@@ -1222,6 +1543,7 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		RampingSinceTime:     versionSummary.GetRampingSinceTime(),
 		RoutingUpdateTime:    versionSummary.GetRoutingUpdateTime(),
 		FirstActivationTime:  versionSummary.GetFirstActivationTime(),
+		LastCurrentTime:      versionSummary.GetLastCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 	}
 }

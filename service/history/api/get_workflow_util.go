@@ -26,7 +26,8 @@ import (
 
 const longPollSoftTimeout = time.Second
 
-func GetOrPollMutableState(
+//nolint:revive // cognitive complexity 39 (> max enabled 25)
+func GetOrPollWorkflowMutableState(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	request *historyservice.GetMutableStateRequest,
@@ -42,7 +43,7 @@ func GetOrPollMutableState(
 	}
 
 	if len(request.Execution.RunId) == 0 {
-		request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentWorkflowRunID(
 			ctx,
 			request.NamespaceId,
 			request.Execution.WorkflowId,
@@ -247,6 +248,13 @@ func GetOrPollMutableState(
 					return response, nil
 				}
 			case <-longPollCtx.Done():
+				return response, nil
+			case <-ctx.Done():
+				// Fallback for when ctx.Deadline() returns false but ctx is still cancelled.
+				// This can happen when gRPC timeout header isn't propagated (e.g., stripped
+				// by proxy) but the client still disconnects/cancels when its timeout fires.
+				// In normal operation where ctx.Deadline() returns true, longPollCtx.Done()
+				// fires first and this case is never reached.
 				return response, nil
 			}
 		}

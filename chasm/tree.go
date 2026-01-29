@@ -16,12 +16,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
@@ -38,6 +38,7 @@ var (
 var (
 	errAccessCheckFailed = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
 	errComponentNotFound = serviceerror.NewNotFound("component not found")
+	errDataNotFound      = serviceerror.NewNotFound("data not found")
 	errTaskNotValid      = serviceerror.NewNotFound("task is no longer valid")
 )
 
@@ -89,8 +90,11 @@ type (
 
 		// Type of attributes controls the type of the node.
 		serializedNode *persistencespb.ChasmNode // serialized component | data | collection with metadata
-		value          any                       // deserialized component | data | map
-		valueState     valueState
+		// Deserialized component | data | map
+		// Do NOT set this field directly, use setValue() method instead.
+		value any
+		// Do NOT set this field directly, use setValueState() method instead.
+		valueState valueState
 
 		// Cached encoded path for this node.
 		// DO NOT read this field directly. Always use getEncodedPath() method to retrieve the encoded path.
@@ -124,9 +128,14 @@ type (
 		// mutation field captures all user state changes (those will be replicated)
 		mutation NodesMutation
 		// systemMutation field captures all cell specific system changes (those will NOT be replicated)
-		systemMutation     NodesMutation
+		systemMutation NodesMutation
+
 		newTasks           map[any][]taskWithAttributes // component value -> task & attributes
 		immediatePureTasks map[any][]taskWithAttributes // similar to newTasks, but will be executed at the end of the transaction
+
+		// Node value -> node
+		// Only component and data node values are tracked right now
+		valueToNode map[any]*Node
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
 
@@ -144,7 +153,7 @@ type (
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
 		currentSA   map[string]VisibilityValue
-		currentMemo map[string]VisibilityValue
+		currentMemo proto.Message
 
 		needsPointerResolution bool
 	}
@@ -156,9 +165,6 @@ type (
 
 	// NodesMutation is a set of mutations for all nodes rooted at a given node n,
 	// including the node n itself.
-	//
-	// TODO: Return tree size changes in NodesMutation as well. MutateState needs to
-	// track the overall size of itself and terminate workflow if it exceeds the limit.
 	NodesMutation struct {
 		UpdatedNodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 		DeletedNodes map[string]struct{}
@@ -184,6 +190,7 @@ type (
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
 			status enumspb.WorkflowExecutionStatus,
@@ -213,8 +220,10 @@ type (
 	}
 )
 
-// NewTree creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
-func NewTree(
+// NewTreeFromDB creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
+// This method should only be used when loading an existing CHASM tree from database.
+// If serializedNodes is empty, the tree will be considered as a legacy Workflow execution without any CHASM nodes.
+func NewTreeFromDB(
 	serializedNodes map[string]*persistencespb.ChasmNode, // This is coming from MS map[nodePath]ChasmNode.
 
 	registry *Registry,
@@ -224,7 +233,10 @@ func NewTree(
 	logger log.Logger,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(registry, timeSource, backend, pathEncoder, logger), nil
+		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger)
+		// NewEmptyTree initializes the serializedNode to an empty component node,
+		root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
+		return root, nil
 	}
 
 	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger)
@@ -255,6 +267,8 @@ func NewEmptyTree(
 	// If serializedNodes is empty, it means that this new tree.
 	// Initialize empty serializedNode.
 	root.initSerializedNode(fieldTypeComponent)
+	// Default to Workflow archetype as empty tree is created for workflow as well.
+	root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
 	// Although both value and serializedNode.Data are nil, they are considered NOT synced
 	// because value has no type and serializedNode does.
 	// deserialize method should set value when called.
@@ -286,6 +300,7 @@ func newTreeHelper(
 		},
 		newTasks:               make(map[any][]taskWithAttributes),
 		immediatePureTasks:     make(map[any][]taskWithAttributes),
+		valueToNode:            make(map[any]*Node),
 		taskValueCache:         make(map[*commonpb.DataBlob]reflect.Value),
 		needsPointerResolution: false,
 	}
@@ -307,21 +322,53 @@ func newTreeInitSearchAttributesAndMemo(
 	// and currentMemo will just never be used.
 
 	if saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider); ok {
-		root.currentSA = saProvider.SearchAttributes(immutableContext)
+		saSlice := saProvider.SearchAttributes(immutableContext)
+		root.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	if memoProvider, ok := rootComponent.(VisibilityMemoProvider); ok {
-		root.currentMemo = memoProvider.Memo(immutableContext)
+		root.currentMemo = proto.Clone(memoProvider.Memo(immutableContext))
 	}
 
 	return nil
+}
+
+func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string]VisibilityValue {
+	result := make(map[string]VisibilityValue, len(saSlice))
+	for _, sa := range saSlice {
+		result[sa.Field] = sa.Value
+	}
+	return result
 }
 
 func (n *Node) SetRootComponent(
 	rootComponent Component,
 ) {
 	root := n.root()
-	root.value = rootComponent
+	root.setValue(rootComponent)
 	root.setValueState(valueStateNeedSyncStructure)
+	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
+		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
+	}
+}
+
+// setValue sets the value field of the node.
+// If the node is a component or data node, the index from node value to node (valueToNode)
+// is also updated.
+func (n *Node) setValue(value any) {
+	if !n.isComponent() && !n.isData() {
+		n.value = value
+		return
+	}
+
+	if n.value != nil {
+		delete(n.valueToNode, n.value)
+	}
+
+	n.value = value
+
+	if value != nil {
+		n.valueToNode[value] = n
+	}
 }
 
 func (n *Node) setValueState(state valueState) {
@@ -339,18 +386,8 @@ func (n *Node) Component(
 	chasmContext Context,
 	ref ComponentRef,
 ) (Component, error) {
-	if ref.entityGoType != nil && ref.archetype == "" {
-		rootRC, ok := n.registry.componentOf(ref.entityGoType)
-		if !ok {
-			return nil, errComponentNotFound
-		}
-		ref.archetype = Archetype(rootRC.fqType())
-
-	}
-	if ref.archetype != "" &&
-		n.root().serializedNode.GetMetadata().GetComponentAttributes().Type != ref.archetype.String() {
-		return nil, errComponentNotFound
-	}
+	// Archetype is already validated before this method is called.
+	// (when the mutable state is loaded, in chasm engine implementation)
 
 	node, ok := n.findNode(ref.componentPath)
 	if !ok {
@@ -364,7 +401,8 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	if err := node.prepareComponentValue(chasmContext); err != nil {
+	validationContext := NewContext(chasmContext.getContext(), node)
+	if err := node.prepareComponentValue(validationContext); err != nil {
 		return nil, err
 	}
 
@@ -376,21 +414,20 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	// Access check always begins on the target node's parent, and ignored for nodes
-	// without ancestors.
-	if node.parent != nil {
-		err := node.parent.validateAccess(chasmContext)
-		if err != nil {
-			return nil, err
-		}
+	if err := node.validateAccess(validationContext); err != nil {
+		return nil, err
 	}
 
 	if ref.validationFn != nil {
-		if err := ref.validationFn(node.root().backend, chasmContext, componentValue); err != nil {
+		if err := ref.validationFn(node.root().backend, validationContext, componentValue); err != nil {
 			return nil, err
 		}
 	}
 
+	// prepare component value again using incoming context to mark node as dirty if needed.
+	if err := node.prepareComponentValue(chasmContext); err != nil {
+		return nil, err
+	}
 	return componentValue, nil
 }
 
@@ -398,7 +435,7 @@ func (n *Node) Component(
 //
 // When the context's intent is OperationIntentProgress, This check validates that
 // all of a node's ancestors are still in a running state, and can accept writes. In
-// the case of a newly-created node, a detached node, or an OperationIntentObserve
+// the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
 func (n *Node) validateAccess(ctx Context) error {
 	intent := operationIntentFromContext(ctx.getContext())
@@ -407,23 +444,32 @@ func (n *Node) validateAccess(ctx Context) error {
 		return nil
 	}
 
-	// TODO - check if this is a detached node, operations are always allowed.
+	// Detached nodes skip ancestor validation entirely.
+	if n.isDetached() || n.parent == nil {
+		return nil
+	}
 
-	if n.parent != nil {
-		err := n.parent.validateAccess(ctx)
-		if err != nil {
+	return n.parent.validateAccessHelper(ctx)
+}
+
+// validateAccessHelper is a helper method that validates both the current
+// node's lifecycle state AND its ancestors recursively.
+// Do not call this method directly, call validateAccess instead.
+func (n *Node) validateAccessHelper(ctx Context) error {
+	// Check ancestors first (if not detached).
+	if !n.isDetached() && n.parent != nil {
+		if err := n.parent.validateAccessHelper(ctx); err != nil {
 			return err
 		}
 	}
 
 	// Only Component nodes need to be validated.
-	if n.serializedNode.Metadata.GetComponentAttributes() == nil {
+	if !n.isComponent() {
 		return nil
 	}
 
 	// Hydrate the component so we can access its LifecycleState.
-	err := n.prepareComponentValue(ctx)
-	if err != nil {
+	if err := n.prepareComponentValue(ctx); err != nil {
 		return err
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
@@ -453,12 +499,12 @@ func (n *Node) prepareComponentValue(
 				fmt.Errorf("actual attributes: %v", metadata.Attributes))
 		}
 
-		registrableComponent, ok := n.registry.component(componentAttr.GetType())
+		registrableComponent, ok := n.registry.ComponentByID(componentAttr.GetTypeId())
 		if !ok {
 			return softassert.UnexpectedInternalErr(
 				n.logger,
-				"component type name not registered",
-				fmt.Errorf("%s", componentAttr.GetType()))
+				"unknown component type ID",
+				fmt.Errorf("%d", componentAttr.GetTypeId()))
 		}
 
 		if err := n.deserialize(registrableComponent.goType); err != nil {
@@ -526,6 +572,18 @@ func (n *Node) preparePointerValue() error {
 
 func (n *Node) isComponent() bool {
 	return n.serializedNode.GetMetadata().GetComponentAttributes() != nil
+}
+
+func (n *Node) isData() bool {
+	return n.serializedNode.GetMetadata().GetDataAttributes() != nil
+}
+
+func (n *Node) isMap() bool {
+	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
+}
+
+func (n *Node) isDetached() bool {
+	return n.serializedNode.GetMetadata().GetComponentAttributes().GetDetached()
 }
 
 func (n *Node) fieldType() fieldType {
@@ -658,7 +716,7 @@ func (n *Node) serialize() error {
 	case *persistencespb.ChasmNodeMetadata_PointerAttributes:
 		return n.serializePointerNode()
 	default:
-		return serviceerror.NewInternal("unknown node type")
+		return softassert.UnexpectedInternalErr(n.logger, "unknown node type", nil)
 	}
 }
 
@@ -689,7 +747,7 @@ func (n *Node) serializeComponentNode() error {
 		}
 
 		n.serializedNode.Data = blob
-		n.serializedNode.GetMetadata().GetComponentAttributes().Type = rc.fqType()
+		n.serializedNode.GetMetadata().GetComponentAttributes().TypeId = rc.componentID
 		n.updateLastUpdateVersionedTransition()
 		n.setValueState(valueStateSynced)
 
@@ -746,6 +804,19 @@ func (n *Node) syncSubComponents() error {
 			}
 			if keepChild {
 				childrenToKeep[field.name] = struct{}{}
+			}
+		case fieldKindParentPtr:
+			internalField := field.val.FieldByName(parentPtrInternalFieldName)
+			internal, ok := internalField.Interface().(parentPtrInternal)
+			if !ok {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"CHASM parent pointer's internal field is not of parentPtrInternal type",
+					fmt.Errorf("node %s, actual type: %T", n.nodeName, internalField.Interface()))
+			}
+			if internal.currentNode == nil || internal.currentNode != n {
+				internal.currentNode = n
+				internalField.Set(reflect.ValueOf(internal))
 			}
 		case fieldKindSubMap:
 			if field.val.IsNil() {
@@ -933,40 +1004,56 @@ func (n *Node) syncSubField(
 		// In this case, return keepNode=false and this node (and all it children) will be added to DeletedNodes map.
 		return
 	}
-	if internal.node == nil && internal.value() != nil {
+
+	fieldValue := internal.value()
+	if internal.node == nil && fieldValue != nil {
+		fieldType := internal.fieldType()
+
 		// Field is not empty but tree node is not set. It means this is a new field, and a node must be created.
 		childNode := newNode(n.nodeBase, n, fieldN)
+		childNode.initSerializedNode(fieldType)
+		childNode.setValueState(valueStateNeedSerialize)
 
-		switch internal.fieldType() {
+		// set node value after validation
+		switch fieldType {
+		case fieldTypeComponent:
+			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
+				return
+			}
+
+			childNode.setValueState(valueStateNeedSyncStructure)
+
+			// Set detached flag from field option or component type registration.
+			componentAttr := childNode.serializedNode.GetMetadata().GetComponentAttributes()
+			componentAttr.Detached = internal.detached
+			if !componentAttr.Detached {
+				if rc, ok := n.registry.componentFor(fieldValue); ok {
+					componentAttr.Detached = rc.IsDetached()
+				}
+			}
+		case fieldTypeData:
+			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
+				return
+			}
 		case fieldTypePointer:
-			if _, ok := internal.value().([]string); !ok {
+			if _, ok := fieldValue.([]string); !ok {
 				err = softassert.UnexpectedInternalErr(
 					n.logger,
 					"value must be of type []string for the field of pointer type",
-					fmt.Errorf("got %T", internal.value()))
-				return
-			}
-		case fieldTypeData, fieldTypeComponent:
-			if err = assertStructPointer(reflect.TypeOf(internal.value())); err != nil {
+					fmt.Errorf("got %T", fieldValue))
 				return
 			}
 		case fieldTypeDeferredPointer:
-			// No-op, validation happens when the pointer is resolved.
 			n.needsPointerResolution = true
 		default:
 			err = softassert.UnexpectedInternalErr(
 				n.logger,
 				"unexpected field type",
-				fmt.Errorf("%d", internal.fieldType()))
+				fmt.Errorf("%d", fieldType),
+			)
 			return
 		}
-		childNode.value = internal.value()
-		childNode.initSerializedNode(internal.fieldType())
-		if internal.fieldType() == fieldTypeComponent {
-			childNode.setValueState(valueStateNeedSyncStructure)
-		} else {
-			childNode.setValueState(valueStateNeedSerialize)
-		}
+		childNode.setValue(fieldValue)
 
 		n.children[fieldN] = childNode
 		internal.node = childNode
@@ -974,12 +1061,14 @@ func (n *Node) syncSubField(
 		updatedFieldV = reflect.New(fieldV.Type()).Elem()
 		updatedFieldV.FieldByName(internalFieldName).Set(reflect.ValueOf(internal))
 	}
+
 	if internal.fieldType() == fieldTypeComponent && internal.value() != nil {
 		err = internal.node.syncSubComponents()
 		if err != nil {
 			return
 		}
 	}
+
 	return true, updatedFieldV, nil
 }
 
@@ -1130,11 +1219,17 @@ func (n *Node) deserializeComponentNode(
 				}
 			}
 		case fieldKindMutableState:
-			field.val.Set(reflect.ValueOf(n.backend))
+			field.val.Set(reflect.ValueOf(NewMSPointer(n.backend)))
+		case fieldKindParentPtr:
+			parentPtrV := reflect.New(field.typ).Elem()
+			parentPtrV.FieldByName(parentPtrInternalFieldName).Set(reflect.ValueOf(parentPtrInternal{
+				currentNode: n,
+			}))
+			field.val.Set(parentPtrV)
 		}
 	}
 
-	n.value = valueV.Interface()
+	n.setValue(valueV.Interface())
 	n.setValueState(valueStateSynced)
 	return nil
 }
@@ -1147,14 +1242,14 @@ func (n *Node) deserializeDataNode(
 		return err
 	}
 
-	n.value = value.Interface()
+	n.setValue(value.Interface())
 	n.setValueState(valueStateSynced)
 	return nil
 }
 
 // deserializePointerNode doesn't deserialize anything but named this way for consistency.
 func (n *Node) deserializePointerNode() error {
-	n.value = n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath()
+	n.setValue(n.serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
 	n.setValueState(valueStateSynced)
 	return nil
 }
@@ -1169,7 +1264,7 @@ func unmarshalProto(
 
 	value := reflect.New(valueT.Elem())
 
-	if dataBlob == nil {
+	if dataBlob == nil || len(dataBlob.Data) == 0 {
 		// If the original data is the zero value of its type, the dataBlob loaded from persistence layer will be nil.
 		// But we know for component & data nodes, they won't get persisted in the first place if there's no data,
 		// so it must be a zero value.
@@ -1190,30 +1285,41 @@ func unmarshalProto(
 func (n *Node) Ref(
 	component Component,
 ) ([]byte, error) {
+	ref, err := n.structuredRef(component)
+	if err != nil {
+		return nil, err
+	}
+	return ref.Serialize(n.registry)
+}
+
+// structuredRef returns a ComponentRef for the node.
+func (n *Node) structuredRef(
+	component Component,
+) (ComponentRef, error) {
 	// No need to update tree structure here. If a Component can only be found after
 	// syncSubComponents() is called, it means the component is created in the
 	// current transition and don't have a reference yet.
 
-	for path, node := range n.andAllChildren() {
-		if node.value == component {
-			workflowKey := node.backend.GetWorkflowKey()
-			ref := ComponentRef{
-				EntityKey: EntityKey{
-					NamespaceID: workflowKey.NamespaceID,
-					BusinessID:  workflowKey.WorkflowID,
-					EntityID:    workflowKey.RunID,
-				},
-				archetype: n.Archetype(),
-				// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
-				// Using VersionedTransition of the entire tree might be too strict.
-				entityLastUpdateVT: transitionhistory.CopyVersionedTransition(node.backend.CurrentVersionedTransition()),
-				componentPath:      path,
-				componentInitialVT: node.serializedNode.GetMetadata().GetInitialVersionedTransition(),
-			}
-			return ref.Serialize(n.registry)
-		}
+	refNode, ok := n.valueToNode[component]
+	if !ok || !refNode.isComponent() {
+		return ComponentRef{}, errComponentNotFound
 	}
-	return nil, errComponentNotFound
+
+	workflowKey := refNode.backend.GetWorkflowKey()
+	return ComponentRef{
+		ExecutionKey: ExecutionKey{
+			NamespaceID: workflowKey.NamespaceID,
+			BusinessID:  workflowKey.WorkflowID,
+			RunID:       workflowKey.RunID,
+		},
+		archetypeID: n.ArchetypeID(),
+		// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
+		// Using VersionedTransition of the entire tree might be too strict.
+		executionLastUpdateVT: transitionhistory.CopyVersionedTransition(refNode.backend.CurrentVersionedTransition()),
+		componentPath:         refNode.path(),
+		componentInitialVT:    refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+	}, nil
+
 }
 
 // componentNodePath implements the CHASM Context interface
@@ -1222,16 +1328,13 @@ func (n *Node) componentNodePath(
 ) ([]string, error) {
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
-	for path, node := range n.andAllChildren() {
-		if !node.isComponent() {
-			continue
-		}
 
-		if node.value == component {
-			return path, nil
-		}
+	refNode, ok := n.valueToNode[component]
+	if !ok || !refNode.isComponent() {
+		return nil, errComponentNotFound
 	}
-	return nil, errComponentNotFound
+
+	return refNode.path(), nil
 }
 
 // dataNodePath implements the CHASM Context interface
@@ -1240,16 +1343,13 @@ func (n *Node) dataNodePath(
 ) ([]string, error) {
 	// It's unnecessary to deserialize entire tree as calling this method means
 	// caller already have the deserialized value.
-	for path, node := range n.andAllChildren() {
-		if node.serializedNode.GetMetadata().GetDataAttributes() == nil {
-			continue
-		}
 
-		if node.value == data {
-			return path, nil
-		}
+	refNode, ok := n.valueToNode[data]
+	if !ok || !refNode.isData() {
+		return nil, errDataNotFound
 	}
-	return nil, errComponentNotFound
+
+	return refNode.path(), nil
 }
 
 // Now implements the CHASM Context interface
@@ -1267,8 +1367,7 @@ func (n *Node) AddTask(
 	task any,
 ) {
 	rt, ok := n.registry.taskFor(task)
-	// TODO: remove the task type check after scheduler unit tests are fixed.
-	if ok && rt.isPureTask && taskAttributes.IsImmediate() && rt.fqType() == "TestLibrary.test_pure_task" {
+	if ok && rt.isPureTask && taskAttributes.IsImmediate() {
 		// Those tasks will be executed in the current transaction.
 		n.immediatePureTasks[component] = append(n.immediatePureTasks[component], taskWithAttributes{
 			task:       task,
@@ -1335,57 +1434,41 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 
 func (n *Node) executeImmediatePureTasks() error {
 
-	if len(n.immediatePureTasks) == 0 {
-		return nil
-	}
-
 	// We must sync structure before running any tasks here because,
 	// those tasks might be for a newly created component which doesn't even have a node yet.
 	// And we want to make sure we only run tasks for components that are still part of the tree.
-	if err := n.syncSubComponents(); err != nil {
-		return err
-	}
+	syncStructure := true
+	var err error
 
-	// TODO: Maintain a mapping from deserialized component value to node
-	// and avoid this look up.
-	componentValueToNode := make(map[any]*Node)
-	for _, node := range n.andAllChildren() {
-		if !node.isComponent() {
-			continue
-		}
-		if _, ok := n.immediatePureTasks[node.value]; ok {
-			componentValueToNode[node.value] = node
-		}
-	}
+	for len(n.immediatePureTasks) != 0 {
+		// Create a map in case more immediate pure tasks get
+		// added while existing ones are executed.
+		immediatePureTasks := n.immediatePureTasks
+		n.immediatePureTasks = make(map[any][]taskWithAttributes)
 
-	for componentValue, componentTasks := range n.immediatePureTasks {
+		for component, pureTasks := range immediatePureTasks {
+			for _, task := range pureTasks {
+				if syncStructure {
+					if err := n.syncSubComponents(); err != nil {
+						return err
+					}
+				}
 
-		taskNode := componentValueToNode[componentValue]
-		if taskNode == nil || len(componentTasks) == 0 {
-			// NOTE: taskNode being nil is not necessarily an error because this function is executed at the end of a transaction
-			// which could contain multiple transitions. So it's possible that a task added for a component in one
-			// transition and in a later transition that component get removed.
-			continue
-		}
+				// The corresponding Node may not be found due to several reasons:
+				// 1. This function is executed at the end of a transaction which could contain multiple transitions.
+				// So it's possible that a task added for a component in one transition and in a later transition that component get removed.
+				// 2. Previous pure task for the node deleted the node itself via a (parent) pointer.
+				// This is also why this check is done in the inner for loop.
+				taskNode, ok := n.valueToNode[component]
+				if !ok {
+					break
+				}
 
-		// TODO: sync structure after every task execution instead of once per node to handle the case
-		// where a task deletes the component it is executing on.
-		//
-		// This is possible if component as a pointer to it's ancestors and that ancestor deletes this component.
-		// For example, a child activity fires a timeout timer, it notifies the parent node which is a workflow,
-		// and workflow deletes the activity from it's activities map.
-		syncStructure := true
-		for _, task := range componentTasks {
-			executed, err := taskNode.ExecutePureTask(context.Background(), task.attributes, task.task)
-			if err != nil {
-				return err
-			}
-			syncStructure = syncStructure || executed
-		}
-
-		if syncStructure {
-			if err := n.syncSubComponents(); err != nil {
-				return err
+				// Only syncStructure on next iteration if task is executed (the first return value).
+				syncStructure, err = taskNode.ExecutePureTask(context.Background(), task.attributes, task.task)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -1452,7 +1535,8 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		newSA := saProvider.SearchAttributes(immutableContext)
+		saSlice := saProvider.SearchAttributes(immutableContext)
+		newSA := searchAttributeKeyValuesToMap(saSlice)
 		if !maps.EqualFunc(n.currentSA, newSA, isVisibilityValueEqual) {
 			needUpdate = true
 		}
@@ -1462,10 +1546,10 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
 		newMemo := memoProvider.Memo(immutableContext)
-		if !maps.EqualFunc(n.currentMemo, newMemo, isVisibilityValueEqual) {
+		if !proto.Equal(n.currentMemo, newMemo) {
 			needUpdate = true
 		}
-		n.currentMemo = newMemo
+		n.currentMemo = proto.Clone(newMemo)
 	}
 
 	if !needUpdate {
@@ -1479,11 +1563,11 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 		}
 
 		if child.valueState == valueStateNeedSerialize {
-			if rc, ok := n.registry.componentFor(child.value); ok && rc.fqType() == visibilityComponentFqType {
+			if rc, ok := n.registry.componentFor(child.value); ok && rc.fqType() == visibilityComponentType {
 				visibilityNode = child
 				break
 			}
-		} else if child.serializedNode.Metadata.GetComponentAttributes().Type == visibilityComponentFqType {
+		} else if child.serializedNode.Metadata.GetComponentAttributes().TypeId == visibilityComponentTypeID {
 			visibilityNode = child
 			break
 		}
@@ -1503,7 +1587,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 		return softassert.UnexpectedInternalErr(
 			n.logger,
 			"expected visibility component for component type",
-			fmt.Errorf("type: %s, but got %T", visibilityComponentFqType, visComponent))
+			fmt.Errorf("type: %s, but got %T", visibilityComponentType, visComponent))
 	}
 
 	// Generate a task and mark the node as dirty.
@@ -1535,7 +1619,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
-			componentAttr.Type == visibilityComponentFqType &&
+			componentAttr.TypeId == visibilityComponentTypeID &&
 			len(nodePath) != 1 {
 			return softassert.UnexpectedInternalErr(
 				n.logger,
@@ -1564,7 +1648,9 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
-	validateContext := NewContext(context.Background(), n)
+	taskValidationContext := NewContext(newContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
+
+	archetypeID := n.ArchetypeID()
 
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
@@ -1577,7 +1663,39 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		// First update component logical tasks.
-		//
+
+		// Even if a node is not touched in this transaction, its task can still become invalid due to, e.g.
+		// - child component state update
+		// - parent component closing (access rule)
+		// - a pointer field pointing to an updated component
+		// As a result, we need to validate existing tasks for all components if we are in active cluster.
+		if n.isActiveStateDirty {
+			// Ensure this node's component value is hydrated before cleaning up tasks.
+			if err := node.prepareComponentValue(taskValidationContext); err != nil {
+				return err
+			}
+
+			cleanedUp, err := node.closeTransactionCleanupInvalidTasks(taskValidationContext)
+			if err != nil {
+				return err
+			}
+
+			if cleanedUp {
+				// add the current node to UpdatedNodes map if it's not already there
+				encodedPath, err := node.getEncodedPath()
+				if err != nil {
+					return err
+				}
+				if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+					// Mark the node as updated so changes will get replicated.
+					node.updateLastUpdateVersionedTransition()
+
+					n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+					delete(n.mutation.DeletedNodes, encodedPath)
+				}
+			}
+		}
+
 		// The conditions excludes replication logic (applyMutation/Snapshot) which sets
 		// valueState to valueStateNeedDeserialize.
 		//
@@ -1588,13 +1706,9 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition,
 			nextVersionedTransition,
 		) == 0 && node.valueState != valueStateNeedDeserialize {
-			if err := node.closeTransactionCleanupInvalidTasks(validateContext); err != nil {
-				return err
-			}
-
 			if err := node.closeTransactionHandleNewTasks(
 				nextVersionedTransition,
-				validateContext,
+				taskValidationContext,
 				&taskOffset,
 			); err != nil {
 				return err
@@ -1611,6 +1725,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			node.closeTransactionGeneratePhysicalSideEffectTask(
 				sideEffectTask,
 				nodePath,
+				archetypeID,
 			)
 		}
 
@@ -1637,18 +1752,19 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	return n.closeTransactionGeneratePhysicalPureTask(
 		firstPureTask,
 		firstPureTaskNode,
+		archetypeID,
 	)
 }
 
 func (n *Node) deserializeComponentTask(
 	componentTask *persistencespb.ChasmComponentAttributes_Task,
 ) (any, error) {
-	registableTask, ok := n.registry.task(componentTask.Type)
+	registableTask, ok := n.registry.taskByID(componentTask.TypeId)
 	if !ok {
 		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
-			"task type is not registered",
-			fmt.Errorf("%s", componentTask.Type))
+			"unknown task type id",
+			fmt.Errorf("%d", componentTask.TypeId))
 	}
 
 	taskValue, err := n.deserializeTaskWithCache(registableTask, componentTask.Data)
@@ -1660,11 +1776,12 @@ func (n *Node) deserializeComponentTask(
 }
 
 // validateTask runs taskInstance's registered validation handler.
+// This method assumes component value is already hydrated.
 func (n *Node) validateTask(
 	validateContext Context,
 	taskAttributes TaskAttributes,
 	taskInstance any,
-) (bool, error) {
+) (_ bool, retErr error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
@@ -1672,6 +1789,15 @@ func (n *Node) validateTask(
 			"task type for goType is not registered",
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
+
+	if err := n.validateAccess(validateContext); err != nil {
+		if errors.Is(err, errAccessCheckFailed) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	defer log.CapturePanic(n.logger, &retErr)
 
 	retValues := registableTask.validateFn.Call([]reflect.Value{
 		reflect.ValueOf(validateContext),
@@ -1689,9 +1815,10 @@ func (n *Node) validateTask(
 
 func (n *Node) closeTransactionCleanupInvalidTasks(
 	validateContext Context,
-) error {
+) (bool, error) {
 	// Validate existing tasks and remove invalid ones.
 	var validationErr error
+	cleanedUp := false
 	deleteFunc := func(existingTask *persistencespb.ChasmComponentAttributes_Task) bool {
 		existingTaskInstance, err := n.deserializeComponentTask(existingTask)
 		if err != nil {
@@ -1712,6 +1839,7 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 			return false
 		}
 		if !valid {
+			cleanedUp = true
 			delete(n.taskValueCache, existingTask.Data)
 		}
 		return !valid
@@ -1720,13 +1848,13 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
 	componentAttr.SideEffectTasks = slices.DeleteFunc(componentAttr.SideEffectTasks, deleteFunc)
 	if validationErr != nil {
-		return validationErr
+		return false, validationErr
 	}
 	componentAttr.PureTasks = slices.DeleteFunc(componentAttr.PureTasks, deleteFunc)
 	if validationErr != nil {
-		return validationErr
+		return false, validationErr
 	}
-	return nil
+	return cleanedUp, nil
 }
 
 func (n *Node) closeTransactionHandleNewTasks(
@@ -1776,7 +1904,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 		}
 
 		componentTask := &persistencespb.ChasmComponentAttributes_Task{
-			Type:                      registrableTask.fqType(),
+			TypeId:                    registrableTask.taskTypeID,
 			Destination:               newTask.attributes.Destination,
 			ScheduledTime:             timestamppb.New(newTask.attributes.ScheduledTime),
 			Data:                      taskBlob,
@@ -1806,6 +1934,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 	sideEffectTask *persistencespb.ChasmComponentAttributes_Task,
 	nodePath []string,
+	archetypeID ArchetypeID,
 ) {
 	n.backend.AddTasks(&tasks.ChasmTask{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
@@ -1816,8 +1945,9 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 			ComponentInitialVersionedTransition:    n.serializedNode.Metadata.InitialVersionedTransition,
 			ComponentLastUpdateVersionedTransition: n.serializedNode.Metadata.LastUpdateVersionedTransition,
 			Path:                                   nodePath,
-			Type:                                   sideEffectTask.Type,
+			TypeId:                                 sideEffectTask.TypeId,
 			Data:                                   sideEffectTask.Data,
+			ArchetypeId:                            archetypeID,
 		},
 	})
 	sideEffectTask.PhysicalTaskStatus = physicalTaskStatusCreated
@@ -1826,15 +1956,24 @@ func (n *Node) closeTransactionGeneratePhysicalSideEffectTask(
 func (n *Node) closeTransactionGeneratePhysicalPureTask(
 	firstPureTask *persistencespb.ChasmComponentAttributes_Task,
 	firstTaskNode *Node,
+	archetypeID ArchetypeID,
 ) error {
-	if firstPureTask == nil || firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
+	if firstPureTask == nil {
+		n.backend.DeleteCHASMPureTasks(tasks.MaximumKey.FireTime)
+		return nil
+	}
+
+	firstPureTaskScheduledTime := firstPureTask.ScheduledTime.AsTime()
+	n.backend.DeleteCHASMPureTasks(firstPureTaskScheduledTime)
+
+	if firstPureTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 		return nil
 	}
 
 	n.backend.AddTasks(&tasks.ChasmTaskPure{
 		WorkflowKey:         n.backend.GetWorkflowKey(),
-		VisibilityTimestamp: firstPureTask.ScheduledTime.AsTime(),
-		Category:            tasks.CategoryTimer,
+		VisibilityTimestamp: firstPureTaskScheduledTime,
+		ArchetypeID:         archetypeID,
 	})
 
 	// We need to persist the task status change as well, so add the node
@@ -1898,7 +2037,7 @@ func (n *Node) resolveDeferredPointers() error {
 				// and update the serializedNode's value.
 				newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
 				newInternal.node = internal.node
-				newInternal.node.value = resolvedPath
+				newInternal.node.setValue(resolvedPath)
 				internalV.Set(reflect.ValueOf(newInternal))
 			}
 		}
@@ -1944,10 +2083,13 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.newTasks = make(map[any][]taskWithAttributes)
+	if len(n.immediatePureTasks) != 0 {
+		// n.immediatePureTasks should already be empty after executeImmediatePureTasks()
+		// unless there's an error.
+		n.immediatePureTasks = make(map[any][]taskWithAttributes)
+	}
 
 	n.isActiveStateDirty = false
-	n.immediatePureTasks = make(map[any][]taskWithAttributes)
-
 	n.needsPointerResolution = false
 }
 
@@ -2029,11 +2171,12 @@ func (n *Node) ApplyMutation(
 	}
 	saProvider, ok := rootComponent.(VisibilitySearchAttributesProvider)
 	if ok {
-		n.currentSA = saProvider.SearchAttributes(immutableContext)
+		saSlice := saProvider.SearchAttributes(immutableContext)
+		n.currentSA = searchAttributeKeyValuesToMap(saSlice)
 	}
 	memoProvider, ok := rootComponent.(VisibilityMemoProvider)
 	if ok {
-		n.currentMemo = memoProvider.Memo(immutableContext)
+		n.currentMemo = proto.Clone(memoProvider.Memo(immutableContext))
 	}
 
 	return nil
@@ -2149,9 +2292,9 @@ func (n *Node) applyUpdates(
 			}
 
 			n.mutation.UpdatedNodes[encodedPath] = updatedNode
-			node.serializedNode = updatedNode
-			node.value = nil
+			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
+			node.serializedNode = updatedNode
 
 			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
 			// Parent node is pointing to the Node struct.
@@ -2259,11 +2402,13 @@ func (n *Node) delete() error {
 		delete(n.parent.children, n.nodeName)
 	}
 
+	// Set value to nil which also deletes the value from valueToNode map.
+	n.setValue(nil)
+
 	encodedPath, err := n.getEncodedPath()
 	if err != nil {
 		return err
 	}
-
 	n.mutation.DeletedNodes[encodedPath] = struct{}{}
 
 	n.cleanupCachedTasks()
@@ -2306,15 +2451,15 @@ func (n *Node) IsStateDirty() bool {
 func (n *Node) IsStale(
 	ref ComponentRef,
 ) error {
-	// The point of this method to access the private entityLastUpdateVT field in componentRef,
+	// The point of this method to access the private executionLastUpdateVT field in componentRef,
 	// and avoid exposing it in the public CHASM interface.
-	if ref.entityLastUpdateVT == nil {
+	if ref.executionLastUpdateVT == nil {
 		return nil
 	}
 
 	return transitionhistory.StalenessCheck(
 		n.backend.GetExecutionInfo().TransitionHistory,
-		ref.entityLastUpdateVT,
+		ref.executionLastUpdateVT,
 	)
 }
 
@@ -2336,15 +2481,26 @@ func (n *Node) Terminate(
 	return nil
 }
 
-func (n *Node) Archetype() Archetype {
-	root := n.root()
-	if root.serializedNode == nil {
-		// Empty tree
-		return ""
+// ArchetypeID returns the framework's internal ID for the root component's fully qualified name.
+func (n *Node) ArchetypeID() ArchetypeID {
+	// Root must be a component.
+	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
+}
+
+// Archetype returns the root component's fully qualified name.
+// Deprecated: use ArchetypeID() instead, this method will be removed.
+func (n *Node) Archetype() (Archetype, error) {
+	archetypeID := n.ArchetypeID()
+
+	fqn, ok := n.registry.ComponentFqnByID(archetypeID)
+	if !ok {
+		return "", softassert.UnexpectedInternalErr(
+			n.logger,
+			"unknown archetype id",
+			fmt.Errorf("%d", archetypeID))
 	}
 
-	// Root must have be a component.
-	return Archetype(root.serializedNode.Metadata.GetComponentAttributes().Type)
+	return Archetype(fqn), nil
 }
 
 func (n *Node) root() *Node {
@@ -2366,8 +2522,8 @@ func isComponentTaskExpired(
 		return false
 	}
 
-	scheduledTime := task.ScheduledTime.AsTime().Truncate(persistence.ScheduledTaskMinPrecision)
-	referenceTime = referenceTime.Truncate(persistence.ScheduledTaskMinPrecision)
+	scheduledTime := task.ScheduledTime.AsTime().Truncate(common.ScheduledTaskMinPrecision)
+	referenceTime = referenceTime.Truncate(common.ScheduledTaskMinPrecision)
 
 	return !scheduledTime.After(referenceTime)
 }
@@ -2380,105 +2536,92 @@ func (n *Node) EachPureTask(
 	referenceTime time.Time,
 	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
 ) error {
-	ctx := NewContext(context.Background(), n)
+	chasmContext := NewContext(context.Background(), n)
 
-	// TODO: instead of tracking processed nodes,
-	// consider removing processed pure tasks from the componentAttr.PureTasks slice
-	// which also addresses the concern of user provided task validator doesn't invalidate
-	// a task even if it's processed.
-	processedNodes := make(map[*Node]struct{})
+	// Because tree structure may change during the processing,
+	// we first gather all nodes that have pure tasks that are ready for execution.
+	var componentToProcess []any
+	for _, node := range n.andAllChildren() {
+		// Skip nodes that aren't serialized yet.
+		if node.serializedNode == nil || node.serializedNode.Metadata == nil {
+			continue
+		}
 
-TreeLoop:
-	for {
-	NodeLoop:
-		for _, node := range n.andAllChildren() {
-			if _, processed := processedNodes[node]; processed {
-				continue NodeLoop
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+		// Skip nodes that aren't components.
+		if componentAttr == nil {
+			continue
+		}
+
+		if len(componentAttr.PureTasks) == 0 {
+			continue
+		}
+
+		if !isComponentTaskExpired(referenceTime, componentAttr.PureTasks[0]) {
+			continue
+		}
+
+		// This component node as a pure task that's ready to execute
+		err := node.prepareComponentValue(chasmContext)
+		if err != nil {
+			return err
+		}
+
+		componentToProcess = append(componentToProcess, node.value)
+	}
+
+	for _, component := range componentToProcess {
+
+		// Node get deleted when previous pure tasks of other components are executed.
+		node, ok := n.valueToNode[component]
+		if !ok {
+			continue
+		}
+
+		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
+
+		for _, task := range componentAttr.GetPureTasks() {
+			if !isComponentTaskExpired(referenceTime, task) {
+				break
 			}
-			processedNodes[node] = struct{}{}
 
-			needSyncComponents, err := node.eachNodePureTask(
-				ctx,
-				referenceTime,
-				callback,
-			)
+			// Node get deleted when previous pure tasks of the same component are executed.
+			// e.g. via a (parent) pointer.
+			_, ok := n.valueToNode[component]
+			if !ok {
+				break
+			}
+
+			taskInstance, err := node.deserializeComponentTask(task)
 			if err != nil {
 				return err
 			}
 
-			if needSyncComponents {
-				// If any pure task is executed, the tree structure may change.
-				// Can not continue using the current node iterator to find the next node,
-				// need to sync tree structure and start over.
+			taskAttributes := TaskAttributes{
+				ScheduledTime: task.ScheduledTime.AsTime(),
+				Destination:   task.Destination,
+			}
+
+			executed, err := callback(node, taskAttributes, taskInstance)
+			if err != nil {
+				return err
+			}
+
+			if executed {
 				if err := n.syncSubComponents(); err != nil {
 					return err
 				}
-				continue TreeLoop
 			}
+
+			// Processed task should become invalid and will be removed upon CloseTransaction().
+
+			// TODO: Add a validation for that and return an internal error if tasks is still valid after processing.
+			// Alternatively, remove task from PureTasks slice after processing, but that requires persisting the
+			// task changes as well even if the component itself is not changed.
 		}
-
-		// If code reaches here, it means all tasks have been processed.
-		return nil
-	}
-}
-
-// eachNodePureTask runs the callback on all expired pure tasks for a single node.
-// This is a helper function for EachPureTask() which runs the callback for pure tasks
-// in all nodes in the tree.
-//
-// Returns a boolean indicating if any pure task in the node is actually executed and error if any.
-func (n *Node) eachNodePureTask(
-	chasmContext Context,
-	referenceTime time.Time,
-	callback func(executor NodePureTask, taskAttributes TaskAttributes, taskInstance any) (bool, error),
-) (bool, error) {
-	// Skip nodes that aren't serialized yet.
-	if n.serializedNode == nil || n.serializedNode.Metadata == nil {
-		return false, nil
 	}
 
-	componentAttr := n.serializedNode.Metadata.GetComponentAttributes()
-	// Skip nodes that aren't components.
-	if componentAttr == nil {
-		return false, nil
-	}
-
-	// Hydrate nodes before the task validator is called.
-	err := n.prepareComponentValue(chasmContext)
-	if err != nil {
-		return false, err
-	}
-
-	taskExecuted := false
-	for _, task := range componentAttr.GetPureTasks() {
-		if !isComponentTaskExpired(referenceTime, task) {
-			// Pure tasks are stored in-order, so we can skip scanning the rest once we hit
-			// an unexpired task deadline.
-			return taskExecuted, nil
-		}
-
-		taskInstance, err := n.deserializeComponentTask(task)
-		if err != nil {
-			return false, err
-		}
-
-		taskAttributes := TaskAttributes{
-			ScheduledTime: task.ScheduledTime.AsTime(),
-			Destination:   task.Destination,
-		}
-
-		executed, err := callback(n, taskAttributes, taskInstance)
-		if err != nil {
-			return false, err
-		}
-		taskExecuted = taskExecuted || executed
-
-		// TODO: sync structure after each task since it's possible for a task to delete the node generated it
-		// when pointers are involved. E.g. Component call a method on its parent which deletes the component.
-		//
-		// This requires either deleting processed pure tasks or tracking which tasks get processed.
-	}
-	return taskExecuted, nil
+	return nil
 }
 
 func newNode(
@@ -2554,7 +2697,7 @@ func (n *Node) carryOverTaskStatus(
 func taskCategory(
 	task *persistencespb.ChasmComponentAttributes_Task,
 ) tasks.Category {
-	if task.Type == visibilityTaskFqType {
+	if task.TypeId == visibilityTaskTypeID {
 		return tasks.CategoryVisibility
 	}
 
@@ -2716,7 +2859,7 @@ func (n *Node) ExecutePureTask(
 	baseCtx context.Context,
 	taskAttributes TaskAttributes,
 	taskInstance any,
-) (bool, error) {
+) (_ bool, retErr error) {
 	registrableTask, ok := n.registry.taskFor(taskInstance)
 	if !ok {
 		return false, fmt.Errorf("unknown task type for task instance goType '%s'", reflect.TypeOf(taskInstance).Name())
@@ -2726,24 +2869,16 @@ func (n *Node) ExecutePureTask(
 		return false, fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	ctx := NewMutableContext(
-		newContextWithOperationIntent(baseCtx, OperationIntentProgress),
-		n,
-	)
+	progressIntentCtx := newContextWithOperationIntent(baseCtx, OperationIntentProgress)
+	validationContext := NewContext(progressIntentCtx, n)
 
-	// Ensure this node's component value is hydrated before execution. Component
-	// will also check access rules.
-	component, err := n.Component(ctx, ComponentRef{})
-	if err != nil {
-		// NotFound errors are expected here and we can safely skip the task execution.
-		if errors.As(err, new(*serviceerror.NotFound)) {
-			return false, nil
-		}
+	// Ensure this node's component value is hydrated before execution.
+	if err := n.prepareComponentValue(validationContext); err != nil {
 		return false, err
 	}
 
 	// Run the task's registered value before execution.
-	valid, err := n.validateTask(ctx, taskAttributes, taskInstance)
+	valid, err := n.validateTask(validationContext, taskAttributes, taskInstance)
 	if err != nil {
 		return false, err
 	}
@@ -2751,8 +2886,16 @@ func (n *Node) ExecutePureTask(
 		return false, nil
 	}
 
+	executionContext := NewMutableContext(progressIntentCtx, n)
+	component, err := n.Component(executionContext, ComponentRef{})
+	if err != nil {
+		return false, err
+	}
+
+	defer log.CapturePanic(n.logger, &retErr)
+
 	result := registrableTask.executeFn.Call([]reflect.Value{
-		reflect.ValueOf(ctx),
+		reflect.ValueOf(executionContext),
 		reflect.ValueOf(component),
 		reflect.ValueOf(taskAttributes),
 		reflect.ValueOf(taskInstance),
@@ -2781,8 +2924,11 @@ func (n *Node) ValidatePureTask(
 	taskAttributes TaskAttributes,
 	taskInstance any,
 ) (bool, error) {
-	validateCtx := NewContext(ctx, n)
-	return n.validateTask(validateCtx, taskAttributes, taskInstance)
+	return n.validateTask(
+		NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n),
+		taskAttributes,
+		taskInstance,
+	)
 }
 
 // ValidateSideEffectTask runs a side effect task's associated validator,
@@ -2799,20 +2945,20 @@ func (n *Node) ValidateSideEffectTask(
 ) (isValid bool, retErr error) {
 
 	taskInfo := chasmTask.Info
-	taskType := taskInfo.Type
-	registrableTask, ok := n.registry.task(taskType)
+	taskTypeID := taskInfo.TypeId
+	registrableTask, ok := n.registry.taskByID(taskTypeID)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
 			n.logger,
-			"unknown task type",
-			fmt.Errorf("%s", taskType))
+			"unknown task type id",
+			fmt.Errorf("%d", taskTypeID))
 	}
 
 	if registrableTask.isPureTask {
 		return false, softassert.UnexpectedInternalErr(
 			n.logger,
-			"ValidateSideEffectTask called on a Pure task",
-			fmt.Errorf("%s", taskType))
+			"ValidateSideEffectTask called on a Pure task, task type: ",
+			fmt.Errorf("%s", registrableTask.fqType()))
 	}
 
 	node, ok := n.findNode(taskInfo.Path)
@@ -2829,7 +2975,7 @@ func (n *Node) ValidateSideEffectTask(
 	}
 
 	// Component must be hydrated before the task's validator is called.
-	validateCtx := NewContext(ctx, n)
+	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
 		return false, err
 	}
@@ -2855,7 +3001,8 @@ func (n *Node) ValidateSideEffectTask(
 	}
 
 	return node.validateTask(
-		validateCtx, TaskAttributes{
+		validateCtx,
+		TaskAttributes{
 			ScheduledTime: chasmTask.GetVisibilityTime(),
 			Destination:   chasmTask.Destination,
 		},
@@ -2864,16 +3011,16 @@ func (n *Node) ValidateSideEffectTask(
 }
 
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
-// without holding the entity lock.
+// without holding the execution lock.
 //
 // WARNING: This method *must not* access the node's properties without first
-// locking the entity.
+// locking the execution.
 //
 // ctx should have a CHASM engine already set.
 func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
 	registry *Registry,
-	entityKey EntityKey,
+	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
 ) (retErr error) {
@@ -2883,19 +3030,19 @@ func (n *Node) ExecuteSideEffectTask(
 	}
 
 	taskInfo := chasmTask.Info
-	taskType := taskInfo.Type
-	registrableTask, ok := registry.task(taskType)
+	taskTypeID := taskInfo.TypeId
+	registrableTask, ok := registry.taskByID(taskTypeID)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
-			"unknown task type",
-			fmt.Errorf("%s", taskType))
+			"unknown task type id",
+			fmt.Errorf("%d", taskTypeID))
 	}
 	if registrableTask.isPureTask {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
-			"ExecuteSideEffectTask called on a Pure task",
-			fmt.Errorf("%s", taskType))
+			"ExecuteSideEffectTask called on a Pure task, task type: ",
+			fmt.Errorf("%s", registrableTask.fqType()))
 	}
 
 	defer func() {
@@ -2925,17 +3072,19 @@ func (n *Node) ExecuteSideEffectTask(
 	}
 
 	ref := ComponentRef{
-		EntityKey:          entityKey,
-		archetype:          n.Archetype(),
-		entityLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
-		componentPath:      taskInfo.Path,
-		componentInitialVT: taskInfo.ComponentInitialVersionedTransition,
+		ExecutionKey:          executionKey,
+		archetypeID:           n.ArchetypeID(),
+		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
+		componentPath:         taskInfo.Path,
+		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
 
 		// Validate the Ref only once it is accessed by the task's executor.
 		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
 	}
 
 	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
+
+	defer log.CapturePanic(n.logger, &retErr)
 
 	result := registrableTask.executeFn.Call([]reflect.Value{
 		reflect.ValueOf(ctx),
@@ -2991,6 +3140,9 @@ func makeValidationFn(
 		if err != nil {
 			return err
 		}
+
+		// Side effect's task validator is invoked inside the task executor,
+		// so the panic wrapper ExecuteSideEffectTask() will cover this case.
 
 		// Call the TaskValidator interface.
 		result := registrableTask.validateFn.Call([]reflect.Value{

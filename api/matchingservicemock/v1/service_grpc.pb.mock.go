@@ -142,6 +142,26 @@ func (mr *MockMatchingServiceClientMockRecorder) CheckTaskQueueUserDataPropagati
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueUserDataPropagation", reflect.TypeOf((*MockMatchingServiceClient)(nil).CheckTaskQueueUserDataPropagation), varargs...)
 }
 
+// CheckTaskQueueVersionMembership mocks base method.
+func (m *MockMatchingServiceClient) CheckTaskQueueVersionMembership(ctx context.Context, in *matchingservice.CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CheckTaskQueueVersionMembership", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CheckTaskQueueVersionMembershipResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckTaskQueueVersionMembership indicates an expected call of CheckTaskQueueVersionMembership.
+func (mr *MockMatchingServiceClientMockRecorder) CheckTaskQueueVersionMembership(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueVersionMembership", reflect.TypeOf((*MockMatchingServiceClient)(nil).CheckTaskQueueVersionMembership), varargs...)
+}
+
 // CreateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) CreateNexusEndpoint(ctx context.Context, in *matchingservice.CreateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.CreateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -682,6 +702,26 @@ func (mr *MockMatchingServiceClientMockRecorder) SyncDeploymentUserData(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).SyncDeploymentUserData), varargs...)
 }
 
+// UpdateFairnessState mocks base method.
+func (m *MockMatchingServiceClient) UpdateFairnessState(ctx context.Context, in *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateFairnessState", varargs...)
+	ret0, _ := ret[0].(*matchingservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockMatchingServiceClientMockRecorder) UpdateFairnessState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockMatchingServiceClient)(nil).UpdateFairnessState), varargs...)
+}
+
 // UpdateNexusEndpoint mocks base method.
 func (m *MockMatchingServiceClient) UpdateNexusEndpoint(ctx context.Context, in *matchingservice.UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*matchingservice.UpdateNexusEndpointResponse, error) {
 	m.ctrl.T.Helper()
@@ -879,6 +919,21 @@ func (m *MockMatchingServiceServer) CheckTaskQueueUserDataPropagation(arg0 conte
 func (mr *MockMatchingServiceServerMockRecorder) CheckTaskQueueUserDataPropagation(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueUserDataPropagation", reflect.TypeOf((*MockMatchingServiceServer)(nil).CheckTaskQueueUserDataPropagation), arg0, arg1)
+}
+
+// CheckTaskQueueVersionMembership mocks base method.
+func (m *MockMatchingServiceServer) CheckTaskQueueVersionMembership(arg0 context.Context, arg1 *matchingservice.CheckTaskQueueVersionMembershipRequest) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckTaskQueueVersionMembership", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CheckTaskQueueVersionMembershipResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CheckTaskQueueVersionMembership indicates an expected call of CheckTaskQueueVersionMembership.
+func (mr *MockMatchingServiceServerMockRecorder) CheckTaskQueueVersionMembership(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckTaskQueueVersionMembership", reflect.TypeOf((*MockMatchingServiceServer)(nil).CheckTaskQueueVersionMembership), arg0, arg1)
 }
 
 // CreateNexusEndpoint mocks base method.
@@ -1284,6 +1339,21 @@ func (m *MockMatchingServiceServer) SyncDeploymentUserData(arg0 context.Context,
 func (mr *MockMatchingServiceServerMockRecorder) SyncDeploymentUserData(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDeploymentUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).SyncDeploymentUserData), arg0, arg1)
+}
+
+// UpdateFairnessState mocks base method.
+func (m *MockMatchingServiceServer) UpdateFairnessState(arg0 context.Context, arg1 *matchingservice.UpdateFairnessStateRequest) (*matchingservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateFairnessState", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockMatchingServiceServerMockRecorder) UpdateFairnessState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockMatchingServiceServer)(nil).UpdateFairnessState), arg0, arg1)
 }
 
 // UpdateNexusEndpoint mocks base method.

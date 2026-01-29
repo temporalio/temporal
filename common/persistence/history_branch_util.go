@@ -5,8 +5,6 @@ package persistence
 import (
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
@@ -38,8 +36,15 @@ type (
 	}
 
 	HistoryBranchUtilImpl struct {
+		serializer serialization.Serializer
 	}
 )
+
+func NewHistoryBranchUtil(serializer serialization.Serializer) *HistoryBranchUtilImpl {
+	return &HistoryBranchUtilImpl{
+		serializer: serializer,
+	}
+}
 
 func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 	_ string, // namespaceID
@@ -63,7 +68,7 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 		BranchId:  id,
 		Ancestors: ancestors,
 	}
-	data, err := serialization.HistoryBranchToBlob(bi)
+	data, err := u.serializer.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +78,7 @@ func (u *HistoryBranchUtilImpl) NewHistoryBranch(
 func (u *HistoryBranchUtilImpl) ParseHistoryBranchInfo(
 	branchToken []byte,
 ) (*persistencespb.HistoryBranch, error) {
-	return serialization.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	return u.serializer.HistoryBranchFromBlob(branchToken)
 }
 
 func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
@@ -81,7 +86,7 @@ func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
 	branchInfo *persistencespb.HistoryBranch,
 	runID string,
 ) ([]byte, error) {
-	bi, err := serialization.HistoryBranchFromBlob(&commonpb.DataBlob{Data: branchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	bi, err := u.serializer.HistoryBranchFromBlob(branchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -89,13 +94,9 @@ func (u *HistoryBranchUtilImpl) UpdateHistoryBranchInfo(
 	bi.BranchId = branchInfo.BranchId
 	bi.Ancestors = branchInfo.Ancestors
 
-	blob, err := serialization.HistoryBranchToBlob(bi)
+	blob, err := u.serializer.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
 	return blob.Data, nil
-}
-
-func (u *HistoryBranchUtilImpl) GetHistoryBranchUtil() HistoryBranchUtil {
-	return u
 }

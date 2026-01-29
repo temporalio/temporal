@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,6 +13,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
@@ -21,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
@@ -227,6 +230,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 				namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID,
 			)).AnyTimes()
 			mutableState.EXPECT().GetCurrentBranchToken().Return(nil, nil).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(NoopChasmTree).AnyTimes()
 			retentionTimerDelay := time.Second
 			cfg := &configs.Config{
 				RetentionTimerJitterDuration: func() time.Duration {
@@ -657,10 +661,10 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 			mockMutableState := historyi.NewMockMutableState(controller)
 			mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 
-			firstRunID := uuid.New()
+			firstRunID := uuid.NewString()
 			currentRunID := firstRunID
 			if !tc.isFirstRun {
-				currentRunID = uuid.New()
+				currentRunID = uuid.NewString()
 			}
 
 			workflowKey := tests.WorkflowKey
@@ -802,6 +806,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				State: tc.workflowState,
 			}).AnyTimes()
 			mockMutableState.EXPECT().IsTransitionHistoryEnabled().Return(tc.transitionHistoryEnabled).AnyTimes()
+			mockMutableState.EXPECT().ChasmTree().Return(NoopChasmTree).AnyTimes()
 			mockShard := shard.NewTestContext(
 				controller,
 				&persistencespb.ShardInfo{
@@ -825,6 +830,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
+				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
 				taskEquivalent := syncVersionTask.TaskEquivalents
 				require.Equal(t, len(tc.expectedTaskEquivalentTypes), len(taskEquivalent))
 				for i, equivalent := range taskEquivalent {
@@ -912,4 +918,151 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 
 	require.Empty(t, genTasks)
 	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
+}
+
+func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	closeTime := time.Unix(0, 0)
+	retentionJitterDuration := time.Second
+
+	testCases := []struct {
+		name                   string
+		archetypeID            chasm.ArchetypeID
+		namespaceRetention     time.Duration
+		expectedMinRetention   time.Duration
+		expectedMaxRetention   time.Duration
+		setupNamespaceRegistry func(*namespace.MockRegistry)
+	}{
+		{
+			name:                 "standalone activity uses 1 day retention",
+			archetypeID:          activity.ArchetypeID,
+			namespaceRetention:   90 * 24 * time.Hour, // 90 days namespace retention
+			expectedMinRetention: 24 * time.Hour,      // Activity should use 1 day
+			expectedMaxRetention: 24*time.Hour + retentionJitterDuration*2,
+			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
+				// Namespace registry should not be called for activities
+			},
+		},
+		{
+			name:                 "workflow uses namespace retention",
+			archetypeID:          chasm.WorkflowArchetypeID,
+			namespaceRetention:   7 * 24 * time.Hour, // 7 days namespace retention
+			expectedMinRetention: 7 * 24 * time.Hour,
+			expectedMaxRetention: 7*24*time.Hour + retentionJitterDuration*2,
+			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
+				namespaceConfig := &persistencespb.NamespaceConfig{
+					Retention: durationpb.New(7 * 24 * time.Hour),
+				}
+				namespaceEntry := namespace.NewGlobalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+						},
+					},
+					tests.Version,
+				)
+				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+			},
+		},
+		{
+			name:                 "scheduler uses namespace retention",
+			archetypeID:          chasm.SchedulerArchetypeID,
+			namespaceRetention:   30 * 24 * time.Hour, // 30 days namespace retention
+			expectedMinRetention: 30 * 24 * time.Hour,
+			expectedMaxRetention: 30*24*time.Hour + retentionJitterDuration*2,
+			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
+				namespaceConfig := &persistencespb.NamespaceConfig{
+					Retention: durationpb.New(30 * 24 * time.Hour),
+				}
+				namespaceEntry := namespace.NewGlobalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+						},
+					},
+					tests.Version,
+				)
+				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			namespaceRegistry := namespace.NewMockRegistry(ctrl)
+			tc.setupNamespaceRegistry(namespaceRegistry)
+
+			mutableState := historyi.NewMockMutableState(ctrl)
+			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
+				return &persistencespb.WorkflowExecutionInfo{
+					NamespaceId: tests.NamespaceID.String(),
+				}
+			}).AnyTimes()
+			mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(
+				tests.NamespaceID.String(), tests.WorkflowID, tests.RunID,
+			)).AnyTimes()
+			mutableState.EXPECT().GetCloseVersion().Return(int64(0), nil).AnyTimes()
+			mutableState.EXPECT().GetCurrentBranchToken().Return([]byte("branch-token"), nil).AnyTimes()
+
+			// Create a mock ChasmTree that returns the specific archetype ID
+			mockChasmTree := historyi.NewMockChasmTree(ctrl)
+			mockChasmTree.EXPECT().ArchetypeID().Return(tc.archetypeID).AnyTimes()
+			mutableState.EXPECT().ChasmTree().Return(mockChasmTree).AnyTimes()
+
+			var allTasks []tasks.Task
+			mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+				allTasks = append(allTasks, ts...)
+			}).AnyTimes()
+
+			cfg := &configs.Config{
+				RetentionTimerJitterDuration: func() time.Duration {
+					return retentionJitterDuration
+				},
+			}
+
+			taskGenerator := NewTaskGenerator(
+				namespaceRegistry,
+				mutableState,
+				cfg,
+				nil, // archivalMetadata not needed for this test
+				testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+			)
+
+			err := taskGenerator.GenerateDeleteHistoryEventTask(closeTime)
+			require.NoError(t, err)
+
+			// Find the DeleteHistoryEventTask
+			var deleteHistoryEventTask *tasks.DeleteHistoryEventTask
+			for _, task := range allTasks {
+				if t, ok := task.(*tasks.DeleteHistoryEventTask); ok {
+					deleteHistoryEventTask = t
+					break
+				}
+			}
+
+			require.NotNil(t, deleteHistoryEventTask, "DeleteHistoryEventTask should be created")
+			assert.Equal(t, tests.NamespaceID.String(), deleteHistoryEventTask.NamespaceID)
+			assert.Equal(t, tests.WorkflowID, deleteHistoryEventTask.WorkflowID)
+			assert.Equal(t, tests.RunID, deleteHistoryEventTask.RunID)
+			assert.Equal(t, tc.archetypeID, deleteHistoryEventTask.ArchetypeID)
+
+			// Verify the retention time is within expected range
+			expectedDeleteTime := closeTime.Add(tc.expectedMinRetention)
+			assert.GreaterOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, expectedDeleteTime,
+				"Delete time should be at least closeTime + retention")
+			assert.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedMaxRetention),
+				"Delete time should not exceed closeTime + retention + jitter")
+		})
+	}
 }

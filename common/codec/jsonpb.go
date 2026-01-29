@@ -102,12 +102,11 @@ func (e *JSONPBEncoder) encodeSlice(
 		}
 		buf.Write(bs)
 
-		if i == len-1 {
-			buf.WriteString("]")
-		} else {
+		if i < len-1 {
 			buf.WriteString(",")
 		}
 	}
+	buf.WriteString("]")
 	return buf.Bytes(), nil
 }
 

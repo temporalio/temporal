@@ -8,9 +8,10 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
+	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -31,6 +32,7 @@ func (s *generatorTasksSuite) SetupTest() {
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     s.logger,
 		SpecProcessor:  s.specProcessor,
+		SpecBuilder:    legacyscheduler.NewSpecBuilder(),
 	})
 }
 
@@ -44,18 +46,18 @@ func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
 	).Return(nil, errors.New("processTimeRange bug"))
 
 	// Execute the generate task.
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.True(common.IsInternalError(err))
+	generator := sched.Generator.Get(ctx)
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	var target *queueerrors.UnprocessableTaskError
+	s.ErrorAs(err, &target)
+	s.Equal("failed to process a time range: processTimeRange bug", target.Message)
 }
 
 func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	ctx := s.newMutableContext()
 	sched := s.scheduler
 
-	generator, err := sched.Generator.Get(ctx)
-	s.NoError(err)
+	generator := sched.Generator.Get(ctx)
 
 	// Use a real SpecProcessor implementation.
 	specProcessor := newTestSpecProcessor(s.controller)
@@ -67,25 +69,76 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	generator.LastProcessedTime = timestamppb.New(highWatermark)
 
 	// Execute the generate task.
-	err = s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	s.NoError(err)
 
 	// We expect 5 buffered starts.
-	invoker, err := sched.Invoker.Get(ctx)
-	s.NoError(err)
+	invoker := sched.Invoker.Get(ctx)
 	s.Equal(5, len(invoker.BufferedStarts))
 
 	// Validate RequestId -> WorkflowId mapping
 	for _, start := range invoker.BufferedStarts {
-		s.Equal(start.WorkflowId, invoker.WorkflowID(start.RequestId))
+		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
 	// Generator's high water mark should have advanced.
 	newHighWatermark := generator.LastProcessedTime.AsTime()
 	s.True(newHighWatermark.After(highWatermark))
 
-	// Ensure we scheduled an immediate physical pure task on the tree.
+	// Ensure we scheduled a physical side-effect task on the tree at immediate time.
+	// The InvokerExecuteTask is a side-effect task that starts workflows.
+	// The InvokerProcessBufferTask (pure) executes inline during CloseTransaction.
 	_, err = s.node.CloseTransaction()
 	s.NoError(err)
-	s.True(s.hasTask(&tasks.ChasmTaskPure{}, chasm.TaskScheduledTimeImmediate))
+	s.True(s.hasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate))
+}
+
+func (s *generatorTasksSuite) TestUpdateFutureActionTimes_UnlimitedActions() {
+	ctx := s.newMutableContext()
+	sched := s.scheduler
+	generator := sched.Generator.Get(ctx)
+
+	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
+
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	s.NoError(err)
+
+	s.NotEmpty(generator.FutureActionTimes)
+	s.Require().Len(generator.FutureActionTimes, 10)
+}
+
+func (s *generatorTasksSuite) TestUpdateFutureActionTimes_LimitedActions() {
+	ctx := s.newMutableContext()
+	sched := s.scheduler
+	generator := sched.Generator.Get(ctx)
+
+	sched.Schedule.State.LimitedActions = true
+	sched.Schedule.State.RemainingActions = 2
+	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
+
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	s.NoError(err)
+
+	s.Len(generator.FutureActionTimes, 2)
+}
+
+func (s *generatorTasksSuite) TestUpdateFutureActionTimes_SkipsBeforeUpdateTime() {
+	ctx := s.newMutableContext()
+	sched := s.scheduler
+	generator := sched.Generator.Get(ctx)
+
+	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
+
+	// UpdateTime acts as a floor - action times at or before it are skipped.
+	baseTime := ctx.Now(generator).UTC()
+	updateTime := baseTime.Add(defaultInterval / 2)
+	sched.Info.UpdateTime = timestamppb.New(updateTime)
+
+	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	s.NoError(err)
+
+	s.Require().NotEmpty(generator.FutureActionTimes)
+	for _, futureTime := range generator.FutureActionTimes {
+		s.True(futureTime.AsTime().After(updateTime))
+	}
 }

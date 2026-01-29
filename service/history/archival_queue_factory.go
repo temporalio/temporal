@@ -83,8 +83,11 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 // like the task scheduler, task priority assigner, and rate limiters.
 func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 	return QueueFactoryBase{
-		HostScheduler:        newHostScheduler(params),
-		HostPriorityAssigner: queues.NewPriorityAssigner(),
+		HostScheduler: newHostScheduler(params),
+		HostPriorityAssigner: queues.NewPriorityAssigner(
+			params.NamespaceRegistry,
+			params.ClusterMetadata.GetCurrentClusterName(),
+		),
 		HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 			NewHostRateLimiterRateFn(
 				params.Config.ArchivalProcessorMaxPollHostRPS,
@@ -125,22 +128,21 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 	logger := log.With(shard.GetLogger(), tag.ComponentArchivalQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationArchivalQueueProcessorScope))
 
-	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			f.ClusterMetadata.GetCurrentClusterName(),
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			logger,
-			metricsHandler,
-		)
-	}
+	shardScheduler := queues.NewRateLimitedScheduler(
+		f.HostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		f.ClusterMetadata.GetCurrentClusterName(),
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
@@ -157,6 +159,8 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
 		shard.GetClusterMetadata(),
+		f.ChasmRegistry,
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.Tracer,

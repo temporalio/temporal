@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -174,7 +174,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	err = workflowRun.Get(ctx, &out)
 	var activityError *temporal.ActivityError
 	s.True(errors.As(err, &activityError))
-	s.Equal(enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activityError.RetryState())
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 	var timeoutError *temporal.TimeoutError
 	s.True(errors.As(activityError.Unwrap(), &timeoutError))
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
@@ -367,7 +367,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -488,7 +488,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	activityName := "activity_retry"
 	timeoutActivityName := "timeout_activity"
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          tv.WorkflowID(),
 		WorkflowType:        tv.WorkflowType(),
@@ -688,7 +688,7 @@ func (s *ActivityTestSuite) TestActivityRetry_Infinite() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -791,7 +791,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Timeout() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -893,7 +893,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1036,7 +1036,7 @@ func (s *ActivityTestSuite) TestActivityCancellationNotStarted() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -1271,7 +1271,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: "functional-heartbeat-identity-record-type"},
@@ -1400,7 +1400,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 
 	ctx := testcore.NewContext()
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		TaskQueue: taskQueue,
 	}
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)
@@ -1431,7 +1431,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 
 	ctx := testcore.NewContext()
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        uuid.New(),
+		ID:        uuid.NewString(),
 		TaskQueue: taskQueue,
 	}
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, wf)

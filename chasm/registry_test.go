@@ -22,7 +22,17 @@ type (
 	testTaskComponentInterface interface {
 		DoSomething()
 	}
+
+	// testComponentWithVisibility is a test component that has a Visibility field.
+	testComponentWithVisibility struct {
+		chasm.UnimplementedComponent
+		Visibility chasm.Field[*chasm.Visibility]
+	}
 )
+
+func (t *testComponentWithVisibility) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
 
 func TestRegistryTestSuite(t *testing.T) {
 	suite.Run(t, new(RegistryTestSuite))
@@ -67,6 +77,29 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Success() {
 	rc3, ok := r.ComponentFor(cInstance2)
 	require.False(s.T(), ok)
 	require.Nil(s.T(), rc3)
+}
+
+func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
+	r := chasm.NewRegistry(s.logger)
+	ctrl := gomock.NewController(s.T())
+	lib := chasm.NewMockLibrary(ctrl)
+	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
+	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*chasm.MockComponent]("DetachedComponent", chasm.WithDetached()),
+	})
+	lib.EXPECT().Tasks().Return(nil)
+
+	err := r.Register(lib)
+	s.Require().NoError(err)
+
+	// Detached component should have IsDetached() return true
+	detachedRC, ok := r.Component("TestLibrary.DetachedComponent")
+	s.Require().True(ok)
+	s.Require().True(detachedRC.IsDetached())
+
+	// Verify that a component without WithDetached() has IsDetached() return false
+	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
+	s.Require().False(normalRC.IsDetached())
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
@@ -216,6 +249,106 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		err := r.Register(lib)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "must be struct or pointer to struct")
+	})
+
+	s.Run("duplicate search attribute alias panics", func() {
+		s.Require().PanicsWithValue("registrable component validation error: search attribute alias \"MyAlias\" is already defined",
+			func() {
+				chasm.NewRegistrableComponent[*chasm.MockComponent](
+					"Component1",
+					chasm.WithSearchAttributes(
+						chasm.NewSearchAttributeBool("MyAlias", chasm.SearchAttributeFieldBool01),
+						chasm.NewSearchAttributeInt("MyAlias", chasm.SearchAttributeFieldInt01),
+					),
+				)
+			},
+		)
+	})
+
+	s.Run("duplicate search attribute field panics", func() {
+		s.Require().PanicsWithValue("registrable component validation error: search attribute field \"TemporalBool01\" is already defined",
+			func() {
+				chasm.NewRegistrableComponent[*chasm.MockComponent](
+					"Component1",
+					chasm.WithSearchAttributes(
+						chasm.NewSearchAttributeBool("Alias1", chasm.SearchAttributeFieldBool01),
+						chasm.NewSearchAttributeBool("Alias2", chasm.SearchAttributeFieldBool01),
+					),
+				)
+			},
+		)
+	})
+
+	s.Run("valid search attributes do not panic", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.NewSearchAttributeBool("Completed", chasm.SearchAttributeFieldBool01),
+					chasm.NewSearchAttributeInt("Count", chasm.SearchAttributeFieldInt01),
+					chasm.NewSearchAttributeKeyword("Status", chasm.SearchAttributeFieldKeyword01),
+				),
+			)
+		})
+	})
+
+	s.Run("ExecutionStatus alias is allowed for CHASM components", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01),
+				),
+			)
+		})
+	})
+
+	s.Run("TaskQueue preallocated search attribute is allowed", func() {
+		s.Require().NotPanics(func() {
+			chasm.NewRegistrableComponent[*chasm.MockComponent](
+				"Component1",
+				chasm.WithSearchAttributes(
+					chasm.SearchAttributeTaskQueue,
+				),
+			)
+		})
+	})
+
+	s.Run("CHASM system search attribute alias panics", func() {
+		s.Require().PanicsWithValue(
+			"registrable component validation error: CHASM search attribute alias \"WorkflowId\" is a CHASM system search attribute",
+			func() {
+				chasm.NewRegistrableComponent[*chasm.MockComponent](
+					"Component1",
+					chasm.WithSearchAttributes(
+						chasm.NewSearchAttributeKeyword("WorkflowId", chasm.SearchAttributeFieldKeyword01),
+					),
+				)
+			},
+		)
+	})
+
+	s.Run("component with Visibility field must have businessID alias", func() {
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*testComponentWithVisibility]("ComponentWithVis"),
+		})
+		r := chasm.NewRegistry(s.logger)
+		err := r.Register(lib)
+		s.Require().Error(err)
+		s.Require().Contains(err.Error(), "has Field[*Visibility] but no businessID alias")
+	})
+
+	s.Run("component with Visibility field and businessID alias succeeds", func() {
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*testComponentWithVisibility](
+				"ComponentWithVis",
+				chasm.WithBusinessIDAlias("MyBusinessId"),
+			),
+		})
+		lib.EXPECT().Tasks().Return(nil)
+		r := chasm.NewRegistry(s.logger)
+		err := r.Register(lib)
+		s.Require().NoError(err)
 	})
 
 }

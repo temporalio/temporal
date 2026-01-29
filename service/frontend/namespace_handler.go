@@ -6,7 +6,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -107,7 +107,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		}
 	}
 
-	if err := validateRetentionDuration(
+	if err := d.validateRetentionDuration(
 		registerRequest.WorkflowExecutionRetentionPeriod,
 		registerRequest.IsGlobalNamespace,
 	); err != nil {
@@ -182,7 +182,7 @@ func (d *namespaceHandler) RegisterNamespace(
 	}
 
 	info := &persistencespb.NamespaceInfo{
-		Id:          uuid.New(),
+		Id:          uuid.NewString(),
 		Name:        registerRequest.GetNamespace(),
 		State:       enumspb.NAMESPACE_STATE_REGISTERED,
 		Owner:       registerRequest.GetOwnerEmail(),
@@ -441,7 +441,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			configurationChanged = true
 
 			config.Retention = updatedConfig.GetWorkflowExecutionRetentionTtl()
-			if err := validateRetentionDuration(
+			if err := d.validateRetentionDuration(
 				config.Retention,
 				isGlobalNamespace,
 			); err != nil {
@@ -862,6 +862,12 @@ func (d *namespaceHandler) createResponse(
 			AsyncUpdate:                     d.config.EnableUpdateWorkflowExecutionAsyncAccepted(info.Name),
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
+			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
+			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
+		},
+		Limits: &namespacepb.NamespaceInfo_Limits{
+			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
+			MemoSizeLimitError: int64(d.config.MemoSizeLimitError(info.Name)),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}
@@ -1052,16 +1058,19 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 }
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
-func validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
+func (d *namespaceHandler) validateRetentionDuration(retention *durationpb.Duration, isGlobalNamespace bool) error {
 	if err := timestamp.ValidateAndCapProtoDuration(retention); err != nil {
 		return errInvalidRetentionPeriod
 	}
 
-	min := namespace.MinRetentionLocal
+	var minRetention time.Duration
 	if isGlobalNamespace {
-		min = namespace.MinRetentionGlobal
+		minRetention = d.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = d.config.NamespaceMinRetentionLocal()
 	}
-	if timestamp.DurationValue(retention) < min {
+
+	if timestamp.DurationValue(retention) < minRetention {
 		return errInvalidRetentionPeriod
 	}
 	return nil

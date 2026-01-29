@@ -3,6 +3,7 @@ package interfaces
 import (
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/service/history/tasks"
@@ -17,7 +18,16 @@ type WorkflowTaskInfo struct {
 	WorkflowTaskTimeout time.Duration
 	// This is only needed to communicate task queue used after AddWorkflowTaskScheduledEvent.
 	TaskQueue *taskqueuepb.TaskQueue
-	Attempt   int32
+
+	// Attempt is the number of attempts for this workflow task.
+	Attempt int32
+	// AttemptsSinceLastSuccess is the number of attempts since the last successful workflow task.
+	// This is used by the `TemporalReportedProblems` search attribute to check latest WFT failure count,
+	// this will only differ from attempts above when the previous workflow tasks failed and there was a
+	// buffered event (like a signal or activity finishing) applied to the workflow which causes the
+	// new workflow task to have an attempt of 1 again.
+	AttemptsSinceLastSuccess int32
+
 	// Scheduled and Started timestamps are useful for transient workflow task: when transient workflow task finally completes,
 	// use these Timestamp to create scheduled/started events.
 	// Also used for recording latency metrics
@@ -37,8 +47,9 @@ type WorkflowTaskInfo struct {
 	// transient event), otherwise a dynamic config change of the suggestion threshold could
 	// cause the WorkflowTaskStarted event that the worker used to not match the event we saved
 	// in history.
-	SuggestContinueAsNew bool
-	HistorySizeBytes     int64
+	SuggestContinueAsNew        bool
+	SuggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason
+	HistorySizeBytes            int64
 	// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 	// info is to make sure the right redirect counter is used in the WFT started event created later
 	// for a transient/speculative WFT.
@@ -54,6 +65,11 @@ type WorkflowTaskInfo struct {
 	// and used to delete them when the workflow task completes.
 	ScheduleToStartTimeoutTask *tasks.WorkflowTaskTimeoutTask
 	StartToCloseTimeoutTask    *tasks.WorkflowTaskTimeoutTask
+
+	// Incrementing Stamp will invalidate the existing transfer/matching workflow task.
+	// Incrementing Stamp will ensure that the standby clusters reschedule the transfer tasks properly.
+	// Stamp is NOT scoped within a single wft, and it should never be decremented in the lifetime of the whole execution.
+	Stamp int32
 }
 
 type WorkflowTaskCompletionLimits struct {

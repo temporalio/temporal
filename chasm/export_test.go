@@ -1,6 +1,9 @@
 package chasm
 
-import "reflect"
+import (
+	"context"
+	"reflect"
+)
 
 func (r *Registry) Component(fqn string) (*RegistrableComponent, bool) {
 	return r.component(fqn)
@@ -32,4 +35,8 @@ func (rc RegistrableComponent) FqType() string {
 
 func (rt RegistrableTask) FqType() string {
 	return rt.fqType()
+}
+
+func EngineFromContext(ctx context.Context) Engine {
+	return engineFromContext(ctx)
 }

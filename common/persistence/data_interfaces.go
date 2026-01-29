@@ -9,16 +9,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Archetype is a type alias for chasm.Archetype to avoid circular dependency.
+type Archetype = chasm.Archetype
 
 // CreateWorkflowMode workflow creation mode
 type CreateWorkflowMode int
@@ -89,7 +93,11 @@ const (
 
 const numItemsInGarbageInfo = 3
 
-const ScheduledTaskMinPrecision = time.Millisecond
+const (
+	NamespaceWatchEventTypeCreate NamespaceWatchEventType = iota
+	NamespaceWatchEventTypeUpdate
+	NamespaceWatchEventTypeDelete
+)
 
 type (
 	// InvalidPersistenceRequestError represents invalid request to persistence
@@ -188,6 +196,7 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
+		ArchetypeID chasm.ArchetypeID
 
 		Tasks map[tasks.Category][]tasks.Task
 	}
@@ -201,6 +210,8 @@ type (
 
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
+
+		ArchetypeID chasm.ArchetypeID
 
 		NewWorkflowSnapshot WorkflowSnapshot
 		NewWorkflowEvents   []*WorkflowEvents
@@ -217,6 +228,8 @@ type (
 		RangeID int64
 
 		Mode UpdateWorkflowMode
+
+		ArchetypeID chasm.ArchetypeID
 
 		UpdateWorkflowMutation WorkflowMutation
 		UpdateWorkflowEvents   []*WorkflowEvents
@@ -236,6 +249,8 @@ type (
 		RangeID int64
 
 		Mode ConflictResolveWorkflowMode
+
+		ArchetypeID chasm.ArchetypeID
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot WorkflowSnapshot
@@ -261,6 +276,7 @@ type (
 		ShardID     int32
 		NamespaceID string
 		WorkflowID  string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// GetCurrentExecutionResponse is the response to GetCurrentExecution
@@ -277,6 +293,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
@@ -290,6 +307,8 @@ type (
 	SetWorkflowExecutionRequest struct {
 		ShardID int32
 		RangeID int64
+
+		ArchetypeID chasm.ArchetypeID
 
 		SetWorkflowSnapshot WorkflowSnapshot
 	}
@@ -384,6 +403,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// DeleteCurrentWorkflowExecutionRequest is used to delete the current workflow execution
@@ -392,6 +412,7 @@ type (
 		NamespaceID string
 		WorkflowID  string
 		RunID       string
+		ArchetypeID chasm.ArchetypeID
 	}
 
 	// GetHistoryTasksRequest is used to get a range of history tasks
@@ -993,7 +1014,7 @@ type (
 	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
 		RPCAddressEquals    net.IP
-		HostIDEquals        uuid.UUID
+		HostIDEquals        []byte
 		RoleEquals          ServiceType
 		SessionStartedAfter time.Time
 		NextPageToken       []byte
@@ -1009,7 +1030,7 @@ type (
 	// ClusterMember is used as a response to GetClusterMembers
 	ClusterMember struct {
 		Role          ServiceType
-		HostID        uuid.UUID
+		HostID        []byte
 		RPCAddress    net.IP
 		RPCPort       uint16
 		SessionStart  time.Time
@@ -1020,7 +1041,7 @@ type (
 	// UpsertClusterMembershipRequest is the request to UpsertClusterMembership
 	UpsertClusterMembershipRequest struct {
 		Role         ServiceType
-		HostID       uuid.UUID
+		HostID       []byte
 		RPCAddress   net.IP
 		RPCPort      uint16
 		SessionStart time.Time
@@ -1060,6 +1081,15 @@ type (
 	DeleteNexusEndpointRequest struct {
 		LastKnownTableVersion int64
 		ID                    string
+	}
+
+	NamespaceWatchEventType int
+
+	NamespaceWatchEvent struct {
+		Type        NamespaceWatchEventType
+		Response    *GetNamespaceResponse
+		NamespaceID namespace.ID
+		Err         error
 	}
 
 	// Closeable is an interface for any entity that supports a close operation to release resources
@@ -1191,6 +1221,7 @@ type (
 		ListNamespaces(ctx context.Context, request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata(ctx context.Context) (*GetMetadataResponse, error)
 		InitializeSystemNamespaces(ctx context.Context, currentClusterName string) error
+		WatchNamespaces(ctx context.Context) (<-chan *NamespaceWatchEvent, error)
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration

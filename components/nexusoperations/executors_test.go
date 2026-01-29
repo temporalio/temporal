@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -32,7 +33,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
-	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
 )
 
@@ -333,11 +334,11 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "operation-timeout",
 			onStartOperation:      nil, // This should not be called if the operation has timed out.
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
-				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_FAILED, op.State())
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT, op.State())
 				require.Equal(t, 1, len(events))
-				failure := events[0].GetNexusOperationFailedEventAttributes().Failure.Cause
-				require.NotNil(t, failure.GetApplicationFailureInfo())
-				require.Equal(t, "remaining operation timeout is less than required minimum", failure.Message)
+				failure := events[0].GetNexusOperationTimedOutEventAttributes().Failure.Cause
+				require.NotNil(t, failure.GetTimeoutFailureInfo())
+				require.Equal(t, "operation timed out", failure.Message)
 			},
 		},
 		{
@@ -464,14 +465,14 @@ func TestProcessInvocationTask(t *testing.T) {
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
-				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				metricsHandler.EXPECT().Counter(chasmnexus.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(chasmnexus.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
@@ -534,7 +535,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				nexusoperations.InvocationTask{EndpointName: "endpoint-id"},
 			)
 			if tc.destinationDown {
-				var destinationDownErr *queues.DestinationDownError
+				var destinationDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
@@ -782,14 +783,14 @@ func TestProcessCancelationTask(t *testing.T) {
 			if tc.expectedMetricOutcome != "" {
 				counter := metrics.NewMockCounterIface(ctrl)
 				timer := metrics.NewMockTimerIface(ctrl)
-				metricsHandler.EXPECT().Counter(nexusoperations.OutboundRequestCounter.Name()).Return(counter)
+				metricsHandler.EXPECT().Counter(chasmnexus.OutboundRequestCounter.Name()).Return(counter)
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
-				metricsHandler.EXPECT().Timer(nexusoperations.OutboundRequestLatency.Name()).Return(timer)
+				metricsHandler.EXPECT().Timer(chasmnexus.OutboundRequestLatency.Name()).Return(timer)
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
@@ -848,7 +849,8 @@ func TestProcessCancelationTask(t *testing.T) {
 				nexusoperations.CancelationTask{EndpointName: "endpoint-id"},
 			)
 			if tc.destinationDown {
-				require.IsType(t, &queues.DestinationDownError{}, err)
+				var destinationDownErr *queueserrors.DestinationDownError
+				require.ErrorAs(t, err, &destinationDownErr)
 			} else {
 				require.NoError(t, err)
 			}

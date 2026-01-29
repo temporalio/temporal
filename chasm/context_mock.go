@@ -4,13 +4,18 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey func() EntityKey
-	HandleNow          func(component Component) time.Time
-	HandleRef          func(component Component) ([]byte, error)
+	HandleExecutionKey         func() ExecutionKey
+	HandleNow                  func(component Component) time.Time
+	HandleRef                  func(component Component) ([]byte, error)
+	HandleExecutionCloseTime   func() time.Time
+	HandleStateTransitionCount func() int64
 }
 
 func (c *MockContext) getContext() context.Context {
@@ -31,11 +36,38 @@ func (c *MockContext) Ref(cmp Component) ([]byte, error) {
 	return nil, nil
 }
 
-func (c *MockContext) ExecutionKey() EntityKey {
+func (c *MockContext) structuredRef(cmp Component) (ComponentRef, error) {
+	return ComponentRef{}, nil
+}
+
+func (c *MockContext) ExecutionKey() ExecutionKey {
 	if c.HandleExecutionKey != nil {
 		return c.HandleExecutionKey()
 	}
-	return EntityKey{}
+	return ExecutionKey{}
+}
+
+func (c *MockContext) ExecutionCloseTime() time.Time {
+	if c.HandleExecutionCloseTime != nil {
+		return c.HandleExecutionCloseTime()
+	}
+	return time.Time{}
+}
+
+func (c *MockContext) StateTransitionCount() int64 {
+	if c.HandleStateTransitionCount != nil {
+		return c.HandleStateTransitionCount()
+	}
+	return 0
+}
+
+func (c *MockContext) Logger() log.Logger {
+	executionKey := c.ExecutionKey()
+	return log.NewTestLogger().With(
+		tag.WorkflowNamespaceID(executionKey.NamespaceID),
+		tag.WorkflowID(executionKey.BusinessID),
+		tag.WorkflowRunID(executionKey.RunID),
+	)
 }
 
 // MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in

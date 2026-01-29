@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -23,7 +24,7 @@ import (
 )
 
 type (
-	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState) (interface{}, error)
+	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (interface{}, error)
 	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
@@ -78,22 +79,37 @@ func standbyTimerTaskPostActionTaskDiscarded(
 	return consts.ErrTaskDiscarded
 }
 
-func isWorkflowExistOnSource(
+func executionExistsOnSource(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
 	logger log.Logger,
 	currentCluster string,
 	clientBean client.Bean,
 	registry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 ) bool {
 	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(workflowKey.NamespaceID))
 	if err != nil {
 		return true
 	}
+
+	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	if !ok {
+		logger.Error("Unknown archetype ID.",
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+		)
+		return true
+	}
+
 	remoteClusterName, err := getSourceClusterName(
 		currentCluster,
 		registry,
 		workflowKey.GetNamespaceID(),
+		workflowKey.GetWorkflowID(),
 	)
 	if err != nil {
 		return true
@@ -108,6 +124,7 @@ func isWorkflowExistOnSource(
 			WorkflowId: workflowKey.GetWorkflowID(),
 			RunId:      workflowKey.GetRunID(),
 		},
+		Archetype:       archetype,
 		SkipForceReload: true,
 	})
 	if err != nil {
@@ -228,13 +245,14 @@ func getSourceClusterName(
 	currentCluster string,
 	registry namespace.Registry,
 	namespaceID string,
+	workflowID string,
 ) (string, error) {
 	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
 	if err != nil {
 		return "", err
 	}
 
-	remoteClusterName := namespaceEntry.ActiveClusterName()
+	remoteClusterName := namespaceEntry.ActiveClusterName(workflowID)
 	if remoteClusterName == currentCluster {
 		// namespace has turned active, retry the task
 		return "", errors.New("namespace becomes active when processing task as standby")

@@ -14,9 +14,9 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflow"
@@ -31,6 +31,11 @@ type (
 	// updateError is a wrapper to distinguish an update error from a start error.
 	updateError struct{ error }
 )
+
+// Unwrap returns the wrapped error to support errors.As() and errors.Is()
+func (e updateError) Unwrap() error {
+	return e.error
+}
 
 type (
 	updateWithStart struct {
@@ -54,11 +59,11 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	tokenSerializer *tasktoken.Serializer,
-	visibilityManager manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 	testHooks testhooks.TestHooks,
 ) (*historyservice.ExecuteMultiOperationResponse, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -93,8 +98,9 @@ func Invoke(
 			shardContext,
 			workflowConsistencyChecker,
 			tokenSerializer,
-			visibilityManager,
 			startReq,
+			matchingClient,
+			versionMembershipCache,
 			uws.workflowLeaseCallback(ctx),
 		)
 		if err != nil {
@@ -403,6 +409,12 @@ func makeResponse(
 }
 
 func newMultiOpError(startErr, updateErr error) error {
+	// Unwrap updateError wrapper if present to allow downstream error inspection
+	var ue updateError
+	if errors.As(updateErr, &ue) && ue.error != nil {
+		updateErr = ue.error
+	}
+
 	var message string
 	switch {
 	case startErr != nil && !errors.Is(startErr, multiOpAbortedErr):

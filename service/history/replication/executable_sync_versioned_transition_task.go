@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
@@ -42,6 +43,9 @@ func NewExecutableSyncVersionedTransitionTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableSyncVersionedTransitionTask {
 	task := replicationTask.GetSyncVersionedTransitionTaskAttributes()
+	if task.ArchetypeId == chasm.UnspecifiedArchetypeID {
+		task.ArchetypeId = chasm.WorkflowArchetypeID
+	}
 	return &ExecutableSyncVersionedTransitionTask{
 		ProcessToolBox: processToolBox,
 
@@ -68,12 +72,13 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if e.TerminalState() {
 		return nil
 	}
+	e.MarkExecutionStart()
 
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
-	), e.NamespaceID)
+	), e.NamespaceID, e.WorkflowID)
 	if nsError != nil {
 		return nsError
 	} else if !apply {
@@ -104,10 +109,21 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	return engine.ReplicateVersionedTransition(ctx, e.taskAttr.VersionedTransitionArtifact, e.SourceClusterName())
+	return engine.ReplicateVersionedTransition(
+		ctx,
+		e.taskAttr.GetArchetypeId(),
+		e.taskAttr.VersionedTransitionArtifact,
+		e.SourceClusterName(),
+	)
 }
 
 func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.SyncVersionedTransitionTaskScope),
+		metrics.NamespaceTag(e.NamespaceName()),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		e.MarkTaskDuplicated()
 		return nil
@@ -125,7 +141,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -154,7 +170,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
-		), e.NamespaceID)
+		), e.NamespaceID, e.WorkflowID)
 		if nsError != nil {
 			return err
 		}
@@ -204,6 +220,25 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			return err
 		}
 		return e.Execute()
+
+	case *serviceerror.NotFound:
+		e.Logger.Error(
+			"workflow not found in source cluster, proceed to cleanup",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.WorkflowID),
+			tag.WorkflowRunID(e.RunID),
+		)
+		// workflow is not found in source cluster, cleanup workflow in target cluster
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		defer cancel()
+		return e.DeleteWorkflow(
+			ctx,
+			definition.NewWorkflowKey(
+				e.NamespaceID,
+				e.WorkflowID,
+				e.RunID,
+			),
+		)
 	default:
 		return err
 	}

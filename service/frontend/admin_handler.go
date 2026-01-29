@@ -12,16 +12,18 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
+	batchspb "go.temporal.io/server/api/batch/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -29,6 +31,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -46,6 +49,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -54,10 +59,12 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -104,6 +111,7 @@ type (
 		clusterMetadata            cluster.Metadata
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
+		chasmRegistry              *chasm.Registry
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -138,6 +146,7 @@ type (
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
+		ChasmRegistry                       *chasm.Registry
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -148,8 +157,6 @@ type (
 
 var (
 	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
-
-	resendStartEventID = int64(0)
 )
 
 // NewAdminHandler creates a gRPC handler for the adminservice
@@ -224,6 +231,7 @@ func NewAdminHandler(
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
+		chasmRegistry:        args.ChasmRegistry,
 	}
 }
 
@@ -289,7 +297,7 @@ func (adh *AdminHandler) AddSearchAttributes(
 	}
 
 	for saName, saType := range request.GetSearchAttributes() {
-		if searchattribute.IsReserved(saName) {
+		if sadefs.IsReserved(saName) {
 			return nil, serviceerror.NewInvalidArgumentf(errSearchAttributeIsReservedMessage, saName)
 		}
 		if currentSearchAttributes.IsDefined(saName) {
@@ -395,7 +403,7 @@ func (adh *AdminHandler) addSearchAttributesSQL(
 		targetFieldName := ""
 		cntUsed := 0
 		for fieldName, fieldType := range cmCustomSearchAttributes {
-			if fieldType != saType || !searchattribute.IsPreallocatedCSAFieldName(fieldName, fieldType) {
+			if fieldType != saType || !sadefs.IsPreallocatedCSAFieldName(fieldName, fieldType) {
 				continue
 			}
 			if _, ok := fieldToAliasMap[fieldName]; ok {
@@ -772,6 +780,11 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
 
@@ -785,10 +798,12 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	}
 
 	historyAddr := historyHost.GetAddress()
+
 	historyResponse, err := adh.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId:     namespaceID.String(),
 		Execution:       request.Execution,
 		SkipForceReload: request.GetSkipForceReload(),
+		ArchetypeId:     archetypeID,
 	})
 
 	if err != nil {
@@ -973,7 +988,7 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	// TODO currently, this API is only going to be used by re-send history events
 	// to remote cluster if kafka is lossy again, in the future, this API can be used
 	// by CLI and client, then empty runID (meaning the current workflow) should be allowed
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+	if execution.GetRunId() == "" || uuid.Validate(execution.GetRunId()) != nil {
 		return errInvalidRunID
 	}
 
@@ -1129,11 +1144,19 @@ func (adh *AdminHandler) ListClusterMembers(
 	if startedTimeRef != nil {
 		startedTime = startedTimeRef.AsTime()
 	}
+	hostIDEqual, err := uuid.Parse(request.GetHostId())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("host ID %q is not a valid UUID: %v", request.GetHostId(), err)
+	}
+	hostIDEqualBytes, err := hostIDEqual.MarshalBinary()
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to marshal host ID %q to bytes: %v", request.GetHostId(), err)
+	}
 
 	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
 		LastHeartbeatWithin: heartbit,
 		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
-		HostIDEquals:        uuid.Parse(request.GetHostId()),
+		HostIDEquals:        hostIDEqualBytes,
 		RoleEquals:          persistence.ServiceType(request.GetRole()),
 		SessionStartedAfter: startedTime,
 		PageSize:            int(request.GetPageSize()),
@@ -1145,9 +1168,13 @@ func (adh *AdminHandler) ListClusterMembers(
 
 	var activeMembers []*clusterspb.ClusterMember
 	for _, member := range resp.ActiveMembers {
+		u, err := uuid.FromBytes(member.HostID)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to parse host ID bytes to UUID: %v", err)
+		}
 		activeMembers = append(activeMembers, &clusterspb.ClusterMember{
 			Role:             enumsspb.ClusterMemberRole(member.Role),
-			HostId:           member.HostID.String(),
+			HostId:           u.String(),
 			RpcAddress:       member.RPCAddress.String(),
 			RpcPort:          int32(member.RPCPort),
 			SessionStartTime: timestamppb.New(member.SessionStart),
@@ -1213,6 +1240,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+			IsReplicationEnabled:     request.GetEnableReplication(),
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
@@ -1529,14 +1557,144 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = adh.historyClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
 		NamespaceId: namespaceEntry.ID().String(),
+		ArchetypeId: archetypeID,
 		Request:     request,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
+}
+
+// StartAdminBatchOperation starts an admin batch operation.
+func (adh *AdminHandler) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := validateAdminBatchOperation(request); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate concurrent batch operation
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
+	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespaceID,
+		Namespace:   namespace.Name(request.GetNamespace()),
+		Query:       batcher.OpenAdminBatchOperationQuery,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	openAdminBatchOperationCount := int(countResp.Count)
+	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
+		return nil, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "Max concurrent admin batch operations is reached",
+		}
+	}
+
+	input := &batchspb.BatchOperationInput{
+		AdminRequest: request,
+		NamespaceId:  namespaceID.String(),
+	}
+
+	identity := request.GetIdentity()
+	var batchTypeMemo string
+	switch op := request.Operation.(type) {
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+		batchTypeMemo = "refresh_tasks"
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
+	}
+
+	inputPayload, err := payloads.Encode(input)
+	if err != nil {
+		return nil, err
+	}
+
+	memo := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
+			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+		},
+	}
+
+	var searchAttributes *commonpb.SearchAttributes
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
+	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
+
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                request.Namespace,
+		WorkflowId:               request.GetJobId(),
+		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayload,
+		Identity:                 identity,
+		RequestId:                uuid.NewString(),
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
+		Memo:                     memo,
+		SearchAttributes:         searchAttributes,
+	}
+
+	_, err = adh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(
+			namespaceID.String(),
+			startReq,
+			nil,
+			nil,
+			time.Now().UTC(),
+		),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.StartAdminBatchOperationResponse{}, nil
+}
+
+func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
+	if params.GetOperation() == nil ||
+		params.GetReason() == "" ||
+		params.GetNamespace() == "" ||
+		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
+		return serviceerror.NewInvalidArgument("must provide required parameters: Operation/Reason/Namespace/Query or Executions")
+	}
+
+	if len(params.GetJobId()) == 0 {
+		return serviceerror.NewInvalidArgument("JobId is not set on request.")
+	}
+	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
+		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
+	}
+
+	switch op := params.GetOperation().(type) {
+	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
+		// No additional validation needed
+		return nil
+	default:
+		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
+	}
 }
 
 // ResendReplicationTasks requests replication task from remote cluster
@@ -1687,9 +1845,15 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	response, err := adh.historyClient.ForceDeleteWorkflowExecution(ctx,
 		&historyservice.ForceDeleteWorkflowExecutionRequest{
 			NamespaceId: namespaceID.String(),
+			ArchetypeId: archetypeID,
 			Request:     request,
 		})
 	if err != nil {
@@ -2117,6 +2281,7 @@ func (adh *AdminHandler) SyncWorkflowState(ctx context.Context, request *adminse
 		VersionHistories:    request.VersionHistories,
 		VersionedTransition: request.VersionedTransition,
 		TargetClusterId:     request.TargetClusterId,
+		ArchetypeId:         request.ArchetypeId,
 	})
 	if err != nil {
 		return nil, err
@@ -2145,12 +2310,18 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
+	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := adh.historyClient.GenerateLastHistoryReplicationTasks(
 		ctx,
 		&historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId:    namespaceEntry.ID().String(),
 			Execution:      request.Execution,
 			TargetClusters: request.TargetClusters,
+			ArchetypeId:    archetypeID,
 		},
 	)
 	if err != nil {
@@ -2173,6 +2344,19 @@ func (adh *AdminHandler) getDLQWorkflowID(
 			key.TargetCluster,
 		),
 	)
+}
+
+func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.ArchetypeID, error) {
+	if len(archetype) == 0 {
+		// For backwards compatibility, default to Workflow
+		return chasm.WorkflowArchetypeID, nil
+	}
+
+	archetypeID, ok := adh.chasmRegistry.ComponentIDByFqn(archetype)
+	if !ok {
+		return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf("unknown archetype: %s", archetype)
+	}
+	return archetypeID, nil
 }
 
 func validateHistoryDLQKey(

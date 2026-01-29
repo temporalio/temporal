@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -157,7 +157,7 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 							PredicateType: enumsspb.PREDICATE_TYPE_NAMESPACE_ID,
 							Attributes: &persistencespb.Predicate_NamespaceIdPredicateAttributes{
 								NamespaceIdPredicateAttributes: &persistencespb.NamespaceIdPredicateAttributes{
-									NamespaceIds: []string{uuid.New()},
+									NamespaceIds: []string{uuid.NewString()},
 								},
 							},
 						},
@@ -208,7 +208,8 @@ func (s *queueBaseSuite) TestStartStop() {
 			mockTask := tasks.NewMockTask(s.controller)
 			key := NewRandomKeyInRange(paginationRange)
 			mockTask.EXPECT().GetKey().Return(key).AnyTimes()
-			mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
 	}
@@ -455,7 +456,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	exclusiveReaderHighWatermark := tasks.MaximumKey
 	scopes := NewRandomScopes(3)
-	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.New()})
+	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.NewString()})
 	scopes[2].Predicate = tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})
 	initialQueueState := &queueState{
 		readerScopes: map[int64][]Scope{
@@ -552,6 +553,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
+			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			slice.(*SliceImpl).add(base.executableFactory.NewExecutable(mockTask, readerID))
 		}
 	}
@@ -635,14 +637,15 @@ func (s *queueBaseSuite) QueueStateEqual(
 	that *persistencespb.QueueState,
 ) {
 	// ser/de so to equal will not take timezone into consideration
-	thisBlob, err := serialization.QueueStateToBlob(this)
+	serializer := serialization.NewSerializer()
+	thisBlob, err := serializer.QueueStateToBlob(this)
 	s.NoError(err)
-	this, err = serialization.QueueStateFromBlob(thisBlob)
+	this, err = serializer.QueueStateFromBlob(thisBlob)
 	s.NoError(err)
 
-	thatBlob, err := serialization.QueueStateToBlob(that)
+	thatBlob, err := serializer.QueueStateToBlob(that)
 	s.NoError(err)
-	that, err = serialization.QueueStateFromBlob(thatBlob)
+	that, err = serializer.QueueStateFromBlob(thatBlob)
 	s.NoError(err)
 
 	s.Equal(this, that)
@@ -653,6 +656,9 @@ func (s *queueBaseSuite) newQueueBase(
 	category tasks.Category,
 	paginationFnProvider PaginationFnProvider,
 ) *queueBase {
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+
 	factory := NewExecutableFactory(
 		nil,
 		s.mockScheduler,
@@ -661,6 +667,8 @@ func (s *queueBaseSuite) newQueueBase(
 		mockShard.GetTimeSource(),
 		mockShard.GetNamespaceRegistry(),
 		mockShard.GetClusterMetadata(),
+		mockShard.ChasmRegistry(),
+		testTaskTagValueProvider,
 		s.logger,
 		s.metricsHandler,
 		telemetry.NoopTracer,

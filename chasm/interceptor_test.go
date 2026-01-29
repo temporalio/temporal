@@ -1,4 +1,4 @@
-package chasm
+package chasm_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -22,7 +23,7 @@ func (h ServiceHandler) Test(
 	ctx context.Context,
 	req *testspb.TestRequest,
 ) (resp *testspb.TestResponse, err error) {
-	hasEngineCtx := engineFromContext(ctx) != nil
+	hasEngineCtx := chasm.EngineFromContext(ctx) != nil
 
 	return &testspb.TestResponse{
 		RequestId:    req.RequestId,
@@ -31,7 +32,7 @@ func (h ServiceHandler) Test(
 }
 
 type ServiceLibrary struct {
-	UnimplementedLibrary
+	chasm.UnimplementedLibrary
 }
 
 func NewServiceLibrary() *ServiceLibrary {
@@ -42,13 +43,35 @@ func (l *ServiceLibrary) RegisterServices(server *grpc.Server) {
 	testspb.RegisterTestServiceServer(server, ServiceHandler{})
 }
 
-func TestChasmRequestInterceptor_ShouldRespond(t *testing.T) {
-	mockEngine := NewMockEngine(gomock.NewController(t))
-	requestInterceptor := ChasmRequestInterceptorProvider(mockEngine, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestChasmEngineInterceptor_ShouldRespond(t *testing.T) {
+	ctrl := gomock.NewController(t)
 
-	server, address := startTestServer(t, grpc.UnaryInterceptor(requestInterceptor.Intercept))
+	mockEngine := chasm.NewMockEngine(ctrl)
+	engineInterceptor := chasm.ChasmEngineInterceptorProvider(
+		mockEngine,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+
+	server, address := startTestServer(t, grpc.UnaryInterceptor(engineInterceptor.Intercept))
 	defer server.Stop()
 
+	response := testRoundTrip(t, address)
+	require.True(t, response.HasEngineCtx)
+}
+
+func TestChasmVisibilityInterceptor_ShouldRespond(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	mockVisibilityManager := chasm.NewMockVisibilityManager(ctrl)
+	visibilityInterceptor := chasm.ChasmVisibilityInterceptorProvider(mockVisibilityManager)
+
+	server, address := startTestServer(t, grpc.UnaryInterceptor(visibilityInterceptor.Intercept))
+	defer server.Stop()
+	testRoundTrip(t, address)
+}
+
+func testRoundTrip(t *testing.T, address string) *testspb.TestResponse {
 	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		t.Fatalf("failed to connect: %v", err)
@@ -66,9 +89,9 @@ func TestChasmRequestInterceptor_ShouldRespond(t *testing.T) {
 		RequestId: "test-request-id",
 	})
 	require.NoError(t, err)
-
 	require.Equal(t, "test-request-id", response.GetRequestId())
-	require.True(t, response.HasEngineCtx)
+
+	return response
 }
 
 func startTestServer(t *testing.T, opt ...grpc.ServerOption) (*grpc.Server, string) {

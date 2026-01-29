@@ -6,13 +6,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -257,6 +258,7 @@ func (s *ackManagerSuite) TestGetTasks_FirstPersistenceErrorReturnsErrorAndEmpty
 		NamespaceID: tasksResponse.Tasks[0].GetNamespaceID(),
 		WorkflowID:  tasksResponse.Tasks[0].GetWorkflowID(),
 		RunID:       tasksResponse.Tasks[0].GetRunID(),
+		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(nil, gweErr)
 
 	replicationTasks, lastTaskID, err := s.replicationAckManager.getTasks(ctx, cluster.TestCurrentClusterName, minTaskID, maxTaskID)
@@ -305,7 +307,7 @@ func (s *ackManagerSuite) TestGetTasks_SecondPersistenceErrorReturnsPartialResul
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil)
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("some random error"))
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil)
@@ -353,7 +355,7 @@ func (s *ackManagerSuite) TestGetTasks_FullPage() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize())
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(s.replicationAckManager.pageSize())
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize())
 
@@ -401,7 +403,7 @@ func (s *ackManagerSuite) TestGetTasks_PartialPage() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(numTasks)
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(numTasks)
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(numTasks)
 
@@ -484,7 +486,7 @@ func (s *ackManagerSuite) TestGetTasks_FilterNamespace() {
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
-		State: workflow.TestCloneToProto(ms)}, nil).Times(s.replicationAckManager.pageSize())
+		State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(s.replicationAckManager.pageSize())
 	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{{}}}, nil).Times(s.replicationAckManager.pageSize())
 
@@ -502,7 +504,7 @@ func (s *ackManagerSuite) getHistoryTasksResponse(size int) *persistence.GetHist
 			WorkflowKey: definition.WorkflowKey{
 				NamespaceID: tests.NamespaceID.String(),
 				WorkflowID:  tests.WorkflowID + strconv.Itoa(i),
-				RunID:       uuid.New(),
+				RunID:       uuid.NewString(),
 			},
 			TaskID:       int64(i),
 			FirstEventID: 1,

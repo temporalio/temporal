@@ -9,6 +9,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/multierr"
 )
@@ -22,10 +23,10 @@ func getCommands(
 ) []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:        "workflow",
-			Aliases:     []string{"w"},
-			Usage:       "Run admin operation on workflow",
-			Subcommands: newAdminWorkflowCommands(clientFactory, prompterFactory),
+			Name:        "execution",
+			Aliases:     []string{"e", "w", "workflow"},
+			Usage:       "Run admin operation on an execution (workflow)",
+			Subcommands: newAdminExecutionCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "shard",
@@ -71,7 +72,7 @@ func getCommands(
 	}
 }
 
-func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
+func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "import",
@@ -137,21 +138,26 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 		{
 			Name:    "describe",
 			Aliases: []string{"d"},
-			Usage:   "Describe internal information of workflow execution",
+			Usage:   "Describe internal information of Temporal execution",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:    FlagWorkflowID,
-					Aliases: FlagWorkflowIDAlias,
-					Usage:   "Workflow ID",
+					Name:    FlagBusinessID,
+					Aliases: FlagBusinessIDAlias,
+					Usage:   "Business ID (Workflow ID)",
 				},
 				&cli.StringFlag{
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID",
+					Usage:   "Run ID (optional, uses latest if not specified)",
+				},
+				&cli.StringFlag{
+					Name:        FlagArchetype,
+					Usage:       "Fully qualified archetype name of the execution",
+					DefaultText: chasm.WorkflowArchetype,
 				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminDescribeWorkflow(c, clientFactory)
+				return AdminDescribeExecution(c, clientFactory)
 			},
 		},
 		{
@@ -169,9 +175,26 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Aliases: FlagRunIDAlias,
 					Usage:   "Run ID",
 				},
+				&cli.StringFlag{
+					Name:        FlagArchetype,
+					Usage:       "Fully qualified archetype name of the execution",
+					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.StringFlag{
+					Name:  FlagVisibilityQuery,
+					Usage: "Visibility query to select workflows",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for starting the batch job",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Optional job ID (auto-generated if not provided)",
+				},
 			},
 			Action: func(c *cli.Context) error {
-				return AdminRefreshWorkflowTasks(c, clientFactory)
+				return adminRefreshWorkflowTasks(c, clientFactory, prompterFactory(c))
 			},
 		},
 		{
@@ -209,6 +232,11 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Aliases: FlagRunIDAlias,
 					Usage:   "Run ID",
 				},
+				&cli.StringFlag{
+					Name:        FlagArchetype,
+					Usage:       "Fully qualified archetype name of the execution",
+					DefaultText: chasm.WorkflowArchetype,
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminReplicateWorkflow(c, clientFactory)
@@ -228,6 +256,11 @@ func newAdminWorkflowCommands(clientFactory ClientFactory, prompterFactory Promp
 					Name:    FlagRunID,
 					Aliases: FlagRunIDAlias,
 					Usage:   "Run ID",
+				},
+				&cli.StringFlag{
+					Name:        FlagArchetype,
+					Usage:       "Fully qualified archetype name of the execution",
+					DefaultText: chasm.WorkflowArchetype,
 				},
 			},
 			Action: func(c *cli.Context) error {

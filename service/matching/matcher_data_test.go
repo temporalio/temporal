@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"math/rand"
@@ -58,20 +59,37 @@ func (s *MatcherDataSuite) now() time.Time {
 func (s *MatcherDataSuite) pollRealTime(timeout time.Duration) *matchResult {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	return s.pollContext(ctx)
+	return s.pollContext(ctx, nil)
 }
 
 func (s *MatcherDataSuite) pollFakeTime(timeout time.Duration) *matchResult {
 	ctx, cancel := clock.ContextWithTimeout(context.Background(), timeout, s.ts)
 	defer cancel()
-	return s.pollContext(ctx)
+	return s.pollContext(ctx, nil)
 }
 
-func (s *MatcherDataSuite) pollContext(ctx context.Context) *matchResult {
+func (s *MatcherDataSuite) pollWithMinPriority(timeout time.Duration, minPriority int32) *matchResult {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return s.pollContext(ctx, &pollMetadata{
+		conditions: &matchingservice.PollConditions{
+			MinPriority: minPriority,
+		},
+	})
+}
+
+func (s *MatcherDataSuite) pollContext(ctx context.Context, meta *pollMetadata) *matchResult {
 	return s.md.EnqueuePollerAndWait([]context.Context{ctx}, &waitingPoller{
 		startTime:    s.now(),
 		forwardCtx:   ctx,
-		pollMetadata: &pollMetadata{},
+		pollMetadata: cmp.Or(meta, &pollMetadata{}),
+	})
+}
+
+func (s *MatcherDataSuite) pollImmediately(meta *pollMetadata) *matchResult {
+	return s.md.MatchPollerImmediately(&waitingPoller{
+		startTime:    s.now(),
+		pollMetadata: cmp.Or(meta, &pollMetadata{}),
 	})
 }
 
@@ -91,7 +109,7 @@ func (s *MatcherDataSuite) newSyncTask(fwdInfo *taskqueuespb.TaskForwardInfo) *i
 	t := &persistencespb.TaskInfo{
 		CreateTime: timestamppb.New(s.now()),
 	}
-	return newInternalTaskForSyncMatch(t, fwdInfo)
+	return newInternalTaskForSyncMatch(t, fwdInfo, 0, nil)
 }
 
 func (s *MatcherDataSuite) newQueryTask(id string) *internalTask {
@@ -397,7 +415,7 @@ func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})
 	t3 := s.newBacklogTaskWithPriority(3, 0, nil, &commonpb.Priority{PriorityKey: 3})
-	tf := newPollForwarderTask()
+	tf := newPollForwarderTask(pollForwarderPriority, normalPollForwarder)
 
 	s.md.EnqueueTaskNoWait(t3)
 	s.md.EnqueueTaskNoWait(tf)
@@ -419,7 +437,7 @@ func (s *MatcherDataSuite) TestPollForwardSuccess() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask())
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// forward succeeded, pass back task
@@ -441,7 +459,7 @@ func (s *MatcherDataSuite) TestPollForwardFailed() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask())
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
@@ -466,7 +484,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask())
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
@@ -517,6 +535,94 @@ func (s *MatcherDataSuite) TestReprocessTasks() {
 	res := s.pollRealTime(time.Microsecond)
 	s.Nil(res.task)
 	s.Error(res.ctxErr)
+}
+
+func (s *MatcherDataSuite) TestMinPriorityFiltering() {
+	// Add tasks at different priorities
+	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
+	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 3})
+	t3 := s.newBacklogTaskWithPriority(3, 0, nil, &commonpb.Priority{PriorityKey: 5})
+
+	s.md.EnqueueTaskNoWait(t3)
+	s.md.EnqueueTaskNoWait(t2)
+	s.md.EnqueueTaskNoWait(t1)
+
+	// Poll with minPriority=2 should only get tasks with priority <= 2
+	// (i.e., tasks at priority 1 and 2, but not 3 or 5)
+	res := s.pollWithMinPriority(20*time.Millisecond, 2)
+	s.Require().NoError(res.ctxErr)
+	s.Equal(t1, res.task) // priority 1 task
+
+	// Next poll with minPriority=2 should timeout since t2 (pri 3) and t3 (pri 5) don't match
+	res = s.pollWithMinPriority(20*time.Millisecond, 2)
+	s.Require().Error(res.ctxErr)
+
+	// Poll with minPriority=3 should get t2 (pri 3)
+	res = s.pollWithMinPriority(20*time.Millisecond, 3)
+	s.Require().NoError(res.ctxErr)
+	s.Equal(t2, res.task)
+
+	// Poll with minPriority=5 should get t3 (pri 5)
+	res = s.pollWithMinPriority(20*time.Millisecond, 5)
+	s.Require().NoError(res.ctxErr)
+	s.Equal(t3, res.task)
+
+	// No more tasks
+	res = s.pollWithMinPriority(20*time.Millisecond, 5)
+	s.Require().Error(res.ctxErr)
+}
+
+func (s *MatcherDataSuite) TestMinPriorityZeroMatchesAll() {
+	// minPriority=0 means no filter
+	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
+	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 5})
+
+	s.md.EnqueueTaskNoWait(t2)
+	s.md.EnqueueTaskNoWait(t1)
+
+	// Poll with minPriority=0 should match first task
+	res := s.pollWithMinPriority(20*time.Millisecond, 0)
+	s.Require().NoError(res.ctxErr)
+	s.Equal(t1, res.task)
+
+	res = s.pollWithMinPriority(20*time.Millisecond, 0)
+	s.Require().NoError(res.ctxErr)
+	s.Equal(t2, res.task)
+}
+
+func (s *MatcherDataSuite) TestMatchPollerImmediately() {
+	// Add tasks at different priorities
+	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
+	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 5})
+
+	s.md.EnqueueTaskNoWait(t2)
+	s.md.EnqueueTaskNoWait(t1)
+
+	// MatchPollerImmediately with minPriority=2 should only match t1 (pri 1)
+	res := s.pollImmediately(&pollMetadata{
+		conditions: &matchingservice.PollConditions{
+			MinPriority: 2,
+		},
+	})
+	s.NotNil(res)
+	s.Equal(t1, res.task)
+
+	// t2 has priority 5, so with minPriority=2 it shouldn't match
+	res = s.pollImmediately(&pollMetadata{
+		conditions: &matchingservice.PollConditions{
+			MinPriority: 2,
+		},
+	})
+	s.Nil(res)
+
+	// But with minPriority=5 it should match
+	res = s.pollImmediately(&pollMetadata{
+		conditions: &matchingservice.PollConditions{
+			MinPriority: 5,
+		},
+	})
+	s.NotNil(res)
+	s.Equal(t2, res.task)
 }
 
 // simple limiter tests
@@ -741,13 +847,13 @@ func FuzzMatcherData(f *testing.F) {
 				sleepTime := randms(100)
 				go func() {
 					defer pollForwarders.Add(-1)
-					res := md.EnqueueTaskAndWait(nil, newPollForwarderTask())
+					res := md.EnqueueTaskAndWait(nil, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
 					softassert.That(md.logger, res.ctxErr == nil && res.poller != nil, "")
 					ts.Sleep(sleepTime)
 					t := &persistencespb.TaskInfo{
 						CreateTime: timestamppb.New(ts.Now()),
 					}
-					md.FinishMatchAfterPollForward(res.poller, newInternalTaskForSyncMatch(t, nil))
+					md.FinishMatchAfterPollForward(res.poller, newInternalTaskForSyncMatch(t, nil, 0, nil))
 				}()
 
 			case 6: // add task forwarder
