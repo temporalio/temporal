@@ -178,7 +178,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	}
 
 	// verify that the workflow's history contains a task that failed because it would otherwise exceed the pending
-	// child workflow limit.
+	// child workflow limit
 	s.WaitForHistoryEventsSuffix(`
  21 WorkflowTaskFailed {"Cause":27,"Failure":{"Message":"PendingActivitiesLimitExceeded: the number of pending activities, 10, has reached the per-workflow limit of 10"}}
  22 WorkflowTaskScheduled
