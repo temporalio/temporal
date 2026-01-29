@@ -218,15 +218,18 @@ func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResol
 	}
 }
 
-func (r *serviceKeyResolverImpl) Lookup(key string, n int) (string, error) {
-	hosts := r.resolver.LookupN(key, n+1)
+// Lookup returns the address for a node within a batch. key contains the key (including batch
+// number), and index is the index within the batch. If not using batches, index should be 0.
+// Note that Lookup(key) and LookupN(key, n)[0] are equal.
+func (r *serviceKeyResolverImpl) Lookup(key string, index int) (string, error) {
+	hosts := r.resolver.LookupN(key, index+1)
 	if len(hosts) == 0 {
 		return "", membership.ErrInsufficientHosts
 	}
-	if n >= len(hosts) {
-		n %= len(hosts)
+	if index >= len(hosts) {
+		index %= len(hosts)
 	}
-	return hosts[n].GetAddress(), nil
+	return hosts[index].GetAddress(), nil
 }
 
 func (r *serviceKeyResolverImpl) GetAllAddresses() ([]string, error) {

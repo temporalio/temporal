@@ -7,14 +7,14 @@ import (
 type (
 	// ClientCache store initialized clients
 	ClientCache interface {
-		Lookup(key string, n int) (string, error) // pass through to keyResolver
-		GetClientForKey(key string, n int) (interface{}, error)
+		Lookup(key string, index int) (string, error) // pass through to keyResolver
+		GetClientForKey(key string, index int) (interface{}, error)
 		GetClientForClientKey(clientKey string) (interface{}, error)
 		GetAllClients() ([]interface{}, error)
 	}
 
 	keyResolver interface {
-		Lookup(key string, n int) (string, error)
+		Lookup(key string, index int) (string, error)
 		GetAllAddresses() ([]string, error)
 	}
 
@@ -43,12 +43,12 @@ func NewClientCache(
 	}
 }
 
-func (c *clientCacheImpl) Lookup(key string, n int) (string, error) {
-	return c.keyResolver.Lookup(key, n)
+func (c *clientCacheImpl) Lookup(key string, index int) (string, error) {
+	return c.keyResolver.Lookup(key, index)
 }
 
-func (c *clientCacheImpl) GetClientForKey(key string, n int) (interface{}, error) {
-	clientKey, err := c.Lookup(key, n)
+func (c *clientCacheImpl) GetClientForKey(key string, index int) (interface{}, error) {
+	clientKey, err := c.Lookup(key, index)
 	if err != nil {
 		return nil, err
 	}
