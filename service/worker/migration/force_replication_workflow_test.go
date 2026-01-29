@@ -82,7 +82,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestForceReplicationWorkflow() {
 		currentPageCount++
 		if currentPageCount < totalPageCount {
 			return &listWorkflowsResponse{
-				Executions:    []*ExecutionInfo{{executionInfoNewJSON{BusinessID: "wf-1"}}},
+				Executions:    []*ExecutionInfo{{BusinessID: "wf-1"}},
 				NextPageToken: []byte("fake-page-token"),
 				LastStartTime: startTime,
 				LastCloseTime: closeTime,
@@ -559,9 +559,9 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyPerIterationExecutions() {
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 1, NamespaceID: namespaceID}, nil)
 
 	pages := [][]*ExecutionInfo{
-		{{executionInfoNewJSON{BusinessID: "wf-1a"}}},
-		{{executionInfoNewJSON{BusinessID: "wf-2a"}}, {executionInfoNewJSON{BusinessID: "wf-2b"}}},
-		{{executionInfoNewJSON{BusinessID: "wf-3a"}}},
+		{{BusinessID: "wf-1a"}},
+		{{BusinessID: "wf-2a"}, {BusinessID: "wf-2b"}},
+		{{BusinessID: "wf-3a"}},
 	}
 
 	totalPageCount := len(pages)

@@ -489,18 +489,16 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	executions := make([]*ExecutionInfo, 0, len(resp.Executions))
 	for _, e := range resp.Executions {
 		executionInfo := &ExecutionInfo{
-			executionInfoNewJSON: executionInfoNewJSON{
-				BusinessID: e.Execution.GetWorkflowId(),
-				RunID:      e.Execution.GetRunId(),
-				// Ideally we should use chasm.WorkflowArchetypeID by default,
-				// but for backward compatibility reason we need this field to be 0
-				// to avoid unmarshaling errors since the previous type returned in
-				// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
-				// which does not have ArchetypeId field.
-				//
-				// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
-				ArchetypeID: chasm.UnspecifiedArchetypeID,
-			},
+			BusinessID: e.Execution.GetWorkflowId(),
+			RunID:      e.Execution.GetRunId(),
+			// Ideally we should use chasm.WorkflowArchetypeID by default,
+			// but for backward compatibility reason we need this field to be 0
+			// to avoid unmarshaling errors since the previous type returned in
+			// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
+			// which does not have ArchetypeId field.
+			//
+			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
+			ArchetypeID: chasm.UnspecifiedArchetypeID,
 		}
 
 		archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(e)
