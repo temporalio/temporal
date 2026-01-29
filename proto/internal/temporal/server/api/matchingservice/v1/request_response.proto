@@ -240,6 +240,20 @@ message CancelOutstandingPollRequest {
 message CancelOutstandingPollResponse {
 }
 
+// CancelOutstandingWorkerPollsRequest identifies the worker that could be having outstanding polls.
+// These polls could be waiting on different partitions of the task queue.
+message CancelOutstandingWorkerPollsRequest {
+    string namespace_id = 1;
+    temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    string worker_instance_key = 4;
+}
+
+message CancelOutstandingWorkerPollsResponse {
+    // Used for debugging.
+    int32 cancelled_count = 1;
+}
+
 message DescribeTaskQueueRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;

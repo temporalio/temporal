@@ -5692,3 +5692,101 @@ func useFairness(config *Config) {
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
 }
+
+func TestCancelOutstandingWorkerPolls(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unknown worker key succeeds", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			outstandingPollers:    collection.NewSyncMap[string, context.CancelFunc](),
+			workerInstancePollers: collection.NewSyncMap[string, *collection.SyncMap[string, struct{}]](),
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "unknown-worker",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.CancelledCount)
+	})
+
+	t.Run("cancels all polls for worker", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			outstandingPollers:    collection.NewSyncMap[string, context.CancelFunc](),
+			workerInstancePollers: collection.NewSyncMap[string, *collection.SyncMap[string, struct{}]](),
+		}
+
+		workerKey := "test-worker"
+		cancelledCount := 0
+
+		// Set up 3 pollers for this worker
+		pollerSet := collection.NewSyncMap[string, struct{}]()
+		engine.workerInstancePollers.Set(workerKey, &pollerSet)
+
+		engine.outstandingPollers.Set("poller-0", func() { cancelledCount++ })
+		engine.outstandingPollers.Set("poller-1", func() { cancelledCount++ })
+		engine.outstandingPollers.Set("poller-2", func() { cancelledCount++ })
+		pollerSet.Set("poller-0", struct{}{})
+		pollerSet.Set("poller-1", struct{}{})
+		pollerSet.Set("poller-2", struct{}{})
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(3), resp.CancelledCount)
+		require.Equal(t, 3, cancelledCount)
+
+		// Verify pollers are removed
+		_, exists := engine.outstandingPollers.Get("poller-0")
+		require.False(t, exists)
+		_, exists = engine.outstandingPollers.Get("poller-1")
+		require.False(t, exists)
+		_, exists = engine.outstandingPollers.Get("poller-2")
+		require.False(t, exists)
+
+		// Verify worker instance is removed
+		_, exists = engine.workerInstancePollers.Get(workerKey)
+		require.False(t, exists)
+	})
+
+	t.Run("does not affect other workers", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			outstandingPollers:    collection.NewSyncMap[string, context.CancelFunc](),
+			workerInstancePollers: collection.NewSyncMap[string, *collection.SyncMap[string, struct{}]](),
+		}
+
+		// Set up pollers for worker1
+		pollerSet1 := collection.NewSyncMap[string, struct{}]()
+		engine.workerInstancePollers.Set("worker-1", &pollerSet1)
+		engine.outstandingPollers.Set("poller-1", func() {})
+		pollerSet1.Set("poller-1", struct{}{})
+
+		// Set up pollers for worker2
+		pollerSet2 := collection.NewSyncMap[string, struct{}]()
+		engine.workerInstancePollers.Set("worker-2", &pollerSet2)
+		engine.outstandingPollers.Set("poller-2", func() {})
+		pollerSet2.Set("poller-2", struct{}{})
+
+		// Cancel worker1's polls only
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "worker-1",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(1), resp.CancelledCount)
+
+		// Verify worker2's poller still exists
+		_, exists := engine.outstandingPollers.Get("poller-2")
+		require.True(t, exists)
+		_, exists = engine.workerInstancePollers.Get("worker-2")
+		require.True(t, exists)
+	})
+}
