@@ -216,12 +216,7 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 func (c *clientImpl) Route(p tqid.Partition) (string, error) {
 	spreadChange := c.spreadRouting()
 	spread := spreadChange.Value(p.GradualChangeKey(), time.Now())
-	key, n := p.RoutingKey(spread)
-	addr, err := c.clients.Lookup(key, n)
-	if err != nil {
-		return "", err
-	}
-	return addr, nil
+	return c.clients.Lookup(p.RoutingKey(spread))
 }
 
 func (c *clientImpl) getClientForTaskQueuePartition(
