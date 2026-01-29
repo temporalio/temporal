@@ -62,7 +62,7 @@ type Config struct {
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
-	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCHASMCallbacksPerWorkflow          dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
