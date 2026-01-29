@@ -233,7 +233,7 @@ func (h *Handler) PollActivityTaskQueue(
 func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
+) (_ *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),

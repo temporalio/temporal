@@ -25,6 +25,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
@@ -332,6 +333,79 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	_, err = s.SdkClient().QueryWorkflow(ctx, id, "", testname)
 	s.Error(err)
 	s.ErrorContains(err, consts.ErrWorkflowClosedBeforeWorkflowTaskStarted.Error())
+}
+
+func (s *QueryWorkflowSuite) TestQueryWorkflow_WithRawHistoryBytesToMatchingService() {
+	// Enable SendRawHistoryBytesToMatchingService to test the raw history path
+	s.OverrideDynamicConfig(dynamicconfig.SendRawHistoryBytesToMatchingService, true)
+
+	// Stop the default worker, so we can control sticky behavior
+	s.Worker().Stop()
+
+	workflowFn := func(ctx workflow.Context) (string, error) {
+		status := "initialized"
+		_ = workflow.SetQueryHandler(ctx, "test", func() (string, error) {
+			return status, nil
+		})
+
+		status = "started"
+		signalCh := workflow.GetSignalChannel(ctx, "done")
+		var msg string
+		signalCh.Receive(ctx, &msg)
+		return msg, nil
+	}
+
+	id := "test-query-raw-history-bytes"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 id,
+		TaskQueue:          s.TaskQueue(),
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Start a new worker
+	queryWorker := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	queryWorker.RegisterWorkflow(workflowFn)
+	err := queryWorker.Start()
+	s.NoError(err)
+	defer queryWorker.Stop()
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+	s.NotNil(workflowRun)
+	s.NotEmpty(workflowRun.GetRunID())
+
+	// Stop the worker to clear sticky cache
+	queryWorker.Stop()
+
+	// Start a new worker - queries will now go through non-sticky path
+	// which exercises getHistoryForQueryTask with raw history bytes
+	queryWorker2 := worker.New(s.SdkClient(), s.TaskQueue(), worker.Options{})
+	queryWorker2.RegisterWorkflow(workflowFn)
+	err = queryWorker2.Start()
+	s.NoError(err)
+	defer queryWorker2.Stop()
+
+	// Execute query - this should use the raw history bytes path
+	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
+	s.NoError(err)
+
+	var queryResultStr string
+	err = queryResult.Get(&queryResultStr)
+	s.NoError(err)
+
+	// Verify query returns correct result
+	s.Equal("started", queryResultStr)
+
+	// Complete the workflow
+	err = s.SdkClient().SignalWorkflow(ctx, id, "", "done", "complete")
+	s.NoError(err)
+
+	var result string
+	err = workflowRun.Get(ctx, &result)
+	s.NoError(err)
+	s.Equal("complete", result)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_FailurePropagated() {

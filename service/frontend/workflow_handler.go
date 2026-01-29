@@ -944,6 +944,28 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	// Handle history from matching response:
+	// 1. If History field is set, use it directly (already processed by history service or matching)
+	// 2. If RawHistory is set, use RawHistory (raw bytes path, needs SA processing)
+	//
+	// When history.sendRawHistoryBytesToMatchingService is enabled, matching service passes raw bytes
+	// through to RawHistory field. The matching client auto-deserializes the repeated bytes into
+	// a History message via gRPC wire compatibility.
+	history := matchingResp.History
+	if matchingResp.RawHistory != nil {
+		history = matchingResp.RawHistory
+		// Process search attributes for raw history since it bypasses the normal processing path.
+		if err := api.ProcessOutgoingSearchAttributes(
+			wh.saProvider,
+			wh.saMapperProvider,
+			history.GetEvents(),
+			namespaceEntry.Name(),
+			wh.visibilityMgr,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,
@@ -953,7 +975,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Query:                      matchingResp.Query,
 		BacklogCountHint:           matchingResp.BacklogCountHint,
 		Attempt:                    matchingResp.Attempt,
-		History:                    matchingResp.History,
+		History:                    history,
 		NextPageToken:              matchingResp.NextPageToken,
 		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
 		ScheduledTime:              matchingResp.ScheduledTime,

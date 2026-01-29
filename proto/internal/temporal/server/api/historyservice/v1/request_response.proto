@@ -273,13 +273,41 @@ message RecordWorkflowTaskStartedResponse {
     int64 version = 17;
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
-    temporal.api.history.v1.History raw_history = 20;
+    // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+    // instead of a proto-decoded History. This avoids matching service having to decode history.
+    // TODO: PRATHYUSH
+    // DEPRECATION PLAN:
+    // Two dynamic config flags control the raw history optimization:
+    // - history.sendRawHistoryBetweenInternalServices: enables raw history (uses field 18 when OFF, field 20/21 when ON)
+    // - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
+    //
+    // Version timeline (current version: v1.29):
+    // - v1.31: This change is released. Both flags default to false for backward compatibility.
+    // - v1.32: Both flags will be enabled by default in code.
+    // - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+    //          as raw_history_bytes (field 21) will be the only field used.
+    temporal.api.history.v1.History raw_history = 20 [deprecated = true];
+    repeated bytes raw_history_bytes = 21;
 }
 
-// RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
-// The only difference is that RecordWorkflowTaskStartedResponseWithRawHistory has a `history` field that contains the
-// raw history batches. RecordWorkflowTaskStartedResponseWithRawHistory will be returned by history service.
-// History client will deserialize this message to RecordWorkflowTaskStartedResponse.
+// RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
+//
+// WIRE COMPATIBILITY PATTERN:
+// This message uses the same field numbers as RecordWorkflowTaskStartedResponse (1-19 are identical),
+// but fields 20 and 21 differ in type:
+// - Field 20: `repeated bytes raw_history` (deprecated) vs `History raw_history` (deprecated)
+// - Field 21: `repeated bytes raw_history_bytes` (same in both)
+//
+// This enables the following optimization when SendRawHistoryBetweenInternalServices is enabled:
+// 1. History service serializes raw_history_bytes as [][]byte (raw proto-encoded history batches)
+// 2. History client receives raw bytes and deserializes as RecordWorkflowTaskStartedResponse
+// 3. Matching service passes these raw bytes through to frontend without deserializing
+// 4. Frontend client deserializes the final response with History field populated
+//
+// This pattern avoids deserialization in matching service, reducing CPU usage.
+//
+// IMPORTANT: Field numbers and all other fields must remain identical between these two messages.
+// Any change to RecordWorkflowTaskStartedResponse must be mirrored here.
 message RecordWorkflowTaskStartedResponseWithRawHistory {
     temporal.api.common.v1.WorkflowType workflow_type = 1;
     int64 previous_started_event_id = 2;
@@ -300,7 +328,10 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
     int64 version = 17;
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
-    repeated bytes raw_history = 20;
+    // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+    // instead of a proto-decoded History. This avoids matching service having to decode history.
+    repeated bytes raw_history = 20 [deprecated = true];
+    repeated bytes raw_history_bytes = 21;
 }
 
 message RecordActivityTaskStartedRequest {
