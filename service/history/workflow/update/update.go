@@ -218,9 +218,8 @@ func (u *Update) WaitLifecycleStage(
 	}
 
 	// Because of the checks above err (if is not nil) can be only registryClearedErr here.
-	// It is converted to Unavailable (retryable) error and returned to the caller.
-	// This error will be retried (by history service handler, or history service client in frontend,
-	// or SDK, or user client). This will recreate Update in the Registry.
+	// It is converted to Aborted (retryable) error and returned to the caller.
+	// This error will be retried by the SDK or user client, which will recreate the Update in the Registry.
 	if errors.Is(err, registryClearedErr) {
 		return nil, AbortedByServerErr
 	}
