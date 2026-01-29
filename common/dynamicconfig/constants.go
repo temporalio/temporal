@@ -1451,7 +1451,9 @@ to remove expired entries. Should be shorter than EntryTTL for timely cleanup. L
 		"matching.spreadRoutingBatchSize",
 		ConvertGradualChange[int](0),
 		StaticGradualChange[int](0),
-		`If non-zero, try to spread task queue partitions across matching nodes better, using the given batch size.`,
+		`If non-zero, try to spread task queue partitions across matching nodes better, using the given batch size.
+Don't change this on a live cluster without using the gradual change mechanism.
+`,
 	)
 
 	// keys for history
