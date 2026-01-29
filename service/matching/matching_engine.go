@@ -214,6 +214,7 @@ func NewEngine(
 	saMapperProvider searchattribute.MapperProvider,
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
+	timeSource clock.TimeSource,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -232,7 +233,7 @@ func NewEngine(
 		serviceResolver:               resolver,
 		membershipChangedCh:           make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
 		clusterMeta:                   clusterMeta,
-		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
+		timeSource:                    timeSource,
 		visibilityManager:             visibilityManager,
 		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
@@ -332,7 +333,7 @@ func (e *matchingEngineImpl) watchMembership() {
 			// queue bouncing back and forth due to long membership propagation time.
 			batch := partitions[i:min(len(partitions), i+batchSize)]
 			wait := backoff.Jitter(delay, 0.1)
-			time.AfterFunc(wait, func() {
+			e.timeSource.AfterFunc(wait, func() {
 				// maybe the whole engine stopped
 				if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
 					return
@@ -522,13 +523,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
+	} else if sticky && !e.stickyWorkerAvailable(pm) {
 		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
 	var expirationTime *timestamppb.Timestamp
-	now := time.Now().UTC()
+	now := e.timeSource.Now().UTC()
 	expirationDuration := addRequest.GetScheduleToStartTimeout().AsDuration()
 	if expirationDuration != 0 {
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
@@ -567,7 +568,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	var expirationTime *timestamppb.Timestamp
-	now := time.Now().UTC()
+	now := e.timeSource.Now().UTC()
 	expirationDuration := timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())
 	if expirationDuration != 0 {
 		expirationTime = timestamppb.New(now.Add(expirationDuration))
@@ -1032,7 +1033,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
+	} else if sticky && !e.stickyWorkerAvailable(pm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1655,7 +1656,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 				updatedClock,
 				data.GetVersioningData(),
 				req.GetCommitBuildId(),
-				tqMgr.HasPollerAfter(req.GetCommitBuildId().GetTargetBuildId(), time.Now().Add(-versioningPollerSeenWindow)),
+				tqMgr.HasPollerAfter(req.GetCommitBuildId().GetTargetBuildId(), e.timeSource.Now().Add(-versioningPollerSeenWindow)),
 				e.config.AssignmentRuleLimitPerQueue(ns.Name().String()),
 			)
 		}
@@ -3132,8 +3133,8 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 
 // We use a very short timeout for considering a sticky worker available, since tasks can also
 // be processed on the normal queue.
-func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
-	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+func (e *matchingEngineImpl) stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
+	return pm != nil && pm.HasPollerAfter("", e.timeSource.Now().Add(-stickyPollerUnavailableWindow))
 }
 
 func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {
