@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/azure_store"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/gcloud"
 	"go.temporal.io/server/common/archiver/s3store"
@@ -93,6 +94,11 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 			return nil, ErrArchiverConfigNotFound
 		}
 		historyArchiver, err = s3store.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.S3store)
+	case azure_store.URIScheme:
+		if p.historyArchiverConfigs.Azblob == nil {
+			return nil, ErrArchiverConfigNotFound
+		}
+		historyArchiver, err = azure_store.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Azblob)
 	default:
 		return nil, ErrUnknownScheme
 	}
@@ -137,6 +143,11 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 			return nil, ErrArchiverConfigNotFound
 		}
 		visibilityArchiver, err = gcloud.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Gstorage)
+	case azure_store.URIScheme:
+		if p.visibilityArchiverConfigs.Azblob == nil {
+			return nil, ErrArchiverConfigNotFound
+		}
+		visibilityArchiver, err = azure_store.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Azblob)
 
 	default:
 		return nil, ErrUnknownScheme
