@@ -1,4 +1,7 @@
 # Syntax is here:
 # https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
 
-*                @temporalio/server @temporalio/cgs
+* @temporalio/server    @temporalio/cgs
+tests/task_queue*.go    @temporalio/server/matching
+tests/versioning*.go    @temporalio/server/matching
+tests/worker*.go        @temporalio/server/matching

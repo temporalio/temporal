@@ -2,8 +2,8 @@ name: Flaky Tests Report
 
 on:
   schedule:
-    # Run on Wednesdays at noon Eastern time (5 PM UTC)
-    - cron: '0 17 * * 3'
+    # Run on weekdays at noon Eastern time (5 PM UTC)
+    - cron: '0 17 * * 1-5'
   workflow_dispatch:
     inputs:
       days:
@@ -38,6 +38,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check day of week
+        id: check-day
+        run: |
+          DAY_OF_WEEK=$(date -u +%u)
+          echo "is_wednesday=$([[ $DAY_OF_WEEK == 3 ]] && echo true || echo false)" >> $GITHUB_OUTPUT
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -69,7 +75,7 @@ jobs:
           mkdir -p tools/flakes/out
           
           tringa --json --since-days "$DAYS_PARAM" repo sql \
-            'select classname, name, artifact from test where passed = false and skipped = false order by classname, name, artifact desc' \
+            'select classname, name, artifact, passed, time, timestamp from test where skipped = false order by classname, name, artifact desc' \
             --branch main \
             --workflow-id 80591745 \
             https://github.com/temporalio/temporal > tools/flakes/out/out.json
@@ -89,14 +95,19 @@ jobs:
           MAX_LINKS_PARAM: ${{ github.event.inputs.max_links || '3' }}
         run: |
           set -x
+          SLACK_ARGS=""
+          if [[ "${{ steps.check-day.outputs.is_wednesday }}" == "true" ]]; then
+            SLACK_ARGS="--send-slack --slack-webhook $SLACK_WEBHOOK"
+          fi
           cd tools/flakes && uv run main.py \
             --file out/out.json \
             --github-summary \
-            --slack-webhook "$SLACK_WEBHOOK" \
+            $SLACK_ARGS \
             --run-id "$RUN_ID" \
             --ref-name "$REF_NAME" \
             --sha "$SHA" \
-            --max-links "$MAX_LINKS_PARAM"
+            --max-links "$MAX_LINKS_PARAM" \
+            --repo-root "../.."
 
       - name: Upload generated reports
         uses: actions/upload-artifact@v4
