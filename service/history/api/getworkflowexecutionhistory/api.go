@@ -29,6 +29,50 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+// appendTransientEvents queries mutable state for transient/speculative events and appends them to the response.
+// This function only queries mutable state once, on the last page, to retrieve transient/speculative events.
+// Validation of event IDs is handled separately by validateTransientWorkflowTaskEvents.
+func appendTransientEvents(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	eventNotifier events.Notifier,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	useRawHistory bool,
+	history *historypb.History,
+	historyBlob *[]*commonpb.DataBlob,
+) error {
+	msResp, err := api.GetOrPollWorkflowMutableState(
+		ctx,
+		shardContext,
+		&historyservice.GetMutableStateRequest{
+			NamespaceId: namespaceID.String(),
+			Execution:   execution,
+		},
+		workflowConsistencyChecker,
+		eventNotifier,
+	)
+	if err != nil || msResp.GetTransientOrSpeculativeEvents() == nil {
+		// Ignore errors - if we can't get transient events, continue without them
+		return nil
+	}
+
+	transientWorkflowTask := msResp.GetTransientOrSpeculativeEvents()
+
+	// Manually append transient events to the response
+	if useRawHistory {
+		transientEventsBlob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTask.GetHistorySuffix())
+		if err == nil {
+			*historyBlob = append(*historyBlob, transientEventsBlob)
+		}
+	} else {
+		history.Events = append(history.Events, transientWorkflowTask.GetHistorySuffix()...)
+	}
+
+	return nil
+}
+
 func Invoke(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -149,6 +193,9 @@ func Invoke(
 
 		execution.RunId = continuationToken.GetRunId()
 
+		// Set isWorkflowRunning from continuation token for pagination
+		isWorkflowRunning = continuationToken.IsWorkflowRunning
+
 		// we need to update the current next event ID and whether workflow is running
 		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
@@ -220,8 +267,9 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
+					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -239,9 +287,10 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
+					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -299,8 +348,9 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
+					continuationToken.IsWorkflowRunning,
 				)
 			} else {
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
@@ -313,14 +363,33 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
+					continuationToken.IsWorkflowRunning,
 				)
 			}
 
 			if err != nil {
 				return nil, err
+			}
+
+			// Query and append transient/speculative events if on last page
+			if isWorkflowRunning && len(continuationToken.PersistenceToken) == 0 {
+				transientEventsErr := appendTransientEvents(
+					ctx,
+					shardContext,
+					workflowConsistencyChecker,
+					eventNotifier,
+					namespaceID,
+					execution,
+					sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices,
+					history,
+					&historyBlob,
+				)
+				if transientEventsErr != nil {
+					return nil, transientEventsErr
+				}
 			}
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
