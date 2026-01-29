@@ -678,7 +678,7 @@ type MigrateScheduleRequest struct {
 	ScheduleId string `protobuf:"bytes,3,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
 	// Target scheduler implementation.
 	Target SchedulerTarget `protobuf:"varint,4,opt,name=target,proto3,enum=temporal.server.chasm.lib.scheduler.proto.v1.SchedulerTarget" json:"target,omitempty"`
-	// Migration state (required when target is CHASM).
+	// Migration state containing stack-agnostic scheduler data.
 	MigrationState *SchedulerMigrationState `protobuf:"bytes,5,opt,name=migration_state,json=migrationState,proto3" json:"migration_state,omitempty"`
 	// Identity of the caller.
 	Identity string `protobuf:"bytes,6,opt,name=identity,proto3" json:"identity,omitempty"`

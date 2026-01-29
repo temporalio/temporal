@@ -90,8 +90,9 @@ message LastCompletionResult {
     temporal.api.failure.v1.Failure failure = 2;
 }
 
+// SchedulerMigrationState is a stack-agnostic interchange format for migrating
+// scheduler state between V1 (workflow-backed) and V2 (CHASM) implementations.
 message SchedulerMigrationState {
-    // Migrated CHASM state components.
     SchedulerState scheduler_state = 1;
     GeneratorState generator_state = 2;
     InvokerState invoker_state = 3;

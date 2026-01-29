@@ -108,54 +108,6 @@ func LegacyToSchedulerMigrationState(
 	}
 }
 
-// LegacyToMigrateScheduleRequest converts legacy scheduler state to a migration request.
-func LegacyToMigrateScheduleRequest(
-	schedule *schedulepb.Schedule,
-	info *schedulepb.ScheduleInfo,
-	state *schedulespb.InternalState,
-	searchAttributes map[string]*commonpb.Payload,
-	memo map[string]*commonpb.Payload,
-	migrationTime time.Time,
-) *schedulerpb.MigrateScheduleRequest {
-	migrationState := LegacyToSchedulerMigrationState(
-		schedule,
-		info,
-		state,
-		searchAttributes,
-		memo,
-		migrationTime,
-	)
-	return SchedulerMigrationStateToMigrateScheduleRequest(migrationState)
-}
-
-// SchedulerMigrationStateToMigrateScheduleRequest extracts CHASM (V2) scheduler
-// state into a MigrateScheduleRequest proto. This creates a deep copy of all
-// state.
-//
-// This function is the inverse of applying a MigrateScheduleRequest - it extracts
-// the current CHASM scheduler state back into the request format. Use cases include:
-//   - Re-migration scenarios (e.g., migrating to a different shard)
-//   - State inspection and debugging
-//   - Creating snapshots of scheduler state
-//
-// All proto fields are deep-cloned to ensure the returned request is independent
-// of the source state. SearchAttributes and Memo maps are shallow-copied since
-// Payload values are treated as immutable.
-func SchedulerMigrationStateToMigrateScheduleRequest(
-	migrationState *schedulerpb.SchedulerMigrationState,
-) *schedulerpb.MigrateScheduleRequest {
-	if migrationState == nil || migrationState.GetSchedulerState() == nil {
-		return &schedulerpb.MigrateScheduleRequest{MigrationState: migrationState}
-	}
-
-	return &schedulerpb.MigrateScheduleRequest{
-		NamespaceId:    migrationState.GetSchedulerState().GetNamespaceId(),
-		Namespace:      migrationState.GetSchedulerState().GetNamespace(),
-		ScheduleId:     migrationState.GetSchedulerState().GetScheduleId(),
-		MigrationState: migrationState,
-	}
-}
-
 // CHASMToSchedulerMigrationState extracts CHASM (V2) scheduler state into a
 // SchedulerMigrationState proto. This creates a deep copy of all state.
 //
@@ -215,23 +167,23 @@ func SchedulerMigrationStateToLegacyStartScheduleArgs(
 	}
 
 	var invokerBuffered []*schedulespb.BufferedStart
-	if migrationState.InvokerState != nil {
-		invokerBuffered = migrationState.InvokerState.GetBufferedStarts()
+	if migrationState.GetInvokerState() != nil {
+		invokerBuffered = migrationState.GetInvokerState().GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
-	ongoingBackfills, triggerStarts := convertBackfillersToLegacy(migrationState.Backfillers, migrationTime)
+	ongoingBackfills, triggerStarts := convertBackfillersToLegacy(migrationState.GetBackfillers(), migrationTime)
 	bufferedStarts = append(bufferedStarts, triggerStarts...)
 
 	var generatorLastProcessed *timestamppb.Timestamp
-	if migrationState.GeneratorState != nil {
-		generatorLastProcessed = migrationState.GeneratorState.GetLastProcessedTime()
+	if migrationState.GetGeneratorState() != nil {
+		generatorLastProcessed = migrationState.GetGeneratorState().GetLastProcessedTime()
 	}
 	lastProcessedTime := common.CloneProto(generatorLastProcessed)
 	if lastProcessedTime == nil {
 		lastProcessedTime = timestamppb.New(migrationTime)
 	}
 
-	resultPayloads, continuedFailure := convertLastCompletionCHASMToLegacy(migrationState.LastCompletionResult)
+	resultPayloads, continuedFailure := convertLastCompletionCHASMToLegacy(migrationState.GetLastCompletionResult())
 
 	info.RunningWorkflows = running
 	info.RecentActions = recent

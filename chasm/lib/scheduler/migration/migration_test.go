@@ -34,7 +34,7 @@ func newTestSchedule() *schedulepb.Schedule {
 	}
 }
 
-func TestLegacyToMigrateScheduleRequest(t *testing.T) {
+func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	now := time.Now().UTC()
 	state := &schedulespb.InternalState{
 		Namespace:         "test-ns",
@@ -70,69 +70,45 @@ func TestLegacyToMigrateScheduleRequest(t *testing.T) {
 	searchAttrs := map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}
 	memo := map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}
 
-	req := LegacyToMigrateScheduleRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
-
-	// Basic fields
-	require.Equal(t, "test-ns-id", req.NamespaceId)
-	require.Equal(t, "test-ns", req.Namespace)
-	require.Equal(t, "test-sched-id", req.ScheduleId)
+	migrationState := LegacyToSchedulerMigrationState(newTestSchedule(), info, state, searchAttrs, memo, now)
 
 	// Scheduler state
-	require.NotNil(t, req.MigrationState)
-	require.NotNil(t, req.MigrationState.SchedulerState)
-	require.Equal(t, int64(42), req.MigrationState.SchedulerState.ConflictToken)
-	require.False(t, req.MigrationState.SchedulerState.Closed)
+	require.NotNil(t, migrationState)
+	require.NotNil(t, migrationState.SchedulerState)
+	require.Equal(t, "test-ns", migrationState.SchedulerState.Namespace)
+	require.Equal(t, "test-ns-id", migrationState.SchedulerState.NamespaceId)
+	require.Equal(t, "test-sched-id", migrationState.SchedulerState.ScheduleId)
+	require.Equal(t, int64(42), migrationState.SchedulerState.ConflictToken)
+	require.False(t, migrationState.SchedulerState.Closed)
 
 	// Generator state
-	require.NotNil(t, req.MigrationState.GeneratorState)
-	require.Equal(t, now, req.MigrationState.GeneratorState.LastProcessedTime.AsTime())
+	require.NotNil(t, migrationState.GeneratorState)
+	require.Equal(t, now, migrationState.GeneratorState.LastProcessedTime.AsTime())
 
 	// Invoker state - buffered starts + running workflows
-	require.NotNil(t, req.MigrationState.InvokerState)
-	require.Len(t, req.MigrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
-	for _, start := range req.MigrationState.InvokerState.BufferedStarts {
+	require.NotNil(t, migrationState.InvokerState)
+	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
+	for _, start := range migrationState.InvokerState.BufferedStarts {
 		require.NotEmpty(t, start.RequestId)
 		require.NotEmpty(t, start.WorkflowId)
 	}
 
 	// Backfillers
-	require.Len(t, req.MigrationState.Backfillers, 1)
-	for id, backfiller := range req.MigrationState.Backfillers {
+	require.Len(t, migrationState.Backfillers, 1)
+	for id, backfiller := range migrationState.Backfillers {
 		require.Equal(t, id, backfiller.BackfillId)
 		require.NotNil(t, backfiller.GetBackfillRequest())
 		require.Equal(t, now.Add(-time.Hour), backfiller.GetBackfillRequest().StartTime.AsTime())
 	}
 
 	// Last completion result
-	require.NotNil(t, req.MigrationState.LastCompletionResult)
-	require.Equal(t, []byte("result"), req.MigrationState.LastCompletionResult.Success.Data)
-	require.Equal(t, "last failure", req.MigrationState.LastCompletionResult.Failure.Message)
+	require.NotNil(t, migrationState.LastCompletionResult)
+	require.Equal(t, []byte("result"), migrationState.LastCompletionResult.Success.Data)
+	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
 	// Search attributes and memo
-	require.Equal(t, searchAttrs, req.MigrationState.SearchAttributes)
-	require.Equal(t, memo, req.MigrationState.Memo)
-}
-
-func TestSchedulerMigrationStateToMigrateScheduleRequest(t *testing.T) {
-	now := time.Now().UTC()
-	scheduler := &schedulerpb.SchedulerState{
-		Namespace:     "ns",
-		NamespaceId:   "ns-id",
-		ScheduleId:    "sched-id",
-		ConflictToken: 42,
-	}
-	generator := &schedulerpb.GeneratorState{LastProcessedTime: timestamppb.New(now)}
-	invoker := &schedulerpb.InvokerState{}
-
-	migrationState := CHASMToSchedulerMigrationState(scheduler, generator, invoker, nil, nil, nil, nil)
-	req := SchedulerMigrationStateToMigrateScheduleRequest(migrationState)
-
-	require.Equal(t, "ns-id", req.NamespaceId)
-	require.Equal(t, "ns", req.Namespace)
-	require.Equal(t, "sched-id", req.ScheduleId)
-	require.Equal(t, int64(42), req.MigrationState.SchedulerState.ConflictToken)
-	require.NotNil(t, req.MigrationState.GeneratorState)
-	require.NotNil(t, req.MigrationState.InvokerState)
+	require.Equal(t, searchAttrs, migrationState.SearchAttributes)
+	require.Equal(t, memo, migrationState.Memo)
 }
 
 func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {

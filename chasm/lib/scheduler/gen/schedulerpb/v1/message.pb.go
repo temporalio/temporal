@@ -426,9 +426,10 @@ func (x *LastCompletionResult) GetFailure() *v13.Failure {
 	return nil
 }
 
+// SchedulerMigrationState is a stack-agnostic interchange format for migrating
+// scheduler state between V1 (workflow-backed) and V2 (CHASM) implementations.
 type SchedulerMigrationState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Migrated CHASM state components.
+	state                protoimpl.MessageState      `protogen:"open.v1"`
 	SchedulerState       *SchedulerState             `protobuf:"bytes,1,opt,name=scheduler_state,json=schedulerState,proto3" json:"scheduler_state,omitempty"`
 	GeneratorState       *GeneratorState             `protobuf:"bytes,2,opt,name=generator_state,json=generatorState,proto3" json:"generator_state,omitempty"`
 	InvokerState         *InvokerState               `protobuf:"bytes,3,opt,name=invoker_state,json=invokerState,proto3" json:"invoker_state,omitempty"`

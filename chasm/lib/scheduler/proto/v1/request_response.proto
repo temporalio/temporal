@@ -95,7 +95,7 @@ message MigrateScheduleRequest {
     // Target scheduler implementation.
     SchedulerTarget target = 4;
 
-    // Migration state (required when target is CHASM).
+    // Migration state containing stack-agnostic scheduler data.
     SchedulerMigrationState migration_state = 5;
 
     // Identity of the caller.
