@@ -2776,6 +2776,18 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
+	RoutingInfoCacheTTL = NewGlobalDurationSetting(
+		"history.routingInfoCacheTTL",
+		1*time.Second,
+		`TTL for caching task queue routing info (deployment versions and ramping state).`,
+	)
+
+	RoutingInfoCacheMaxSize = NewGlobalIntSetting(
+		"history.routingInfoCacheMaxSize",
+		10000,
+		`Maximum number of entries in the routing info cache.`,
+	)
+
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
 		"history.externalPayloadsEnabled",
 		false,

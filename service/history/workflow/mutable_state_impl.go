@@ -9055,6 +9055,13 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 		// need to update stamp so the passive side regenerate the task
 		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
 			info.Stamp++
+			// Updating scheduled time because we don't want the time since last scheduling until now
+			// be considered in the schedule-to-start latency calculation.
+			// This is specifically needed for the cases that the activity is blocked not because of a
+			// backlog but because of an ongoing transition. See ActivityStartDuringTransition error usage.
+			// TODO (shahab): can we limit this adjustment to apply only for activities who actually faced the
+			// ActivityStartDuringTransition error, and not all others?
+			info.ScheduledTime = timestamppb.New(ms.timeSource.Now())
 			return nil
 		})
 		if err != nil {
