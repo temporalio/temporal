@@ -26,7 +26,7 @@ type Engine interface {
 		func(MutableContext) (Component, error),
 		func(MutableContext, Component) error,
 		...TransitionOption,
-	) (ExecutionKey, []byte, error)
+	) (EngineUpdateWithStartExecutionResult, error)
 
 	UpdateComponent(
 		context.Context,
@@ -77,8 +77,7 @@ type TransitionOptions struct {
 
 type TransitionOption func(*TransitionOptions)
 
-// StartExecutionResult contains the outcome of creating a new execution via [StartExecution]
-// or [UpdateWithStartExecution].
+// StartExecutionResult contains the outcome of creating a new execution via [StartExecution].
 //
 // This struct provides information about whether a new execution was actually created,
 // along with identifiers needed to reference the execution in subsequent operations.
@@ -102,9 +101,34 @@ type StartExecutionResult[O any] struct {
 	Output       O
 }
 
+// UpdateWithStartExecutionResult is the result of a UpdateWithStartExecution operation.
+//
+// Fields:
+//   - ExecutionKey: The unique identifier for the execution. This key can be used to
+//     look up or reference the execution in future operations.
+//   - ExecutionRef: A serialized reference to the newly created root component.
+//     This can be passed to [UpdateComponent], [ReadComponent], or [PollComponent]
+//     to interact with the component. Use [DeserializeComponentRef] to convert this
+//     back to a [ComponentRef] if needed.
+//   - Created: Indicates whether a new execution was actually created. When false,
+//     the execution already existed (based on the [BusinessIDReusePolicy] and
+//     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
+//     existing execution was returned instead.
+//   - Output1: The output value returned by the first factory function.
+//   - Output2: The output value returned by the second factory function.
+type UpdateWithStartExecutionResult[O1 any, O2 any] struct {
+	ExecutionKey ExecutionKey
+	ExecutionRef []byte
+	Created      bool
+	Output1      O1
+	Output2      O2
+}
+
 // EngineStartExecutionResult is a type alias for the result type returned by the Engine implementation.
 // This avoids repeating [struct{}] everywhere in the engine implementation.
 type EngineStartExecutionResult = StartExecutionResult[struct{}]
+
+type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}, struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -216,10 +240,10 @@ func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
 	updateFn func(C, MutableContext, I) (O2, error),
 	input I,
 	opts ...TransitionOption,
-) (O1, O2, ExecutionKey, []byte, error) {
+) (UpdateWithStartExecutionResult[O1, O2], error) {
 	var output1 O1
 	var output2 O2
-	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithStartExecution(
+	result, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
 		func(ctx MutableContext) (_ Component, retErr error) {
@@ -240,9 +264,18 @@ func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
 		opts...,
 	)
 	if err != nil {
-		return output1, output2, ExecutionKey{}, nil, err
+		return UpdateWithStartExecutionResult[O1, O2]{
+			Output1: output1,
+			Output2: output2,
+		}, err
 	}
-	return output1, output2, executionKey, serializedRef, err
+	return UpdateWithStartExecutionResult[O1, O2]{
+		ExecutionKey: result.ExecutionKey,
+		ExecutionRef: result.ExecutionRef,
+		Created:      result.Created,
+		Output1:      output1,
+		Output2:      output2,
+	}, nil
 }
 
 // TODO:
