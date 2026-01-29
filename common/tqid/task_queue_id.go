@@ -357,7 +357,7 @@ func (p *NormalPartition) RoutingKey(batchSize int) (string, int) {
 	batch := p.partitionId / batchSize
 	if batch == 0 {
 		// For the first batch, omit the batch number as if batchSize==0 so that the root
-		// partition doesn't move if we turn on/off spreading.
+		// partition (id 0, batch number 0) doesn't move if we turn on/off spreading.
 		return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.TaskQueue().Name(), p.TaskType()), p.partitionId
 	}
 	// For subsequent batches, put the batch number in the key to hash.
