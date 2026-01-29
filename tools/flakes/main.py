@@ -1,17 +1,313 @@
 import argparse
+import fnmatch
 import json
 import os
+import re
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 import requests
+
+
+@dataclass
+class TestRun:
+    artifact: str
+    passed: bool
+    timestamp: str | None = None
+    job_url: str = ""
+
+
+@dataclass
+class TestStats:
+    name: str
+    runs: list[TestRun] = field(default_factory=list)
+
+    @property
+    def failure_rate(self) -> float:
+        if not self.runs:
+            return 0.0
+        failures = sum(1 for r in self.runs if not r.passed)
+        return (failures / len(self.runs)) * 100
+
+    @property
+    def failure_count(self) -> int:
+        return sum(1 for r in self.runs if not r.passed)
+
+    @property
+    def total_runs(self) -> int:
+        return len(self.runs)
+
+
+class SuiteToFileMapper:
+    """Maps test suite names to their source files."""
+
+    # Static overrides for edge cases
+    STATIC_OVERRIDES = {
+        "TestVersioning3FunctionalSuiteV0": "tests/versioning_3_test.go",
+        "TestVersioning3FunctionalSuiteV2": "tests/versioning_3_test.go",
+    }
+
+    def __init__(self, repo_root: str = "../.."):
+        self.repo_root = repo_root
+        self.suite_to_file: dict[str, str] = {}
+        self._build_mapping()
+
+    def _build_mapping(self) -> None:
+        """Build mapping by parsing test files for suite definitions."""
+        tests_dir = os.path.join(self.repo_root, "tests")
+        if not os.path.isdir(tests_dir):
+            return
+
+        # Pattern to match: func TestXxxSuite(t *testing.T)
+        pattern = re.compile(r"func\s+(Test\w+)\s*\(\s*t\s+\*testing\.T\s*\)")
+
+        for root, _, files in os.walk(tests_dir):
+            for filename in files:
+                if not filename.endswith("_test.go"):
+                    continue
+                filepath = os.path.join(root, filename)
+                rel_path = os.path.relpath(filepath, self.repo_root)
+                try:
+                    with open(filepath, "r") as f:
+                        content = f.read()
+                    for match in pattern.finditer(content):
+                        func_name = match.group(1)
+                        self.suite_to_file[func_name] = rel_path
+                except Exception:
+                    continue
+
+    def get_file(self, test_name: str) -> str | None:
+        """Get the file path for a test name.
+
+        Args:
+            test_name: Full test name like "TestCallbacksSuite/TestWorkflowCallbacks"
+
+        Returns:
+            Relative file path or None if not found
+        """
+        # Extract suite name (first part before /)
+        parts = test_name.split("/")
+        if not parts:
+            return None
+        suite_name = parts[0]
+
+        # Check static overrides first
+        if suite_name in self.STATIC_OVERRIDES:
+            return self.STATIC_OVERRIDES[suite_name]
+
+        # Check dynamic mapping
+        if suite_name in self.suite_to_file:
+            return self.suite_to_file[suite_name]
+
+        # Heuristic fallback: strip Test prefix and Suite suffix, convert to snake_case
+        return self._heuristic_lookup(suite_name)
+
+    def _heuristic_lookup(self, suite_name: str) -> str | None:
+        """Fallback heuristic to find file from suite name."""
+        # Remove Test prefix
+        name = suite_name
+        if name.startswith("Test"):
+            name = name[4:]
+
+        # Remove common suffixes
+        for suffix in ["Suite", "TestSuite", "FunctionalSuite", "ClientSuite"]:
+            if name.endswith(suffix):
+                name = name[: -len(suffix)]
+                break
+
+        # Convert CamelCase to snake_case
+        snake_name = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
+
+        # Try to find matching file
+        candidate = f"tests/{snake_name}_test.go"
+        full_path = os.path.join(self.repo_root, candidate)
+        if os.path.isfile(full_path):
+            return candidate
+
+        return None
+
+
+class CodeOwnersParser:
+    """Parse CODEOWNERS file and match files to owners."""
+
+    def __init__(self, path: str = ".github/CODEOWNERS"):
+        self.rules: list[tuple[str, list[str]]] = []
+        self.default_owners = ["@temporalio/server", "@temporalio/cgs"]
+        self._parse(path)
+
+    def _parse(self, path: str) -> None:
+        """Parse CODEOWNERS file."""
+        if not os.path.isfile(path):
+            return
+
+        try:
+            with open(path, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip comments and empty lines
+                    if not line or line.startswith("#"):
+                        continue
+
+                    parts = line.split()
+                    if len(parts) < 2:
+                        continue
+
+                    pattern = parts[0]
+                    owners = parts[1:]
+                    self.rules.append((pattern, owners))
+        except Exception:
+            pass
+
+    def get_owners(self, file_path: str) -> list[str]:
+        """Get owners for a file path.
+
+        Last matching rule wins (most specific).
+        """
+        matched_owners = self.default_owners
+
+        for pattern, owners in self.rules:
+            # Handle patterns starting with /
+            check_pattern = pattern.lstrip("/")
+
+            # Use fnmatch for glob-style matching
+            if fnmatch.fnmatch(file_path, check_pattern):
+                matched_owners = owners
+            # Also check if pattern matches with wildcard prefix
+            elif fnmatch.fnmatch(file_path, f"**/{check_pattern}"):
+                matched_owners = owners
+
+        return matched_owners
+
+
+def parse_job_url(artifact: str) -> str:
+    """Parse artifact string to extract job URL."""
+    parts = artifact.split("--")
+    if len(parts) > 2 and parts[1] and parts[2]:
+        p2 = parts[2]
+        if p2 == "unknown":
+            return f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
+        return f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}/job/{p2}"
+    return artifact
+
+
+def process_tests_with_stats(data: list[dict], max_links: int = 3) -> dict[str, TestStats]:
+    """Process test data into TestStats objects with failure rates."""
+    test_stats: dict[str, TestStats] = {}
+
+    for item in data:
+        name_parts = item["name"].split("/")
+        if len(name_parts) < 2:
+            continue
+
+        test_name = item["name"]
+        if test_name not in test_stats:
+            test_stats[test_name] = TestStats(name=test_name)
+
+        job_url = parse_job_url(item.get("artifact", ""))
+        passed = item.get("passed", False)
+        timestamp = item.get("timestamp")
+
+        test_run = TestRun(
+            artifact=item.get("artifact", ""),
+            passed=passed,
+            timestamp=timestamp,
+            job_url=job_url,
+        )
+        test_stats[test_name].runs.append(test_run)
+
+    return test_stats
+
+
+def generate_table_report(
+    test_stats: dict[str, TestStats],
+    suite_mapper: SuiteToFileMapper,
+    codeowners: CodeOwnersParser,
+    max_links: int = 3,
+    max_tests_per_owner: int = 10,
+) -> str:
+    """Generate markdown table report grouped by owner."""
+    # Group tests by owner
+    owner_tests: dict[str, list[TestStats]] = {}
+
+    for stats in test_stats.values():
+        # Only include tests with failures
+        if stats.failure_count == 0:
+            continue
+
+        file_path = suite_mapper.get_file(stats.name)
+        if file_path:
+            owners = codeowners.get_owners(file_path)
+        else:
+            owners = codeowners.default_owners
+
+        # Use first owner for grouping (or join if multiple)
+        owner_key = " ".join(owners)
+        if owner_key not in owner_tests:
+            owner_tests[owner_key] = []
+        owner_tests[owner_key].append(stats)
+
+    # Sort each owner's tests by failure rate descending
+    for tests in owner_tests.values():
+        tests.sort(key=lambda x: x.failure_rate, reverse=True)
+
+    # Sort owners by total failures descending
+    sorted_owners = sorted(
+        owner_tests.keys(),
+        key=lambda o: sum(t.failure_count for t in owner_tests[o]),
+        reverse=True,
+    )
+
+    # Generate markdown
+    lines = []
+    for owner in sorted_owners:
+        tests = owner_tests[owner][:max_tests_per_owner]
+
+        lines.append(f"### {owner}")
+        lines.append("")
+        lines.append("| Test Name | Failure Rate | Failures | Total | Links |")
+        lines.append("|-----------|-------------|----------|-------|-------|")
+
+        for stats in tests:
+            # Get failure job URLs (only failures, up to max_links)
+            failure_urls = [r.job_url for r in stats.runs if not r.passed][:max_links]
+            links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(failure_urls)])
+
+            lines.append(
+                f"| `{stats.name}` | {stats.failure_rate:.1f}% | {stats.failure_count} | {stats.total_runs} | {links} |"
+            )
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def output_all_tests_json(test_stats: dict[str, TestStats], output_file: str) -> None:
+    """Write all test runs to a JSON file for aggregation."""
+    all_tests = []
+
+    for stats in test_stats.values():
+        for run in stats.runs:
+            all_tests.append({
+                "name": stats.name,
+                "passed": run.passed,
+                "timestamp": run.timestamp,
+                "job_url": run.job_url,
+            })
+
+    with open(output_file, "w") as f:
+        json.dump(all_tests, f, indent=2)
 
 
 def process_tests(data, pattern, output_file: str, max_links: int = 3):
     # Group data by test name and collect artifacts for tests matching pattern
     test_groups = {}
     for item in data:
+        # Only process failures for legacy reports
+        if item.get("passed", False):
+            continue
+
         name_parts = item["name"].split("/")
         if len(name_parts) < 2:
             continue
@@ -22,18 +318,7 @@ def process_tests(data, pattern, output_file: str, max_links: int = 3):
         if test_name not in test_groups:
             test_groups[test_name] = []
 
-        parts = item["artifact"].split("--")
-        if len(parts) > 0 and len(parts[1]) > 0 and len(parts[2]) > 0:
-            p2 = parts[2]
-            if p2 == "unknown":
-                job_url = (
-                    f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
-                )
-            else:
-                job_url = f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}/job/{p2}"
-        else:
-            job_url = item["artifact"]
-
+        job_url = parse_job_url(item.get("artifact", ""))
         test_groups[test_name].append(job_url)
 
     # Transform into list with counts and multiple links
@@ -67,6 +352,10 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
     # Group data by test name and collect artifacts for crash tests
     test_groups = {}
     for item in data:
+        # Only process failures for legacy reports
+        if item.get("passed", False):
+            continue
+
         if "crash" not in item["name"]:
             continue
 
@@ -111,67 +400,46 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
         outfile.writelines(lines)
 
 
-def process_flaky(data, output_file: str, max_links: int = 3):
-    # Group data by test name and collect artifacts
-    test_groups = {}
-    for item in data:
-        name_parts = item["name"].split("/")
-        if len(name_parts) < 2:
-            continue
+def process_flaky(
+    data,
+    output_file: str,
+    max_links: int = 3,
+    repo_root: str = "../..",
+):
+    """Process flaky tests with table format output grouped by owner."""
+    # Process all tests (passed and failed) for stats
+    test_stats = process_tests_with_stats(data, max_links)
 
-        test_name = item["name"]
-        if test_name not in test_groups:
-            test_groups[test_name] = []
+    # Initialize mappers
+    suite_mapper = SuiteToFileMapper(repo_root)
+    codeowners_path = os.path.join(repo_root, ".github/CODEOWNERS")
+    codeowners = CodeOwnersParser(codeowners_path)
 
-        parts = item["artifact"].split("--")
-        if len(parts) > 0 and len(parts[1]) > 0 and len(parts[2]) > 0:
-            p2 = parts[2]
-            if p2 == "unknown":
-                job_url = (
-                    f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
-                )
-            else:
-                job_url = f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}/job/{p2}"
-        else:
-            job_url = item["artifact"]
-
-        test_groups[test_name].append(job_url)
-
-    # Transform into list with counts and multiple links
-    transformed = []
-    for test_name, artifacts in test_groups.items():
-        failure_count = len(artifacts)
-        # Get up to max_links most recent artifacts (already sorted desc from SQL)
-        recent_artifacts = artifacts[:max_links]
-
-        transformed.append({
-            "name": test_name,
-            "count": failure_count,
-            "artifacts": recent_artifacts,
-        })
-
-    # Sort by failure count descending
-    transformed.sort(key=lambda x: x["count"], reverse=True)
-
-    # Limit to top 10 flaky tests
-    transformed = transformed[:10]
-
-    # Write bullet point format (for GitHub)
-    lines = []
-    for item in transformed:
-        # Format: * XXX failures: `TestName` [1](url1) [2](url2) [3](url3)
-        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
+    # Generate table report
+    table_content = generate_table_report(
+        test_stats, suite_mapper, codeowners, max_links
+    )
 
     with open(output_file, "w") as outfile:
-        outfile.writelines(lines)
+        outfile.write(table_content)
+
+    # Output all tests JSON for aggregation
+    all_tests_file = output_file.replace(".txt", "_all.json")
+    output_all_tests_json(test_stats, all_tests_file)
 
     # Also create a plain text version for Slack (without links for cleaner viewing)
     slack_file = output_file.replace(".txt", "_slack.txt")
     slack_lines = []
-    for item in transformed:
-        # Format for Slack: • XXX failures: `TestName`
-        slack_lines.append(f"• {item['count']} failures: `{item['name']}`\n")
+
+    # Get top 10 flaky tests by failure rate for Slack
+    flaky_tests = [s for s in test_stats.values() if s.failure_count > 0]
+    flaky_tests.sort(key=lambda x: x.failure_rate, reverse=True)
+    flaky_tests = flaky_tests[:10]
+
+    for stats in flaky_tests:
+        slack_lines.append(
+            f"* {stats.failure_rate:.1f}% failure rate ({stats.failure_count}/{stats.total_runs}): `{stats.name}`\n"
+        )
 
     with open(slack_file, "w") as outfile:
         outfile.writelines(slack_lines)
@@ -185,7 +453,7 @@ def create_success_message(
     flaky_content: str,
     run_id: str,
     total_failures: int,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Create a success Slack message with flaky tests report."""
 
     blocks = [
@@ -234,7 +502,7 @@ def create_success_message(
     return {"text": "Flaky Tests Report - Last 7 Days", "blocks": blocks}
 
 
-def create_failure_message(run_id: str, ref_name: str, sha: str) -> Dict[str, Any]:
+def create_failure_message(run_id: str, ref_name: str, sha: str) -> dict[str, Any]:
     """Create a failure Slack message."""
 
     blocks = [
@@ -279,7 +547,7 @@ def create_failure_message(run_id: str, ref_name: str, sha: str) -> Dict[str, An
     return {"text": "Flaky Tests Report Generation Failed", "blocks": blocks}
 
 
-def send_slack_message(webhook_url: str, message: Dict[str, Any]) -> bool:
+def send_slack_message(webhook_url: str, message: dict[str, Any]) -> bool:
     """Send message to Slack webhook."""
     try:
         response = requests.post(
@@ -335,7 +603,11 @@ def count_failures_in_file(file_path: str) -> int:
             return 0
         with open(file_path, "r") as f:
             content = f.read()
-        return content.count("* ")
+        # Count table rows (lines starting with |) minus header rows
+        # Or bullet points for legacy format
+        table_rows = content.count("\n| `")
+        bullet_points = content.count("* ")
+        return max(table_rows, bullet_points)
     except Exception:
         return 0
 
@@ -349,7 +621,7 @@ def create_github_actions_summary(
 ) -> str:
     """Create GitHub Actions summary content."""
     summary_lines = []
-    
+
     # Header
     summary_lines.append(f"## Flaky Tests Report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     summary_lines.append("")
@@ -364,7 +636,7 @@ def create_github_actions_summary(
     summary_lines.append(f"| Flaky Tests | {flaky_count} |")
     summary_lines.append(f"| Retry Failures | {retry_count} |")
     summary_lines.append("")
-    
+
     # Add detailed tables for each category
     if crash_count > 0 and os.path.exists("out/crash.txt"):
         summary_lines.append("### Crashes")
@@ -381,7 +653,7 @@ def create_github_actions_summary(
         summary_lines.append("")
 
     if flaky_count > 0 and os.path.exists("out/flaky.txt"):
-        summary_lines.append("### Flaky Tests")
+        summary_lines.append("### Flaky Tests (by Owner)")
         summary_lines.append("")
         with open("out/flaky.txt", "r") as f:
             summary_lines.append(f.read())
@@ -393,10 +665,10 @@ def create_github_actions_summary(
         with open("out/retry.txt", "r") as f:
             summary_lines.append(f.read())
         summary_lines.append("")
-    
+
     if crash_count == 0 and flaky_count == 0 and retry_count == 0 and timeout_count == 0:
         summary_lines.append("**No test failures found in the last 7 days!**")
-    
+
     return "\n".join(summary_lines)
 
 
@@ -414,7 +686,7 @@ def write_github_actions_summary(summary_content: str) -> None:
         print(f"Warning: Could not write GitHub Actions summary: {e}", file=sys.stderr)
 
 
-def process_json_file(input_filename: str, max_links: int = 3):
+def process_json_file(input_filename: str, max_links: int = 3, repo_root: str = "../.."):
     with open(input_filename, "r") as file:
         # Load the file content as JSON
         data = json.load(file)
@@ -422,13 +694,17 @@ def process_json_file(input_filename: str, max_links: int = 3):
     # Create output directory if it doesn't exist
     os.makedirs("out", exist_ok=True)
 
-    process_flaky(data, "out/flaky.txt", max_links)
+    process_flaky(data, "out/flaky.txt", max_links, repo_root)
     process_tests(data, "(timeout)", "out/timeout.txt", max_links)
     process_tests(data, "(retry 2)", "out/retry.txt", max_links)
     process_crash(data, "(crash)", "out/crash.txt", max_links)
 
+    # Also output all tests JSON at the top level
+    test_stats = process_tests_with_stats(data, max_links)
+    output_all_tests_json(test_stats, "out/all_tests.json")
+
     # Return total number of failures in the original data
-    return len(data)
+    return sum(1 for item in data if not item.get("passed", False))
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -451,6 +727,11 @@ def create_argument_parser() -> argparse.ArgumentParser:
     )
 
     # Slack notification options
+    parser.add_argument(
+        "--send-slack",
+        action="store_true",
+        help="Enable Slack notifications (requires --slack-webhook)",
+    )
     parser.add_argument("--slack-webhook", help="Slack webhook URL for notifications")
     parser.add_argument("--run-id", help="GitHub Actions run ID")
     parser.add_argument("--ref-name", help="Git branch name")
@@ -464,6 +745,13 @@ def create_argument_parser() -> argparse.ArgumentParser:
         help="Maximum number of failure links to show per test (default: 3)",
     )
 
+    # Repository options
+    parser.add_argument(
+        "--repo-root",
+        default="../..",
+        help="Path to repository root for file mapping (default: ../..)",
+    )
+
     return parser
 
 
@@ -473,9 +761,9 @@ def get_failure_counts() -> tuple[int, int, int, int]:
     flaky_count = count_failures_in_file("out/flaky.txt")
     retry_count = count_failures_in_file("out/retry.txt")
     timeout_count = count_failures_in_file("out/timeout.txt")
-    
+
     print(f"Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Retry: {retry_count}, Timeout: {timeout_count}")
-    
+
     return crash_count, flaky_count, retry_count, timeout_count
 
 
@@ -492,8 +780,11 @@ def handle_success_case(args, total_failures: int) -> None:
         )
         write_github_actions_summary(summary_content)
 
-    if args.slack_webhook:
+    # Only send Slack if --send-slack flag is set and webhook is provided
+    if args.send_slack and args.slack_webhook:
         send_success_slack_notification(args, crash_count, flaky_count, retry_count, timeout_count, total_failures)
+    elif args.send_slack and not args.slack_webhook:
+        print("Warning: --send-slack specified but --slack-webhook not provided", file=sys.stderr)
 
 
 def send_success_slack_notification(args, crash_count: int, flaky_count: int, retry_count: int, timeout_count: int, total_failures: int) -> None:
@@ -541,10 +832,10 @@ def send_failure_slack_notification(args) -> None:
 def handle_failure_case(args, error_msg: str) -> None:
     """Handle the failure case with appropriate error reporting and notifications."""
     print(error_msg, file=sys.stderr)
-    
-    if args.slack_webhook:
+
+    if args.send_slack and args.slack_webhook:
         send_failure_slack_notification(args)
-    
+
     sys.exit(1)
 
 
@@ -555,7 +846,7 @@ def main():
 
     # Try to process the JSON file and handle both success and failure cases
     try:
-        total_failures = process_json_file(args.file, args.max_links)
+        total_failures = process_json_file(args.file, args.max_links, args.repo_root)
         print(f"Successfully processed {args.file}")
         handle_success_case(args, total_failures)
 
