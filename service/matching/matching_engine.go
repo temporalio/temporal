@@ -79,6 +79,7 @@ type (
 	TaskDispatchRateLimiter quotas.RequestRateLimiter
 	pollerIDCtxKey          string
 	identityCtxKey          string
+	workerInstanceKeyCtxKey string
 
 	taskQueueCounterKey struct {
 		namespaceID   string
@@ -154,6 +155,9 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
+		// workerInstancePollers tracks pollerIDs by worker instance key for bulk cancellation
+		// during worker shutdown. Maps workerInstanceKey -> (pollerID -> struct{}).
+		workerInstancePollers collection.SyncMap[string, *collection.SyncMap[string, struct{}]]
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -175,8 +179,9 @@ var (
 
 	errNoTasks = errors.New("no tasks")
 
-	pollerIDKey pollerIDCtxKey = "pollerID"
-	identityKey identityCtxKey = "identity"
+	pollerIDKey          pollerIDCtxKey          = "pollerID"
+	identityKey          identityCtxKey          = "identity"
+	workerInstanceKeyKey workerInstanceKeyCtxKey = "workerInstanceKey"
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
 	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
@@ -253,6 +258,7 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
+		workerInstancePollers:     collection.NewSyncMap[string, *collection.SyncMap[string, struct{}]](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -629,6 +635,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
+		pollerCtx = context.WithValue(pollerCtx, workerInstanceKeyKey, request.GetWorkerInstanceKey())
 		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		if err != nil {
 			return nil, err
@@ -936,6 +943,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
+		pollerCtx = context.WithValue(pollerCtx, workerInstanceKeyKey, request.GetWorkerInstanceKey())
 		pollMetadata := &pollMetadata{
 			taskQueueMetadata:         request.TaskQueueMetadata,
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
@@ -1164,6 +1172,32 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 		cancel()
 	}
 	return nil
+}
+
+func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
+	_ context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	workerInstanceKey := request.WorkerInstanceKey
+
+	pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey)
+	if !ok {
+		return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 0}, nil
+	}
+
+	// Cancel all pollers for this worker instance
+	var cancelledCount int32
+	for pollerID := range pollerSet.PopAll() {
+		if cancel, ok := e.outstandingPollers.Pop(pollerID); ok {
+			cancel()
+			cancelledCount++
+		}
+	}
+
+	// Clean up the worker instance entry
+	e.workerInstancePollers.Delete(workerInstanceKey)
+
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueue(
@@ -2486,6 +2520,7 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
+		pollerCtx = context.WithValue(pollerCtx, workerInstanceKeyKey, request.GetWorkerInstanceKey())
 		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_NEXUS)
 		if err != nil {
 			return nil, err
@@ -2767,7 +2802,26 @@ func (e *matchingEngineImpl) pollTask(
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-		defer e.outstandingPollers.Delete(pollerID)
+
+		// Also track by worker instance key for bulk cancellation during shutdown
+		workerInstanceKey, _ := ctx.Value(workerInstanceKeyKey).(string)
+		if workerInstanceKey != "" {
+			pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey)
+			if !ok {
+				newPollerSet := collection.NewSyncMap[string, struct{}]()
+				pollerSet, _ = e.workerInstancePollers.GetOrSet(workerInstanceKey, &newPollerSet)
+			}
+			pollerSet.Set(pollerID, struct{}{})
+		}
+
+		defer func() {
+			e.outstandingPollers.Delete(pollerID)
+			if workerInstanceKey != "" {
+				if pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey); ok {
+					pollerSet.Delete(pollerID)
+				}
+			}
+		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
