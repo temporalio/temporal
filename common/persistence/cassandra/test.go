@@ -55,7 +55,7 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 		Password:       password,
 		Hosts:          host,
 		Port:           port,
-		MaxConns:       2,
+		MaxConns:       20,
 		ConnectTimeout: 30 * time.Second * debug.TimeoutMultiplier,
 		Keyspace:       keyspace,
 	}
