@@ -383,7 +383,7 @@ func (e taskExecutor) loadOperationArgs(
 		eventToken = operation.ScheduledEventToken
 		event, err := node.LoadHistoryEvent(ctx, eventToken)
 		if err != nil {
-			return nil
+			return err
 		}
 		attrs := event.GetNexusOperationScheduledEventAttributes()
 		args.payload = attrs.GetInput()
