@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -46,6 +47,9 @@ type (
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
+		// FinalGC does a final gc pass before unloading.
+		// Used when unloading a draining queue that won't be reloaded.
+		FinalGC()
 
 		// TODO(pri): remove
 		getDB() *taskQueueDB
@@ -296,4 +300,9 @@ func (c *backlogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *backlogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+func (c *backlogManagerImpl) FinalGC() {
+	// classic backlog manager doesn't participate in draining
+	softassert.Fail(c.logger, "FinalGC called on non-draining backlog manager")
 }

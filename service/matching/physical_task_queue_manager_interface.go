@@ -18,6 +18,8 @@ type (
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		SetupDraining()
+		// FinishedDraining is called by a draining backlog manager when it has fully drained.
+		FinishedDraining()
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
