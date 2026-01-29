@@ -119,6 +119,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		simpleSpanProcessors      []sdktrace.SpanProcessor
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -222,6 +223,13 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+	}
+
+	// Create SimpleSpanProcessors once, shared across all services.
+	// SimpleSpanProcessor exports spans immediately when they end, which is
+	// required for tests that need to observe spans in real-time.
+	for _, exp := range params.SpanExporters {
+		impl.simpleSpanProcessors = append(impl.simpleSpanProcessors, sdktrace.NewSimpleSpanProcessor(exp))
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -412,6 +420,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
+			c.simpleSpanProcessorOption(),
 			frontend.Module,
 			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
 			temporal.FxLogAdapter,
@@ -507,6 +516,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
+			c.simpleSpanProcessorOption(),
 			history.QueueModule,
 			history.Module,
 			replication.Module,
@@ -569,6 +579,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
+			c.simpleSpanProcessorOption(),
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
@@ -636,6 +647,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(c.GetTaskCategoryRegistry),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
+			c.simpleSpanProcessorOption(),
 			worker.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
@@ -978,4 +990,14 @@ func mustPortFromAddress(addr string) httpPort {
 		panic(fmt.Errorf("Cannot parse port: %w", err))
 	}
 	return httpPort(portInt)
+}
+
+// simpleSpanProcessorOption returns an FX option that provides the shared
+// SimpleSpanProcessors created during cluster setup.
+// Returns fx.Options() (no-op) if no span processors are configured.
+func (c *TemporalImpl) simpleSpanProcessorOption() fx.Option {
+	if len(c.simpleSpanProcessors) == 0 {
+		return fx.Options()
+	}
+	return fx.Replace(c.simpleSpanProcessors)
 }

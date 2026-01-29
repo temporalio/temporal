@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -24,6 +26,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -441,6 +444,24 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		if err != nil {
 			return err
 		}
+
+		defer func() {
+			if retError != nil {
+				return
+			}
+			span := trace.SpanFromContext(ctx)
+			if !span.IsRecording() {
+				return
+			}
+			span.AddEvent(
+				telemetry.WorkflowTaskTimeout,
+				trace.WithAttributes(
+					attribute.String(telemetry.TimeoutTypeKey, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()),
+					attribute.String(telemetry.WorkflowIDKey, mutableState.GetExecutionInfo().WorkflowId),
+					attribute.String(telemetry.WorkflowTaskTypeKey, workflowTask.Type.String()),
+				))
+		}()
+
 		scheduleWorkflowTask = true
 	}
 
