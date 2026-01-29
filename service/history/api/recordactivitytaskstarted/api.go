@@ -304,15 +304,13 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 			return nil, 0, err
 		}
 		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
-		if !ok {
-			// The TQ is unversioned
-			return nil, 0, nil
+		if ok {
+			// Calculate the routing info for versioned task queue
+			current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
 		}
+		// else: current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber are all zero/nil (unversioned)
 
-		// Calculate and cache the routing info
-		current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-
-		// Store routing info in cache (without workflow ID)
+		// Store routing info in cache (without workflow ID) - even for unversioned task queues
 		routingInfoCache.Put(namespaceID, taskQueueName, taskQueueType, current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber)
 	}
 

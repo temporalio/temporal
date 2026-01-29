@@ -9062,6 +9062,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 			// TODO (shahab): can we limit this adjustment to apply only for activities who actually faced the
 			// ActivityStartDuringTransition error, and not all others?
 			info.ScheduledTime = timestamppb.New(ms.timeSource.Now())
+			//info.TimerTaskStatus =
 			return nil
 		})
 		if err != nil {
