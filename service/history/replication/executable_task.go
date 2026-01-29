@@ -785,6 +785,10 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 		},
 		ClosedWorkflowOnly: false,
 	})
+	var notFoundErr *serviceerror.NotFound
+	if errors.As(err, &notFoundErr) {
+		return nil
+	}
 	return err
 }
 
