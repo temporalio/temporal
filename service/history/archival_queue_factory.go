@@ -83,8 +83,11 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 // like the task scheduler, task priority assigner, and rate limiters.
 func newQueueFactoryBase(params ArchivalQueueFactoryParams) QueueFactoryBase {
 	return QueueFactoryBase{
-		HostScheduler:        newHostScheduler(params),
-		HostPriorityAssigner: queues.NewPriorityAssigner(),
+		HostScheduler: newHostScheduler(params),
+		HostPriorityAssigner: queues.NewPriorityAssigner(
+			params.NamespaceRegistry,
+			params.ClusterMetadata.GetCurrentClusterName(),
+		),
 		HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 			NewHostRateLimiterRateFn(
 				params.Config.ArchivalProcessorMaxPollHostRPS,

@@ -3,7 +3,6 @@ package scheduler
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -61,6 +60,13 @@ var (
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
 )
 
+var (
+	executionStatusRunning   = "Running"
+	executionStatusCompleted = "Completed"
+)
+
+var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
 	recentActionCount = 10
@@ -78,7 +84,7 @@ const (
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
 	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
-	ErrUnprocessable         = serviceerror.NewInternal("unprocessable schedule")
+	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -538,12 +544,12 @@ func (s *Scheduler) ListMatchingTimes(
 
 	frontendReq := req.FrontendRequest
 	if frontendReq == nil || frontendReq.StartTime == nil || frontendReq.EndTime == nil {
-		return nil, errors.New("missing or invalid query")
+		return nil, ErrInvalidQuery
 	}
 
 	cspec, err := s.getCompiledSpec(specBuilder)
 	if err != nil {
-		return nil, fmt.Errorf("invalid schedule: %w", err)
+		return nil, serviceerror.NewInvalidArgumentf("invalid schedule: %v", err)
 	}
 
 	var out []*timestamppb.Timestamp
@@ -657,9 +663,17 @@ func (s *Scheduler) validateConflictToken(token []byte) bool {
 	return bytes.Equal(current, token)
 }
 
+func (s *Scheduler) executionStatus() string {
+	if s.Closed {
+		return executionStatusCompleted
+	}
+	return executionStatusRunning
+}
+
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
+		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
 	}
 }

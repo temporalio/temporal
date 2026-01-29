@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -629,8 +630,13 @@ func (a *activities) handleTaskResult(
 		metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to process batch operation task", tag.Error(err))
 
-		// Check operation-specific non-retryable errors first, then check the list of non-retryable errors from frontend.
-		nonRetryable := isNonRetryableError(err, batchOperation.BatchType) ||
+		// Check if error is non-retryable:
+		// 1. ApplicationError marked as NonRetryable
+		// 2. Operation-specific non-retryable errors
+		// 3. List of non-retryable errors from frontend
+		var appErr *temporal.ApplicationError
+		nonRetryable := (errors.As(err, &appErr) && appErr.NonRetryable()) ||
+			isNonRetryableError(err, batchOperation.BatchType) ||
 			slices.Contains(batchOperation.NonRetryableErrors, err.Error())
 
 		if nonRetryable || task.attempts > int(batchOperation.AttemptsOnRetryableError) {
@@ -785,7 +791,7 @@ func getLastWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }
@@ -826,7 +832,7 @@ func getFirstWorkflowTaskEventID(
 		req.NextPageToken = resp.NextPageToken
 	}
 	if workflowTaskEventID == 0 {
-		return 0, errors.New("unable to find any scheduled or completed task")
+		return 0, temporal.NewNonRetryableApplicationError("unable to find any scheduled or completed task", "NoWorkflowTaskFound", nil)
 	}
 	return
 }

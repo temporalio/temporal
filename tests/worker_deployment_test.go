@@ -19,6 +19,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -210,6 +211,70 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 		})
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *WorkerDeploymentSuite) TestForceCAN_WithOverrideState() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// Set the version as current
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        tv.DeploymentVersionString(),
+	})
+	s.NoError(err)
+
+	// Create a modified state with a different manager identity
+	overrideState := &deploymentspb.WorkerDeploymentLocalState{
+		CreateTime:           timestamppb.New(time.Now()),
+		RoutingConfig:        &deploymentpb.RoutingConfig{CurrentVersion: tv.DeploymentVersionString()},
+		Versions:             map[string]*deploymentspb.WorkerDeploymentVersionSummary{tv.DeploymentVersionString(): {Version: tv.DeploymentVersionString(), CreateTime: timestamppb.New(time.Now())}},
+		LastModifierIdentity: "override-test-identity",
+		ManagerIdentity:      "override-manager-identity",
+	}
+
+	// Create signal args with the override state
+	signalArgs := &deploymentspb.ForceCANDeploymentSignalArgs{
+		OverrideState: overrideState,
+	}
+	marshaledData, err := proto.Marshal(signalArgs)
+	s.NoError(err)
+	signalPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("binary/protobuf"),
+				},
+				Data: marshaledData,
+			},
+		},
+	}
+
+	// Send ForceCAN signal with override state
+	workflowID := workerdeployment.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+	}
+
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, tv.ClientIdentity())
+	s.NoError(err)
+
+	// Verify that the override state is used after CAN
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("override-manager-identity", resp.GetWorkerDeploymentInfo().GetManagerIdentity())
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -1516,26 +1581,28 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	secondVersion := tv.WithBuildIDNumber(2)
 
 	version1CreateTime := timestamppb.Now()
-	go s.pollFromDeployment(ctx, firstVersion)
+	// Start poller with cancellable context for deterministic control
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	defer pollerCancel()
+	go s.pollFromDeployment(pollerCtx, firstVersion)
 
-	// No current deployment version set.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	// Wait for version to be created deterministically
+	s.ensureCreateVersionInDeployment(firstVersion)
 
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
-	}, time.Second*10, time.Millisecond*1000)
+	// Verify no current deployment version is set initially
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 
 	// Set first version as current version
 	firstVersionCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, firstVersion, true, "")
 
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
@@ -1568,7 +1635,10 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 
 	// Set a new second version and set it as the current version
 	version2CreateTime := timestamppb.Now()
-	go s.pollFromDeployment(ctx, secondVersion)
+	// Start second poller with cancellable context
+	poller2Ctx, poller2Cancel := context.WithCancel(ctx)
+	defer poller2Cancel()
+	go s.pollFromDeployment(poller2Ctx, secondVersion)
 	secondVersionCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, secondVersion, true, "")
 
@@ -3138,7 +3208,10 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, tv1)
+	// Use a cancellable context so we can stop the poller before checking pollers disappeared
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	defer pollerCancel()
+	s.startVersionWorkflow(pollerCtx, tv1)
 
 	// Signal the first version to be drained. Only do this in tests.
 	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
@@ -3165,6 +3238,9 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 
 	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
 	s.Nil(err)
+
+	// Stop the poller so it doesn't keep polling
+	pollerCancel()
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {

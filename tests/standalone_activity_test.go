@@ -12,7 +12,6 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	errordetailspb "go.temporal.io/api/errordetails/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
@@ -195,20 +194,10 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			StartToCloseTimeout: durationpb.New(1 * time.Minute),
 		})
 
-		require.Error(t, err)
-		statusErr := serviceerror.ToStatus(err)
-		require.Equal(t, codes.AlreadyExists, statusErr.Code())
-
-		var details *errordetailspb.ActivityExecutionAlreadyStartedFailure
-		for _, detail := range statusErr.Details() {
-			if d, ok := detail.(*errordetailspb.ActivityExecutionAlreadyStartedFailure); ok {
-				details = d
-				break
-			}
-		}
-		require.NotNil(t, details, "expected ActivityExecutionAlreadyStartedFailure in error details")
-		require.Equal(t, s.tv.RequestID(), details.StartRequestId)
-		require.Equal(t, startResponse.GetRunId(), details.RunId)
+		var alreadyStartedErr *serviceerror.ActivityExecutionAlreadyStarted
+		require.ErrorAs(t, err, &alreadyStartedErr)
+		require.Equal(t, s.tv.RequestID(), alreadyStartedErr.StartRequestId)
+		require.Equal(t, startResponse.GetRunId(), alreadyStartedErr.RunId)
 	})
 
 	t.Run("UseExistingNoError", func(t *testing.T) {
@@ -242,6 +231,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 
 	activityID := testcore.RandomizeStr(t.Name())
 	taskQueue := testcore.RandomizeStr(t.Name())
+	namespace := s.Namespace().String()
 
 	startToCloseTimeout := durationpb.New(1 * time.Minute)
 	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
@@ -251,7 +241,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	}
 
 	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    s.Namespace().String(),
+		Namespace:    namespace,
 		ActivityId:   activityID,
 		ActivityType: s.tv.ActivityType(),
 		Identity:     s.tv.WorkerIdentity(),
@@ -269,7 +259,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NoError(t, err)
 
 	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: namespace,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: taskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -278,6 +268,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	})
 	require.NoError(t, err)
 	require.Equal(t, activityID, pollTaskResp.GetActivityId())
+	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
 	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
 	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
 	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())

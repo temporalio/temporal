@@ -2598,6 +2598,51 @@ func TestQueryConverter_WithArchetypeID(t *testing.T) {
 	r.Equal(chasm.UnspecifiedArchetypeID, c.archetypeID)
 }
 
+func TestQueryConverter_TemporalSystemExecutionStatus(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+
+	// Test that TemporalSystemExecutionStatus maps to ExecutionStatus only for SchedulerArchetypeID
+	t.Run("with SchedulerArchetypeID", func(t *testing.T) {
+		r := require.New(t)
+		queryConverter := NewQueryConverter(
+			storeQCMock,
+			testNamespaceName,
+			searchattribute.TestNameTypeMap(),
+			&searchattribute.TestMapper{},
+		).WithArchetypeID(chasm.SchedulerArchetypeID)
+
+		in := &sqlparser.ColName{
+			Name: sqlparser.NewColIdent("TemporalSystemExecutionStatus"),
+		}
+		out, err := queryConverter.convertColName(in)
+		r.NoError(err)
+		r.Equal(NewSAColumn(
+			"TemporalSystemExecutionStatus",
+			sadefs.ExecutionStatus,
+			enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		), out)
+	})
+
+	t.Run("without SchedulerArchetypeID", func(t *testing.T) {
+		r := require.New(t)
+		queryConverter := NewQueryConverter(
+			storeQCMock,
+			testNamespaceName,
+			searchattribute.TestNameTypeMap(),
+			&searchattribute.TestMapper{},
+		)
+
+		in := &sqlparser.ColName{
+			Name: sqlparser.NewColIdent("TemporalSystemExecutionStatus"),
+		}
+		_, err := queryConverter.convertColName(in)
+		r.Error(err)
+		r.ErrorContains(err, "not a valid search attribute")
+	})
+}
+
 func TestQueryConverter_ResolveSearchAttributeAlias_WithChasmMapper(t *testing.T) {
 	t.Parallel()
 	ctrl := gomock.NewController(t)

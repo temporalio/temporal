@@ -446,11 +446,17 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 
 	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap, c.chasmMapper)
 	if err != nil {
-		return nil, query.NewConverterError(
-			"%s: column name '%s' is not a valid search attribute",
-			query.InvalidExpressionErrMessage,
-			saAlias,
-		)
+		if c.archetypeID != chasm.SchedulerArchetypeID || saAlias != "TemporalSystemExecutionStatus" {
+			return nil, query.NewConverterError(
+				"%s: column name '%s' is not a valid search attribute",
+				query.InvalidExpressionErrMessage,
+				saAlias,
+			)
+		}
+		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
+		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
+		saFieldName = sadefs.ExecutionStatus
+		saType, _ = c.saTypeMap.GetType(saFieldName)
 	}
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true

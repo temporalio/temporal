@@ -82,6 +82,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.config.Tweakables(scheduler.Namespace)
+	metricsHandler := newTaggedMetricsHandler(s.metricsHandler, scheduler)
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
@@ -130,17 +131,17 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			// water mark, discard actions that were scheduled to kick off before the update.
 			// Skip this check for manual (backfill) actions since they explicitly request
 			// past times.
-			s.logger.Warn("ProcessBuffer skipped an action due to update time",
+			s.logger.Info("ProcessBuffer skipped an action due to update time",
 				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
 				tag.NewTimeTag("droppedActionTime", next.Next))
 			continue
 		}
 
 		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window",
+			s.logger.Info("Schedule missed catchup window",
 				tag.NewTimeTag("now", end),
 				tag.NewTimeTag("time", next.Next))
-			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue

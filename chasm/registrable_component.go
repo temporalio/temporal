@@ -20,6 +20,7 @@ type (
 
 		ephemeral     bool
 		singleCluster bool
+		detached      bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
@@ -52,6 +53,22 @@ func WithSingleCluster() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.singleCluster = true
 	}
+}
+
+// WithDetached marks the registrable component as detached. Detached components ignore
+// parent lifecycle validation, allowing them to continue operating when their
+// parent is closed/terminated.
+// If a registrable component is not detached by default, a component definition
+// can specify its child as detached via ComponentFieldDetached() option.
+func WithDetached() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.detached = true
+	}
+}
+
+// IsDetached returns true if the component type is registered as detached.
+func (rc *RegistrableComponent) IsDetached() bool {
+	return rc.detached
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.

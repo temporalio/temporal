@@ -36,7 +36,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -1226,7 +1226,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
@@ -1419,7 +1419,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1611,7 +1611,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
@@ -1828,7 +1828,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	namespaceName := namespaceEntry.Name().String()
 
 	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
-		return nil, serviceerror.NewUnavailable(activity.StandaloneActivityDisabledError)
+		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -4436,31 +4436,55 @@ func (wh *WorkflowHandler) ListSchedules(
 		return nil, errListNotAllowed
 	}
 
-	query := ""
-	if strings.TrimSpace(request.Query) != "" {
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if chasmEnabled {
+		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+	}
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+}
+
+// prepareSchedulerQuery validates a scheduler RPC's query argument, and wraps it
+// in the appropriate base query.
+func (wh *WorkflowHandler) prepareSchedulerQuery(
+	chasmEnabled bool,
+	query string,
+	namespaceName namespace.Name,
+) (string, error) {
+	// Use different base queries based on code path:
+	// - CHASM path uses TemporalSystemExecutionStatus (translated via archetype ID)
+	// - V1 path uses ExecutionStatus directly (no archetype ID available)
+	baseQuery := scheduler.VisibilityListQueryV1
+	if chasmEnabled {
+		baseQuery = scheduler.VisibilityListQueryChasm
+	}
+
+	result := baseQuery
+	if strings.TrimSpace(query) != "" {
 		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
-			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
+
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
-			request.Query,
+			query,
 		); err != nil {
-			return nil, err
+			return "", err
 		}
-		query = fmt.Sprintf("%s AND (%s)", scheduler.VisibilityBaseListQuery, request.Query)
-	} else {
-		query = scheduler.VisibilityBaseListQuery
+
+		result = fmt.Sprintf("%s AND (%s)", baseQuery, query)
 	}
 
-	if wh.chasmSchedulerEnabled(ctx, namespaceName.String()) {
-		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
-		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
-	}
-	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+	return result, nil
 }
 
 func (wh *WorkflowHandler) listSchedulesChasm(
@@ -4554,6 +4578,103 @@ func (wh *WorkflowHandler) listSchedulesWorkflow(
 	return &workflowservice.ListSchedulesResponse{
 		Schedules:     schedules,
 		NextPageToken: persistenceResp.NextPageToken,
+	}, nil
+}
+
+func (wh *WorkflowHandler) CountSchedules(
+	ctx context.Context,
+	request *workflowservice.CountSchedulesRequest,
+) (_ *workflowservice.CountSchedulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableSchedules(request.Namespace) {
+		return nil, errSchedulesNotAllowed
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
+		return nil, errListNotAllowed
+	}
+
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Route to CHASM or V1 based on config (same pattern as ListSchedules)
+	if chasmEnabled {
+		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, query)
+	}
+	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, query)
+}
+
+// countSchedulesChasm counts schedules using CHASM APIs
+func (wh *WorkflowHandler) countSchedulesChasm(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	namespaceName namespace.Name,
+	query string,
+) (*workflowservice.CountSchedulesResponse, error) {
+	resp, err := chasm.CountExecutions[*chasmscheduler.Scheduler](ctx, &chasm.CountExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: namespaceName.String(),
+		Query:         query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountSchedulesResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountSchedulesResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountSchedulesResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
+}
+
+// countSchedulesWorkflow counts schedules using direct visibility query (V1 path)
+func (wh *WorkflowHandler) countSchedulesWorkflow(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	namespaceName namespace.Name,
+	query string,
+) (*workflowservice.CountSchedulesResponse, error) {
+	persistenceResp, err := wh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespaceID,
+		Namespace:   namespaceName,
+		Query:       query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountSchedulesResponse_AggregationGroup, 0, len(persistenceResp.Groups))
+	for _, g := range persistenceResp.Groups {
+		groups = append(groups, &workflowservice.CountSchedulesResponse_AggregationGroup{
+			GroupValues: g.GroupValues,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountSchedulesResponse{
+		Count:  persistenceResp.Count,
+		Groups: groups,
 	}, nil
 }
 
@@ -5705,6 +5826,9 @@ func (wh *WorkflowHandler) validateVersioningInfo(nsName string, id buildIdAndFl
 func (wh *WorkflowHandler) validateDeploymentOptions(deploymentOptions *deploymentpb.WorkerDeploymentOptions) error {
 	if deploymentOptions == nil {
 		return nil
+	}
+	if deploymentOptions.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		return nil // both deployment name and build ID fields are optional for unversioned workers
 	}
 	if deploymentOptions.GetDeploymentName() == "" || deploymentOptions.GetBuildId() == "" {
 		return errDeploymentOptionsNotSet

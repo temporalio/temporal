@@ -21,8 +21,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const StandaloneActivityDisabledError = "Standalone activity is disabled"
-
 type FrontendHandler interface {
 	StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error)
 	DescribeActivityExecution(ctx context.Context, req *workflowservice.DescribeActivityExecutionRequest) (*workflowservice.DescribeActivityExecutionResponse, error)
@@ -34,6 +32,8 @@ type FrontendHandler interface {
 	TerminateActivityExecution(context.Context, *workflowservice.TerminateActivityExecutionRequest) (*workflowservice.TerminateActivityExecutionResponse, error)
 	IsStandaloneActivityEnabled(namespaceName string) bool
 }
+
+var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone activity is disabled")
 
 type frontendHandler struct {
 	FrontendHandler
@@ -83,7 +83,7 @@ func (h *frontendHandler) IsStandaloneActivityEnabled(namespaceName string) bool
 // 3. Sends the request to the history activity service.
 func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -111,7 +111,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 	req *workflowservice.DescribeActivityExecutionRequest,
 ) (*workflowservice.DescribeActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	err := ValidateDescribeActivityExecutionRequest(
@@ -140,7 +140,7 @@ func (h *frontendHandler) PollActivityExecution(
 	req *workflowservice.PollActivityExecutionRequest,
 ) (*workflowservice.PollActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	err := ValidatePollActivityExecutionRequest(
@@ -167,7 +167,7 @@ func (h *frontendHandler) ListActivityExecutions(
 	req *workflowservice.ListActivityExecutionsRequest,
 ) (*workflowservice.ListActivityExecutionsResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	pageSize := req.GetPageSize()
@@ -230,7 +230,7 @@ func (h *frontendHandler) CountActivityExecutions(
 	req *workflowservice.CountActivityExecutionsRequest,
 ) (*workflowservice.CountActivityExecutionsResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -267,7 +267,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 	req *workflowservice.TerminateActivityExecutionRequest,
 ) (*workflowservice.TerminateActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceName := req.GetNamespace()
@@ -315,7 +315,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 ) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
 	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
+		return nil, ErrStandaloneActivityDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))

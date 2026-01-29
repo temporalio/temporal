@@ -326,13 +326,6 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		return result, nil
 	}
 
-	if retryState == enumspb.RETRY_STATE_TIMEOUT {
-		// If retryState is Timeout then it means that expirationTime is expired.
-		// ExpirationTime is expired when ScheduleToClose timeout is expired.
-		const timeoutType = enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE
-		var failureMsg = fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String())
-		timeoutFailure = failure.NewTimeoutFailure(failureMsg, timeoutType)
-	}
 	timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = ai.LastHeartbeatDetails
 
 	t.emitTimeoutMetricScopeWithNamespaceTag(
