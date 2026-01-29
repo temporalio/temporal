@@ -114,6 +114,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.policy = NewSelectedAPIsForwardingPolicy(
 		s.currentClusterName,
 		s.forwardingEnabled,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.mockNamespaceCache,
 	)
 }
@@ -395,6 +396,31 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 	s.Equal(2, currentClustercallCount)
 	s.Equal(2, alternativeClustercallCount)
+}
+
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_SelectedForNSOverridesEnableForAllAPIs() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
+	policy := NewAllAPIsForwardingPolicy(
+		s.currentClusterName,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		s.mockNamespaceCache,
+	)
+
+	callCount := 0
+	callFn := func(targetCluster string) error {
+		callCount++
+		s.Equal(s.currentClusterName, targetCluster)
+		return nil
+	}
+
+	apiName := "NonWhitelistedAPI"
+	err := policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
+	s.NoError(err)
+	err = policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
+	s.NoError(err)
+
+	s.Equal(2, callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {

@@ -162,6 +162,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.headersBlacklist = dynamicconfig.GetTypedPropertyFn(re)
 	oc.redirectionInterceptor = interceptor.NewRedirection(
 		nil,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		nil,
 		config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
 		oc.logger,

@@ -355,6 +355,7 @@ func RedirectionInterceptorProvider(
 ) *interceptor.Redirection {
 	return interceptor.NewRedirection(
 		configuration.EnableNamespaceNotActiveAutoForwarding,
+		configuration.ForceNamespaceSelectedAPIAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,

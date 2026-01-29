@@ -125,6 +125,11 @@ query.`,
 		`EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 for signal / start / signal with start API if namespace is not active`,
 	)
+	ForceNamespaceSelectedAPIAutoForwarding = NewNamespaceBoolSetting(
+		"system.forceNamespaceSelectedAPIAutoForwarding",
+		false,
+		`ForceNamespaceSelectedAPIAutoForwarding forces selective (whitelist) API forwarding for the namespace when true, overriding all-apis-forwarding policy for that namespace`,
+	)
 	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
 		"system.enableNamespaceHandoverWait",
 		false,
