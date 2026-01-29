@@ -100,6 +100,8 @@ type Config struct {
 
 	QueuePendingTaskCriticalCount     dynamicconfig.IntPropertyFn
 	QueueReaderStuckCriticalAttempts  dynamicconfig.IntPropertyFn
+	QueueReaderStuckLagDuration       dynamicconfig.DurationPropertyFn
+	QueueReaderStuckShadowMode        dynamicconfig.BoolPropertyFn
 	QueueCriticalSlicesCount          dynamicconfig.IntPropertyFn
 	QueuePendingTaskMaxCount          dynamicconfig.IntPropertyFn
 	QueueMaxPredicateSize             dynamicconfig.IntPropertyFn
@@ -497,6 +499,8 @@ func NewConfig(
 
 		QueuePendingTaskCriticalCount:     dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
 		QueueReaderStuckCriticalAttempts:  dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
+		QueueReaderStuckLagDuration:       dynamicconfig.QueueReaderStuckLagDuration.Get(dc),
+		QueueReaderStuckShadowMode:        dynamicconfig.QueueReaderStuckShadowMode.Get(dc),
 		QueueCriticalSlicesCount:          dynamicconfig.QueueCriticalSlicesCount.Get(dc),
 		QueuePendingTaskMaxCount:          dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
 		QueueMaxPredicateSize:             dynamicconfig.QueueMaxPredicateSize.Get(dc),

@@ -1695,6 +1695,17 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskC
 before that task range is split into a separate slice to unblock loading for later range.
 currently only work for scheduled queues and the task range is 1s.`,
 	)
+	QueueReaderStuckLagDuration = NewGlobalDurationSetting(
+		"history.queueReaderStuckLagDuration",
+		5*time.Second,
+		`QueueReaderStuckLagDuration is the minimum time the reader watermark must lag behind current time
+before triggering the reader stuck alert.`,
+	)
+	QueueReaderStuckShadowMode = NewGlobalBoolSetting(
+		"history.queueReaderStuckShadowMode",
+		true,
+		`QueueReaderStuckShadowMode controls whether reader stuck alerts are suppressed and only logged/metriced.`,
+	)
 	QueueCriticalSlicesCount = NewGlobalIntSetting(
 		"history.queueCriticalSlicesCount",
 		50,

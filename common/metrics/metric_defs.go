@@ -862,6 +862,7 @@ var (
 	QueueReaderCountHistogram = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram  = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueActionCounter        = NewCounterDef("queue_actions")
+	QueueAlertShadowCounter   = NewCounterDef("queue_alert_shadow")
 	ActivityE2ELatency        = NewTimerDef(
 		"activity_end_to_end_latency",
 		WithDescription("DEPRECATED: Will be removed in one of the next releases. Duration of an activity attempt. Use activity_start_to_close_latency instead."),
