@@ -51,14 +51,14 @@ func newHandler(config *Config, metricsHandler metrics.Handler, logger log.Logge
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 
-	reusePolicy, ok := businessIDReusePolicyMap[frontendReq.GetIdReusePolicy()]
+	reusePolicy, ok := businessIDReusePolicyMap[frontendReq.GetActivityIdReusePolicy()]
 	if !ok {
-		return nil, serviceerror.NewInvalidArgumentf("unsupported ID reuse policy: %v", frontendReq.GetIdReusePolicy())
+		return nil, serviceerror.NewInvalidArgumentf("unsupported ID reuse policy: %v", frontendReq.GetActivityIdReusePolicy())
 	}
 
-	conflictPolicy, ok := businessIDConflictPolicyMap[frontendReq.GetIdConflictPolicy()]
+	conflictPolicy, ok := businessIDConflictPolicyMap[frontendReq.GetActivityIdConflictPolicy()]
 	if !ok {
-		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
+		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetActivityIdConflictPolicy())
 	}
 
 	result, err := chasm.StartExecution(

@@ -166,12 +166,12 @@ func normalizeAndValidateTimeouts(
 }
 
 func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionRequest) error {
-	if req.GetIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
-		req.IdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
+	if req.GetActivityIdReusePolicy() == enumspb.ACTIVITY_ID_REUSE_POLICY_UNSPECIFIED {
+		req.ActivityIdReusePolicy = enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
-	if req.GetIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED {
-		req.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL
+	if req.GetActivityIdConflictPolicy() == enumspb.ACTIVITY_ID_CONFLICT_POLICY_UNSPECIFIED {
+		req.ActivityIdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL
 	}
 
 	return nil
