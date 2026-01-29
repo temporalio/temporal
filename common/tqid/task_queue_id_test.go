@@ -227,7 +227,7 @@ func TestInvalidRpcNames(t *testing.T) {
 	}
 }
 
-func TestBatching(t *testing.T) {
+func TestWithoutBatching(t *testing.T) {
 	f := UnsafeTaskQueueFamily("asdf1234", "some-tq")
 	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	ps := make([]*NormalPartition, 5)
@@ -243,6 +243,15 @@ func TestBatching(t *testing.T) {
 		unique[key] = true
 	}
 	assert.Len(t, unique, len(ps))
+}
+
+func TestBatching(t *testing.T) {
+	f := UnsafeTaskQueueFamily("asdf1234", "some-tq")
+	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	ps := make([]*NormalPartition, 5)
+	for i := range ps {
+		ps[i] = tq.NormalPartition(i)
+	}
 
 	// with batching by 3: 0,1,2 use one key, 3,4 use another key
 	keys := make([]string, len(ps))
@@ -255,10 +264,16 @@ func TestBatching(t *testing.T) {
 	assert.Equal(t, keys[0], keys[2])
 	assert.Equal(t, keys[3], keys[4])
 	assert.NotEqual(t, keys[0], keys[3])
+}
+
+func TestStableKeyForRootPartition(t *testing.T) {
+	f := UnsafeTaskQueueFamily("asdf1234", "some-tq")
+	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	root := tq.RootPartition()
 
 	// root does not move with vs without batching
-	nbKey, nbN := ps[0].RoutingKey(0)
-	bKey, bN := ps[0].RoutingKey(6)
+	nbKey, nbN := root.RoutingKey(0)
+	bKey, bN := root.RoutingKey(6)
 	assert.Equal(t, nbKey, bKey)
 	assert.Equal(t, nbN, bN)
 }
