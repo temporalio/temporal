@@ -1484,25 +1484,28 @@ func (s *scheduleFunctionalSuiteBase) TestCountSchedules() {
 	}, 15*time.Second, 1*time.Second)
 
 	// Test basic count (all schedules)
-	countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
-		Namespace: s.Namespace().String(),
-	})
-	s.NoError(err)
-	s.GreaterOrEqual(countResp.Count, int64(3), "Expected at least 3 schedules")
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		return err == nil && countResp.Count >= 3
+	}, 15*time.Second, 1*time.Second, "Expected at least 3 schedules")
 
 	// Test count with query filter for paused schedules
-	countResp, err = s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
-		Namespace: s.Namespace().String(),
-		Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
-	})
-	s.NoError(err)
-	s.GreaterOrEqual(countResp.Count, int64(1), "Expected at least 1 paused schedule")
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
+		})
+		return err == nil && countResp.Count >= 1
+	}, 15*time.Second, 1*time.Second, "Expected at least 1 paused schedule")
 
 	// Test count with query filter for non-paused schedules
-	countResp, err = s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
-		Namespace: s.Namespace().String(),
-		Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
-	})
-	s.NoError(err)
-	s.GreaterOrEqual(countResp.Count, int64(2), "Expected at least 2 non-paused schedules")
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
+		})
+		return err == nil && countResp.Count >= 2
+	}, 15*time.Second, 1*time.Second, "Expected at least 2 non-paused schedules")
 }
