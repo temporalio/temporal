@@ -14,6 +14,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -40,6 +41,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -704,4 +706,52 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 	})
 
 	return err
+}
+
+// Eventually overrides suite.Suite.Eventually to panic, directing users to use s.Await instead.
+// testify's Eventually runs conditions in a goroutine, which causes tests to hang when require.* assertions
+// fail (due to runtime.Goexit() only terminating the goroutine, not the test).
+// See: https://github.com/stretchr/testify/issues/1810
+func (s *FunctionalTestBase) Eventually(condition func() bool, waitFor time.Duration, tick time.Duration, msgAndArgs ...interface{}) bool {
+	panic("FunctionalTestBase.Eventually is deprecated due to goroutine safety issues. " +
+		"Use s.Await(func(t *eventually.T) { ... }) instead. " +
+		"See common/testing/eventually package for details.")
+}
+
+// EventuallyWithT overrides suite.Suite.EventuallyWithT to panic, directing users to use s.Await instead.
+// testify's EventuallyWithT runs conditions in a goroutine, which causes tests to hang when require.* assertions
+// fail (due to runtime.Goexit() only terminating the goroutine, not the test).
+// See: https://github.com/stretchr/testify/issues/1810
+func (s *FunctionalTestBase) EventuallyWithT(condition func(collect *assert.CollectT), waitFor time.Duration, tick time.Duration, msgAndArgs ...interface{}) bool {
+	panic("FunctionalTestBase.EventuallyWithT is deprecated due to goroutine safety issues. " +
+		"Use s.Await(func(t *eventually.T) { ... }) instead. " +
+		"See common/testing/eventually package for details.")
+}
+
+// EventuallyWithTf overrides suite.Suite.EventuallyWithTf to panic, directing users to use s.Await instead.
+func (s *FunctionalTestBase) EventuallyWithTf(condition func(collect *assert.CollectT), waitFor time.Duration, tick time.Duration, msg string, args ...interface{}) bool {
+	panic("FunctionalTestBase.EventuallyWithTf is deprecated due to goroutine safety issues. " +
+		"Use s.Await(func(t *eventually.T) { ... }) instead. " +
+		"See common/testing/eventually package for details.")
+}
+
+// Eventuallyf overrides suite.Suite.Eventuallyf to panic, directing users to use s.Await instead.
+func (s *FunctionalTestBase) Eventuallyf(condition func() bool, waitFor time.Duration, tick time.Duration, msg string, args ...interface{}) bool {
+	panic("FunctionalTestBase.Eventuallyf is deprecated due to goroutine safety issues. " +
+		"Use s.Await(func(t *eventually.T) { ... }) instead. " +
+		"See common/testing/eventually package for details.")
+}
+
+// Await polls the condition function until it succeeds or times out.
+// It is safe to use require.* assertions inside the condition.
+// Uses default timeout (5s, 10s on CI) and poll interval (200ms, 400ms on CI).
+func (s *FunctionalTestBase) Await(condition func(t *eventually.T)) {
+	s.T().Helper()
+	eventually.Require(s.T(), condition, eventually.DefaultTimeout, eventually.DefaultPollInterval)
+}
+
+// AwaitWithTimeout is like Await but with custom timeout and poll interval.
+func (s *FunctionalTestBase) AwaitWithTimeout(timeout, pollInterval time.Duration, condition func(t *eventually.T)) {
+	s.T().Helper()
+	eventually.Require(s.T(), condition, timeout, pollInterval)
 }

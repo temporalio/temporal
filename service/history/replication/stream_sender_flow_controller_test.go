@@ -6,12 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/mock/gomock"
 )
@@ -154,10 +155,10 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	}()
 
 	// Ensure the goroutine has time to start and block
-	assert.Eventually(s.T(), func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		state.mu.Lock()
 		defer state.mu.Unlock()
-		return state.waiters == 1
+		require.Equal(t, 1, state.waiters)
 	}, 1*time.Second, 100*time.Millisecond)
 
 	s.Equal(1, state.waiters)

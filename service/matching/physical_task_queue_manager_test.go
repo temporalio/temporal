@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -25,6 +24,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -191,22 +191,22 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	blm.taskReader.taskBuffer <- randomTaskInfoWithAgeTaskID(10*time.Second, 2)
 	go blm.taskReader.dispatchBufferedTasks()
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.InDelta(t, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.InDelta(t, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
@@ -362,10 +362,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
 	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
-	s.EventuallyWithT(func(collect *assert.CollectT) {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		// will unload due to idleness
-		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
-	}, 5*time.Second, 100*time.Millisecond)
+		require.Equal(t, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
+	}, eventually.DefaultTimeout, 100*time.Millisecond)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
@@ -394,9 +394,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	s.tqMgr.backlogMgr.getDB().updateAckLevelAndBacklogStats(0, 123456, 10, time.Time{})
 
 	// on the next periodic write, it'll fail due to conflict and unload the task queue
-	s.Eventually(func() bool {
-		return s.tqMgr.tqCtx.Err() != nil
-	}, 5*time.Second, 20*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Error(t, s.tqMgr.tqCtx.Err())
+	}, eventually.DefaultTimeout, 20*time.Millisecond)
 
 	// no additional updates (the failed periodic update counts as "1")
 	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))

@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/eventually"
 	"golang.org/x/time/rate"
 )
 
@@ -153,7 +155,7 @@ func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
 	rl.RecycleToken()
 
 	// wait until done so we know assert.NoError was called
-	assert.Eventually(t, func() bool { return asserted.Load() }, time.Second, time.Millisecond)
+	eventually.Require(t, func(t *eventually.T) { require.True(t, asserted.Load()) }, time.Second, time.Millisecond)
 }
 
 // test that reservations for >1 token are NOT unblocked by RecycleToken
@@ -188,5 +190,5 @@ func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
 	cancel()
 
 	// wait until done so we know assert.NoError was called
-	assert.Eventually(t, func() bool { return asserted.Load() }, time.Second, time.Millisecond)
+	eventually.Require(t, func(t *eventually.T) { require.True(t, asserted.Load()) }, time.Second, time.Millisecond)
 }

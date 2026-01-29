@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -687,15 +688,15 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	// be some straggler acquireShard goroutines that call it even after shardController.Stop
 	// (which will cancel all lifecycleCtxs).
 	var prevGetShards int64
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		thisGetShards := getShards.Load()
 		ok := thisGetShards == prevGetShards && thisGetShards == closeContexts.Load()
 		prevGetShards = thisGetShards
-		return ok
-	}, 1*time.Second, 100*time.Millisecond, "all contexts did not close")
-	s.Eventually(func() bool {
-		return engineStarts.Load() == engineStops.Load()
-	}, 1*time.Second, 100*time.Millisecond, "engine start/stop")
+		require.True(t, ok, "all contexts did not close")
+	}, 1*time.Second, 100*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, engineStarts.Load(), engineStops.Load(), "engine start/stop")
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func (s *controllerSuite) Test_GetOrCreateShard_InvalidShardID() {

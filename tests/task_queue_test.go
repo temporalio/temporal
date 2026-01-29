@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -98,30 +99,22 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 	// wait for backlog to be >= maxBacklog
 	wfBacklogCount := int64(0)
-	s.Eventually(
-		func() bool {
-			wfBacklogCount = s.getBacklogCount(ctx, tv)
-			return wfBacklogCount >= maxBacklog
-		},
-		5*time.Second,
-		200*time.Millisecond,
-	)
+	s.AwaitWithTimeout(timeToDrain, 500*time.Millisecond, func(t *eventually.T) {
+		wfBacklogCount = s.getBacklogCount(ctx, tv)
+		require.GreaterOrEqual(t, wfBacklogCount, int64(maxBacklog))
+	})
 
 	// terminate all those workflow executions so that all the tasks in the backlog are invalid
 	var wfList []*workflowpb.WorkflowExecutionInfo
-	s.Eventually(
-		func() bool {
-			listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
-			})
-			s.NoError(err)
-			wfList = listResp.GetExecutions()
-			return len(wfList) == maxBacklog
-		},
-		5*time.Second,
-		200*time.Millisecond,
-	)
+	s.Await(func(t *eventually.T) {
+		listResp, err := s.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("TaskQueue = '%s'", tv.TaskQueue().GetName()),
+		})
+		require.NoError(t, err)
+		wfList = listResp.GetExecutions()
+		require.Len(t, wfList, maxBacklog)
+	})
 
 	for _, exec := range wfList {
 		_, err := s.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
@@ -143,14 +136,10 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	}
 
 	// wait for backlog to be 0
-	s.Eventually(
-		func() bool {
-			wfBacklogCount = s.getBacklogCount(ctx, tv)
-			return wfBacklogCount == 0
-		},
-		timeToDrain,
-		500*time.Millisecond,
-	)
+	s.Await(func(t *eventually.T) {
+		wfBacklogCount = s.getBacklogCount(ctx, tv)
+		require.Zero(t, wfBacklogCount)
+	})
 
 }
 

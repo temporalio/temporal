@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporaltest"
 	"google.golang.org/grpc/codes"
@@ -304,32 +306,22 @@ func TestSearchAttributeRegistration(t *testing.T) {
 
 	// Wait a bit longer for the workflow to be indexed. This usually isn't necessary,
 	// but helps avoid test flakiness.
-	assert.Eventually(t, func() bool {
+	eventually.Require(t, func(t *eventually.T) {
 		// Confirm workflow has search attribute and shows up in custom list query
 		listFilter := fmt.Sprintf("%s=%q", testSearchAttr, "foo")
 		workflowList, err := c.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace: ts.GetDefaultNamespace(),
 			Query:     listFilter,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if numExecutions := len(workflowList.GetExecutions()); numExecutions != 1 {
-			t.Logf("Expected list filter %q to return one workflow, got %d", listFilter, numExecutions)
-			return false
-		}
+		require.NoError(t, err)
+		require.Len(t, workflowList.GetExecutions(), 1, "Expected list filter %q to return one workflow", listFilter)
 
 		searchAttrPayload, ok := workflowList.GetExecutions()[0].GetSearchAttributes().GetIndexedFields()[testSearchAttr]
-		if !ok {
-			t.Fatal("Workflow missing test search attr")
-		}
+		require.True(t, ok, "Workflow missing test search attr")
 		var searchAttrValue string
-		if err := converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue); err != nil {
-			t.Fatal(err)
-		}
-		assert.Equal(t, "foo", searchAttrValue)
-
-		return true
+		err = converter.GetDefaultDataConverter().FromPayload(searchAttrPayload, &searchAttrValue)
+		require.NoError(t, err)
+		require.Equal(t, "foo", searchAttrValue)
 	}, 30*time.Second, 100*time.Millisecond)
 }
 

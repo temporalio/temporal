@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/goro"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 func TestKeyedSet_Starts(t *testing.T) {
@@ -29,8 +29,8 @@ func TestKeyedSet_Starts(t *testing.T) {
 	target := map[int]struct{}{1: {}, 2: {}, 3: {}}
 	ks.Sync(target, f)
 
-	require.Eventually(t, func() bool {
-		return running.Load() == 3
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, int32(3), running.Load())
 	}, time.Second, time.Millisecond)
 }
 
@@ -50,8 +50,8 @@ func TestKeyedSet_Cancels(t *testing.T) {
 	target := map[int]struct{}{1: {}, 2: {}, 3: {}}
 	ks.Sync(target, f)
 
-	require.Eventually(t, func() bool {
-		return running.Load() == 3
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, int32(3), running.Load())
 	}, time.Second, time.Millisecond)
 
 	// Remove key 2
@@ -59,8 +59,8 @@ func TestKeyedSet_Cancels(t *testing.T) {
 	ks.Sync(target, f)
 
 	// Goroutine for key 2 should be canceled
-	require.Eventually(t, func() bool {
-		return running.Load() == 2
+	eventually.Require(t, func(t *eventually.T) {
+		require.Equal(t, int32(2), running.Load())
 	}, time.Second, time.Millisecond)
 }
 
@@ -87,20 +87,20 @@ func TestKeyedSet_StartsAndCancelsTogether(t *testing.T) {
 
 	// Start with {"a", "b"}
 	ks.Sync(map[string]struct{}{"a": {}, "b": {}}, f)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"a", "b"}, runningKeys())
+	eventually.Require(t, func(t *eventually.T) {
+		require.ElementsMatch(t, []string{"a", "b"}, runningKeys())
 	}, time.Second, time.Millisecond)
 
 	// Change to {"b", "c"} - should cancel "a", keep "b", start "c"
 	ks.Sync(map[string]struct{}{"b": {}, "c": {}}, f)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"b", "c"}, runningKeys())
+	eventually.Require(t, func(t *eventually.T) {
+		require.ElementsMatch(t, []string{"b", "c"}, runningKeys())
 	}, time.Second, time.Millisecond)
 
 	// Cancel all
 	ks.Sync(nil, nil)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, runningKeys())
+	eventually.Require(t, func(t *eventually.T) {
+		require.Empty(t, runningKeys())
 	}, time.Second, time.Millisecond)
 }
 
@@ -117,11 +117,11 @@ func TestKeyedSet_BaseContextCanceled(t *testing.T) {
 
 	// Start goroutines
 	ks.Sync(map[int]struct{}{1: {}, 2: {}}, f)
-	require.Eventually(t, func() bool { return running.Load() == 2 }, time.Second, time.Millisecond)
+	eventually.Require(t, func(t *eventually.T) { require.Equal(t, int32(2), running.Load()) }, time.Second, time.Millisecond)
 
 	// Cancel base context
 	cancel()
-	require.Eventually(t, func() bool { return running.Load() == 0 }, time.Second, time.Millisecond)
+	eventually.Require(t, func(t *eventually.T) { require.Equal(t, int32(0), running.Load()) }, time.Second, time.Millisecond)
 }
 
 func TestKeyedSet_ConcurrentSync(t *testing.T) {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/eventually"
 )
 
 type (
@@ -61,21 +62,18 @@ func WaitGoRoutineWithFn(t testing.TB, fn any, opts ...func(*WaitOptions)) int {
 
 	attempt := 1
 	numFound := 0
-	require.Eventually(t,
-		func() bool {
-			numFound, err = numGoRoutinesWithFn(fnName)
-			require.NoError(t, err)
-			if numFound == wo.NumGoRoutines {
-				t.Logf("Found %s function %d times on %d attempt\n", fnName, numFound, attempt)
-				return true
-			}
-
-			attempt++
-			return false
-		},
-		wo.MaxDuration,
-		wo.CheckInterval,
-		"Function %s must be found %d times but was found %d times in all go routine call stacks after %s", fnName, wo.NumGoRoutines, numFound, wo.MaxDuration.String())
+	eventually.Require(t, func(et *eventually.T) {
+		var err error
+		numFound, err = numGoRoutinesWithFn(fnName)
+		require.NoError(et, err)
+		if numFound == wo.NumGoRoutines {
+			t.Logf("Found %s function %d times on %d attempt\n", fnName, numFound, attempt)
+			return
+		}
+		attempt++
+		require.Equalf(et, wo.NumGoRoutines, numFound,
+			"Function %s must be found %d times but was found %d times in all go routine call stacks after %s", fnName, wo.NumGoRoutines, numFound, wo.MaxDuration.String())
+	}, wo.MaxDuration, wo.CheckInterval)
 	return attempt
 }
 

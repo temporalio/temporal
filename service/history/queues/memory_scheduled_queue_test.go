@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -90,7 +91,9 @@ func (s *memoryScheduledQueueSuite) Test_ThreeInOrderTasks() {
 	s.scheduledQueue.Add(t3)
 
 	// To ensure all timers have fired.
-	s.Eventually(func() bool { return calls.Load() == 0 }, time.Second, 100*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, int32(0), calls.Load())
+	}, time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) Test_ThreeCancelledTasks() {
@@ -113,7 +116,9 @@ func (s *memoryScheduledQueueSuite) Test_ThreeCancelledTasks() {
 	s.scheduledQueue.Add(t2)
 	s.scheduledQueue.Add(t3)
 
-	s.Eventually(func() bool { return calls.Load() == 0 }, time.Second, 100*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, int32(0), calls.Load())
+	}, time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
@@ -146,7 +151,9 @@ func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
 	}
 
 	// To ensure all timers have fired.
-	s.Eventually(func() bool { return calls.Load() == 0 }, 10*time.Second, 100*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, int32(0), calls.Load())
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *memoryScheduledQueueSuite) newSpeculativeWorkflowTaskTimeoutTestExecutable(

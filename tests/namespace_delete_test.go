@@ -11,6 +11,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,6 +24,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -81,17 +83,13 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, time.Second, func(t *eventually.T) {
 		_, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
-			return false
-		}
-
-		return true
-	}, 20*time.Second, time.Second)
+		require.True(t, errors.As(err, &notFound))
+	})
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
@@ -128,17 +126,13 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_OverrideDelay() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, time.Second, func(t *eventually.T) {
 		_, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
-			return false
-		}
-
-		return true
-	}, 20*time.Second, time.Second)
+		require.True(t, errors.As(err, &notFound))
+	})
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
@@ -172,17 +166,13 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_Empty_WithID() {
 	})
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, time.Second, func(t *eventually.T) {
 		_, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
-		if !errors.As(err, &notFound) {
-			return false
-		}
-
-		return true
-	}, 20*time.Second, time.Second)
+		require.True(t, errors.As(err, &notFound))
+	})
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithNameAndID() {
@@ -271,13 +261,14 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, time.Second, func(t *eventually.T) {
 		_, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false // namespace still exists
+			require.Fail(t, "namespace should be deleted")
+			return
 		}
 
 		for _, execution := range executions {
@@ -287,12 +278,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithWorkflows() {
 					WorkflowId: execution.GetWorkflowId(),
 				},
 			})
-			if !errors.As(err, &notFound) {
-				return false // should never happen
-			}
+			require.True(t, errors.As(err, &notFound))
 		}
-		return true
-	}, 20*time.Second, time.Second)
+	})
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
@@ -365,13 +353,14 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	s.NoError(err)
 	s.Equal(enumspb.NAMESPACE_STATE_DELETED, descResp2.GetNamespaceInfo().GetState())
 
-	s.Eventually(func() bool {
+	s.AwaitWithTimeout(20*time.Second, time.Second, func(t *eventually.T) {
 		_, err := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Id: nsID,
 		})
 		var notFound *serviceerror.NamespaceNotFound
 		if !errors.As(err, &notFound) {
-			return false // namespace still exists
+			require.Fail(t, "namespace should be deleted")
+			return
 		}
 
 		for _, execution := range executions {
@@ -381,12 +370,9 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 					WorkflowId: execution.GetWorkflowId(),
 				},
 			})
-			if !errors.As(err, &notFound) {
-				return false // should never happen
-			}
+			require.True(t, errors.As(err, &notFound))
 		}
-		return true
-	}, 20*time.Second, time.Second)
+	})
 }
 
 func (s *namespaceTestSuite) Test_NamespaceDelete_CrossNamespaceChild() {

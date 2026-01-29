@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
@@ -87,10 +88,11 @@ func (s *ownershipSuite) TestAcquireViaMembershipUpdate() {
 
 	shardController.ownership.membershipUpdateCh <- &membership.ChangedEvent{}
 
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		shardIDs := shardController.ShardIDs()
-		return len(shardIDs) == 1 && shardIDs[0] == shardID
-	}, 5*time.Second, 100*time.Millisecond)
+		require.Len(t, shardIDs, 1)
+		require.Equal(t, shardID, shardIDs[0])
+	}, eventually.DefaultTimeout, 100*time.Millisecond)
 
 	s.resource.HistoryServiceResolver.EXPECT().
 		RemoveListener(shardControllerMembershipUpdateListenerName).

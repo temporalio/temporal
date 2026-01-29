@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/eventually"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
@@ -447,10 +448,9 @@ func (s *matchingEngineSuite) testFailAddTaskWithHistoryError(
 		wg.Done()
 	}()
 
-	partitionReady := func() bool {
-		return len(s.matchingEngine.getTaskQueuePartitions(10)) >= 1
-	}
-	s.Eventually(partitionReady, 100*time.Millisecond, 10*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.GreaterOrEqual(t, len(s.matchingEngine.getTaskQueuePartitions(10)), 1)
+	}, 100*time.Millisecond, 10*time.Millisecond)
 
 	recordWorkflowTaskStartedResponse := &historyservice.RecordWorkflowTaskStartedResponse{
 		PreviousStartedEventId:     scheduledEventID,
@@ -823,7 +823,9 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	if err != errShutdown {
 		s.Require().NoError(err)
 	}
-	s.Eventually(didUpdate.Load, time.Second, time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.True(t, didUpdate.Load())
+	}, time.Second, time.Millisecond)
 
 	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
 	data, _, _ := mgr.GetUserDataManager().GetUserData()
@@ -1222,9 +1224,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		s.EqualValues(serializedToken, result.TaskToken)
 	}
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		assert.EqualValues(collect, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
-		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.EqualValues(t, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
+		require.EqualValues(t, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker_version=__unversioned__"]
@@ -2211,8 +2213,9 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	// at the end of this step, ackManager readLevel will also be equal to the buffer size
 	blm := tlMgr.backlogMgr.(*backlogManagerImpl)
 	expectedBufSize := min(cap(blm.taskReader.taskBuffer), taskCount)
-	s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) == expectedBufSize },
-		time.Second, 5*time.Millisecond)
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, expectedBufSize, len(blm.taskReader.taskBuffer))
+	}, time.Second, 5*time.Millisecond)
 
 	// unload the queue and stop all goroutines that read / write tasks in the background
 	// remainder of this test works with the in-memory buffer
@@ -2345,8 +2348,9 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		// wait until all tasks are loaded by into in-memory buffers by task queue manager
 		// the buffer size should be one less than expected because dispatcher will dequeue the head
 		// 1/4 should be thrown out because they are expired before they hit the buffer
-		s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) >= (3*taskCount/4 - 1) },
-			time.Second, 5*time.Millisecond)
+		eventually.Require(s.T(), func(t *eventually.T) {
+			require.GreaterOrEqual(t, len(blm.taskReader.taskBuffer), 3*taskCount/4-1)
+		}, time.Second, 5*time.Millisecond)
 
 		// ensure the 1/4 of tasks with small ScheduleToStartTimeout will be expired when they come out of the buffer
 		time.Sleep(300 * time.Millisecond)
@@ -2958,9 +2962,9 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
 	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(other, nil).Times(2)
 	e.membershipChangedCh <- nil
-	s.Eventually(func() bool {
-		return len(e.getTaskQueuePartitions(1000)) == 1
-	}, 100*time.Millisecond, 10*time.Millisecond, "p2 should have been unloaded")
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, 1, len(e.getTaskQueuePartitions(1000)), "p2 should have been unloaded")
+	}, 100*time.Millisecond, 10*time.Millisecond)
 
 	isLoaded := func(p tqid.Partition) bool {
 		tqm, _, err := e.getTaskQueuePartitionManager(context.Background(), p, false, loadCauseUnspecified)
@@ -2989,12 +2993,12 @@ func (s *matchingEngineSuite) TaskQueueMetricValidator(capture *metricstest.Capt
 
 func (s *matchingEngineSuite) PhysicalQueueMetricValidator(capture *metricstest.Capture, physicalTaskQueueLength int, physicalTaskQueueCounter float64) {
 	// checks the metrics according to the values passed in the parameters
-	s.Eventually(func() bool {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		snapshot := capture.Snapshot()
 		physicalTaskQueueRecordings := snapshot[metrics.LoadedPhysicalTaskQueueGauge.Name()]
-		return len(physicalTaskQueueRecordings) == physicalTaskQueueLength &&
-			physicalTaskQueueCounter == physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64)
-	}, 5*time.Second, 100*time.Millisecond)
+		require.Len(t, physicalTaskQueueRecordings, physicalTaskQueueLength)
+		require.Equal(t, physicalTaskQueueCounter, physicalTaskQueueRecordings[physicalTaskQueueLength-1].Value.(float64))
+	}, eventually.DefaultTimeout, 100*time.Millisecond)
 }
 
 func (s *matchingEngineSuite) TestUpdateTaskQueuePartitionGauge_RootPartitionWorkflowType() {
@@ -3215,7 +3219,7 @@ func (s *matchingEngineSuite) addWorkflowTask(
 	workflowExecution *commonpb.WorkflowExecution,
 	taskQueue *taskqueuepb.TaskQueue,
 ) {
-	s.EventuallyWithT(func(c *assert.CollectT) {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		addRequest := matchingservice.AddWorkflowTaskRequest{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
@@ -3224,12 +3228,12 @@ func (s *matchingEngineSuite) addWorkflowTask(
 			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
 		}
 		_, _, err := s.matchingEngine.AddWorkflowTask(context.Background(), &addRequest)
-		require.NoError(c, err)
-	}, 10*time.Second, time.Millisecond, "failed to add workflow task")
+		require.NoError(t, err)
+	}, 10*time.Second, time.Millisecond)
 }
 
 func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *taskqueuepb.TaskQueue) {
-	s.EventuallyWithT(func(c *assert.CollectT) {
+	eventually.Require(s.T(), func(t *eventually.T) {
 		result, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -3237,10 +3241,10 @@ func (s *matchingEngineSuite) createPollWorkflowTaskRequestAndPoll(taskQueue *ta
 				Identity:  "nobody",
 			},
 		}, metrics.NoopMetricsHandler)
-		require.NoError(c, err) // DB could have failed while fetching tasks; try again
-		require.NotEmpty(c, result.TaskToken)
-		require.NotZero(c, result.Attempt)
-	}, 3*time.Second, time.Millisecond, "failed to poll workflow task")
+		require.NoError(t, err) // DB could have failed while fetching tasks; try again
+		require.NotEmpty(t, result.TaskToken)
+		require.NotZero(t, result.Attempt)
+	}, 3*time.Second, time.Millisecond)
 }
 
 // addWorkflowTasks adds taskCount number of tasks sequentially
@@ -3417,9 +3421,9 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
 
 	s.EqualValues(0, s.taskManager.getTaskCount(ptq))
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
-	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
+	eventually.Require(s.T(), func(t *eventually.T) {
+		require.Equal(t, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
+	}, 4*time.Second, 10*time.Millisecond)
 }
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
