@@ -503,3 +503,109 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 }
+
+// TestDrainCompletionNoReloadDraining tests that after drain completes:
+// 1. OtherHasTasks is set to false in persisted metadata
+// 2. On reload, no draining is set up and no persistence calls are made to the migration table
+func TestDrainCompletionNoReloadDraining(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	config := defaultTestConfig()
+	config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(50 * time.Millisecond)
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+
+	nsName := namespace.Name("ns-name")
+	ns, registry := createMockNamespaceCache(controller, nsName)
+
+	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+	engine.metricsHandler = metricstest.NewCaptureHandler()
+
+	// Get the test task managers
+	priTm := engine.taskManager.(*testTaskManager)
+	fairTm := engine.fairTaskManager.(*testTaskManager)
+
+	physicalTaskQueueKey := defaultTqId()
+	prtn := physicalTaskQueueKey.Partition()
+	tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	require.NoError(t, err)
+	engine.partitions[prtn.Key()] = prtnMgr
+
+	prtnMgr.config.NewMatcher = true
+	prtnMgr.config.EnableFairness = true
+
+	tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, physicalTaskQueueKey)
+	require.NoError(t, err)
+	prtnMgr.defaultQueueFuture.Set(tqMgr, nil)
+
+	tqMgr.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = tqMgr.WaitUntilInitialized(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	// grab referencs to these to peek inside
+	priQueueData := priTm.getQueueDataByKey(physicalTaskQueueKey)
+	fairQueueData := fairTm.getQueueDataByKey(physicalTaskQueueKey)
+
+	// wait for both to be loaded
+	require.Eventually(t, func() bool {
+		pri, fair := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
+		return (pri.updateCount > 0 || pri.createCount > 0) && (fair.updateCount > 0 || fair.createCount > 0)
+	}, 2*time.Second, 10*time.Millisecond, "both tables should be loaded")
+
+	// since the pri table is empty, drain should complete quickly.
+	// wait for drain completion (drainbacklogmgr becomes nil) and
+	// otherhastasks is false in persistence
+	require.Eventually(t, func() bool {
+		fairQueueData.Lock()
+		otherHasTasks := fairQueueData.info.OtherHasTasks
+		fairQueueData.Unlock()
+		return tqMgr.getDrainBacklogMgr() == nil && !otherHasTasks
+	}, 5*time.Second, 50*time.Millisecond, "drain should complete")
+
+	// unload
+	prtnMgr.Stop(unloadCauseUnspecified)
+
+	// record current counts
+	prevPriStats, prevFairStats := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
+
+	// create a new manager (reload)
+	prtnMgr2, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	require.NoError(t, err)
+	engine.partitions[prtn.Key()] = prtnMgr2
+
+	prtnMgr2.config.NewMatcher = true
+	prtnMgr2.config.EnableFairness = true
+
+	tqMgr2, err := newPhysicalTaskQueueManager(prtnMgr2, physicalTaskQueueKey)
+	require.NoError(t, err)
+	prtnMgr2.defaultQueueFuture.Set(tqMgr2, nil)
+
+	tqMgr2.Start()
+	defer tqMgr2.Stop(unloadCauseShuttingDown)
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	err = tqMgr2.WaitUntilInitialized(ctx)
+	cancel()
+	require.NoError(t, err)
+
+	// wait for fair queue to be updated on reload
+	require.Eventually(t, func() bool {
+		return fairQueueData.persistenceStats().updateCount > prevFairStats.updateCount
+	}, 2*time.Second, 10*time.Millisecond, "fair table should be updated on reload")
+
+	// verify no draining is set up on reload
+	require.Nil(t, tqMgr2.getDrainBacklogMgr(), "draining should not be set up after reload")
+
+	// verify no new persistence calls on pri queue
+	assert.Equal(t, prevPriStats.updateCount, priQueueData.persistenceStats().updateCount,
+		"no new UpdateTaskQueue calls should be made to drained table after reload")
+}

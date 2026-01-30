@@ -418,6 +418,20 @@ func (db *taskQueueDB) getTotalApproximateBacklogCount() int64 {
 	return total
 }
 
+// SetOtherHasTasks updates the otherHasTasks flag and attempts to persist immediately.
+// The in-memory state is updated regardless of whether persistence succeeds.
+// Returns any error from the persistence attempt.
+func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
+	db.Lock()
+	defer db.Unlock()
+	if db.otherHasTasks == value {
+		return nil
+	}
+	db.otherHasTasks = value
+	db.lastChange = time.Now()
+	return db.updateTaskQueueLocked(ctx, false)
+}
+
 // CreateTasks creates a batch of given tasks for this task queue
 func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
