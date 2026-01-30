@@ -19,6 +19,7 @@ communication.
 
 The frontend exposes the following Nexus HTTP routes over the existing HTTP API (default port is `7243`):
 
+> ⚠️ All of the following routes are considered experimental and may change without notice until the feature stabilizes ⚠️
 ### `/namespaces/{namespace}/task-queues/{task_queue}/nexus-services`
 
 Dispatch a nexus task directly to a task queue.
@@ -60,7 +61,7 @@ To enable Nexus in your deployment:
           httpAddress: $PUBLIC_URL:7243
     ```
 
-2. Enable Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration), set the public callback URL, and set the allowed callback addresses.
+2a. Prior to version 1.30.X, you must enable Nexus through [dynamic config](https://docs.temporal.io/references/dynamic-configuration), set the public callback URL, and set the allowed callback addresses.
 
     ```yaml
     system.enableNexus:
@@ -73,12 +74,18 @@ To enable Nexus in your deployment:
     component.callbacks.allowedAddresses:
       # Limits which callback URLs are accepted by the server.
       # Wildcard patterns (*) and insecure (HTTP) callbacks are intended for development only.
-      # For production, restrict allowed hosts (e.g. via regex) and set AllowInsecure to false
+      # For production, restrict allowed hosts and set AllowInsecure to false
       # whenever HTTPS/TLS is supported. Allowing HTTP increases MITM and data exposure risk.
      - value:
-         - Pattern: "*" # Update to restrict allowed callers, e.g. "^https://$EXAMPLE_URL\\.example\\.com(:1234)?/.*$"
+         - Pattern: "*" # Update to restrict allowed callers, e.g. "https://$EXAMPLE_URL\\.example\\.com(:1234)?/.*$"
            AllowInsecure: true # In production, set to false when HTTPS/TLS is supported. 
     ```
+
+2a. Since version 1.30.X, Nexus is enabled by default, just set SystemCallbackURL for Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
+
+    ```yaml
+   component.nexusoperations.useSystemCallbackURL: true
+   ```
 
 ## Disabling Nexus
 
