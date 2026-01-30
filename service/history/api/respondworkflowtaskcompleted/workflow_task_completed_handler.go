@@ -245,9 +245,9 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 			tag.WorkflowID(wfKey.WorkflowID),
 			tag.WorkflowRunID(wfKey.RunID),
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
-			tag.NewStringTag("worker-identity", workerIdentity),
-			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
-			tag.NewInt("rejected-count", len(rejectedUpdateIDs)),
+			tag.String("worker-identity", workerIdentity),
+			tag.Strings("update-ids", rejectedUpdateIDs),
+			tag.Int("rejected-count", len(rejectedUpdateIDs)),
 		)
 	}
 

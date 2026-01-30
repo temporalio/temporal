@@ -429,9 +429,9 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 
 	tags := []tag.Tag{
 		tag.UserDataVersion(response.UserData.GetVersion()),
-		tag.NewInt64("expected-user-data-version", m.userData.GetVersion()),
+		tag.Int64("expected-user-data-version", m.userData.GetVersion()),
 		tag.Timestamp(hybrid_logical_clock.UTC(response.UserData.GetData().GetClock())),
-		tag.NewTimeTag("expected-user-data-timestamp", hybrid_logical_clock.UTC(m.userData.GetData().GetClock())),
+		tag.Time("expected-user-data-timestamp", hybrid_logical_clock.UTC(m.userData.GetData().GetClock())),
 	}
 
 	if response.UserData.GetVersion() < m.userData.GetVersion() {
@@ -524,7 +524,7 @@ func (m *userDataManagerImpl) updateUserData(
 		return userData, false, err
 	}
 	if err != nil {
-		m.logger.Error("user data update function failed", tag.Error(err), tag.NewStringTag("user-data-update-source", options.Source))
+		m.logger.Error("user data update function failed", tag.Error(err), tag.String("user-data-update-source", options.Source))
 		return nil, false, err
 	}
 
@@ -559,7 +559,7 @@ func (m *userDataManagerImpl) updateUserData(
 	}
 
 	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
-	m.logNewUserData("modified user data", updatedVersionedData, tag.NewStringTag("user-data-update-source", options.Source))
+	m.logNewUserData("modified user data", updatedVersionedData, tag.String("user-data-update-source", options.Source))
 	m.setUserDataLocked(updatedVersionedData)
 
 	return updatedVersionedData, shouldReplicate, err
@@ -588,7 +588,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// If we're closing, return a success with no data, as if the request expired. We shouldn't
 			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
 			// change of ownership. The caller will retry and be redirected to the new owner.
-			m.logger.Debug("returning empty user data (closing)", tag.NewBoolTag("long-poll", req.WaitNewData))
+			m.logger.Debug("returning empty user data (closing)", tag.Bool("long-poll", req.WaitNewData))
 			return &matchingservice.GetTaskQueueUserDataResponse{}, nil
 		} else if err != nil {
 			return nil, err
@@ -597,11 +597,11 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		newEphData := ephData.GetVersion() > lastEphVersion
 		if newUserData || newEphData {
 			m.logger.Info("returning user data",
-				tag.NewBoolTag("long-poll", req.WaitNewData),
-				tag.NewInt64("request-known-version", lastVersion),
+				tag.Bool("long-poll", req.WaitNewData),
+				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
-				tag.NewInt64("request-eph-data-version", lastEphVersion),
-				tag.NewInt64("eph-data-version", ephData.GetVersion()),
+				tag.Int64("request-eph-data-version", lastEphVersion),
+				tag.Int64("eph-data-version", ephData.GetVersion()),
 			)
 			var res matchingservice.GetTaskQueueUserDataResponse
 			if newUserData {
@@ -620,7 +620,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			// due to an edge case in during ownership transfer.
 			// We rely on client retries in this case to let the system eventually self-heal.
 			m.logger.Error("requested task queue user data for version greater than known version",
-				tag.NewInt64("request-known-version", lastVersion),
+				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.Version),
 			)
 			return nil, errRequestedVersionTooLarge
@@ -638,7 +638,7 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		select {
 		case <-ctx.Done():
 			m.logger.Debug("returning empty user data (expired)",
-				tag.NewInt64("request-known-version", lastVersion),
+				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
 			)
 			return &matchingservice.GetTaskQueueUserDataResponse{}, nil

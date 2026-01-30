@@ -33,7 +33,7 @@ func (t ZapTag) Key() string {
 	return t.field.Key
 }
 
-func (t ZapTag) Value() interface{} {
+func (t ZapTag) Value() any {
 	// Not for production use.
 	enc := zapcore.NewMapObjectEncoder()
 	t.field.AddTo(enc)
@@ -153,7 +153,7 @@ func NewTimePtrTag(key string, value *timestamppb.Timestamp) ZapTag {
 	}
 }
 
-func NewAnyTag(key string, value interface{}) ZapTag {
+func NewAnyTag(key string, value any) ZapTag {
 	return ZapTag{
 		field: zap.Any(key, value),
 	}
@@ -229,4 +229,14 @@ func Any(key string, value any) ZapTag {
 
 func Binary(key string, value []byte) ZapTag {
 	return NewBinaryTag(key, value)
+}
+
+func Bool(key string, b bool) ZapTag {
+	return NewBoolTag(key, b)
+}
+
+func Zap(field zap.Field) ZapTag {
+	return ZapTag{
+		field: field,
+	}
 }

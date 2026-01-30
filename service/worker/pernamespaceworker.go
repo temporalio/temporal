@@ -354,7 +354,7 @@ func (w *perNamespaceWorker) handleError(err error) {
 			w.logger.Error("Failed to start sdk worker, out of retries", tag.Error(err))
 			return
 		}
-		w.logger.Warn("Failed to start sdk worker", tag.Error(err), tag.NewDurationTag("sleep", sleep))
+		w.logger.Warn("Failed to start sdk worker", tag.Error(err), tag.Duration("sleep", sleep))
 	}
 
 	w.retryTimer = time.AfterFunc(sleep, func() {

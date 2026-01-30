@@ -461,8 +461,8 @@ func (e *ExecutableTaskImpl) Resend(
 				tag.WorkflowNamespaceID(retryErr.NamespaceId),
 				tag.WorkflowID(retryErr.WorkflowId),
 				tag.WorkflowRunID(retryErr.RunId),
-				tag.NewStringTag("first-resend-error", retryErr.Error()),
-				tag.NewStringTag("second-resend-error", resendErr.Error()),
+				tag.String("first-resend-error", retryErr.Error()),
+				tag.String("second-resend-error", resendErr.Error()),
 			)
 		}
 		// handle 2nd resend error, then 1st resend error
@@ -474,8 +474,8 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowNamespaceID(resendErr.NamespaceId),
 			tag.WorkflowID(resendErr.WorkflowId),
 			tag.WorkflowRunID(resendErr.RunId),
-			tag.NewStringTag("first-resend-error", retryErr.Error()),
-			tag.NewStringTag("second-resend-error", resendErr.Error()),
+			tag.String("first-resend-error", retryErr.Error()),
+			tag.String("second-resend-error", resendErr.Error()),
 			tag.Error(err),
 		)
 		return false, resendErr
@@ -484,8 +484,8 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
-			tag.NewStringTag("first-resend-error", retryErr.Error()),
-			tag.NewStringTag("second-resend-error", resendErr.Error()),
+			tag.String("first-resend-error", retryErr.Error()),
+			tag.String("second-resend-error", resendErr.Error()),
 		)
 		return false, resendErr
 	}

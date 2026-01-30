@@ -87,7 +87,7 @@ func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
 	opts := addOptions(omp, counterOptions{}, counter)
 	c, err := omp.provider.GetMeter().Int64Counter(counter, opts...)
 	if err != nil {
-		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", counter), tag.Error(err))
+		omp.l.Error("error getting metric", tag.String("MetricName", counter), tag.Error(err))
 		return CounterFunc(func(i int64, t ...Tag) {})
 	}
 
@@ -115,7 +115,7 @@ func (omp *otelMetricsHandler) getGaugeAdapter(gauge string) (*gaugeAdapter, err
 	_, err := omp.provider.GetMeter().Float64ObservableGauge(gauge, opts...)
 	if err != nil {
 		omp.gauges.Delete(gauge)
-		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", gauge), tag.Error(err))
+		omp.l.Error("error getting metric", tag.String("MetricName", gauge), tag.Error(err))
 		return nil, err
 	}
 
@@ -162,7 +162,7 @@ func (omp *otelMetricsHandler) timerInMilliseconds(timer string) TimerIface {
 	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(Milliseconds)}, timer)
 	c, err := omp.provider.GetMeter().Int64Histogram(timer, opts...)
 	if err != nil {
-		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		omp.l.Error("error getting metric", tag.String("MetricName", timer), tag.Error(err))
 		return TimerFunc(func(i time.Duration, t ...Tag) {})
 	}
 
@@ -176,7 +176,7 @@ func (omp *otelMetricsHandler) timerInSeconds(timer string) TimerIface {
 	opts := addOptions(omp, float64HistogramOptions{metric.WithUnit(Seconds)}, timer)
 	c, err := omp.provider.GetMeter().Float64Histogram(timer, opts...)
 	if err != nil {
-		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", timer), tag.Error(err))
+		omp.l.Error("error getting metric", tag.String("MetricName", timer), tag.Error(err))
 		return TimerFunc(func(i time.Duration, t ...Tag) {})
 	}
 
@@ -191,7 +191,7 @@ func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) Hist
 	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(string(unit))}, histogram)
 	c, err := omp.provider.GetMeter().Int64Histogram(histogram, opts...)
 	if err != nil {
-		omp.l.Error("error getting metric", tag.NewStringTag("MetricName", histogram), tag.Error(err))
+		omp.l.Error("error getting metric", tag.String("MetricName", histogram), tag.Error(err))
 		return HistogramFunc(func(i int64, t ...Tag) {})
 	}
 

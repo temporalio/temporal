@@ -1340,7 +1340,7 @@ Loop:
 			metrics.ShardInfoScheduledQueueLagTimer.With(metricsHandler).
 				Record(lag, metrics.TaskCategoryTag(category.Name()))
 		default:
-			s.contextTaggedLogger.Error("Unknown task category type", tag.NewStringerTag("task-category", category.Type()))
+			s.contextTaggedLogger.Error("Unknown task category type", tag.Stringer("task-category", category.Type()))
 		}
 	}
 }
@@ -2086,7 +2086,7 @@ func newContext(
 	if ioConcurrency != 1 && persistenceConfig.DataStores[persistenceConfig.DefaultStore].Cassandra != nil {
 		throttledLogger.Warn(
 			fmt.Sprintf("Cassandra persistence implementation only supports %v == 1", dynamicconfig.ShardIOConcurrency),
-			tag.NewInt("shard-io-concurrency", ioConcurrency),
+			tag.Int("shard-io-concurrency", ioConcurrency),
 		)
 		ioConcurrency = 1
 	}

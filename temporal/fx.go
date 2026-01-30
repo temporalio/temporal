@@ -552,7 +552,7 @@ func genericFrontendServiceProvider(
 			// extra tag to differentiate.
 			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
 			if serviceName == primitives.InternalFrontendService {
-				tags = append(tags, tag.NewBoolTag("internal-frontend", true))
+				tags = append(tags, tag.Bool("internal-frontend", true))
 			}
 			return log.With(params.Logger, tags...)
 		}),
@@ -1096,83 +1096,83 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.OnStartExecuting:
 		l.logger.Debug("OnStart hook executing",
 			tag.ComponentFX,
-			tag.NewStringTag("callee", e.FunctionName),
-			tag.NewStringTag("caller", e.CallerName),
+			tag.String("callee", e.FunctionName),
+			tag.String("caller", e.CallerName),
 		)
 	case *fxevent.OnStartExecuted:
 		if e.Err != nil {
 			l.logger.Error("OnStart hook failed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
 				tag.Error(e.Err),
 			)
 		} else {
 			l.logger.Debug("OnStart hook executed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringerTag("runtime", e.Runtime),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
+				tag.Stringer("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
 		l.logger.Debug("OnStop hook executing",
 			tag.ComponentFX,
-			tag.NewStringTag("callee", e.FunctionName),
-			tag.NewStringTag("caller", e.CallerName),
+			tag.String("callee", e.FunctionName),
+			tag.String("caller", e.CallerName),
 		)
 	case *fxevent.OnStopExecuted:
 		if e.Err != nil {
 			l.logger.Error("OnStop hook failed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
 				tag.Error(e.Err),
 			)
 		} else {
 			l.logger.Debug("OnStop hook executed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringerTag("runtime", e.Runtime),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
+				tag.Stringer("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
 		if e.Err != nil {
 			l.logger.Error("supplied",
 				tag.ComponentFX,
-				tag.NewStringTag("type", e.TypeName),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("type", e.TypeName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Provided:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Replaced:
 		if e.Err != nil {
 			l.logger.Error("error encountered while replacing",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Decorated:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Run:
 		if e.Err != nil {
 			l.logger.Error("error returned",
 				tag.ComponentFX,
-				tag.NewStringTag("name", e.Name),
-				tag.NewStringTag("kind", e.Kind),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("name", e.Name),
+				tag.String("kind", e.Kind),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err),
 			)
 		}
@@ -1180,23 +1180,23 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 		// Do not log stack as it will make logs hard to read.
 		l.logger.Debug("invoking",
 			tag.ComponentFX,
-			tag.NewStringTag("function", e.FunctionName),
-			tag.NewStringTag("module", e.ModuleName),
+			tag.String("function", e.FunctionName),
+			tag.String("module", e.ModuleName),
 		)
 	case *fxevent.Invoked:
 		if e.Err != nil {
 			l.logger.Error("invoke failed",
 				tag.ComponentFX,
 				tag.Error(e.Err),
-				tag.NewStringTag("stack", e.Trace),
-				tag.NewStringTag("function", e.FunctionName),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("stack", e.Trace),
+				tag.String("function", e.FunctionName),
+				tag.String("module", e.ModuleName),
 			)
 		}
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringerTag("signal", e.Signal))
+			tag.Stringer("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))
@@ -1219,14 +1219,14 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 		} else {
 			l.logger.Debug("initialized custom fxevent.Logger",
 				tag.ComponentFX,
-				tag.NewStringTag("function", e.ConstructorName))
+				tag.String("function", e.ConstructorName))
 		}
 	case *fxevent.BeforeRun:
 		l.logger.Debug("before run",
 			tag.ComponentFX,
-			tag.NewStringTag("name", e.Name),
-			tag.NewStringTag("kind", e.Kind),
-			tag.NewStringTag("module", e.ModuleName),
+			tag.String("name", e.Name),
+			tag.String("kind", e.Kind),
+			tag.String("module", e.ModuleName),
 		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",

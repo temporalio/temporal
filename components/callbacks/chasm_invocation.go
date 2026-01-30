@@ -38,7 +38,7 @@ func (c chasmInvocation) WrapError(result invocationResult, err error) error {
 // returned. Intended to be used to hide internal errors from end users.
 func logInternalError(logger log.Logger, internalMsg string, internalErr error) error {
 	referenceID := uuid.NewString()
-	logger.Error(internalMsg, tag.Error(internalErr), tag.NewStringTag("reference-id", referenceID))
+	logger.Error(internalMsg, tag.Error(internalErr), tag.String("reference-id", referenceID))
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 

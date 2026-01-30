@@ -187,7 +187,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		logger.Error("Child workflow error.", tag.Error(err))
 		return result, err
 	}
-	logger.Info("Child workflow executed successfully.", tag.NewStringTag("wf-child-type", reclaimresources.WorkflowName))
+	logger.Info("Child workflow executed successfully.", tag.String("wf-child-type", reclaimresources.WorkflowName))
 
 	logger.Info("Workflow finished successfully.")
 	return result, nil

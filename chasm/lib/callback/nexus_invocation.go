@@ -69,7 +69,7 @@ func (n nexusInvocation) Invoke(
 		traceLogger := log.With(e.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
-			tag.NewStringTag("destination", taskAttr.Destination),
+			tag.String("destination", taskAttr.Destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
 			tag.AttemptStart(time.Now().UTC()),
@@ -127,7 +127,7 @@ func (n nexusInvocation) Invoke(
 
 	retryable := isRetryableHTTPResponse(response)
 	err = readHandlerErrFromResponse(response, e.logger)
-	e.logger.Error("Callback request failed", tag.Error(err), tag.NewStringTag("status", response.Status), tag.NewBoolTag("retryable", retryable))
+	e.logger.Error("Callback request failed", tag.Error(err), tag.String("status", response.Status), tag.Bool("retryable", retryable))
 	if retryable {
 		return invocationResultRetry{err: err}
 	}
@@ -146,7 +146,7 @@ func readHandlerErrFromResponse(response *http.Response, logger log.Logger) erro
 
 	body, err := readAndReplaceBody(response)
 	if err != nil {
-		logger.Error("Error reading response body for non-ok callback request", tag.Error(err), tag.NewStringTag("status", response.Status))
+		logger.Error("Error reading response body for non-ok callback request", tag.Error(err), tag.String("status", response.Status))
 		return err
 	}
 

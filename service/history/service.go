@@ -106,7 +106,7 @@ func (s *Service) Start() {
 			// pausing before joining membership can help separate the shard movement
 			// caused by another history instance terminating with this instance starting.
 			s.logger.Info("history start: delaying before membership start",
-				tag.NewDurationTag("startupMembershipJoinDelay", delay))
+				tag.Duration("startupMembershipJoinDelay", delay))
 			time.Sleep(delay)
 		}
 		s.membershipMonitor.Start()
