@@ -19,8 +19,6 @@ communication.
 
 The frontend exposes the following Nexus HTTP routes over the existing HTTP API (default port is `7243`):
 
-> ⚠️ All of the following routes are considered experimental and may change without notice until the feature stabilizes ⚠️
-
 ### `/namespaces/{namespace}/task-queues/{task_queue}/nexus-services`
 
 Dispatch a nexus task directly to a task queue.
@@ -33,23 +31,19 @@ Dispatch a nexus task directly to a registered endpoint by ID. (more on this lat
 
 Complete a Nexus operation via callback.
 
-# Trying Nexus Out
+# Nexus Environment Configurations
 
-Since Nexus is a new feature with experimental APIs and has not been exercised in production, it is disabled by default
-until it is considered stable.
+Nexus is disabled by default in releases prior to `1.30.X`, with the `1.30.X` release Nexus will be enabled by default.
 
-Nexus is only supported in single cluster setups for the time being due to endpoint registry replication not being implemented
-yet.
+> NOTE: Nexus is only supported in single cluster setups due to endpoint registry replication not being implemented.
 
 ## Enabling Nexus
 
 To enable Nexus in your deployment:
 
 > NOTE: Replace `$PUBLIC_URL` with a URL value that is accessible to external callers or internally within the cluster.
-> At the time of writing external Nexus calls are considered experimental so it should be safe to use the address of an
-> internal load balancer for the frontend service.
 
-1. Ensure that the server's static configuration file enables the HTTP API.
+1. Ensure that the server's [static configuration file](https://docs.temporal.io/references/configuration) enables the HTTP API.
 
     ```yaml
     services:
@@ -66,7 +60,7 @@ To enable Nexus in your deployment:
           httpAddress: $PUBLIC_URL:7243
     ```
 
-2. Enable Nexus via dynamic config, set the public callback URL, and set the allowed callback addresses.
+2. Enable Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration), set the public callback URL, and set the allowed callback addresses.
 
     ```yaml
     system.enableNexus:
@@ -77,12 +71,13 @@ To enable Nexus in your deployment:
       # membership. The URL is a Go template that interpolates the `NamepaceName` and `NamespaceID` variables.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
     component.callbacks.allowedAddresses:
-      # This list is a security mechanism for limiting which callback URLs are accepted by the server.
-      # Attackers may leverage the callback mechanism to force the server to call arbitrary URLs.
-      # The config below is only recommended for development, tune this to your requirements.
-      - value:
-          - Pattern: "*"
-            AllowInsecure: true
+      # Limits which callback URLs are accepted by the server.
+      # Wildcard patterns (*) and insecure (HTTP) callbacks are intended for development only.
+      # For production, restrict allowed hosts (e.g. via regex) and set AllowInsecure to false
+      # whenever HTTPS/TLS is supported. Allowing HTTP increases MITM and data exposure risk.
+     - value:
+         - Pattern: "*" # Update to restrict allowed callers, e.g. "^https://$EXAMPLE_URL\\.example\\.com(:1234)?/.*$"
+           AllowInsecure: true # In production, set to false when HTTPS/TLS is supported. 
     ```
 
 ## Disabling Nexus
@@ -93,9 +88,8 @@ the Outbound Queue Processor](#disabling-the-outbound-queue-processor) for shutt
 
 ## Downgrading to a Pre-Nexus Server Release
 
-In order to safely downgrade the server version to `1.24.x`, first disable nexus via dynamic config
-(`system.enableNexus`). This ensures that no experimental functionality while Nexus was still being developed is
-triggered.
+In order to safely downgrade the server version to `1.24.x` or earlier, first disable nexus via dynamic config
+(`system.enableNexus`). This ensures that no unrelease Nexus functionality is triggered in these versions.
 
 After disabling Nexus, outbound tasks currently scheduled will not be run and timer tasks will immediately go to the
 [DLQ](../admin/dlq.md) without any retries. Workflows with pending Nexus operations will be stuck.
@@ -129,8 +123,8 @@ The endpoints table is versioned where every write to the table increments its v
 purposes: to ensure writes are serialized, and to determine whether a node has an up-to-date view of the table when long
 polling.
 
-> ⚠️  At the time of writing, replication for the registry is not implemented and Nexus shouldn't be used in multi cluster
-setups. Replication will be implemented at a later time.⚠️
+> ⚠️  Nexus shouldn't be used in multi cluster setups because replication for the registry is not implemented. 
+> This feature is planned for the future. ⚠️
 
 ## Outbound Task Queue
 
