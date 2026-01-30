@@ -2706,7 +2706,6 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 
 	taskqueue := "functional-activity-multi-heartbeat-failover-test-taskqueue"
 	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
-	s.NoError(err)
 
 	// Orchestration channels
 	hb1Ch := make(chan struct{}, 1)
