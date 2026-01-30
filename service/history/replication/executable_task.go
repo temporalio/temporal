@@ -285,7 +285,9 @@ func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 }
 
 func (e *ExecutableTaskImpl) MarkExecutionStart() {
-	e.taskExecuteStartTime = time.Now().UTC()
+	if e.taskExecuteStartTime.IsZero() {
+		e.taskExecuteStartTime = time.Now().UTC()
+	}
 }
 
 func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
@@ -346,6 +348,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
 				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
 				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId), e.replicationTask.RawTaskInfo.WorkflowId)),
+				tag.AttemptCount(int64(e.Attempt())),
 			)
 		}
 	}
