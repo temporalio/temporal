@@ -5345,7 +5345,7 @@ func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 10 * time.Second,
 			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    3 * time.Second, // Give us time to change deployment
+				InitialInterval:    5 * time.Second, // Give us time to change deployment
 				BackoffCoefficient: 1.0,
 				MaximumAttempts:    3,
 			},
