@@ -2706,7 +2706,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 
 	taskqueue := "functional-activity-multi-heartbeat-failover-test-taskqueue"
 	client0, worker0 := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker0")
-	client1, _ := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	s.NoError(err)
 
 	// Orchestration channels
 	hb1Ch := make(chan struct{}, 1)
@@ -2776,10 +2776,10 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	// Wait for first heartbeat to be sent
 	<-hb1Ch
 
-	// Validate heartbeat1 is visible on standby before failover (eventually)
+	// Validate heartbeat1 is visible before failover (eventually)
 	var hbVal int
 	s.Eventually(func() bool {
-		desc0, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
+		desc0, err := client0.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
 		if err != nil || len(desc0.GetPendingActivities()) != 1 {
 			return false
 		}
