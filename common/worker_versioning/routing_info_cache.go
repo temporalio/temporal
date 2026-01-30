@@ -13,20 +13,21 @@ import (
 //
 // Implementations are expected to be safe for concurrent use.
 type (
+	RoutingInfo struct {
+		Current               *deploymentspb.WorkerDeploymentVersion
+		CurrentRevisionNumber int64
+		Ramping               *deploymentspb.WorkerDeploymentVersion
+		RampPercentage        float32
+		RampingRevisionNumber int64
+	}
+
 	RoutingInfoCache interface {
 		// Get returns the cached routing info. ok=false means there was no cached value.
 		Get(
 			namespaceID string,
 			taskQueue string,
 			taskQueueType enumspb.TaskQueueType,
-		) (
-			current *deploymentspb.WorkerDeploymentVersion,
-			currentRevisionNumber int64,
-			ramping *deploymentspb.WorkerDeploymentVersion,
-			rampPercentage float32,
-			rampingRevisionNumber int64,
-			ok bool,
-		)
+		) (RoutingInfo, bool)
 
 		Put(
 			namespaceID string,
@@ -73,14 +74,7 @@ func (c *RoutingInfoCacheImpl) Get(
 	namespaceID string,
 	taskQueue string,
 	taskQueueType enumspb.TaskQueueType,
-) (
-	current *deploymentspb.WorkerDeploymentVersion,
-	currentRevisionNumber int64,
-	ramping *deploymentspb.WorkerDeploymentVersion,
-	rampPercentage float32,
-	rampingRevisionNumber int64,
-	ok bool,
-) {
+) (RoutingInfo, bool) {
 	handler := c.metricsHandler.WithTags(metrics.OperationTag(metrics.RoutingInfoCacheGetScope), metrics.NamespaceIDTag(namespaceID))
 	metrics.CacheRequests.With(handler).Record(1)
 
@@ -92,17 +86,21 @@ func (c *RoutingInfoCacheImpl) Get(
 	v := c.Cache.Get(key)
 	if v == nil {
 		metrics.CacheMissCounter.With(handler).Record(1)
-		return nil, 0, nil, 0, 0, false
+		return RoutingInfo{}, false
 	}
 	value, ok := v.(routingInfoCacheValue)
 	if !ok {
 		// Unexpected type: treat as miss to avoid false positives.
 		metrics.CacheMissCounter.With(handler).Record(1)
-		return nil, 0, nil, 0, 0, false
+		return RoutingInfo{}, false
 	}
-	return value.current, value.currentRevisionNumber,
-		value.ramping, value.rampPercentage,
-		value.rampingRevisionNumber, true
+	return RoutingInfo{
+		Current:               value.current,
+		CurrentRevisionNumber: value.currentRevisionNumber,
+		Ramping:               value.ramping,
+		RampPercentage:        value.rampPercentage,
+		RampingRevisionNumber: value.rampingRevisionNumber,
+	}, true
 }
 
 func (c *RoutingInfoCacheImpl) Put(

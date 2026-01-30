@@ -290,7 +290,7 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	workflowId string,
 ) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
 	// Check cache first for task queue routing info (independent of workflow ID)
-	current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
+	routingInfo, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
 
 	if !ok {
 		// Cache miss, fetch from matching
@@ -306,16 +306,16 @@ func getDeploymentVersionAndRevisionNumberForWorkflowID(
 		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
 		if ok {
 			// Calculate the routing info for versioned task queue
-			current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+			routingInfo.Current, routingInfo.CurrentRevisionNumber, _, routingInfo.Ramping, _, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
 		}
-		// else: current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber are all zero/nil (unversioned)
+		// else: routingInfo fields are all zero/nil (unversioned)
 
 		// Store routing info in cache (without workflow ID) - even for unversioned task queues
-		routingInfoCache.Put(namespaceID, taskQueueName, taskQueueType, current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber)
+		routingInfoCache.Put(namespaceID, taskQueueName, taskQueueType, routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber)
 	}
 
 	// Apply workflow-specific routing logic
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId)
 
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }

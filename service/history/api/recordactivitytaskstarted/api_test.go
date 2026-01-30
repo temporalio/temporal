@@ -21,16 +21,8 @@ type mockRoutingInfoCache struct {
 	getCalled   bool
 	putCalled   bool
 	cacheHit    bool
-	cachedData  *routingCacheData
-	lastPutData *routingCacheData
-}
-
-type routingCacheData struct {
-	current               *deploymentspb.WorkerDeploymentVersion
-	currentRevisionNumber int64
-	ramping               *deploymentspb.WorkerDeploymentVersion
-	rampPercentage        float32
-	rampingRevisionNumber int64
+	cachedData  *worker_versioning.RoutingInfo
+	lastPutData *worker_versioning.RoutingInfo
 }
 
 func newMockRoutingInfoCache() *mockRoutingInfoCache {
@@ -41,21 +33,12 @@ func (m *mockRoutingInfoCache) Get(
 	namespaceID string,
 	taskQueue string,
 	taskQueueType enumspb.TaskQueueType,
-) (
-	current *deploymentspb.WorkerDeploymentVersion,
-	currentRevisionNumber int64,
-	ramping *deploymentspb.WorkerDeploymentVersion,
-	rampPercentage float32,
-	rampingRevisionNumber int64,
-	ok bool,
-) {
+) (worker_versioning.RoutingInfo, bool) {
 	m.getCalled = true
 	if !m.cacheHit || m.cachedData == nil {
-		return nil, 0, nil, 0, 0, false
+		return worker_versioning.RoutingInfo{}, false
 	}
-	return m.cachedData.current, m.cachedData.currentRevisionNumber,
-		m.cachedData.ramping, m.cachedData.rampPercentage,
-		m.cachedData.rampingRevisionNumber, true
+	return *m.cachedData, true
 }
 
 func (m *mockRoutingInfoCache) Put(
@@ -69,12 +52,12 @@ func (m *mockRoutingInfoCache) Put(
 	rampingRevisionNumber int64,
 ) {
 	m.putCalled = true
-	m.lastPutData = &routingCacheData{
-		current:               current,
-		currentRevisionNumber: currentRevisionNumber,
-		ramping:               ramping,
-		rampPercentage:        rampPercentage,
-		rampingRevisionNumber: rampingRevisionNumber,
+	m.lastPutData = &worker_versioning.RoutingInfo{
+		Current:               current,
+		CurrentRevisionNumber: currentRevisionNumber,
+		Ramping:               ramping,
+		RampPercentage:        rampPercentage,
+		RampingRevisionNumber: rampingRevisionNumber,
 	}
 }
 
@@ -89,18 +72,18 @@ func TestGetDeploymentVersionForWorkflowID_CacheHit(t *testing.T) {
 
 	// Setup cache to return a hit
 	mockCache.cacheHit = true
-	mockCache.cachedData = &routingCacheData{
-		current: &deploymentspb.WorkerDeploymentVersion{
+	mockCache.cachedData = &worker_versioning.RoutingInfo{
+		Current: &deploymentspb.WorkerDeploymentVersion{
 			DeploymentName: "deployment-1",
 			BuildId:        "build-1",
 		},
-		currentRevisionNumber: 100,
-		ramping: &deploymentspb.WorkerDeploymentVersion{
+		CurrentRevisionNumber: 100,
+		Ramping: &deploymentspb.WorkerDeploymentVersion{
 			DeploymentName: "deployment-2",
 			BuildId:        "build-2",
 		},
-		rampPercentage:        0.3,
-		rampingRevisionNumber: 200,
+		RampPercentage:        0.3,
+		RampingRevisionNumber: 200,
 	}
 
 	// Matching client should NOT be called when cache hits
@@ -133,11 +116,11 @@ func TestGetDeploymentVersionForWorkflowID_CacheHit(t *testing.T) {
 	// The result should be computed using FindTargetDeploymentVersionAndRevisionNumberForWorkflowID
 	// with the cached routing info
 	expectedVersion, expectedRevNum := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(
-		mockCache.cachedData.current,
-		mockCache.cachedData.currentRevisionNumber,
-		mockCache.cachedData.ramping,
-		mockCache.cachedData.rampPercentage,
-		mockCache.cachedData.rampingRevisionNumber,
+		mockCache.cachedData.Current,
+		mockCache.cachedData.CurrentRevisionNumber,
+		mockCache.cachedData.Ramping,
+		mockCache.cachedData.RampPercentage,
+		mockCache.cachedData.RampingRevisionNumber,
 		workflowID,
 	)
 	assert.Equal(t, expectedVersion, targetVersion)
@@ -214,7 +197,7 @@ func TestGetDeploymentVersionForWorkflowID_CacheMiss(t *testing.T) {
 
 	// Verify the cached data was populated correctly
 	require.NotNil(t, mockCache.lastPutData)
-	assert.Equal(t, currentVersion, mockCache.lastPutData.current)
+	assert.Equal(t, currentVersion, mockCache.lastPutData.Current)
 
 	// Verify result
 	require.NoError(t, err)
@@ -270,11 +253,11 @@ func TestGetDeploymentVersionForWorkflowID_UnversionedTaskQueue(t *testing.T) {
 
 	// Verify the cached data for unversioned task queue (all nil/zero)
 	require.NotNil(t, mockCache.lastPutData)
-	assert.Nil(t, mockCache.lastPutData.current, "Cached current should be nil for unversioned")
-	assert.Equal(t, int64(0), mockCache.lastPutData.currentRevisionNumber, "Cached current rev should be 0")
-	assert.Nil(t, mockCache.lastPutData.ramping, "Cached ramping should be nil for unversioned")
-	assert.Equal(t, float32(0), mockCache.lastPutData.rampPercentage, "Cached ramp percentage should be 0")
-	assert.Equal(t, int64(0), mockCache.lastPutData.rampingRevisionNumber, "Cached ramping rev should be 0")
+	assert.Nil(t, mockCache.lastPutData.Current, "Cached current should be nil for unversioned")
+	assert.Equal(t, int64(0), mockCache.lastPutData.CurrentRevisionNumber, "Cached current rev should be 0")
+	assert.Nil(t, mockCache.lastPutData.Ramping, "Cached ramping should be nil for unversioned")
+	assert.InDelta(t, float32(0), mockCache.lastPutData.RampPercentage, 0.0001, "Cached ramp percentage should be 0")
+	assert.Equal(t, int64(0), mockCache.lastPutData.RampingRevisionNumber, "Cached ramping rev should be 0")
 
 	// Verify result for unversioned task queue
 	require.NoError(t, err)

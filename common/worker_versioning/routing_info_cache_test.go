@@ -1,3 +1,4 @@
+//nolint:staticcheck
 package worker_versioning
 
 import (
@@ -38,7 +39,7 @@ func TestRoutingInfoCache_GetPut(t *testing.T) {
 	rampingRevNum := int64(200)
 
 	// Test cache miss
-	_, _, _, _, _, ok := routingCache.Get(namespaceID, taskQueue, taskQueueType)
+	_, ok := routingCache.Get(namespaceID, taskQueue, taskQueueType)
 	assert.False(t, ok, "Cache should be empty initially")
 
 	// Test Put
@@ -54,17 +55,17 @@ func TestRoutingInfoCache_GetPut(t *testing.T) {
 	)
 
 	// Test cache hit
-	gotCurrent, gotCurrentRev, gotRamping, gotRampPct, gotRampingRev, ok := routingCache.Get(
+	result, ok := routingCache.Get(
 		namespaceID,
 		taskQueue,
 		taskQueueType,
 	)
 	require.True(t, ok, "Cache should contain the entry")
-	assert.Equal(t, currentVersion, gotCurrent)
-	assert.Equal(t, currentRevNum, gotCurrentRev)
-	assert.Equal(t, rampingVersion, gotRamping)
-	assert.Equal(t, rampPercentage, gotRampPct)
-	assert.Equal(t, rampingRevNum, gotRampingRev)
+	assert.Equal(t, currentVersion, result.Current)
+	assert.Equal(t, currentRevNum, result.CurrentRevisionNumber)
+	assert.Equal(t, rampingVersion, result.Ramping)
+	assert.InDelta(t, rampPercentage, result.RampPercentage, 0.0001)
+	assert.Equal(t, rampingRevNum, result.RampingRevisionNumber)
 }
 
 func TestRoutingInfoCache_DifferentKeys(t *testing.T) {
@@ -92,15 +93,15 @@ func TestRoutingInfoCache_DifferentKeys(t *testing.T) {
 	routingCache.Put(namespace2, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version2, 200, nil, 0, 0)
 
 	// Verify both entries exist and are independent
-	current1, rev1, _, _, _, ok1 := routingCache.Get(namespace1, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	result1, ok1 := routingCache.Get(namespace1, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	assert.True(t, ok1)
-	assert.Equal(t, version1, current1)
-	assert.Equal(t, int64(100), rev1)
+	assert.Equal(t, version1, result1.Current)
+	assert.Equal(t, int64(100), result1.CurrentRevisionNumber)
 
-	current2, rev2, _, _, _, ok2 := routingCache.Get(namespace2, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	result2, ok2 := routingCache.Get(namespace2, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	assert.True(t, ok2)
-	assert.Equal(t, version2, current2)
-	assert.Equal(t, int64(200), rev2)
+	assert.Equal(t, version2, result2.Current)
+	assert.Equal(t, int64(200), result2.CurrentRevisionNumber)
 }
 
 func TestRoutingInfoCache_TaskQueueTypes(t *testing.T) {
@@ -127,16 +128,16 @@ func TestRoutingInfoCache_TaskQueueTypes(t *testing.T) {
 	routingCache.Put(namespace, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY, activityVersion, 200, nil, 0, 0)
 
 	// Verify workflow task queue type
-	current, rev, _, _, _, ok := routingCache.Get(namespace, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	result, ok := routingCache.Get(namespace, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	assert.True(t, ok)
-	assert.Equal(t, workflowVersion, current)
-	assert.Equal(t, int64(100), rev)
+	assert.Equal(t, workflowVersion, result.Current)
+	assert.Equal(t, int64(100), result.CurrentRevisionNumber)
 
 	// Verify activity task queue type
-	current, rev, _, _, _, ok = routingCache.Get(namespace, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	result, ok = routingCache.Get(namespace, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	assert.True(t, ok)
-	assert.Equal(t, activityVersion, current)
-	assert.Equal(t, int64(200), rev)
+	assert.Equal(t, activityVersion, result.Current)
+	assert.Equal(t, int64(200), result.CurrentRevisionNumber)
 }
 
 func TestRoutingInfoCache_NilValues(t *testing.T) {
@@ -154,13 +155,13 @@ func TestRoutingInfoCache_NilValues(t *testing.T) {
 	routingCache.Put(namespace, taskQueue, taskQueueType, nil, 0, nil, 0, 0)
 
 	// Verify we can retrieve nil values
-	current, rev, ramping, rampPct, rampingRev, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
+	result, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
 	assert.True(t, ok)
-	assert.Nil(t, current)
-	assert.Equal(t, int64(0), rev)
-	assert.Nil(t, ramping)
-	assert.Equal(t, float32(0), rampPct)
-	assert.Equal(t, int64(0), rampingRev)
+	assert.Nil(t, result.Current)
+	assert.Equal(t, int64(0), result.CurrentRevisionNumber)
+	assert.Nil(t, result.Ramping)
+	assert.InDelta(t, float32(0), result.RampPercentage, 0.0001)
+	assert.Equal(t, int64(0), result.RampingRevisionNumber)
 }
 
 func TestRoutingInfoCache_UpdateExisting(t *testing.T) {
@@ -190,10 +191,10 @@ func TestRoutingInfoCache_UpdateExisting(t *testing.T) {
 	routingCache.Put(namespace, taskQueue, taskQueueType, version2, 200, nil, 0, 0)
 
 	// Verify updated value
-	current, rev, _, _, _, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
+	result, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
 	assert.True(t, ok)
-	assert.Equal(t, version2, current)
-	assert.Equal(t, int64(200), rev)
+	assert.Equal(t, version2, result.Current)
+	assert.Equal(t, int64(200), result.CurrentRevisionNumber)
 }
 
 func TestRoutingInfoCache_WithRamping(t *testing.T) {
@@ -229,13 +230,13 @@ func TestRoutingInfoCache_WithRamping(t *testing.T) {
 	)
 
 	// Verify all values including ramping
-	current, currentRev, ramping, rampPct, rampingRev, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
+	result, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
 	assert.True(t, ok)
-	assert.Equal(t, currentVersion, current)
-	assert.Equal(t, int64(150), currentRev)
-	assert.Equal(t, rampingVersion, ramping)
-	assert.Equal(t, float32(0.25), rampPct)
-	assert.Equal(t, int64(250), rampingRev)
+	assert.Equal(t, currentVersion, result.Current)
+	assert.Equal(t, int64(150), result.CurrentRevisionNumber)
+	assert.Equal(t, rampingVersion, result.Ramping)
+	assert.InDelta(t, float32(0.25), result.RampPercentage, 0.0001)
+	assert.Equal(t, int64(250), result.RampingRevisionNumber)
 }
 
 func TestRoutingInfoCache_Concurrent(t *testing.T) {
@@ -255,8 +256,9 @@ func TestRoutingInfoCache_Concurrent(t *testing.T) {
 
 	// Concurrent writes
 	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(idx int) {
+		idx := i
+		wg.Add(1) //nolint:revive // use-waitgroup-go: standard sync.WaitGroup doesn't have Go() method
+		go func() {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				version := &deploymentspb.WorkerDeploymentVersion{
@@ -274,12 +276,12 @@ func TestRoutingInfoCache_Concurrent(t *testing.T) {
 					0,
 				)
 			}
-		}(i)
+		}()
 	}
 
 	// Concurrent reads
 	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
+		wg.Add(1) //nolint:revive // use-waitgroup-go: standard sync.WaitGroup doesn't have Go() method
 		go func() {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
@@ -291,7 +293,7 @@ func TestRoutingInfoCache_Concurrent(t *testing.T) {
 	wg.Wait()
 
 	// Verify cache is in a consistent state
-	_, _, _, _, _, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
+	_, ok := routingCache.Get(namespace, taskQueue, taskQueueType)
 	assert.True(t, ok, "Cache should contain an entry after concurrent operations")
 }
 
