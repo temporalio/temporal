@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -35,6 +36,7 @@ type clientImpl struct {
 	metricsHandler  metrics.Handler
 	logger          log.Logger
 	loadBalancer    LoadBalancer
+	spreadRouting   dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]]
 }
 
 // NewClient creates a new history service gRPC client
@@ -45,6 +47,7 @@ func NewClient(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	lb LoadBalancer,
+	spreadRouting dynamicconfig.TypedPropertyFn[dynamicconfig.GradualChange[int]],
 ) matchingservice.MatchingServiceClient {
 	return &clientImpl{
 		timeout:         timeout,
@@ -53,6 +56,7 @@ func NewClient(
 		metricsHandler:  metricsHandler,
 		logger:          logger,
 		loadBalancer:    lb,
+		spreadRouting:   spreadRouting,
 	}
 }
 
@@ -209,10 +213,20 @@ func (c *clientImpl) createLongPollContext(parent context.Context) (context.Cont
 	return context.WithTimeout(parent, c.longPollTimeout)
 }
 
+func (c *clientImpl) Route(p tqid.Partition) (string, error) {
+	spreadChange := c.spreadRouting()
+	spread := spreadChange.Value(p.GradualChangeKey(), time.Now())
+	return c.clients.Lookup(p.RoutingKey(spread))
+}
+
 func (c *clientImpl) getClientForTaskQueuePartition(
 	partition tqid.Partition,
 ) (matchingservice.MatchingServiceClient, error) {
-	client, err := c.clients.GetClientForKey(partition.RoutingKey())
+	addr, err := c.Route(partition)
+	if err != nil {
+		return nil, err
+	}
+	client, err := c.clients.GetClientForClientKey(addr)
 	if err != nil {
 		return nil, err
 	}

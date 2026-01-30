@@ -36,6 +36,11 @@ var errMatchingHostThrottleTest = &serviceerror.ResourceExhausted{
 	Message: "Matching host RPS exceeded.",
 }
 
+// emptyClientPollWorkflowTaskQueueResponse is the empty response for the client interface.
+// This is needed because the client interface returns *PollWorkflowTaskQueueResponse
+// while the server uses *PollWorkflowTaskQueueResponseWithRawHistory.
+var emptyClientPollWorkflowTaskQueueResponse = &matchingservice.PollWorkflowTaskQueueResponse{}
+
 type MatcherTestSuite struct {
 	suite.Suite
 	controller   *gomock.Controller
@@ -475,7 +480,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
 			t.Assert().ErrorIs(err, errNoTasks)
 		},
-	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
+	).Return(emptyClientPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
@@ -506,7 +511,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
 			t.Assert().ErrorIs(err, errNoTasks)
 		},
-	).Return(emptyPollWorkflowTaskQueueResponse, nil).AnyTimes()
+	).Return(emptyClientPollWorkflowTaskQueueResponse, nil).AnyTimes()
 
 	// make a poll that expires
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)

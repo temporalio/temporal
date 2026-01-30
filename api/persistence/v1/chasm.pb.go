@@ -221,7 +221,11 @@ type ChasmComponentAttributes struct {
 	SideEffectTasks []*ChasmComponentAttributes_Task `protobuf:"bytes,2,rep,name=side_effect_tasks,json=sideEffectTasks,proto3" json:"side_effect_tasks,omitempty"`
 	// Tasks are ordered by their scheduled time, breaking ties by
 	// versioned transition and versioned_transition_offset.
-	PureTasks     []*ChasmComponentAttributes_Task `protobuf:"bytes,3,rep,name=pure_tasks,json=pureTasks,proto3" json:"pure_tasks,omitempty"`
+	PureTasks []*ChasmComponentAttributes_Task `protobuf:"bytes,3,rep,name=pure_tasks,json=pureTasks,proto3" json:"pure_tasks,omitempty"`
+	// When true, this component ignores parent lifecycle validation.
+	// Detached components can continue operating, accepting writes and executing
+	// tasks, even when their parent is closed/terminated.
+	Detached      bool `protobuf:"varint,4,opt,name=detached,proto3" json:"detached,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -275,6 +279,13 @@ func (x *ChasmComponentAttributes) GetPureTasks() []*ChasmComponentAttributes_Ta
 		return x.PureTasks
 	}
 	return nil
+}
+
+func (x *ChasmComponentAttributes) GetDetached() bool {
+	if x != nil {
+		return x.Detached
+	}
+	return false
 }
 
 type ChasmDataAttributes struct {
@@ -804,12 +815,13 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x15collection_attributes\x18\r \x01(\v2=.temporal.server.api.persistence.v1.ChasmCollectionAttributesH\x00R\x14collectionAttributes\x12k\n" +
 	"\x12pointer_attributes\x18\x0e \x01(\v2:.temporal.server.api.persistence.v1.ChasmPointerAttributesH\x00R\x11pointerAttributesB\f\n" +
 	"\n" +
-	"attributes\"\x9f\x05\n" +
+	"attributes\"\xbb\x05\n" +
 	"\x18ChasmComponentAttributes\x12\x17\n" +
 	"\atype_id\x18\x01 \x01(\rR\x06typeId\x12m\n" +
 	"\x11side_effect_tasks\x18\x02 \x03(\v2A.temporal.server.api.persistence.v1.ChasmComponentAttributes.TaskR\x0fsideEffectTasks\x12`\n" +
 	"\n" +
-	"pure_tasks\x18\x03 \x03(\v2A.temporal.server.api.persistence.v1.ChasmComponentAttributes.TaskR\tpureTasks\x1a\x98\x03\n" +
+	"pure_tasks\x18\x03 \x03(\v2A.temporal.server.api.persistence.v1.ChasmComponentAttributes.TaskR\tpureTasks\x12\x1a\n" +
+	"\bdetached\x18\x04 \x01(\bR\bdetached\x1a\x98\x03\n" +
 	"\x04Task\x12\x17\n" +
 	"\atype_id\x18\x01 \x01(\rR\x06typeId\x12 \n" +
 	"\vdestination\x18\x02 \x01(\tR\vdestination\x12A\n" +
