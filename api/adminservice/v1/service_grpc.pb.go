@@ -157,8 +157,7 @@ type AdminServiceClient interface {
 	GenerateLastHistoryReplicationTasks(ctx context.Context, in *GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*GenerateLastHistoryReplicationTasksResponse, error)
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
-	// MigrateSchedule migrates a V1 workflow-backed schedule to V2 CHASM.
-	// This signals the V1 workflow to run the migration activity.
+	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
 }
 
@@ -687,8 +686,7 @@ type AdminServiceServer interface {
 	GenerateLastHistoryReplicationTasks(context.Context, *GenerateLastHistoryReplicationTasksRequest) (*GenerateLastHistoryReplicationTasksResponse, error)
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
-	// MigrateSchedule migrates a V1 workflow-backed schedule to V2 CHASM.
-	// This signals the V1 workflow to run the migration activity.
+	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }

@@ -66,6 +66,16 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 		RunningWorkflows: []*commonpb.WorkflowExecution{
 			{WorkflowId: "wf-1", RunId: "run-1"},
 		},
+		RecentActions: []*schedulepb.ScheduleActionResult{
+			{
+				ScheduleTime: timestamppb.New(now.Add(-time.Hour)),
+				ActualTime:   timestamppb.New(now.Add(-time.Millisecond)),
+			},
+			{
+				ScheduleTime: timestamppb.New(now.Add(-time.Hour)),
+				ActualTime:   timestamppb.New(now.Add(-time.Millisecond)),
+			},
+		},
 	}
 	searchAttrs := map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}
 	memo := map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}
@@ -74,6 +84,7 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 
 	// Scheduler state
 	require.NotNil(t, migrationState)
+	require.Equal(t, "check the schedule is pauses", migrationState.SchedulerState)
 	require.NotNil(t, migrationState.SchedulerState)
 	require.Equal(t, "test-ns", migrationState.SchedulerState.Namespace)
 	require.Equal(t, "test-ns-id", migrationState.SchedulerState.NamespaceId)
@@ -86,7 +97,11 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	require.Equal(t, now, migrationState.GeneratorState.LastProcessedTime.AsTime())
 
 	// Invoker state - buffered starts + running workflows
+
+	//TODO: check: buffered, completed, running
 	require.NotNil(t, migrationState.InvokerState)
+	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
+	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
 	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
 	for _, start := range migrationState.InvokerState.BufferedStarts {
 		require.NotEmpty(t, start.RequestId)
