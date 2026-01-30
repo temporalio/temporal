@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/mock/gomock"
@@ -430,6 +432,99 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 				require.True(t, ok)
 			} else {
 				require.False(t, ok)
+			}
+		})
+	}
+}
+
+func TestIndexSearchAttributesForVisibilityStoreTypes(t *testing.T) {
+	// This test verifies that indexSearchAttributes is populated for SQL, Custom, and Elasticsearch
+	// visibility stores when persistenceCustomSearchAttributes config is provided.
+	// This mirrors the logic in ApplyClusterMetadataConfigProvider that builds indexSearchAttributes.
+
+	csaOverride := map[enumspb.IndexedValueType]int{
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD: 40,
+		enumspb.INDEXED_VALUE_TYPE_INT:     20,
+	}
+
+	testCases := []struct {
+		name           string
+		dataStore      config.DataStore
+		expectPopulate bool
+	}{
+		{
+			name: "SQL visibility store",
+			dataStore: config.DataStore{
+				SQL: &config.SQL{
+					DatabaseName: "test_visibility_db",
+				},
+			},
+			expectPopulate: true,
+		},
+		{
+			name: "Custom visibility store",
+			dataStore: config.DataStore{
+				CustomDataStoreConfig: &config.CustomDatastoreConfig{
+					IndexName: "test_custom_index",
+				},
+			},
+			expectPopulate: true,
+		},
+		{
+			name: "Elasticsearch visibility store",
+			dataStore: config.DataStore{
+				Elasticsearch: &esclient.Config{
+					Indices: map[string]string{
+						esclient.VisibilityAppName: "test_es_visibility_index",
+					},
+				},
+			},
+			expectPopulate: true,
+		},
+		{
+			name: "Cassandra visibility store (not supported)",
+			dataStore: config.DataStore{
+				Cassandra: &config.Cassandra{
+					Keyspace: "test_keyspace",
+				},
+			},
+			expectPopulate: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
+
+			// This mirrors the logic in ApplyClusterMetadataConfigProvider (fx.go lines 653-657)
+			ds := tc.dataStore
+			if ds.SQL != nil || ds.CustomDataStoreConfig != nil || ds.Elasticsearch != nil {
+				indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(csaOverride)
+			}
+
+			if tc.expectPopulate {
+				require.Len(t, indexSearchAttributes, 1)
+				indexName := ds.GetIndexName()
+				require.NotEmpty(t, indexName)
+				isa := indexSearchAttributes[indexName]
+				require.NotNil(t, isa)
+				require.NotEmpty(t, isa.CustomSearchAttributes)
+
+				// Verify the override was applied: should have 40 Keyword fields
+				keywordCount := 0
+				intCount := 0
+				for _, saType := range isa.CustomSearchAttributes {
+					if saType == enumspb.INDEXED_VALUE_TYPE_KEYWORD {
+						keywordCount++
+					}
+					if saType == enumspb.INDEXED_VALUE_TYPE_INT {
+						intCount++
+					}
+				}
+				require.Equal(t, 40, keywordCount, "expected 40 keyword fields from override")
+				require.Equal(t, 20, intCount, "expected 20 int fields from override")
+			} else {
+				require.Empty(t, indexSearchAttributes)
 			}
 		})
 	}

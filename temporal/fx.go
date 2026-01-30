@@ -651,7 +651,7 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
-		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
+		if ds.SQL != nil || ds.CustomDataStoreConfig != nil || ds.Elasticsearch != nil {
 			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}
