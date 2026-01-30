@@ -734,24 +734,25 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		Namespace:  ms.namespaceEntry.Name().String(),
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
-		// Backwards compatibility: this is the default link type.
-		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+	}
+	requestIDInfo := ms.executionState.RequestIds[requestID]
+	// For a callback that is attached to a running workflow, we create a RequestIdReference link since the event may be
+	// buffered and not have a final event ID yet.
+	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+		// If the callback was attached, then replace with RequestIdReference.
+		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: requestID,
+				EventType: requestIDInfo.GetEventType(),
+			},
+		}
+	} else {
+		// For a callback that is attached on workflow start, we create an EventReference link.
+		link.Reference = &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 				EventId:   common.FirstEventID,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
-		},
-	}
-	if ms.config.EnableRequestIdRefLinks() {
-		requestIDInfo := ms.executionState.RequestIds[requestID]
-		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-			// If the callback was attached, then replace with RequestIdReference.
-			link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-					RequestId: requestID,
-					EventType: requestIDInfo.GetEventType(),
-				},
-			}
 		}
 	}
 	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
