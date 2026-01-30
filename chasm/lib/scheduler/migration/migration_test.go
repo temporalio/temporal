@@ -68,12 +68,10 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 		},
 		RecentActions: []*schedulepb.ScheduleActionResult{
 			{
-				ScheduleTime: timestamppb.New(now.Add(-time.Hour)),
-				ActualTime:   timestamppb.New(now.Add(-time.Millisecond)),
-			},
-			{
-				ScheduleTime: timestamppb.New(now.Add(-time.Hour)),
-				ActualTime:   timestamppb.New(now.Add(-time.Millisecond)),
+				ScheduleTime:        timestamppb.New(now.Add(-time.Hour)),
+				ActualTime:          timestamppb.New(now.Add(-time.Millisecond)),
+				StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "wf-2", RunId: "run-2"},
+				StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 			},
 		},
 	}
@@ -84,8 +82,8 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 
 	// Scheduler state
 	require.NotNil(t, migrationState)
-	require.Equal(t, "check the schedule is pauses", migrationState.SchedulerState)
 	require.NotNil(t, migrationState.SchedulerState)
+	require.True(t, migrationState.SchedulerState.Schedule.State.Paused, "schedule should be paused after migration")
 	require.Equal(t, "test-ns", migrationState.SchedulerState.Namespace)
 	require.Equal(t, "test-ns-id", migrationState.SchedulerState.NamespaceId)
 	require.Equal(t, "test-sched-id", migrationState.SchedulerState.ScheduleId)
@@ -96,17 +94,33 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	require.NotNil(t, migrationState.GeneratorState)
 	require.Equal(t, now, migrationState.GeneratorState.LastProcessedTime.AsTime())
 
-	// Invoker state - buffered starts + running workflows
-
-	//TODO: check: buffered, completed, running
+	// Invoker state - buffered starts + running workflows + completed
 	require.NotNil(t, migrationState.InvokerState)
-	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
-	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
-	require.Len(t, migrationState.InvokerState.BufferedStarts, 2) // 1 buffered + 1 running
+	require.Len(t, migrationState.InvokerState.BufferedStarts, 3) // 1 buffered + 1 running + 1 completed
+
+	var buffered, running, completed int
 	for _, start := range migrationState.InvokerState.BufferedStarts {
 		require.NotEmpty(t, start.RequestId)
 		require.NotEmpty(t, start.WorkflowId)
+		switch {
+		case start.RunId == "" && start.Completed == nil:
+			buffered++
+		case start.RunId != "" && start.Completed == nil:
+			running++
+			require.Equal(t, "wf-1", start.WorkflowId)
+			require.Equal(t, "run-1", start.RunId)
+		case start.Completed != nil:
+			completed++
+			require.Equal(t, "wf-2", start.WorkflowId)
+			require.Equal(t, "run-2", start.RunId)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.Completed.Status)
+		default:
+			t.Fatalf("unexpected buffered start state: RunId=%q, Completed=%v", start.RunId, start.Completed)
+		}
 	}
+	require.Equal(t, 1, buffered, "expected 1 pending buffered start")
+	require.Equal(t, 1, running, "expected 1 running workflow")
+	require.Equal(t, 1, completed, "expected 1 completed workflow")
 
 	// Backfillers
 	require.Len(t, migrationState.Backfillers, 1)
