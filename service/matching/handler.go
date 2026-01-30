@@ -247,7 +247,7 @@ func (h *Handler) PollActivityTaskQueue(
 func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-) (_ *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, retError error) {
+) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 	if err := h.checkReady(); err != nil {
 		return nil, err
 	}
