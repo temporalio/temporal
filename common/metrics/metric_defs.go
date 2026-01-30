@@ -44,6 +44,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -457,6 +458,10 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
+	// RoutingInfoCacheGetScope is the scope used by routing info cache
+	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
+	// RoutingInfoCachePutScope is the scope used by routing info cache
+	RoutingInfoCachePutScope = "RoutingInfoCachePut"
 )
 
 // Matching Scope
