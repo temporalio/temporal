@@ -1444,7 +1444,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 
 	// Mock the external signal (propagation complete signal is sent after async propagation)
 	var capturedSignalArg *deploymentspb.PropagationCompletionInfo
-	expectedWorkflowID := GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	expectedWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
 	s.env.OnSignalExternalWorkflow(
 		mock.Anything,
 		expectedWorkflowID,

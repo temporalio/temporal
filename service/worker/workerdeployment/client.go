@@ -226,7 +226,7 @@ func (d *ClientImpl) SetManager(
 		ctx,
 		d.historyClient,
 		namespaceEntry,
-		GenerateDeploymentWorkflowID(request.GetDeploymentName()),
+		worker_versioning.GenerateDeploymentWorkflowID(request.GetDeploymentName()),
 		&updatepb.Request{
 			Input: &updatepb.Input{Name: SetManagerIdentity, Args: updatePayload},
 			Meta:  &updatepb.Meta{UpdateId: requestID, Identity: request.GetIdentity()},
@@ -369,7 +369,7 @@ func (d *ClientImpl) DescribeVersion(
 		return nil, nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -451,7 +451,7 @@ func (d *ClientImpl) UpdateVersionMetadata(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(version.GetDeploymentName(), version.GetBuildId())
+	workflowID := worker_versioning.GenerateVersionWorkflowID(version.GetDeploymentName(), version.GetBuildId())
 	outcome, err := updateWorkflow(ctx, d.historyClient, namespaceEntry, workflowID, &updatepb.Request{
 		Input: &updatepb.Input{Name: UpdateVersionMetadata, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
@@ -486,7 +486,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 		return nil, nil, err
 	}
 
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
+	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	req := &historyservice.QueryWorkflowRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -539,7 +539,7 @@ func (d *ClientImpl) workerDeploymentExists(
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
 ) (bool, error) {
-	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
+	deploymentWorkflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	res, err := d.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
 		NamespaceId: namespaceEntry.ID().String(),
@@ -689,7 +689,7 @@ func (d *ClientImpl) SetCurrentVersion(
 			ctx,
 			d.historyClient,
 			namespaceEntry,
-			GenerateDeploymentWorkflowID(deploymentName),
+			worker_versioning.GenerateDeploymentWorkflowID(deploymentName),
 			&updatepb.Request{
 				Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
@@ -758,7 +758,7 @@ func (d *ClientImpl) SetRampingVersion(
 		return nil, err
 	}
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetRampingVersionArgs{
 		Identity:                identity,
@@ -879,7 +879,7 @@ func (d *ClientImpl) DeleteWorkerDeploymentVersion(
 		return err
 	}
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	outcome, err := updateWorkflow(
 		ctx,
@@ -935,7 +935,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 	if err != nil {
 		return err
 	}
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	outcome, err := updateWorkflow(
 		ctx,
@@ -971,7 +971,7 @@ func (d *ClientImpl) StartWorkerDeployment(
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), identity)()
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.WorkerDeploymentWorkflowArgs{
 		NamespaceName:  namespaceEntry.Name().String(),
@@ -1012,7 +1012,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 		return err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
 	if err != nil {
 		return err
@@ -1049,7 +1049,7 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, versionObj.GetBuildId())
 
 	// updates an already existing deployment version workflow.
 	outcome, err := updateWorkflow(
@@ -1104,7 +1104,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		return nil, err
 	}
 
-	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+	workflowID := worker_versioning.GenerateDeploymentWorkflowID(deploymentName)
 
 	exists, err := d.workerDeploymentExists(ctx, namespaceEntry, deploymentName)
 	if err != nil {
@@ -1186,7 +1186,7 @@ func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(
 		return nil, err
 	}
 
-	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+	workflowID := worker_versioning.GenerateVersionWorkflowID(deploymentName, buildID)
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
 	if err != nil {
 		return nil, err

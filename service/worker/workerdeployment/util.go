@@ -54,11 +54,12 @@ const (
 	// of a version exceeds the max number of versions allowed in a worker-deployment (defaultMaxVersions)
 
 	// Signals
-	ForceCANSignalName        = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
-	SyncDrainageSignalName    = "sync-drainage-status"
-	TerminateDrainageSignal   = "terminate-drainage"
-	SyncVersionSummarySignal  = "sync-version-summary"
-	PropagationCompleteSignal = "propagation-complete"
+	ForceCANSignalName          = "force-continue-as-new" // for Worker Deployment Version _and_ Worker Deployment wfs
+	SyncDrainageSignalName      = "sync-drainage-status"
+	TerminateDrainageSignal     = "terminate-drainage"
+	SyncVersionSummarySignal    = "sync-version-summary"
+	PropagationCompleteSignal   = "propagation-complete"
+	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
@@ -127,12 +128,6 @@ var (
 // Worker Deployment Version related workflowID's are valid
 func validateVersionWfParams(fieldName string, field string, maxIDLengthLimit int) error {
 	return worker_versioning.ValidateDeploymentVersionFields(fieldName, field, maxIDLengthLimit)
-}
-
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment workflows
-func GenerateDeploymentWorkflowID(deploymentName string) string {
-	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + deploymentName
 }
 
 func GetDeploymentNameFromWorkflowID(workflowID string) string {
