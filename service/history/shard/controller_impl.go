@@ -366,7 +366,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.Controllab
 		if err := limiter.Wait(ctx); err != nil {
 			c.contextTaggedLogger.Info("shardLinger: wait timed out",
 				tag.ShardID(shard.GetShardID()),
-				tag.Duration("duration", time.Now().Sub(startTime)),
+				tag.Duration("duration", time.Since(startTime)),
 			)
 			metrics.ShardLingerTimeouts.With(c.taggedMetricsHandler).Record(1)
 			break
