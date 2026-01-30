@@ -25,6 +25,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -222,6 +223,75 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Nil(resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+
+	// Create a modified state with metadata to verify override works
+	overrideState := &deploymentspb.VersionLocalState{
+		Version:    tv.DeploymentVersion(),
+		CreateTime: timestamppb.New(time.Now()),
+		Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		Metadata: &deploymentpb.VersionMetadata{
+			Entries: map[string]*commonpb.Payload{
+				"override-key": {Data: []byte("override-value")},
+			},
+		},
+		TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+			tv.TaskQueue().GetName(): {
+				TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
+				},
+			},
+		},
+	}
+
+	// Create signal args with the override state
+	signalArgs := &deploymentspb.ForceCANVersionSignalArgs{
+		OverrideState: overrideState,
+	}
+	marshaledData, err := proto.Marshal(signalArgs)
+	s.NoError(err)
+	signalPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("binary/protobuf"),
+				},
+				Data: marshaledData,
+			},
+		},
+	}
+
+	// Send ForceCAN signal with override state
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: versionWorkflowID,
+	}
+
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, tv.ClientIdentity())
+	s.NoError(err)
+
+	// Verify that the override state is used after CAN (metadata should be present)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.describeVersion(tv)
+		if !a.NoError(err) {
+			return
+		}
+
+		// Verify the metadata from override state is present
+		entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+		a.Len(entries, 1)
+		a.Equal([]byte("override-value"), entries["override-key"].Data)
 	}, time.Second*10, time.Millisecond*1000)
 }
 

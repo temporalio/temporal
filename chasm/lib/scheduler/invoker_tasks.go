@@ -176,6 +176,7 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 	}
 
 	logger := newTaggedLogger(e.baseLogger, scheduler)
+	metricsHandler := newTaggedMetricsHandler(e.metricsHandler, scheduler)
 
 	// Terminate, cancel, and start workflows. The result struct contains the
 	// complete outcome of all requests executed in a single batch.
@@ -184,9 +185,9 @@ func (e *InvokerExecuteTaskExecutor) Execute(
 	// cancel, start) at a time, so it isn't sensible to run them in parallel. The
 	// structure below is simply for code simplicity.
 	ictx := e.newInvokerTaskExecutorContext(ctx, scheduler)
-	result = result.Append(e.terminateWorkflows(ictx, logger, scheduler, invoker.GetTerminateWorkflows()))
-	result = result.Append(e.cancelWorkflows(ictx, logger, scheduler, invoker.GetCancelWorkflows()))
-	sres, startResults := e.startWorkflows(ictx, logger, scheduler, invoker, lastCompletionState, callback)
+	result = result.Append(e.terminateWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetTerminateWorkflows()))
+	result = result.Append(e.cancelWorkflows(ictx, logger, metricsHandler, scheduler, invoker.GetCancelWorkflows()))
+	sres, startResults := e.startWorkflows(ictx, logger, metricsHandler, scheduler, invoker, lastCompletionState, callback)
 	result = result.Append(sres)
 
 	// Record action results on the Invoker (internal state), as well as the
@@ -225,6 +226,7 @@ func (i *invokerTaskExecutorContext) takeNextAction() bool {
 func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 	ctx invokerTaskExecutorContext,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
@@ -245,8 +247,8 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
-				e.metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
+				logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
 			// Cancels are only attempted once.
@@ -262,6 +264,7 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 	ctx invokerTaskExecutorContext,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
 	targets []*commonpb.WorkflowExecution,
 ) (result executeResult) {
@@ -282,8 +285,8 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
-				e.metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
+				logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
 			// Terminates are only attempted once.
@@ -299,12 +302,13 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 func (e *InvokerExecuteTaskExecutor) startWorkflows(
 	ctx invokerTaskExecutorContext,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
 	invoker *Invoker,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	callback *commonpb.Callback,
 ) (result executeResult, startResults []*schedulepb.ScheduleActionResult) {
-	metricsWithTag := e.metricsHandler.WithTags(
+	metricsWithTag := metricsHandler.WithTags(
 		metrics.StringTag(metrics.ScheduleActionTypeTag, metrics.ScheduleActionStartWorkflow))
 
 	var wg sync.WaitGroup
@@ -332,13 +336,13 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
 		wg.Go(func() {
-			startResult, err := e.startWorkflow(newCtx, scheduler, start, lastCompletionState, callback)
+			startResult, err := e.startWorkflow(newCtx, metricsHandler, scheduler, start, lastCompletionState, callback)
 
 			resultMutex.Lock()
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to start workflow", tag.Error(err))
+				logger.Info("failed to start workflow", tag.Error(err))
 
 				// Don't count "already started" for the error metric or retry, as it is most likely
 				// due to misconfiguration.
@@ -528,6 +532,7 @@ func (e *InvokerProcessBufferTaskExecutor) startWorkflowDeadline(
 
 func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	ctx context.Context,
+	metricsHandler metrics.Handler,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
@@ -598,7 +603,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {
-		e.metricsHandler.
+		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
 			Record(actualStartTime.Sub(start.DesiredTime.AsTime()))
 	}

@@ -49,6 +49,8 @@ on:
         description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
         type: string
         default: '["sqlite"]'
+permissions:
+  contents: read
 
 concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   group: run-tests-${{ github.head_ref || github.run_id }}
@@ -534,8 +536,6 @@ jobs:
         run: ./develop/github/monitor_test.sh make functional-test-coverage
         env:
           TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
-          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
-          TEMPORAL_OTEL_DEBUG: true
 
       - name: Print memory snapshot
         if: always()
@@ -594,17 +594,6 @@ jobs:
         env:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
-
-      # Upload OpenTelemetry traces.
-      - name: Upload OpenTelemetry traces
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{matrix.shard_index}}--${{github.run_attempt}}--${{matrix.name}}--functional-test
-          path: ./.testoutput/traces.*.json
-          if-no-files-found: ignore
-          include-hidden-files: true
-          retention-days: 28
 
   # XDC matrix job. Include `${{ matrix.name }}` in the display name so each
   # matrix variant has a unique name for the job-id lookup.
@@ -708,9 +697,6 @@ jobs:
       - name: Run functional test xdc
         timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
         run: ./develop/github/monitor_test.sh make functional-test-xdc-coverage
-        env:
-          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
-          TEMPORAL_OTEL_DEBUG: true
 
       - name: Print memory snapshot
         if: always()
@@ -769,16 +755,6 @@ jobs:
         env:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
-
-      # Upload OpenTelemetry traces.
-      - name: Upload OpenTelemetry traces
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
-          path: ./.testoutput/traces.*.json
-          if-no-files-found: ignore
-          retention-days: 28
 
   # NDC matrix job. Include `${{ matrix.name }}` in the display name so each
   # matrix variant has a unique name for the job-id lookup.
@@ -879,9 +855,6 @@ jobs:
       - name: Run functional test ndc
         timeout-minutes: 15
         run: ./develop/github/monitor_test.sh make functional-test-ndc-coverage
-        env:
-          TEMPORAL_TEST_OTEL_OUTPUT: ${{ github.workspace }}/.testoutput
-          TEMPORAL_OTEL_DEBUG: true
 
       - name: Print memory snapshot
         if: always()
@@ -930,16 +903,6 @@ jobs:
         env:
           FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
           TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }} -count=5"
-
-      # Upload OpenTelemetry traces.
-      - name: Upload OpenTelemetry traces
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: traces-json--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
-          path: ./.testoutput/traces.*.json
-          if-no-files-found: ignore
-          retention-days: 28
 
   test-status:
     if: always()
