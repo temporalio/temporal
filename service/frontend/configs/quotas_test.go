@@ -65,6 +65,13 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 	}
 }
 
+func (s *quotasSuite) TestWorkerDeploymentReadAPIToPriorityMapping() {
+	for _, priority := range WorkerDeploymentReadAPIToPriority {
+		index := slices.Index(WorkerDeploymentReadAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
 func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {
 	for idx := range ExecutionAPIPrioritiesOrdered[1:] {
 		s.True(ExecutionAPIPrioritiesOrdered[idx] < ExecutionAPIPrioritiesOrdered[idx+1])
@@ -80,6 +87,12 @@ func (s *quotasSuite) TestVisibilityAPIPrioritiesOrdered() {
 func (s *quotasSuite) TestNamespaceReplicationInducingAPIPrioritiesOrdered() {
 	for idx := range NamespaceReplicationInducingAPIPrioritiesOrdered[1:] {
 		s.True(NamespaceReplicationInducingAPIPrioritiesOrdered[idx] < NamespaceReplicationInducingAPIPrioritiesOrdered[idx+1])
+	}
+}
+
+func (s *quotasSuite) TestWorkerDeploymentReadAPIPrioritiesOrdered() {
+	for idx := range WorkerDeploymentReadAPIPrioritiesOrdered[1:] {
+		s.True(WorkerDeploymentReadAPIPrioritiesOrdered[idx] < WorkerDeploymentReadAPIPrioritiesOrdered[idx+1])
 	}
 }
 
@@ -100,8 +113,9 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/CountSchedules":                    {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               {},
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   {},
-		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":         {},
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability": {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":     {},
 
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":  {},
@@ -153,6 +167,9 @@ func (s *quotasSuite) TestAllAPIs() {
 	for api := range NamespaceReplicationInducingAPIToPriority {
 		apisWithPriority[api] = struct{}{}
 	}
+	for api := range WorkerDeploymentReadAPIToPriority {
+		apisWithPriority[api] = struct{}{}
+	}
 	var service workflowservice.WorkflowServiceServer
 	temporalapi.WalkExportedMethods(&service, func(m reflect.Method) {
 		_, ok := apisWithPriority["/temporal.api.workflowservice.v1.WorkflowService/"+m.Name]
@@ -179,6 +196,11 @@ func (s *quotasSuite) TestOperatorPriority_Visibility() {
 func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	limiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
+}
+
+func (s *quotasSuite) TestOperatorPriority_WorkerDeploymentRead() {
+	limiter := NewWorkerDeploymentReadAPIPriorityRateLimiter(testRateBurstFn, testOperatorRPSRatioFn)
+	s.testOperatorPrioritized(limiter, "DescribeWorkerDeployment")
 }
 
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {

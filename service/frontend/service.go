@@ -70,6 +70,10 @@ type Config struct {
 	GlobalNamespaceVisibilityRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	InternalFEGlobalNamespaceVisibilityRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceNamespaceReplicationInducingAPIsRPS                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkerDeploymentReadAPIsRPS                                       dynamicconfig.IntPropertyFn
+	MaxNamespaceWorkerDeploymentReadAPIsRPSPerInstance                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceWorkerDeploymentReadAPIsBurstRatioPerInstance         dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	GlobalNamespaceWorkerDeploymentReadAPIsRPS                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                                                  dynamicconfig.IntPropertyFn
 	WorkerBuildIdSizeLimit                                            dynamicconfig.IntPropertyFn
 	ReachabilityTaskQueueScanLimit                                    dynamicconfig.IntPropertyFn
@@ -294,6 +298,11 @@ func NewConfig(
 		InternalFEGlobalNamespaceVisibilityRPS: dynamicconfig.InternalFrontendGlobalNamespaceVisibilityRPS.Get(dc),
 		// Overshoot since these low rate limits don't work well in an uncoordinated global limiter.
 		GlobalNamespaceNamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Get(dc),
+
+		WorkerDeploymentReadAPIsRPS:                               dynamicconfig.FrontendWorkerDeploymentReadAPIsRPS.Get(dc),
+		MaxNamespaceWorkerDeploymentReadAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceWorkerDeploymentReadAPIsRPSPerInstance.Get(dc),
+		MaxNamespaceWorkerDeploymentReadAPIsBurstRatioPerInstance: dynamicconfig.FrontendMaxNamespaceWorkerDeploymentReadAPIsBurstRatioPerInstance.Get(dc),
+		GlobalNamespaceWorkerDeploymentReadAPIsRPS:                dynamicconfig.FrontendGlobalNamespaceWorkerDeploymentReadAPIsRPS.Get(dc),
 
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
 		WorkerBuildIdSizeLimit:                   dynamicconfig.WorkerBuildIdSizeLimit.Get(dc),
