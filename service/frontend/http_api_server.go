@@ -235,8 +235,8 @@ func (h *HTTPAPIServer) serveHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.Debug(
 		"HTTP API call",
-		tag.NewStringTag("http-method", r.Method),
-		tag.NewAnyTag("http-url", r.URL),
+		tag.String("http-method", r.Method),
+		tag.Any("http-url", r.URL),
 	)
 
 	// Need to change the accept header based on whether pretty and/or

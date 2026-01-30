@@ -110,7 +110,7 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 		}
 
 		if size := f.stickyCacheSize(); size > 0 {
-			f.logger.Info("setting sticky workflow cache size", tag.NewInt("size", size))
+			f.logger.Info("setting sticky workflow cache size", tag.Int("size", size))
 			sdkworker.SetStickyWorkflowCacheSize(size)
 		}
 	})
