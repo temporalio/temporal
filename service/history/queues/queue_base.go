@@ -81,7 +81,8 @@ type (
 		nextForceNewSliceTime          time.Time
 
 		checkpointRetrier backoff.Retrier
-		checkpointTimer   *time.Timer
+		checkpointTimerCh <-chan time.Time
+		checkpointTimer   clock.Timer
 
 		alertCh <-chan *Alert
 	}
@@ -232,7 +233,7 @@ func (p *queueBase) Start() {
 	p.rescheduler.Start()
 	p.readerGroup.Start()
 
-	p.checkpointTimer = time.NewTimer(backoff.Jitter(
+	p.checkpointTimerCh, p.checkpointTimer = p.timeSource.NewTimer(backoff.Jitter(
 		p.options.CheckpointInterval(),
 		p.options.CheckpointIntervalJitterCoefficient(),
 	))

@@ -192,7 +192,7 @@ func (p *scheduledQueue) processEventLoop() {
 			p.lookAheadTask()
 		case <-p.timerGate.FireCh():
 			p.processNewRange()
-		case <-p.checkpointTimer.C:
+		case <-p.checkpointTimerCh:
 			p.checkpoint()
 		case alert := <-p.alertCh:
 			p.handleAlert(alert)

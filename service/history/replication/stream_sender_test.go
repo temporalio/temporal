@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -79,6 +80,7 @@ func (s *streamSenderSuite) SetupTest() {
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
 	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
+	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 
 	s.streamSender = NewStreamSender(
 		s.server,
@@ -1057,6 +1059,7 @@ func (s *streamSenderSuite) TestLivenessMonitor() {
 		s.streamSender.shutdownChan,
 		s.streamSender.Stop,
 		s.streamSender.logger,
+		s.streamSender.shardContext.GetTimeSource(),
 	)
 	s.False(s.streamSender.IsValid())
 }

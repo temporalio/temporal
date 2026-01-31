@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -82,6 +83,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		LowPriorityTaskScheduler:  s.taskScheduler,
 		MetricsHandler:            metrics.NoopMetricsHandler,
 		Logger:                    log.NewTestLogger(),
+		TimeSource:                clock.NewRealTimeSource(),
 		DLQWriter:                 NoopDLQWriter{},
 	}
 	processToolBox.Config.ReplicationStreamSyncStatusDuration = dynamicconfig.GetDurationPropertyFn(5 * time.Millisecond)
@@ -518,6 +520,7 @@ func (s *streamReceiverSuite) TestLivenessMonitor() {
 		s.streamReceiver.shutdownChan,
 		s.streamReceiver.Stop,
 		s.streamReceiver.logger,
+		s.streamReceiver.TimeSource,
 	)
 	s.False(s.streamReceiver.IsValid())
 }

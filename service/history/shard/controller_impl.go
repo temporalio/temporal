@@ -10,6 +10,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -74,6 +75,7 @@ func ControllerProvider(
 	metricsHandler metrics.Handler,
 	hostInfoProvider membership.HostInfoProvider,
 	contextFactory ContextFactory,
+	timeSource clock.TimeSource,
 ) *ControllerImpl {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	contextTaggedLogger := log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity))
@@ -85,6 +87,7 @@ func ControllerProvider(
 		hostInfoProvider,
 		contextTaggedLogger,
 		taggedMetricsHandler,
+		timeSource,
 	)
 
 	c := &ControllerImpl{

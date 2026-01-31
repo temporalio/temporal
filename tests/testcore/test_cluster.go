@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -88,6 +89,8 @@ type (
 		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
+		// TimeSource is an optional custom time source for the cluster.
+		TimeSource clock.TimeSource
 	}
 
 	TestClusterFactory interface {
@@ -329,6 +332,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
+		TimeSource:                       clusterConfig.TimeSource,
 	}
 
 	if clusterConfig.EnableMetricsCapture {
