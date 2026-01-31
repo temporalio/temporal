@@ -1144,7 +1144,7 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 	identity string,
 ) *historyspb.TransientWorkflowTaskInfo {
 
-	// Create scheduled and started events which are not written to the history yet.
+	// Create scheduled event which is not written to the history yet.
 	scheduledEvent := &historypb.HistoryEvent{
 		EventId:   workflowTask.ScheduledEventID,
 		EventTime: timestamppb.New(workflowTask.ScheduledTime),
@@ -1159,6 +1159,15 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 		},
 	}
 
+	// Check if WFT is started
+	if workflowTask.StartedEventID == common.EmptyEventID {
+		// WFT only scheduled, not started yet
+		return &historyspb.TransientWorkflowTaskInfo{
+			HistorySuffix: []*historypb.HistoryEvent{scheduledEvent},
+		}
+	}
+
+	// WFT both scheduled and started
 	var versioningStamp *commonpb.WorkerVersionStamp
 	if workflowTask.BuildId != "" {
 		// fill out the stamp value of the transient WFT based on MS data
