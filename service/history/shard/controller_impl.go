@@ -366,7 +366,7 @@ func (c *ControllerImpl) doLinger(ctx context.Context, shard historyi.Controllab
 		if err := limiter.Wait(ctx); err != nil {
 			c.contextTaggedLogger.Info("shardLinger: wait timed out",
 				tag.ShardID(shard.GetShardID()),
-				tag.NewDurationTag("duration", time.Now().Sub(startTime)),
+				tag.Duration("duration", time.Since(startTime)),
 			)
 			metrics.ShardLingerTimeouts.With(c.taggedMetricsHandler).Record(1)
 			break
@@ -513,10 +513,10 @@ func (c *ControllerImpl) checkShardReadiness(
 
 	if ready.Load() != int32(len(shards)) {
 		c.contextTaggedLogger.Info("initial shards not ready",
-			tag.NewInt32("ready", ready.Load()), tag.NewInt("total", len(shards)))
+			tag.Int32("ready", ready.Load()), tag.Int("total", len(shards)))
 		return false
 	}
-	c.contextTaggedLogger.Info("initial shards ready", tag.NewInt("total", len(shards)))
+	c.contextTaggedLogger.Info("initial shards ready", tag.Int("total", len(shards)))
 	return true
 }
 
@@ -594,5 +594,5 @@ func IsShardOwnershipLostError(err error) bool {
 }
 
 func numShardsTag(n int) tag.ZapTag {
-	return tag.NewInt("numShards", n)
+	return tag.Int("numShards", n)
 }

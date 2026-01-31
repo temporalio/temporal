@@ -61,7 +61,7 @@ func (task *SetupTask) setupTemplate() error {
 		return task.handleOperationFailure("template creation failed without error", errors.New("acknowledged=false"))
 	}
 
-	task.logger.Info("Template created successfully", tag.NewStringTag("templateName", templateName))
+	task.logger.Info("Template created successfully", tag.String("templateName", templateName))
 	return nil
 }
 
@@ -79,7 +79,7 @@ func (task *SetupTask) setupIndex(ctx context.Context) error {
 		var esErr *elastic.Error
 		if errors.As(err, &esErr) {
 			if esErr.Status == 400 && esErr.Details != nil && esErr.Details.Type == "resource_already_exists_exception" {
-				task.logger.Info("Index already exists, skipping creation", tag.NewStringTag("indexName", config.VisibilityIndex))
+				task.logger.Info("Index already exists, skipping creation", tag.String("indexName", config.VisibilityIndex))
 				return nil
 			}
 		}
@@ -88,13 +88,13 @@ func (task *SetupTask) setupIndex(ctx context.Context) error {
 		return task.handleOperationFailure("index creation failed without error", errors.New("acknowledged=false"))
 	}
 
-	task.logger.Info("Index created successfully", tag.NewStringTag("indexName", config.VisibilityIndex))
+	task.logger.Info("Index created successfully", tag.String("indexName", config.VisibilityIndex))
 	return nil
 }
 
 // RunSchemaSetup runs only cluster settings and template setup (no index creation)
 func (task *SetupTask) RunSchemaSetup() error {
-	task.logger.Info("Starting schema setup (cluster settings and template)", tag.NewAnyTag("config", task.config))
+	task.logger.Info("Starting schema setup (cluster settings and template)", tag.Any("config", task.config))
 
 	if err := task.setupClusterSettings(); err != nil {
 		task.logger.Error("Failed to setup cluster settings.", tag.Error(err))
@@ -112,7 +112,7 @@ func (task *SetupTask) RunSchemaSetup() error {
 
 // RunTemplateUpgrade runs only template upgrade
 func (task *SetupTask) RunTemplateUpgrade() error {
-	task.logger.Info("Starting template upgrade", tag.NewAnyTag("config", task.config))
+	task.logger.Info("Starting template upgrade", tag.Any("config", task.config))
 
 	if err := task.setupTemplate(); err != nil {
 		task.logger.Error("Failed to upgrade template.", tag.Error(err))
@@ -125,7 +125,7 @@ func (task *SetupTask) RunTemplateUpgrade() error {
 
 // RunIndexCreation runs only index creation
 func (task *SetupTask) RunIndexCreation(ctx context.Context) error {
-	task.logger.Info("Starting index creation", tag.NewAnyTag("config", task.config))
+	task.logger.Info("Starting index creation", tag.Any("config", task.config))
 
 	if err := task.setupIndex(ctx); err != nil {
 		task.logger.Error("Failed to create index.", tag.Error(err))
@@ -138,7 +138,7 @@ func (task *SetupTask) RunIndexCreation(ctx context.Context) error {
 
 // RunIndexUpdate updates the mappings of an existing index
 func (task *SetupTask) RunIndexUpdate() error {
-	task.logger.Info("Starting index mapping update", tag.NewAnyTag("config", task.config))
+	task.logger.Info("Starting index mapping update", tag.Any("config", task.config))
 
 	if err := task.updateIndexMappings(); err != nil {
 		task.logger.Error("Failed to update index mappings.", tag.Error(err))
@@ -195,7 +195,7 @@ func (task *SetupTask) updateIndexMappings() error {
 		return task.handleOperationFailure("index mapping update failed without error", errors.New("acknowledged=false"))
 	}
 
-	task.logger.Info("Index mappings updated successfully", tag.NewStringTag("indexName", indexName))
+	task.logger.Info("Index mappings updated successfully", tag.String("indexName", indexName))
 	return nil
 }
 

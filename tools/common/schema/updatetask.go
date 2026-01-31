@@ -77,7 +77,7 @@ func NewUpdateSchemaTask(db DB, config *UpdateConfig, logger log.Logger) *Update
 func (task *UpdateTask) Run() error {
 	config := task.config
 
-	task.logger.Info("UpdateSchemaTask started", tag.NewAnyTag("config", config))
+	task.logger.Info("UpdateSchemaTask started", tag.Any("config", config))
 
 	if config.IsDryRun {
 		if err := task.setupDryRunDatabase(); err != nil {

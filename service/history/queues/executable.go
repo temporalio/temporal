@@ -555,7 +555,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.Attempt(int32(e.attempt)),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
-		tag.NewStringTag("task-category", e.GetCategory().Name()),
+		tag.String("task-category", e.GetCategory().Name()),
 	)
 	if e.attempt > taskCriticalLogMetricAttempts {
 		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)

@@ -383,7 +383,7 @@ func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
 	}
 
 	indexTemplateFile := path.Join(testutils.GetRepoRootDirectory(), "schema/elasticsearch/visibility/index_template_v7.json")
-	logger.Info("Creating index template.", tag.NewStringTag("templatePath", indexTemplateFile))
+	logger.Info("Creating index template.", tag.String("templatePath", indexTemplateFile))
 	template, err := os.ReadFile(indexTemplateFile)
 	if err != nil {
 		return err

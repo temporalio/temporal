@@ -279,7 +279,7 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 				r.logger.Warn(
 					"Namespace registry callback slow",
 					tag.Key(fmt.Sprintf("%v", key)),
-					tag.NewDurationTag("duration", duration),
+					tag.Duration("duration", duration),
 				)
 			}
 		}()
@@ -404,7 +404,7 @@ func (r *registry) watchLoop(ctx context.Context, watchCh <-chan *persistence.Na
 			}
 
 			if !ok || err != nil {
-				r.logger.Error("Namespace watch failed, restarting", tag.Error(err), tag.NewBoolTag("closed", ok))
+				r.logger.Error("Namespace watch failed, restarting", tag.Error(err), tag.Bool("closed", ok))
 				metrics.NamespaceRegistryWatchReconnections.With(r.metricsHandler).Record(1)
 				return
 			}
@@ -655,7 +655,7 @@ func (r *registry) processWatchEvent(event *persistence.NamespaceWatchEvent) err
 		ns = r.deleteNamespace(event.NamespaceID)
 		executeCallbacks = ns != nil
 	default:
-		r.logger.Warn("Unknown namespace watch event type", tag.NewInt("eventType", int(event.Type)))
+		r.logger.Warn("Unknown namespace watch event type", tag.Int("eventType", int(event.Type)))
 	}
 
 	if executeCallbacks {

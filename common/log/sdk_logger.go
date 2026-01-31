@@ -48,7 +48,7 @@ func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
 			i++
 		}
 
-		tags = append(tags, tag.NewAnyTag(key, val))
+		tags = append(tags, tag.Any(key, val))
 	}
 
 	return tags

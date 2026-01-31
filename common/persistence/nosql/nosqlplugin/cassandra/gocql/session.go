@@ -70,7 +70,7 @@ func (s *session) refresh() {
 
 	if time.Now().UTC().Sub(s.sessionInitTime) < sessionRefreshMinInternal {
 		s.logger.Warn("gocql wrapper: did not refresh gocql session because the last refresh was too close",
-			tag.NewDurationTag("min_refresh_interval_seconds", sessionRefreshMinInternal))
+			tag.Duration("min_refresh_interval_seconds", sessionRefreshMinInternal))
 		handler := s.metricsHandler.WithTags(metrics.FailureTag(refreshThrottleTagValue))
 		metrics.CassandraSessionRefreshFailures.With(handler).Record(1)
 		return

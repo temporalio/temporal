@@ -1136,7 +1136,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
-	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.NewInt64("ResetToEventID", resetToEventID))
+	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.Int64("ResetToEventID", resetToEventID))
 
 	descResp, descErr = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),

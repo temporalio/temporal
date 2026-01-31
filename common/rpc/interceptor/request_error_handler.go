@@ -90,7 +90,7 @@ func (eh *RequestErrorHandler) logError(
 		return
 	}
 
-	logTags = append(logTags, tag.NewStringerTag("grpc_code", statusCode))
+	logTags = append(logTags, tag.Stringer("grpc_code", statusCode))
 	logTags = append(logTags, eh.workflowTags.Extract(req, fullMethod)...)
 
 	eh.logger.Error("service failures", append(logTags, tag.Error(err))...)

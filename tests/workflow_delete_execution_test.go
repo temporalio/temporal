@@ -141,7 +141,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_CompetedWorkf
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
+					s.Logger.Warn("Execution is not deleted yet", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -256,7 +256,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_RunningWorkfl
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
+					s.Logger.Warn("Execution is not deleted yet", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -364,13 +364,13 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
-		s.Logger.Warn("Execution is terminated", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
+		s.Logger.Warn("Execution is terminated", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 		_, err = s.FrontendClient().DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace:         s.Namespace().String(),
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
-		s.Logger.Warn("Execution is scheduled for deletion", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
+		s.Logger.Warn("Execution is scheduled for deletion", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 	}
 
 	for i, we := range wes {
@@ -385,7 +385,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 					},
 				)
 				if err == nil {
-					s.Logger.Warn("Execution is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
+					s.Logger.Warn("Execution is not deleted yet", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				var notFoundErr *serviceerror.NotFound
@@ -423,7 +423,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecution_JustTerminate
 				)
 				s.NoError(err)
 				if len(visibilityResponse.Executions) != 0 {
-					s.Logger.Warn("Visibility is not deleted yet", tag.NewInt("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
+					s.Logger.Warn("Visibility is not deleted yet", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
 					return false
 				}
 				return true
