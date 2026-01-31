@@ -1,0 +1,35 @@
+=== RUN   TestFoo1
+=== RUN   TestFoo1/SubTest1
+=== RUN   TestFoo2
+panic: test timed out after 1s
+	running tests:
+		TestFoo1 (1s)
+		TestFoo1/SubTest1 (1s)
+		TestFoo2 (1s)
+
+goroutine 53 [running]:
+testing.(*M).startAlarm.func1()
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2373 +0x1dc
+created by time.goFunc
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/time/sleep.go:215 +0x44
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0xc000358340, {0x105740b8d, 0x23}, 0x1068381a0)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1751 +0x600
+testing.runTests.func1(0xc000358340)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2168 +0x84
+testing.tRunner(0xc000358340, 0xc000d0fad8)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:1690 +0x188
+testing.runTests(0xc000e20360, {0x10883edc0, 0x3d, 0x3d}, {0x2?, 0x1021d4320?, 0x108868860?})
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2166 +0x6e4
+testing.(*M).Run(0xc0008e3180)
+        /golang/1.23.2/packages/pkg/mod/golang.org/toolchain@v0.0.1-go1.23.4.darwin-arm64/src/testing/testing.go:2034 +0xb78
+main.main()
+        _testmain.go:165 +0x114
+
+goroutine 5 [select]:
+go.opencensus.io/stats/view.(*worker).start(0xc000b02800)
+        /golang/1.23.2/packages/pkg/mod/go.opencensus.io@v0.24.0/stats/view/worker.go:292 +0x128
+created by go.opencensus.io/stats/view.init.0 in goroutine 1
+        /golang/1.23.2/packages/pkg/mod/go.opencensus.io@v0.24.0/stats/view/worker.go:34 +0xf4
+FAIL	go.temporal.io/server/tools/testrunner2/testdata/fakepkg1	1.01s

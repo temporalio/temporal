@@ -1,0 +1,4 @@
+=== RUN   TestFoo2
+--- PASS: TestFoo2 (0.01s)
+PASS
+ok  	go.temporal.io/server/tools/testrunner2/testdata/fakepkg1	0.01s

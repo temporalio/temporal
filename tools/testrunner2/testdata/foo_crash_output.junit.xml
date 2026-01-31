@@ -1,0 +1,7 @@
+<testsuites tests="1" failures="1">
+    <testsuite name="suite" tests="1" failures="1" errors="0" id="0" time="">
+        <testcase name="TestFoo1 (crash)" classname="">
+            <failure message="Crash"></failure>
+        </testcase>
+    </testsuite>
+</testsuites>
