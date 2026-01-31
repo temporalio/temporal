@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -2840,6 +2841,12 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 		return nil, err
 	}
 
+	// Eagerly cancel outstanding polls for this worker before processing shutdown.
+	// This prevents task orphaning when tasks are dispatched to a shutting-down worker.
+	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
+		wh.cancelOutstandingWorkerPolls(ctx, namespaceId.String(), request)
+	}
+
 	// route heartbeat to the matching service
 	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
 		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
@@ -2871,6 +2878,82 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	}
 
 	return &workflowservice.ShutdownWorkerResponse{}, nil
+}
+
+// cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
+// This is a best-effort operation - errors are logged but don't fail the shutdown.
+func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
+	ctx context.Context,
+	namespaceId string,
+	request *workflowservice.ShutdownWorkerRequest,
+) {
+	workerInstanceKey := request.GetWorkerInstanceKey()
+	taskQueueName := request.GetTaskQueue()
+	if workerInstanceKey == "" || taskQueueName == "" {
+		return
+	}
+
+	namespaceName := request.GetNamespace()
+
+	// Use task queue types from request, or default to both workflow and activity
+	taskTypes := request.GetTaskQueueTypes()
+	if len(taskTypes) == 0 {
+		taskTypes = []enumspb.TaskQueueType{
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		}
+	}
+
+	// TODO: Optimize by grouping partitions by host and making one RPC per host instead of per partition.
+	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
+	// TODO: Consider retrying on transient failures.
+	tqFamily := tqid.UnsafeTaskQueueFamily(namespaceId, taskQueueName)
+
+	var waitGroup sync.WaitGroup
+	var totalCancelled atomic.Int32
+	var failedPartitions atomic.Int32
+
+	for _, taskType := range taskTypes {
+		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
+		if numPartitions < 1 {
+			numPartitions = 1
+		}
+
+		tq := tqFamily.TaskQueue(taskType)
+		for partitionId := 0; partitionId < numPartitions; partitionId++ {
+			partition := tq.NormalPartition(partitionId)
+			waitGroup.Add(1)
+			go func(p *tqid.NormalPartition, tt enumspb.TaskQueueType) {
+				defer waitGroup.Done()
+				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
+					NamespaceId: namespaceId,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: p.RpcName(),
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType:     tt,
+					WorkerInstanceKey: workerInstanceKey,
+				})
+				if err != nil {
+					failedPartitions.Add(1)
+					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+						tag.WorkflowTaskQueueName(p.RpcName()),
+						tag.NewStringTag("worker-instance-key", workerInstanceKey),
+						tag.Error(err))
+				} else {
+					totalCancelled.Add(resp.CancelledCount)
+				}
+			}(partition, taskType)
+		}
+	}
+	waitGroup.Wait()
+
+	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
+		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
+			tag.NewStringTag("worker-instance-key", workerInstanceKey),
+			tag.NewInt32("cancelled-count", totalCancelled.Load()),
+			tag.NewInt32("failed-partitions", failedPartitions.Load()))
+	}
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
