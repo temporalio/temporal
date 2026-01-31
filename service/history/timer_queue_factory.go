@@ -48,9 +48,15 @@ func NewTimerQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
+						EnableWorkflowQueueScheduler:    params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
+						WorkflowQueueSchedulerQueueSize: params.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
+					},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
 			HostPriorityAssigner: queues.NewPriorityAssigner(
 				params.NamespaceRegistry,
