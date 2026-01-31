@@ -206,6 +206,8 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
+TYPOS := typos
+
 WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
 WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
@@ -384,6 +386,35 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
 	@printf $(COLOR) "Formatting imports..."
 	@$(GCI) write --skip-generated -s standard -s default ./*
+
+install-typos:
+	@printf $(COLOR) "Installing typos-cli..."
+	@if ! command -v cargo >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: cargo is not installed. Install Rust from https://rustup.rs"; \
+		echo ""; \
+		exit 1; \
+	fi
+	cargo install typos-cli --locked
+
+# Check spelling only on files changed from main branch
+lint-typos:
+	@printf $(COLOR) "Checking spelling on changed files with typos..."
+	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --file-list -
+
+# Fix spelling on files changed from main branch
+fix-typos:
+	@printf $(COLOR) "Fixing spelling on changed files with typos..."
+	@if ! command -v $(TYPOS) >/dev/null 2>&1; then \
+		printf $(RED) "ERROR: typos is not installed. Run 'make install-typos' or 'cargo install typos-cli'"; \
+		echo ""; \
+		exit 1; \
+	fi
+	@git diff --name-only --diff-filter=ACMR $(MAIN_BRANCH)...HEAD | $(TYPOS) --config .github/_typos.toml --write-changes --file-list -
 
 lint: lint-code lint-actions lint-api lint-protos
 	@printf $(COLOR) "Run linters..."
