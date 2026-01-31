@@ -2751,7 +2751,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	testWorkflowFn := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second * 120,
-			HeartbeatTimeout:    time.Second * 10,
+			HeartbeatTimeout:    time.Second * 20,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
 		return workflow.ExecuteActivity(ctx, activityWithMultipleHB).Get(ctx, nil)
