@@ -255,6 +255,11 @@ func TestMultiOperationErrorRetries(t *testing.T) {
 	require.True(t, IsServiceHandlerRetryableError(unavailableOpErr))
 	require.True(t, IsServiceClientTransientError(unavailableOpErr))
 
+	abortedOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{serviceerror.NewAborted("err")})
+	require.True(t, IsServiceHandlerRetryableError(abortedOpErr))
+	require.True(t, IsServiceClientTransientError(abortedOpErr))
+
 	invalidArgOpErr := serviceerror.NewMultiOperationExecution("err",
 		[]error{serviceerror.NewInvalidArgument("err")})
 	require.False(t, IsServiceHandlerRetryableError(invalidArgOpErr))
@@ -273,6 +278,11 @@ func TestMultiOperationErrorRetries(t *testing.T) {
 		[]error{nil, serviceerror.NewUnavailable("err")})
 	require.True(t, IsServiceHandlerRetryableError(nilAndUnavailableOpErr))
 	require.True(t, IsServiceClientTransientError(nilAndUnavailableOpErr))
+
+	nilAndAbortedOpErr := serviceerror.NewMultiOperationExecution("err",
+		[]error{nil, serviceerror.NewAborted("err")})
+	require.True(t, IsServiceHandlerRetryableError(nilAndAbortedOpErr))
+	require.True(t, IsServiceClientTransientError(nilAndAbortedOpErr))
 }
 
 func TestDiscardUnknownProto(t *testing.T) {
