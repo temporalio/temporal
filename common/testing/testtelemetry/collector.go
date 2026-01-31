@@ -53,11 +53,14 @@ func (l *MemoryCollector) Addr() string {
 	return "http://" + l.addr
 }
 
+// Spans returns a copy of all collected spans.
 func (l *MemoryCollector) Spans() []*trace.ResourceSpans {
 	l.spansLock.RLock()
 	defer l.spansLock.RUnlock()
 
-	return l.spans
+	result := make([]*trace.ResourceSpans, len(l.spans))
+	copy(result, l.spans)
+	return result
 }
 
 func (l *MemoryCollector) Export(

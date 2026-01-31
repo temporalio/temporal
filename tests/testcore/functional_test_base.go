@@ -68,8 +68,9 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		Logger       log.Logger
-		otelExporter *testtelemetry.MemoryExporter
+		Logger         log.Logger
+		memoryExporter *testtelemetry.MemoryExporter
+		traceDump      *testtelemetry.Dump
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -101,6 +102,7 @@ type (
 		FaultInjectionConfig   *config.FaultInjection
 		NumHistoryShards       int32
 		SharedCluster          bool
+		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -166,6 +168,13 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 func WithSharedCluster() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.SharedCluster = true
+	}
+}
+
+// withSpanExporters sets custom OTEL span exporters for the cluster.
+func withSpanExporters(exporters map[telemetry.SpanExporterType]sdktrace.SpanExporter) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.SpanExporters = exporters
 	}
 }
 
@@ -284,16 +293,18 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.isShared = true
 	}
 
-	// Initialize the OTEL collector if OTEL is enabled.
-	// Must be done before the test cluster is created, so that the collector can be used by the test cluster.
-	if otelOutputDir := os.Getenv("TEMPORAL_TEST_OTEL_OUTPUT"); otelOutputDir != "" {
-		// Create an OTEL exporter.
-		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
+	// Initialize the OTEL span exporter. The MemoryExporter is always present
+	// and only buffers spans when there are active subscribers.
+	s.memoryExporter = testtelemetry.NewMemoryExporter()
+	spanExporters := map[telemetry.SpanExporterType]sdktrace.SpanExporter{
+		telemetry.OtelTracesOtlpExporterType: s.memoryExporter,
+	}
+	s.testClusterConfig.SpanExporters = spanExporters
 
-		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
+	// Create testtelemetry.Dump if TEMPORAL_TEST_OTEL_OUTPUT is set.
+	// This subscribes to the MemoryExporter and buffers spans for file dump on test failure.
+	if otelOutputDir := os.Getenv("TEMPORAL_TEST_OTEL_OUTPUT"); otelOutputDir != "" {
+		s.traceDump = testtelemetry.NewDump(s.T(), s.memoryExporter, otelOutputDir)
 	}
 
 	var err error
@@ -418,8 +429,8 @@ func (s *FunctionalTestBase) setupSdk() {
 	s.NoError(err)
 }
 
-func (s *FunctionalTestBase) exportOTELTraces() {
-	if s.otelExporter == nil {
+func (s *FunctionalTestBase) exportOTELTracesOnFailure() {
+	if s.traceDump == nil {
 		return
 	}
 	if s.T().Failed() {
@@ -427,13 +438,12 @@ func (s *FunctionalTestBase) exportOTELTraces() {
 		fileName := s.T().Name()
 		fileName = validFilenameChars.ReplaceAllString(fileName, "-") // remove invalid characters
 		fileName = fmt.Sprintf("traces.%s_%d.json", fileName, time.Now().Unix())
-		if filePath, err := s.otelExporter.Write(fileName); err != nil {
+		if filePath, err := s.traceDump.Write(fileName); err != nil {
 			s.T().Logf("unable to write OTEL traces: %v", err)
 		} else {
 			s.T().Logf("wrote OTEL traces to %s", filePath)
 		}
 	}
-	_ = s.otelExporter.Shutdown(NewContext())
 }
 
 func (s *FunctionalTestBase) TearDownCluster() {
@@ -447,14 +457,14 @@ func (s *FunctionalTestBase) TearDownCluster() {
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
-	s.exportOTELTraces()
+	s.exportOTELTracesOnFailure()
 	s.tearDownSdk()
 	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
 func (s *FunctionalTestBase) TearDownSubTest() {
-	s.exportOTELTraces()
+	s.exportOTELTracesOnFailure()
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {

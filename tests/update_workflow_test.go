@@ -24,9 +24,11 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
@@ -2744,7 +2746,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_ScheduleToStartTimeoutOnNormalTaskQueue", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithEventTracker())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2813,11 +2815,12 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		// which will time out in 5 seconds and create new normal WT.
 		updateResultCh := sendUpdateNoError(s, s.Tv())
 
-		// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
-		//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
-		s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-		time.Sleep(5*time.Second + 100*time.Millisecond) //nolint:forbidigo
-		s.Logger.Info("Sleep 5+ seconds is done.")
+		// Wait until speculative workflow task schedule-to-start times out.
+		s.WaitFor(
+			testtelemetry.MatchEvent().
+				Name(telemetry.WorkflowTaskTimeout).
+				Attr(telemetry.WorkflowIDKey, s.Tv().WorkflowID()),
+			10*time.Second)
 
 		// Process update in workflow.
 		res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
