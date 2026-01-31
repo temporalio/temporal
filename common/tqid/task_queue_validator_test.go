@@ -5,8 +5,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/common/primitives"
 )
 
 func TestNormalizeAndValidate(t *testing.T) {
@@ -140,6 +142,124 @@ func TestNormalizeAndValidate(t *testing.T) {
 
 			if tt.taskQueue != nil && tt.taskQueue.GetName() == "" && tt.defaultVal != "" {
 				assert.Equal(t, tt.defaultVal, tt.taskQueue.GetName())
+			}
+		})
+	}
+}
+
+func TestNormalizeAndValidateUserDefined(t *testing.T) {
+	const perNsTaskQueue = primitives.PerNSWorkerTaskQueue
+
+	tests := []struct {
+		name             string
+		taskQueue        *taskqueuepb.TaskQueue
+		parentTaskQueue  *taskqueuepb.TaskQueue
+		defaultVal       string
+		maxIDLengthLimit int
+		expectedError    string
+	}{
+		{
+			name:             "Nil task queue",
+			taskQueue:        nil,
+			parentTaskQueue:  nil,
+			defaultVal:       "default",
+			maxIDLengthLimit: 100,
+			expectedError:    "taskQueue is not set",
+		},
+		{
+			name:             "Valid user-defined task queue without parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "user-tq"},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Valid user-defined task queue with parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "user-tq"},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "parent-tq"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Internal per-ns task queue without parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "cannot use internal per namespace task queue",
+		},
+		{
+			name:             "Internal per-ns task queue with non-internal parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "user-parent-tq"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "cannot use internal per namespace task queue",
+		},
+		{
+			name:             "Internal per-ns task queue with internal per-ns parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Empty name with default, no parent",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			parentTaskQueue:  nil,
+			defaultVal:       "default",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+		{
+			name:             "Empty name, no default, no parent",
+			taskQueue:        &taskqueuepb.TaskQueue{},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "missing task queue name",
+		},
+		{
+			name:             "Name exceeds max length",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: strings.Repeat("a", 101)},
+			parentTaskQueue:  nil,
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "taskQueue length exceeds limit",
+		},
+		{
+			name:             "User task queue with empty parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "user-tq"},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var parentName string
+			if tt.parentTaskQueue != nil {
+				parentName = tt.parentTaskQueue.GetName()
+			}
+			err := NormalizeAndValidateUserDefined(tt.taskQueue, tt.defaultVal, parentName, tt.maxIDLengthLimit)
+
+			if tt.expectedError == "" {
+				require.NoError(t, err)
+				if tt.taskQueue != nil {
+					require.NotEqual(t, enumspb.TASK_QUEUE_KIND_UNSPECIFIED, tt.taskQueue.GetKind(), "Kind should be normalized")
+				}
+			} else {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.expectedError)
+			}
+
+			if tt.taskQueue != nil && tt.taskQueue.GetName() == "" && tt.defaultVal != "" && tt.expectedError == "" {
+				require.Equal(t, tt.defaultVal, tt.taskQueue.GetName(), "Default name should be applied")
 			}
 		})
 	}

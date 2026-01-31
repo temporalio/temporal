@@ -14,11 +14,15 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -835,4 +839,91 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
   2 WorkflowExecutionTerminated`, s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: childID,
 	}))
+}
+
+func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked() {
+	id := testcore.RandomizeStr(s.T().Name())
+	wt := "test-continue-as-new-internal-taskqueue-type"
+	tl := "test-continue-as-new-internal-taskqueue"
+	identity := "worker1"
+
+	workflowType := &commonpb.WorkflowType{Name: wt}
+	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        workflowType,
+		TaskQueue:           taskQueue,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// Workflow logic: try to continue as new on internal task queue
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	continueAsNewAttempted := false
+	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.Logger.Info("Processing workflow task", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+
+		if !continueAsNewAttempted {
+			s.Logger.Info("Attempting to continue as new on internal task queue")
+			continueAsNewAttempted = true
+
+			commands := []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+					ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+						WorkflowType: workflowType,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: primitives.PerNSWorkerTaskQueue,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+					},
+				},
+			}}
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: commands,
+			}, nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// Process workflow task - should fail when trying to continue as new on internal task queue
+	_, err = poller.PollAndHandleWorkflowTask(tv, wtHandler)
+	s.Error(err, "Expected error when continuing as new on internal task queue")
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.Contains(err.Error(), "internal per namespace task queue")
+
+	// Wait a bit for the workflow task failed event to be written to history
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+
+	// Verify workflow task failed
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: id,
+		RunId:      we.RunId,
+	})
+
+	var foundTaskFailed bool
+	for _, event := range historyEvents {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			foundTaskFailed = true
+			attrs := event.GetWorkflowTaskFailedEventAttributes()
+			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, attrs.GetCause())
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per namespace task queue")
+			break
+		}
+	}
+	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
 }
