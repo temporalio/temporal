@@ -943,3 +943,81 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	// allTimes : Used to verify the overall throughput of the task queue.
 	return perKeyTimes, allTimes
 }
+
+func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true)
+	// Use single partition to simplify testing
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tv := testvars.New(s.T())
+	workerInstanceKey := uuid.NewString()
+
+	// Use a long poll timeout (2 minutes) to ensure we're testing cancellation, not timeout.
+	// The test should complete in ~1 second if cancellation works.
+	pollTimeout := 2 * time.Minute
+
+	// Start 2 long polls in goroutines to verify bulk cancellation
+	var wg sync.WaitGroup
+	pollResults := make(chan struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}, 2)
+
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+			defer cancel()
+			resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace:         s.Namespace().String(),
+				TaskQueue:         tv.TaskQueue(),
+				Identity:          tv.WorkerIdentity(),
+				WorkerInstanceKey: workerInstanceKey,
+			})
+			pollResults <- struct {
+				resp *workflowservice.PollWorkflowTaskQueueResponse
+				err  error
+			}{resp, err}
+		}()
+	}
+
+	// Give polls time to register with matching
+	time.Sleep(2 * time.Second)
+
+	// Call ShutdownWorker to cancel all outstanding polls for this worker
+	ctx := context.Background()
+	_, err := s.FrontendClient().ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.Namespace().String(),
+		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+		Identity:          tv.WorkerIdentity(),
+		Reason:            "graceful shutdown test",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         tv.TaskQueue().GetName(),
+	})
+	s.NoError(err)
+
+	// Wait for all polls to complete (should be quick after cancellation)
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All polls completed
+	case <-time.After(5 * time.Second):
+		s.Fail("polls did not complete within expected time after shutdown")
+	}
+
+	close(pollResults)
+
+	// Verify both polls returned empty responses (no task token)
+	for result := range pollResults {
+		s.NoError(result.err)
+		s.NotNil(result.resp)
+		s.Empty(result.resp.GetTaskToken(), "poll should return empty response after shutdown")
+	}
+}
