@@ -70,7 +70,7 @@ func (m *mapCounter) updateHeap(key string, count int64) bool {
 	// heap is full - only add if count > min
 	if count > m.heap[0].Count {
 		// evict min
-		evicted := heap.Pop(&m.heap).(TopKEntry)
+		evicted := heap.Pop(&m.heap).(TopKEntry) // nolint:revive // unchecked-type-assertion
 		delete(m.m, evicted.Key)
 		// add new
 		m.m[key] = len(m.heap)
