@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	rateLimiterTTL = 30 * time.Minute // Evict entries idle longer than this
+	rateLimiterTTL = 1 * time.Hour // Evict entries idle longer than this
 )
 
 type (
