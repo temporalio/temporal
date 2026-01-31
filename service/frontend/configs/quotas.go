@@ -141,11 +141,8 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeSchedule":                3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListScheduleMatchingTimes":       3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeBatchOperation":          3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":              3, // [cleanup-wv-pre-release]
-		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeDeployment":   3, // [cleanup-wv-pre-release]
+		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment": 3, // [cleanup-wv-pre-release]
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -200,8 +197,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/CountSchedules":                    1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
-		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":     1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -217,6 +215,15 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
+
+	// Special rate limiting for worker deployment read APIs to prevent overloading the system
+	// with describe calls that query workflow state.
+	WorkerDeploymentReadAPIToPriority = map[string]int{
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        1,
+	}
+
+	WorkerDeploymentReadAPIPrioritiesOrdered = []int{0, 1}
 
 	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
 	// This includes some APIs, history tasks, etc.
@@ -294,6 +301,7 @@ func NewRequestToRateLimiter(
 	executionRateBurstFn quotas.RateBurst,
 	visibilityRateBurstFn quotas.RateBurst,
 	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
+	workerDeploymentReadRateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
@@ -301,6 +309,7 @@ func NewRequestToRateLimiter(
 	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, operatorRPSRatio)
 	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
 	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
+	workerDeploymentReadRateLimiter := NewWorkerDeploymentReadAPIPriorityRateLimiter(workerDeploymentReadRateBurstFn, operatorRPSRatio)
 
 	for api := range APIToPriority {
 		mapping[api] = executionRateLimiter
@@ -310,6 +319,9 @@ func NewRequestToRateLimiter(
 	}
 	for api := range NamespaceReplicationInducingAPIToPriority {
 		mapping[api] = namespaceReplicationInducingRateLimiter
+	}
+	for api := range WorkerDeploymentReadAPIToPriority {
+		mapping[api] = workerDeploymentReadRateLimiter
 	}
 
 	return quotas.NewRoutingRateLimiter(mapping)
@@ -381,6 +393,29 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 			return priority
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
+	}, rateLimiters)
+}
+
+func NewWorkerDeploymentReadAPIPriorityRateLimiter(
+	rateBurstFn quotas.RateBurst,
+	operatorRPSRatio dynamicconfig.FloatPropertyFn,
+) quotas.RequestRateLimiter {
+	rateLimiters := make(map[int]quotas.RequestRateLimiter)
+	for priority := range WorkerDeploymentReadAPIPrioritiesOrdered {
+		if priority == OperatorPriority {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(newOperatorRateBurst(rateBurstFn, operatorRPSRatio), time.Minute))
+		} else {
+			rateLimiters[priority] = quotas.NewRequestRateLimiterAdapter(quotas.NewDynamicRateLimiter(rateBurstFn, time.Minute))
+		}
+	}
+	return quotas.NewPriorityRateLimiter(func(req quotas.Request) int {
+		if req.CallerType == headers.CallerTypeOperator {
+			return OperatorPriority
+		}
+		if priority, ok := WorkerDeploymentReadAPIToPriority[req.API]; ok {
+			return priority
+		}
+		return WorkerDeploymentReadAPIPrioritiesOrdered[len(WorkerDeploymentReadAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
 }
 

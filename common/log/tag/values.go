@@ -127,6 +127,7 @@ var (
 	ComponentLongPollHandler           = component("long-poll-handler")
 	ComponentVisibilityHandler         = component("visibility-handler")
 	ComponentNamespaceReplication      = component("namespace-replication")
+	ComponentWorkerVersioning          = component("worker-versioning")
 	ComponentPersistence               = component("persistence")
 	ComponentWorkflowUpdate            = component("workflow-update")
 	ComponentTaskScheduler             = component("task-scheduler")

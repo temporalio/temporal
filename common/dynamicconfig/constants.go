@@ -737,6 +737,39 @@ If this is set, it overwrites the per instance limit configured with
 "frontend.namespaceRPS.namespaceReplicationInducingAPIs".
 This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 	)
+	FrontendWorkerDeploymentReadAPIsRPS = NewGlobalIntSetting(
+		"frontend.rps.workerDeploymentReadAPIs",
+		10,
+		`FrontendWorkerDeploymentReadAPIsRPS limits the per second request rate for worker deployment read APIs
+(e.g. DescribeWorkerDeploymentVersion, DescribeWorkerDeployment).
+This config is EXPERIMENTAL and may be changed or removed in a later release.`,
+	)
+	FrontendMaxNamespaceWorkerDeploymentReadAPIsRPSPerInstance = NewNamespaceIntSetting(
+		"frontend.namespaceRPS.workerDeploymentReadAPIs",
+		10,
+		`FrontendMaxNamespaceWorkerDeploymentReadAPIsRPSPerInstance is a per host/per namespace RPS limit for
+worker deployment read APIs (e.g. DescribeWorkerDeploymentVersion, DescribeWorkerDeployment).
+This config is EXPERIMENTAL and may be changed or removed in a later release.`,
+	)
+	FrontendMaxNamespaceWorkerDeploymentReadAPIsBurstRatioPerInstance = NewNamespaceFloatSetting(
+		"frontend.namespaceBurstRatio.workerDeploymentReadAPIs",
+		10,
+		`FrontendMaxNamespaceWorkerDeploymentReadAPIsBurstRatioPerInstance is a per host/per namespace burst limit for
+worker deployment read APIs (e.g. DescribeWorkerDeploymentVersion, DescribeWorkerDeployment)
+as a ratio of namespace WorkerDeploymentReadAPIs RPS. The RPS used here will be the effective RPS from global and
+per-instance limits. This config is EXPERIMENTAL and may be changed or removed in a later release. The value must
+be 1 or higher.`,
+	)
+	FrontendGlobalNamespaceWorkerDeploymentReadAPIsRPS = NewNamespaceIntSetting(
+		"frontend.globalNamespaceRPS.workerDeploymentReadAPIs",
+		0,
+		`FrontendGlobalNamespaceWorkerDeploymentReadAPIsRPS is a cluster global, per namespace RPS limit for
+worker deployment read APIs (e.g. DescribeWorkerDeploymentVersion, DescribeWorkerDeployment).
+The limit is evenly distributed among available frontend service instances.
+If this is set, it overwrites the per instance limit configured with
+"frontend.namespaceRPS.workerDeploymentReadAPIs".
+This config is EXPERIMENTAL and may be changed or removed in a later release.`,
+	)
 	InternalFrontendGlobalNamespaceVisibilityRPS = NewNamespaceIntSetting(
 		"internal-frontend.globalNamespaceRPS.visibility",
 		0,

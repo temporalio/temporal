@@ -450,11 +450,16 @@ func RateLimitInterceptorProvider(
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
+	workerDeploymentReadRateFn := func() float64 {
+		return float64(serviceConfig.WorkerDeploymentReadAPIsRPS())
+	}
+
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
 			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
 			quotas.NewDefaultIncomingRateBurst(rateFn),
 			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
+			quotas.NewDefaultIncomingRateBurst(workerDeploymentReadRateFn),
 			serviceConfig.OperatorRPSRatio,
 		),
 		map[string]int{
@@ -481,18 +486,20 @@ func NamespaceRateLimitInterceptorProvider(
 	frontendServiceResolver membership.ServiceResolver,
 	logger log.SnTaggedLogger,
 ) interceptor.NamespaceRateLimitInterceptor {
-	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS, globalNamespaceWorkerDeploymentReadAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
 	case primitives.FrontendService:
 		globalNamespaceRPS = serviceConfig.GlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.GlobalNamespaceVisibilityRPS
 		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.GlobalNamespaceNamespaceReplicationInducingAPIsRPS
+		globalNamespaceWorkerDeploymentReadAPIsRPS = serviceConfig.GlobalNamespaceWorkerDeploymentReadAPIsRPS
 	case primitives.InternalFrontendService:
 		globalNamespaceRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 		globalNamespaceVisibilityRPS = serviceConfig.InternalFEGlobalNamespaceVisibilityRPS
 		// Internal frontend has no special limit for this set of APIs
 		globalNamespaceNamespaceReplicationInducingAPIsRPS = serviceConfig.InternalFEGlobalNamespaceRPS
+		globalNamespaceWorkerDeploymentReadAPIsRPS = serviceConfig.InternalFEGlobalNamespaceRPS
 	default:
 		panic("invalid service name")
 	}
@@ -521,12 +528,21 @@ func NamespaceRateLimitInterceptorProvider(
 		},
 		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
 	).GetQuota
+	workerDeploymentReadRateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    frontendServiceResolver,
+			PerInstanceQuota: serviceConfig.MaxNamespaceWorkerDeploymentReadAPIsRPSPerInstance,
+			GlobalQuota:      globalNamespaceWorkerDeploymentReadAPIsRPS,
+		},
+		log.With(logger, tag.ComponentWorkerVersioning, tag.ScopeNamespace),
+	).GetQuota
 	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return configs.NewRequestToRateLimiter(
 				configs.NewNamespaceRateBurst(req.Caller, namespaceRateFn, serviceConfig.MaxNamespaceBurstRatioPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
 				configs.NewNamespaceRateBurst(req.Caller, namespaceReplicationInducingRateFn, serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, workerDeploymentReadRateFn, serviceConfig.MaxNamespaceWorkerDeploymentReadAPIsBurstRatioPerInstance),
 				serviceConfig.OperatorRPSRatio,
 			)
 		},
