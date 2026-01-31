@@ -60,7 +60,7 @@ func namespaceRequestRateLimiterKeyFn(req Request) string {
 func NewNamespaceRequestRateLimiter(
 	rateLimiterGenFn RequestRateLimiterFn,
 ) *MapRequestRateLimiterImpl[string] {
-	return NewMapRequestRateLimiter(rateLimiterGenFn, namespaceRequestRateLimiterKeyFn)
+	return NewMapRequestRateLimiter[string](rateLimiterGenFn, namespaceRequestRateLimiterKeyFn)
 }
 
 // Allow attempts to allow a request to go through. The method returns
