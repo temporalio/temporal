@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -68,7 +69,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		FirstExecutionRunId:             firstRunID,
 		OriginalExecutionRunId:          originalRunID,
 		Memo:                            req.Memo,
-		SearchAttributes:                req.SearchAttributes,
+		SearchAttributes:                payload.FilterNilSearchAttributes(req.SearchAttributes),
 		WorkflowId:                      req.WorkflowId,
 		SourceVersionStamp:              request.SourceVersionStamp,
 		CompletionCallbacks:             req.CompletionCallbacks,
@@ -478,7 +479,7 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
 		Memo:                         command.Memo,
-		SearchAttributes:             command.SearchAttributes,
+		SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
 		InheritBuildId:               command.InheritBuildId,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
@@ -845,7 +846,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			RetryPolicy:                  command.RetryPolicy,
 			CronSchedule:                 command.CronSchedule,
 			Memo:                         command.Memo,
-			SearchAttributes:             command.SearchAttributes,
+			SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,
 			Priority:                     command.Priority,
