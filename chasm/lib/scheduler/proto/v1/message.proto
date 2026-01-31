@@ -13,7 +13,7 @@ import "google/protobuf/timestamp.proto";
 
 // CHASM scheduler top-level state.
 message SchedulerState {
-    // Scheduler request parameters and metadata. 
+    // Scheduler request parameters and metadata.
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
 
@@ -88,4 +88,18 @@ message BackfillerState {
 message LastCompletionResult {
     temporal.api.common.v1.Payload success = 1;
     temporal.api.failure.v1.Failure failure = 2;
+}
+
+// SchedulerMigrationState is a stack-agnostic interchange format for migrating
+// scheduler state between V1 (workflow-backed) and V2 (CHASM) implementations.
+message SchedulerMigrationState {
+    SchedulerState scheduler_state = 1;
+    GeneratorState generator_state = 2;
+    InvokerState invoker_state = 3;
+    map<string, BackfillerState> backfillers = 4;
+    LastCompletionResult last_completion_result = 5;
+
+    // Visibility data.
+    map<string, temporal.api.common.v1.Payload> search_attributes = 6;
+    map<string, temporal.api.common.v1.Payload> memo = 7;
 }
