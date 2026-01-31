@@ -309,6 +309,74 @@ func TestDefaultReplicationResolver_FailoverNotificationVersion(t *testing.T) {
 	}
 }
 
+func TestDefaultReplicationResolver_ActiveInCluster(t *testing.T) {
+	factory := namespace.NewDefaultReplicationResolverFactory()
+
+	tests := []struct {
+		name        string
+		detail      *persistencespb.NamespaceDetail
+		clusterName string
+		want        bool
+	}{
+		{
+			name: "local namespace returns true for any cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a"},
+				},
+				FailoverVersion: 0, // local namespace
+			},
+			clusterName: "cluster-b",
+			want:        true,
+		},
+		{
+			name: "local namespace returns true for active cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a"},
+				},
+				FailoverVersion: 0, // local namespace
+			},
+			clusterName: "cluster-a",
+			want:        true,
+		},
+		{
+			name: "global namespace returns true for active cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a", "cluster-b"},
+				},
+				FailoverVersion: 1, // global namespace
+			},
+			clusterName: "cluster-a",
+			want:        true,
+		},
+		{
+			name: "global namespace returns false for non-active cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a", "cluster-b"},
+				},
+				FailoverVersion: 1, // global namespace
+			},
+			clusterName: "cluster-b",
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := factory(tt.detail)
+			got := resolver.ActiveInCluster(tt.clusterName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 
