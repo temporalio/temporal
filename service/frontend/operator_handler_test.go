@@ -523,29 +523,26 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesElasticsearch() {
 			expectedErrMsg: "",
 		},
 		{
-			name: "success: search attribute already exists",
+			name: "search attribute already exists",
 			request: &operatorservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			expectedErrMsg: "",
+			passValidation: false,
+			expectedErrMsg: "Search attribute CustomKeywordField already exists",
 		},
 		{
-			name: "success: mix new and already exists search attributes",
+			name: "mix new and already exists search attributes",
 			request: &operatorservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomAttr":         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 				},
 			},
-			passValidation: true,
-			customAttributesToAdd: map[string]enumspb.IndexedValueType{
-				"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			},
-			expectedErrMsg: "",
+			passValidation: false,
+			expectedErrMsg: "Search attribute CustomKeywordField already exists",
 		},
-
 		{
 			name: "fail: cannot add elasticsearch schema",
 			request: &operatorservice.AddSearchAttributesRequest{
@@ -646,7 +643,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 			expectedErrMsg:              "",
 		},
 		{
-			name: "success: search attribute already exists",
+			name: "search attribute already exists",
 			request: &operatorservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -654,10 +651,10 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 				Namespace: testNamespace,
 			},
 			describeNamespaceCalled: true,
-			expectedErrMsg:          "",
+			expectedErrMsg:          "Search attribute CustomKeywordField already exists",
 		},
 		{
-			name: "success: mix new and already exists search attributes",
+			name: "mix new and already exists search attributes",
 			request: &operatorservice.AddSearchAttributesRequest{
 				SearchAttributes: map[string]enumspb.IndexedValueType{
 					"CustomAttr":         enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -665,12 +662,9 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesSQL() {
 				},
 				Namespace: testNamespace,
 			},
-			customSearchAttributesToAdd: []string{"CustomAttr"},
-			describeNamespaceCalled:     true,
-			updateNamespaceCalled:       true,
-			expectedErrMsg:              "",
+			describeNamespaceCalled: true,
+			expectedErrMsg:          "Search attribute CustomKeywordField already exists",
 		},
-
 		{
 			name: "fail: cannot get frontend client",
 			request: &operatorservice.AddSearchAttributesRequest{
