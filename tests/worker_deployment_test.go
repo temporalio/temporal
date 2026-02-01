@@ -1429,7 +1429,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 	defer cancel()
 	tv := testvars.New(s)
 
-	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)
+	s.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1))
 
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
@@ -1502,7 +1502,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	defer cancel()
 	tv := testvars.New(s)
 
-	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)
+	s.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1))
 
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
@@ -1693,7 +1693,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	defer cancel()
 	tv := testvars.New(s)
 
-	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1)
+	s.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, 1))
 
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
@@ -2202,8 +2202,8 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 	numOperations := 20
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, numTaskQueues)
-	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize)
-	s.InjectHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500)
+	s.InjectHook(testhooks.NewHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize))
+	s.InjectHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500))
 
 	// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
 	s.OverrideDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations)

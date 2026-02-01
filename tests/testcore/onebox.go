@@ -962,12 +962,6 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 	return cleanup
 }
 
-func (c *TemporalImpl) injectHook(t *testing.T, key testhooks.Key, value any) func() {
-	cleanup := testhooks.Set(c.testHooks, key, value)
-	t.Cleanup(cleanup)
-	return cleanup
-}
-
 func mustPortFromAddress(addr string) httpPort {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {
