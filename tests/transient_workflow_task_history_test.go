@@ -287,8 +287,8 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_TransientWFT_Schedule
 	s.NoError(err)
 }
 
-// TestGetHistory_RaceCondition_RetryableError verifies that the query-compare-query pattern
-// detects workflow state changes during pagination.
+// TestGetHistory_RaceCondition_RetryableError verifies that pagination handles the case
+// where the workflow completes during multi-page history retrieval.
 func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_RetryableError() {
 	id := "functional-get-history-race-condition-retryable-error"
 	wt := "functional-get-history-race-condition-retryable-error-type"
@@ -359,7 +359,6 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 	s.NotEmpty(resp2.TaskToken)
 
 	// Step 3: Start fetching history with pagination (small page size to force pagination)
-	// This will capture the initial transient task state
 	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx,
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       s.Namespace().String(),
@@ -385,7 +384,7 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 	s.NoError(err)
 
 	// Step 5: Continue pagination with the next page token
-	// This should detect the race condition and return a retryable error
+	// Tests that pagination handles workflow completion gracefully during multi-page retrieval
 	if histResp.NextPageToken != nil {
 		histResp2, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx,
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -395,10 +394,9 @@ func (s *TransientWorkflowTaskHistorySuite) TestGetHistory_RaceCondition_Retryab
 				NextPageToken:   histResp.NextPageToken,
 			})
 
-		// The implementation should detect the state change.
 		// Depending on timing, we might get:
-		// 1. An Unavailable error (ideal case - race condition detected)
-		// 2. Success if the workflow completed before the second pagination call
+		// 1. An Unavailable error if transient events changed (e.g., validation failed)
+		// 2. Success if the workflow completed and pagination succeeded
 		// We verify that if there's an error, it's the expected type
 		if err != nil {
 			var unavailableErr *serviceerror.Unavailable
