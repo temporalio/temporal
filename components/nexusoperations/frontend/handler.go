@@ -587,6 +587,5 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 	return redirectAllowed &&
 		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
-		len(c.namespace.ClusterNames(businessID)) > 1 &&
 		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
 }

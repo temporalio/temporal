@@ -248,10 +248,9 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 ) error {
 	m.beforeAddWorkflowTaskCompletedEvent()
-	return m.afterAddWorkflowTaskCompletedEvent(
-		event,
-		historyi.WorkflowTaskCompletionLimits{MaxResetPoints: math.MaxInt, MaxSearchAttributeValueSize: math.MaxInt},
-	)
+	// no need to pass real wftScheduleToClose, as it is only needed for adjusting pending activity scheduled time
+	// which is only relevant in case of dropped matching tasks which is not applicable for rebuilt history.
+	return m.afterAddWorkflowTaskCompletedEvent(event, historyi.WorkflowTaskCompletionLimits{MaxResetPoints: math.MaxInt, MaxSearchAttributeValueSize: math.MaxInt}, 0)
 }
 
 func (m *workflowTaskStateMachine) ApplyWorkflowTaskFailedEvent() error {
@@ -783,7 +782,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		vb,
 	)
 
-	err := m.afterAddWorkflowTaskCompletedEvent(event, limits)
+	wftScheduleToClose := event.GetEventTime().AsTime().Sub(workflowTask.ScheduledTime)
+	err := m.afterAddWorkflowTaskCompletedEvent(event, limits, wftScheduleToClose)
 	if err != nil {
 		return nil, err
 	}
@@ -1223,6 +1223,7 @@ func (m *workflowTaskStateMachine) beforeAddWorkflowTaskCompletedEvent() {
 func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 	event *historypb.HistoryEvent,
 	limits historyi.WorkflowTaskCompletionLimits,
+	wftScheduleToClose time.Duration,
 ) error {
 	attrs := event.GetWorkflowTaskCompletedEventAttributes()
 	m.ms.executionInfo.LastCompletedWorkflowTaskStartedEventId = attrs.GetStartedEventId()
@@ -1300,7 +1301,7 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 		// If effective behavior changes we also want to reschedule the pending activities, so
 		// they go to the right matching queues.
 		wfBehaviorBefore != wfBehaviorAfter {
-		if err := m.ms.reschedulePendingActivities(); err != nil {
+		if err := m.ms.reschedulePendingActivities(wftScheduleToClose); err != nil {
 			return err
 		}
 	}

@@ -515,6 +515,15 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+// isDrained returns true if this subqueue has been fully drained:
+// - We've read to the end of the queue (atEnd is true)
+// - No tasks are loaded in memory
+func (tr *fairTaskReader) isDrained() bool {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	return tr.atEnd && tr.loadedTasks == 0
+}
+
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
 	return tr.ackLevelPinnedByWriter || len(tr.newlyWrittenTasks) > 0
 }
@@ -610,12 +619,7 @@ func (tr *fairTaskReader) shouldGCLocked() bool {
 
 // called in new goroutine
 func (tr *fairTaskReader) doGC(ackLevel fairLevel) {
-	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
-
-	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
-	defer cancel()
-
-	n, err := tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
+	rowsDeleted, err := tr.doGCAt(ackLevel)
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -627,11 +631,31 @@ func (tr *fairTaskReader) doGC(ackLevel fairLevel) {
 	// implementation behavior for CompleteTasksLessThan:
 	// - unit test, cassandra: always return UnknownNumRowsAffected (in this case means "all")
 	// - sql: return number of rows affected (should be <= batchSize)
-	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
-	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
-	if n == persistence.UnknownNumRowsAffected {
+	if rowsDeleted == persistence.UnknownNumRowsAffected {
 		tr.numToGC = 0
 	} else {
-		tr.numToGC = max(0, tr.numToGC-n)
+		tr.numToGC = max(0, tr.numToGC-rowsDeleted)
 	}
+}
+
+func (tr *fairTaskReader) doGCAt(ackLevel fairLevel) (int, error) {
+	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
+
+	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+
+	n, err := tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
+	if err != nil {
+		tr.logger.Warn("failed to gc tasks", tag.Error(err))
+	}
+	return n, err
+}
+
+// finalGC does a single synchronous gc.
+// Used when unloading a draining queue that won't be reloaded.
+func (tr *fairTaskReader) finalGC() {
+	tr.lock.Lock()
+	ackLevel := tr.ackLevel
+	tr.lock.Unlock()
+	_, _ = tr.doGCAt(ackLevel)
 }

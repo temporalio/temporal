@@ -4834,9 +4834,14 @@ type testQueueData struct {
 	tasks    treemap.Map
 	userData *persistencespb.VersionedTaskQueueUserData
 
+	testQueuePersistenceStats
+}
+
+type testQueuePersistenceStats struct {
 	createTaskCount  int
 	getTasksCount    int
 	getUserDataCount int
+	createCount      int
 	updateCount      int
 }
 
@@ -4861,6 +4866,12 @@ func (q *testQueueData) RangeID() int64 {
 	return q.rangeID
 }
 
+func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
+	q.Lock()
+	defer q.Unlock()
+	return q.testQueuePersistenceStats
+}
+
 func (m *testTaskManager) CreateTaskQueue(
 	_ context.Context,
 	request *persistence.CreateTaskQueueRequest,
@@ -4873,6 +4884,8 @@ func (m *testTaskManager) CreateTaskQueue(
 
 	tlm.Lock()
 	defer tlm.Unlock()
+
+	tlm.createCount++
 
 	if tlm.rangeID != 0 {
 		return nil, &persistence.ConditionFailedError{

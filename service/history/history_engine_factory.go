@@ -50,6 +50,7 @@ type (
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipCache
+		RoutingInfoCache                worker_versioning.RoutingInfoCache
 	}
 
 	historyEngineFactory struct {
@@ -68,6 +69,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.VersionMembershipCache,
+		f.RoutingInfoCache,
 		f.RawMatchingClient,
 		f.WorkflowCache,
 		f.ReplicationProgressCache,
