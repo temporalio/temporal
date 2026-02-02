@@ -59,8 +59,8 @@ func (i *SlowRequestLoggerInterceptor) logSlowRequest(
 	method := info.FullMethod
 
 	tags := i.workflowTags.Extract(request, method)
-	tags = append(tags, tag.NewDurationTag("duration", elapsed))
-	tags = append(tags, tag.NewStringTag("method", method))
+	tags = append(tags, tag.Duration("duration", elapsed))
+	tags = append(tags, tag.String("method", method))
 
 	i.logger.Warn("Slow gRPC call", tags...)
 }

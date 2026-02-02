@@ -2734,13 +2734,6 @@ that task will be sent to DLQ.`,
 		`SendRawHistoryBytesToMatchingService controls whether to use the new raw_history_bytes field (21) instead of raw_history field (20) when sending history to matching service. Only enable after all services are upgraded. NOTE: This flag only has effect when SendRawHistoryBetweenInternalServices is also enabled.`,
 	)
 
-	// TODO(rodrigozhou): This is temporary dynamic config to be removed before the next release.
-	EnableRequestIdRefLinks = NewGlobalBoolSetting(
-		"history.enableRequestIdRefLinks",
-		false,
-		"Enable generating request ID reference links",
-	)
-
 	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
 		false,
