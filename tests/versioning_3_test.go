@@ -908,7 +908,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 4 WorkflowTaskCompleted
 5 WorkflowTaskScheduled // Was speculative WT...
 6 WorkflowTaskStarted
-7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.  
+7 WorkflowTaskCompleted // ...and events were written to the history when WT completes.
 8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
 9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
 `, events)

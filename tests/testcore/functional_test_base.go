@@ -577,7 +577,6 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 }
 
 // InjectHook sets a test hook inside the cluster.
-// FunctionalTestBase tests that use InjectHook are assumed to use dedicated clusters.
 func (s *FunctionalTestBase) InjectHook(hook testhooks.Hookable) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
@@ -615,55 +614,18 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 }
 
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-	for _, forcePollForward := range []bool{false, true} {
-		for _, forceTaskForward := range []bool{false, true} {
-			for _, forceAsync := range []bool{false, true} {
-				name := "NoTaskForward"
-				if forceTaskForward {
-					// force two levels of forwarding
-					name = "ForceTaskForward"
-				}
-				if forcePollForward {
-					name += "ForcePollForward"
-				} else {
-					name += "NoPollForward"
-				}
-				if forceAsync {
-					name += "ForceAsync"
-				} else {
-					name += "AllowSync"
-				}
-
-				s.Run(
-					name, func() {
-						if forceTaskForward || forcePollForward {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-						} else {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-						}
-						if forceTaskForward {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 11))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 0))
-						}
-						if forcePollForward {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 5))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
-						}
-						if forceAsync {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
-						}
-
-						subtest()
-					},
-				)
+	for _, behavior := range AllMatchingBehaviors() {
+		s.Run(behavior.Name(), func() {
+			if behavior.ForceTaskForward || behavior.ForcePollForward {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+			} else {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 			}
-		}
+			behavior.InjectHooks(s)
+			subtest()
+		})
 	}
 }
 
