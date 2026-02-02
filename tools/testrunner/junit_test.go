@@ -109,7 +109,7 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 	report, err := mergeReports([]*junitReport{j})
 	require.NoError(t, err)
 
-	suites := report.Testsuites.Suites
+	suites := report.Suites
 	require.Len(t, suites, 1)
 
 	testNames := collectTestNames(suites)
@@ -122,7 +122,7 @@ func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
 	require.Contains(t, testNames, "TestDatanodeSuite/TestOtherTest")
 
 	// Verify the failures are preserved
-	require.Equal(t, 2, report.Testsuites.Failures)
+	require.Equal(t, 2, report.Failures)
 }
 
 func TestMergeReports_MissingRerun(t *testing.T) {
