@@ -15,6 +15,7 @@ var Module = fx.Module(
 	fx.Provide(NewCancellationBackoffTaskHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
+	fx.Invoke(registerCommandHandlers),
 )
 
 func register(
