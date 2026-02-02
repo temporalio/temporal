@@ -657,6 +657,16 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
 	)
+	FrontendWorkerDeploymentReadRPS = NewNamespaceIntSetting(
+		"frontend.workerDeploymentReadRPS",
+		100,
+		`FrontendWorkerDeploymentReadRPS is the per-namespace rate limit for DescribeWorkerDeployment and DescribeWorkerDeploymentVersion APIs`,
+	)
+	FrontendWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
+		"frontend.workerDeploymentReadBurstRatio",
+		2.0,
+		`FrontendWorkerDeploymentReadBurstRatio is the burst ratio for worker deployment read API rate limiter`,
+	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
 		1200,

@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -74,6 +75,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -141,9 +143,10 @@ type (
 		membershipMonitor               membership.Monitor
 		healthInterceptor               *interceptor.HealthInterceptor
 		scheduleSpecBuilder             *scheduler.SpecBuilder
-		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
-		httpEnabled                     bool
-		registry                        *chasm.Registry
+		outstandingPollers                      collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                             bool
+		registry                                *chasm.Registry
+		workerDeploymentReadRateLimiter     quotas.RequestRateLimiter
 	}
 )
 
@@ -232,6 +235,23 @@ func NewWorkflowHandler(
 		httpEnabled:         httpEnabled,
 		registry:            registry,
 	}
+
+	handler.workerDeploymentReadRateLimiter = quotas.NewNamespaceRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDynamicRateLimiter(
+					configs.NewNamespaceRateBurst(
+						req.Caller,
+						func(ns string) float64 {
+							return float64(config.WorkerDeploymentReadRPS(ns))
+						},
+						config.WorkerDeploymentReadBurstRatio,
+					),
+					time.Minute,
+				),
+			)
+		},
+	)
 
 	return handler
 }
@@ -3471,6 +3491,10 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, errDeploymentVersionsNotAllowed
 	}
 
+	if err := wh.checkWorkerDeploymentReadRateLimit(request.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3666,6 +3690,10 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if err := wh.checkWorkerDeploymentReadRateLimit(request.GetNamespace()); err != nil {
+		return nil, err
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -5684,6 +5712,25 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 	}
 	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(namespaceName string) error {
+	req := quotas.NewRequest(
+		"",            // API name not needed
+		1,             // token count
+		namespaceName, // caller (namespace)
+		"",            // caller type
+		0,             // caller segment
+		"",            // initiation
+	)
+
+	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now(), req) {
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			fmt.Sprintf("Worker deployment describe API rate limit exceeded for namespace %q", namespaceName),
+		)
 	}
 	return nil
 }
