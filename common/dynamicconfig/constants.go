@@ -2723,12 +2723,15 @@ that task will be sent to DLQ.`,
 		false,
 		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
 	)
-
-	// TODO(rodrigozhou): This is temporary dynamic config to be removed before the next release.
-	EnableRequestIdRefLinks = NewGlobalBoolSetting(
-		"history.enableRequestIdRefLinks",
+	// SendRawHistoryBytesToMatchingService controls which field is used when sending raw history
+	// from history service to matching service. IMPORTANT: Only enable this flag after all services
+	// (history, matching, frontend) are upgraded to a version that supports this feature.
+	// NOTE: This flag only has effect when SendRawHistoryBetweenInternalServices is also enabled.
+	// If SendRawHistoryBetweenInternalServices is false, this flag is ignored.
+	SendRawHistoryBytesToMatchingService = NewGlobalBoolSetting(
+		"history.sendRawHistoryBytesToMatchingService",
 		false,
-		"Enable generating request ID reference links",
+		`SendRawHistoryBytesToMatchingService controls whether to use the new raw_history_bytes field (21) instead of raw_history field (20) when sending history to matching service. Only enable after all services are upgraded. NOTE: This flag only has effect when SendRawHistoryBetweenInternalServices is also enabled.`,
 	)
 
 	EnableChasm = NewNamespaceBoolSetting(
@@ -2774,6 +2777,18 @@ instead of the previous HSM backed implementation.`,
 		"history.versionMembershipCacheMaxSize",
 		10000,
 		`Maximum number of entries in the version membership cache.`,
+	)
+
+	RoutingInfoCacheTTL = NewGlobalDurationSetting(
+		"history.routingInfoCacheTTL",
+		1*time.Second,
+		`TTL for caching task queue routing info (deployment versions and ramping state).`,
+	)
+
+	RoutingInfoCacheMaxSize = NewGlobalIntSetting(
+		"history.routingInfoCacheMaxSize",
+		10000,
+		`Maximum number of entries in the routing info cache.`,
 	)
 
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(

@@ -135,6 +135,7 @@ type (
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionMembershipCache     worker_versioning.VersionMembershipCache
+		routingInfoCache           worker_versioning.RoutingInfoCache
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
@@ -155,6 +156,7 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
@@ -225,6 +227,7 @@ func NewEngineWithShardContext(
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionMembershipCache:     versionMembershipCache,
+		routingInfoCache:           routingInfoCache,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -522,7 +525,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found
