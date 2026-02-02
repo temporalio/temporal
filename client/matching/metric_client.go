@@ -162,7 +162,7 @@ func (c *metricClient) emitForwardedSourceStats(
 		// it means some mangled name come here; need to check why
 		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
 		if err != nil {
-			c.logger.Info("invalid tq name", tag.Error(err), tag.Strings("proto", []string{taskQueue.GetName()}))
+			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueue.GetName()))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}
