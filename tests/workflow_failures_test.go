@@ -103,7 +103,7 @@ ListClosedLoop:
 		s.NoError(err3)
 		closedCount = len(resp.Executions)
 		if closedCount == 0 {
-			s.Logger.Info("Closed WorkflowExecution is not yet visibile")
+			s.Logger.Info("Closed WorkflowExecution is not yet visible")
 			time.Sleep(1000 * time.Millisecond) //nolint:forbidigo
 			continue ListClosedLoop
 		}

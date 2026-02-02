@@ -2,7 +2,7 @@
 ## Configuration
 See https://cloud.google.com/docs/authentication#service-accounts to understand how is made the authentication against google cloud storage
 
-Nowdays we support three different ways in order to let Temporal know where your google keyfile credentials are located
+Nowadays we support three different ways in order to let Temporal know where your google keyfile credentials are located
 
 * Temporal archival deployment.yaml configuration file
 * `GOOGLE_APPLICATION_CREDENTIALS` environment variable
@@ -12,7 +12,7 @@ If more than one credentials location is given, then Temporal will resolve the c
 
 `GOOGLE_APPLICATION_CREDENTIALS > Temporal archival deployment.yaml > Google default credentials`
 
-Be sure that you have created your bucket first, and have enought rights in order to read/write over your bucket.
+Be sure that you have created your bucket first, and have enough rights in order to read/write over your bucket.
 
 ### Gcloud Archival example
 
@@ -65,7 +65,7 @@ it will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T5
 ### Limitations
 
 - The only operator supported is `=`
-- Currently It's not possible to guarantee the resulSet order, specially if the pageSize it's fullfilled.  
+- Currently It's not possible to guarantee the resultSet order, specially if the pageSize it's fulfilled.  
 
 ### Example
 

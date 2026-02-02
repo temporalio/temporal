@@ -17,8 +17,8 @@ func TestUnsafeSQLString(t *testing.T) {
 	require.Equal(t, `'foo'`, sqlparser.String(val))
 
 	// chars are not escaped
-	val = NewUnsafeSQLString("fo'o")
-	require.Equal(t, `'fo'o'`, sqlparser.String(val))
+	val = NewUnsafeSQLString("fo'o")              // typos:disable-line
+	require.Equal(t, `'fo'o'`, sqlparser.String(val)) // typos:disable-line
 }
 
 func TestColName(t *testing.T) {

@@ -119,7 +119,7 @@ processing code. Spans are created by `go.opentelemetry.io/otel/trace.Tracer`
 objects which are themselves created by
 `go.opentelemetry.io/otel/trace.TracerProvider` instances. The `TracerProvider`
 instances are bound to a single logical service and as such a single Temporal
-process will have up to four such instances (for worker, mathcing, history, and
+process will have up to four such instances (for worker, matching, history, and
 frontend services respectively). The `Tracer` object is bound to a single
 logical _library_ which is different than a _service_. Consider that a history
 _service_ instance might run code from the temporal common library, gRPC

@@ -1166,7 +1166,7 @@ func (s *hrsuTestSuite) TestConflictResolutionGetResult() {
 	t.cluster1.executeHistoryReplicationTasksUntil(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED)
 	s.EqualValues(t.cluster1.getHistory(ctx), t.cluster2.getHistory(ctx))
 
-	// Complete the workflow in cluster2. This will cause the workflow result to be sent to cluste1.
+	// Complete the workflow in cluster2. This will cause the workflow result to be sent to cluster1.
 	task, err := t.cluster2.testCluster.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: t.tv.NamespaceName().String(),
 		TaskQueue: t.tv.TaskQueue(),

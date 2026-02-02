@@ -16,7 +16,7 @@ type (
 
 func newNoopMetricsHandler() *noopMetricsHandler { return &noopMetricsHandler{} }
 
-// WithTags creates a new MetricProvder with provided []Tag
+// WithTags creates a new MetricProvider with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler
 func (n *noopMetricsHandler) WithTags(...Tag) Handler {
 	return n

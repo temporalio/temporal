@@ -161,14 +161,14 @@ func (s *historyExecutionTimerSuite) TestDeleteSelect_Single() {
 	runID := primitives.NewUUID()
 	timerID := shuffle.String(testHistoryExecutionTimerID)
 
-	deletFilter := sqlplugin.TimerInfoMapsFilter{
+	deleteFilter := sqlplugin.TimerInfoMapsFilter{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 		RunID:       runID,
 		TimerIDs:    []string{timerID},
 	}
-	result, err := s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deletFilter)
+	result, err := s.store.DeleteFromTimerInfoMaps(newExecutionContext(), deleteFilter)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)

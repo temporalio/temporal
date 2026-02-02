@@ -129,12 +129,12 @@ func (s *notifierSuite) TestMultipleSubscriberWatchingEvents() {
 		subscriberID, channel, err := s.notifier.WatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()))
 		s.Nil(err)
 
-		timeourChan := time.NewTimer(time.Second * 10).C
+		timeoutChan := time.NewTimer(time.Second * 10).C
 
 		select {
 		case msg := <-channel:
 			s.Equal(historyEvent, msg)
-		case <-timeourChan:
+		case <-timeoutChan:
 			s.Fail("subscribe to new events timeout")
 		}
 		err = s.notifier.UnwatchHistoryEvent(definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId()), subscriberID)

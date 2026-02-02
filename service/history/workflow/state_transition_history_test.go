@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-func TestUpdatedTranstionHistory(t *testing.T) {
+func TestUpdatedTransitionHistory(t *testing.T) {
 	var hist []*persistencespb.VersionedTransition
 	hist = workflow.UpdatedTransitionHistory(hist, 1)
 	protorequire.ProtoSliceEqual(t,

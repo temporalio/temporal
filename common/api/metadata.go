@@ -3,7 +3,7 @@ package api
 import "strings"
 
 type (
-	// Describes the scope of a method (whole cluster or inividual namespace).
+	// Describes the scope of a method (whole cluster or individual namespace).
 	Scope int32
 
 	// Describes what level of access is needed for a method. Note that this field is
@@ -16,7 +16,7 @@ type (
 	Polling int32
 
 	MethodMetadata struct {
-		// Describes the scope of a method (whole cluster or inividual namespace).
+		// Describes the scope of a method (whole cluster or individual namespace).
 		Scope Scope
 		// Describes what level of access is needed for a method (advisory).
 		Access Access

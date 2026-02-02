@@ -826,7 +826,7 @@ func (e taskExecutor) executeCancelationBackoffTask(env hsm.Environment, node *h
 	})
 }
 
-// lookupEndpint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.
+// lookupEndpoint gets an endpoint from the registry, preferring to look up by ID and falling back to name lookup.
 // The fallback is a temporary workaround for not implementing endpoint replication, and endpoint ID being a UUID set by
 // the system. We try to get the endpoint by name to support cases where an operator manually created an endpoint with
 // the same name in two replicas.

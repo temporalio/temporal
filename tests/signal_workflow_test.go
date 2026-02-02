@@ -332,7 +332,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
 	requestID := uuid.NewString()
-	signalReqest := &workflowservice.SignalWorkflowExecutionRequest{
+	signalRequest := &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
@@ -343,7 +343,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 		Identity:   identity,
 		RequestId:  requestID,
 	}
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), signalReqest)
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), signalRequest)
 	s.NoError(err)
 
 	// Process signal in workflow
@@ -359,7 +359,7 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_DuplicateRequest() {
 	s.Equal(1, numOfSignaledEvent)
 
 	// Send another signal with same request id
-	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), signalReqest)
+	_, err = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), signalRequest)
 	s.NoError(err)
 
 	// Process signal in workflow

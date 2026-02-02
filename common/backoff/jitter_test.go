@@ -79,7 +79,7 @@ func (s *jitterSuite) TestJitter_InputZeroValue() {
 	s.Zero(Jitter(float64(0), rand.Float64()))
 }
 
-func (s *jitterSuite) TestJitter_CoeffientZeroValue() {
+func (s *jitterSuite) TestJitter_CoefficientZeroValue() {
 	s.Equal(time.Duration(1), Jitter(time.Duration(1), 0))
 	s.Equal(int64(1), Jitter(int64(1), 0))
 	s.Equal(float64(1), Jitter(float64(1), 0))

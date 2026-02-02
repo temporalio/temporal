@@ -2752,7 +2752,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 	})
 
 	// Case 2: caller does not set a deadline. In practice this is equivalent to them setting a 30s
-	// deadline since that is what Histry receives. In this case History times out the wait at
+	// deadline since that is what History receives. In this case History times out the wait at
 	// LongPollTimeout and the caller gets an empty response.
 	t.Run("NoCallerDeadline", func(t *testing.T) {
 		// The caller sets no deadline. However, the ctx received by the history service handler

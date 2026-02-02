@@ -404,7 +404,7 @@ func (r *workflowResetterImpl) persistToDB(
 		return err
 	}
 	resetRunVersion := resetWorkflow.GetMutableState().GetCurrentVersion()
-	currentRunVerson := currentWorkflow.GetMutableState().GetCurrentVersion()
+	currentRunVersion := currentWorkflow.GetMutableState().GetCurrentVersion()
 	if _, _, _, err := r.transaction.ConflictResolveWorkflowExecution(
 		ctx,
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
@@ -415,7 +415,7 @@ func (r *workflowResetterImpl) persistToDB(
 		&resetRunVersion,
 		resetWorkflowSnapshot,
 		resetWorkflowEventsSeq,
-		&currentRunVerson,
+		&currentRunVersion,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
 		currentWorkflow.GetMutableState().IsWorkflow(),
@@ -1157,7 +1157,7 @@ func IsTerminatedByResetter(event *historypb.HistoryEvent) bool {
 	return false
 }
 
-// shouldExcludeAllReapplyEvents returns true if the excludeTypes map contains all the elegible re-apply event types.
+// shouldExcludeAllReapplyEvents returns true if the excludeTypes map contains all the eligible re-apply event types.
 func (r *workflowResetterImpl) shouldExcludeAllReapplyEvents(excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) bool {
 	for key := range enumspb.ResetReapplyExcludeType_name {
 		eventType := enumspb.ResetReapplyExcludeType(key)

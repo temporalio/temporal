@@ -40,7 +40,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initializaed")
+var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initialized")
 
 const (
 	defaultTaskDispatchRPS    = 100000.0
@@ -1734,7 +1734,7 @@ func (pm *taskQueuePartitionManagerImpl) getPhysicalQueuesForAdd(
 		// unknownBuild flag is ignored because we don't have any special logic for it anymore. unknown build can
 		// happen in two scenarios:
 		// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
-		// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
+		// - task queue is still using the old API but a failover happened before versioning data fully propagate.
 		// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
 		// TODO: [cleanup-old-wv]
 		_, err = checkVersionForStickyAdd(data, directive.GetAssignedBuildId())
@@ -1821,7 +1821,7 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 	if unknownBuild {
 		// this could happen in two scenarios:
 		// - task queue is switching to the new versioning API and the build ID is not registered in version sets.
-		// - task queue is still using the old API but a failover happened before verisoning data fully propagate.
+		// - task queue is still using the old API but a failover happened before versioning data fully propagate.
 		// the second case is unlikely, and we do not support it anymore considering the old API is deprecated.
 		return "", nil
 	}

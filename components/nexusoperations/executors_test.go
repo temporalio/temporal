@@ -39,7 +39,7 @@ import (
 )
 
 var endpointEntry = &persistencespb.NexusEndpointEntry{
-	Id: "enpdoint-id",
+	Id: "endpoint-id",
 	Endpoint: &persistencespb.NexusEndpoint{
 		Spec: &persistencespb.NexusEndpointSpec{
 			Name: "endpoint",

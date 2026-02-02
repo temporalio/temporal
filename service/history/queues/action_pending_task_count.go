@@ -50,7 +50,7 @@ func (a *actionQueuePendingTask) Name() string {
 
 func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) bool {
 	// first check if the alert is still valid
-	if a.monitor.GetTotalPendingTaskCount() <= a.attributes.CiriticalPendingTaskCount {
+	if a.monitor.GetTotalPendingTaskCount() <= a.attributes.CriticalPendingTaskCount {
 		return false
 	}
 
@@ -64,7 +64,7 @@ func (a *actionQueuePendingTask) Run(readerGroup *ReaderGroup) bool {
 	a.init()
 	a.gatherStatistics(readers)
 	a.findSliceToClear(
-		int(float64(a.attributes.CiriticalPendingTaskCount) * targetLoadFactor),
+		int(float64(a.attributes.CriticalPendingTaskCount) * targetLoadFactor),
 	)
 	a.splitAndClearSlice(readers, readerGroup)
 	return true
@@ -76,7 +76,7 @@ func (a *actionQueuePendingTask) shrinkSliceLowTaskCount(
 	for _, reader := range readers {
 		reader.ShrinkSlices()
 	}
-	return a.monitor.GetTotalPendingTaskCount() <= a.attributes.CiriticalPendingTaskCount
+	return a.monitor.GetTotalPendingTaskCount() <= a.attributes.CriticalPendingTaskCount
 }
 
 func (a *actionQueuePendingTask) init() {
@@ -91,7 +91,7 @@ func (a *actionQueuePendingTask) gatherStatistics(
 ) {
 	// gather statistic for
 	// 1. total # of pending tasks per key
-	// 2. for each slice, # of pending taks per key
+	// 2. for each slice, # of pending tasks per key
 	// 3. for each key, a list of slices that contains pending tasks from that key,
 	//    reversely ordered by slice range. Upon unloading, first unload newer slices.
 	for _, reader := range readers {
@@ -136,7 +136,7 @@ func (a *actionQueuePendingTask) findSliceToClear(
 
 		sliceList := a.slicesPerKey[key]
 		if len(sliceList) == 0 {
-			panic("Found key with non-zero pending task count but has no correspoding Slice")
+			panic("Found key with non-zero pending task count but has no corresponding Slice")
 		}
 
 		// pop the first slice in the list

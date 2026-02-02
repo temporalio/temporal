@@ -62,16 +62,16 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
-	testSer := &testSerializer{Serializer: serializer}
+	testSet := &testSerializer{Serializer: serializer}
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			testSer,
+			testSet,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			testSer,
+			testSet,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),

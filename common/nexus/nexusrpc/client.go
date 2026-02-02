@@ -46,7 +46,7 @@ var errEmptyOperationToken = errors.New("empty operation token")
 type UnexpectedResponseError struct {
 	// Error message.
 	Message string
-	// Optional failure that may have been emedded in the response.
+	// Optional failure that may have been embedded in the response.
 	Failure *nexus.Failure
 	// Additional transport specific details.
 	// For HTTP, this would include the HTTP response. The response body will have already been read into memory and

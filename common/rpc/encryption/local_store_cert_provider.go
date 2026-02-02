@@ -262,7 +262,7 @@ func (s *localStoreCertProvider) fetchCertificate(
 	}
 
 	if certFile != "" && certData != "" {
-		return nil, errors.New("only one of certFile or certData properties should be spcified")
+		return nil, errors.New("only one of certFile or certData properties should be specified")
 	}
 
 	var certBytes []byte

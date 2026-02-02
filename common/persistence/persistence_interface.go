@@ -376,7 +376,7 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
-		// workflow to be resetted
+		// workflow to be reset
 		ResetWorkflowSnapshot        InternalWorkflowSnapshot
 		ResetWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 		// maybe new workflow

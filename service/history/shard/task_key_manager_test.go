@@ -162,7 +162,7 @@ func (s *taskKeyManagerSuite) TestGetExclusiveReaderHighWatermark_WithPendingTas
 		now.Add(-time.Minute),
 	)
 
-	// make two calls here, otherwise the order for assgining task keys is not guaranteed
+	// make two calls here, otherwise the order for assigning task keys is not guaranteed
 	_, err := s.manager.setAndTrackTaskKeys(map[tasks.Category][]tasks.Task{
 		tasks.CategoryTransfer: {transferTask},
 	})

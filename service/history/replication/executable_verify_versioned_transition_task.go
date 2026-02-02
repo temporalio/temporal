@@ -81,7 +81,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -271,7 +271,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 	)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
-		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+		callerInfo := getReplicationCallerInfo(e.GetPriority())
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,
@@ -307,7 +307,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 			tag.WorkflowID(e.WorkflowID),
 			tag.WorkflowRunID(e.RunID),
 		)
-		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+		callerInfo := getReplicationCallerInfo(e.GetPriority())
 		// workflow is not found in source cluster, cleanup workflow in target cluster
 		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()

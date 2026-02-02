@@ -130,7 +130,7 @@ var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
 	"chasm.nexusoperation.callback.endpoint.template",
 	"unset",
 	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver asynchronous completion.
-The template can be used to interpolate the {{.NamepaceName}} and {{.NamespaceID}} parameters to construct a publicly accessible URL.
+The template can be used to interpolate the {{.NamespaceName}} and {{.NamespaceID}} parameters to construct a publicly accessible URL.
 Must be set in order to use Nexus Operations.`,
 )
 

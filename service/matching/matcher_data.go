@@ -122,10 +122,10 @@ func (t *taskPQ) Less(i int, j int) bool {
 	// TODO(pri): ready time is not task-specific yet, we only have whole-queue, so we don't
 	// need to consider this here yet.
 	// // ready time
-	// aready, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
-	// if aready < bready {
+	// already, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
+	// if already < bready {
 	// 	return true
-	// } else if aready > bready {
+	// } else if already > bready {
 	// 	return false
 	// }
 
@@ -414,7 +414,7 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 				continue
 			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
 				// Note the ">" above: "min" priority is a numeric max.
-				// Also note: this condition will be false for draining tasks since we artifically boost
+				// Also note: this condition will be false for draining tasks since we artificially boost
 				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}

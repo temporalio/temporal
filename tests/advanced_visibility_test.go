@@ -2457,7 +2457,7 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name() + "-scavenger",
 		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
-	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+	}, build_ids.BuildIdScavengerWorkflowName, build_ids.BuildIdScavengerInput{
 		IgnoreRetentionTime: true,
 	})
 	s.Require().NoError(err)

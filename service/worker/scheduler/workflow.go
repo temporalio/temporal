@@ -1098,7 +1098,7 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 	for key, valuePayload := range searchAttributes.GetIndexedFields() {
 		var value any
 		if err := payload.Decode(valuePayload, &value); err != nil {
-			s.logger.Error("error updating search attributes of the scheule", "error", err)
+			s.logger.Error("error updating search attributes of the schedule", "error", err)
 			return
 		}
 		upsertMap[key] = value
@@ -1128,7 +1128,7 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 	}
 	//nolint:staticcheck // SA1019 The untyped function here is more convenient.
 	if err := workflow.UpsertSearchAttributes(s.ctx, upsertMap); err != nil {
-		s.logger.Error("error updating search attributes of the scheule", "error", err)
+		s.logger.Error("error updating search attributes of the schedule", "error", err)
 	}
 }
 

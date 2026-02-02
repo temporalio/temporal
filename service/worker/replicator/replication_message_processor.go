@@ -30,7 +30,7 @@ const (
 	pollIntervalSecs                          = 1
 	taskProcessorErrorRetryWait               = time.Second
 	taskProcessorErrorRetryBackoffCoefficient = 1
-	taskProcessorErrorRetryMaxAttampts        = 5
+	taskProcessorErrorRetryMaxAttempts        = 5
 )
 
 func newReplicationMessageProcessor(
@@ -48,7 +48,7 @@ func newReplicationMessageProcessor(
 ) *replicationMessageProcessor {
 	retryPolicy := backoff.NewExponentialRetryPolicy(taskProcessorErrorRetryWait).
 		WithBackoffCoefficient(taskProcessorErrorRetryBackoffCoefficient).
-		WithMaximumAttempts(taskProcessorErrorRetryMaxAttampts)
+		WithMaximumAttempts(taskProcessorErrorRetryMaxAttempts)
 
 	return &replicationMessageProcessor{
 		hostInfo:                  hostInfo,

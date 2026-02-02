@@ -539,7 +539,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 
 	ai, ok := handler.mutableState.GetActivityByActivityID(attr.ActivityId)
 	if !ok {
-		// activity cancelled in the same worflow task
+		// activity cancelled in the same workflow task
 		return nil, nil
 	}
 

@@ -77,8 +77,8 @@ func (r *Registry) Machine(t string) (def StateMachineDefinition, ok bool) {
 // RegisterTaskSerializer registers a [TaskSerializer] for a given type.
 // Returns an [ErrDuplicateRegistration] if a serializer for this task type has already been registered.
 func (r *Registry) RegisterTaskSerializer(t string, def TaskSerializer) error {
-	if exising, ok := r.tasks[t]; ok {
-		return fmt.Errorf("%w: task already registered for %v: %v", ErrDuplicateRegistration, t, exising)
+	if existing, ok := r.tasks[t]; ok {
+		return fmt.Errorf("%w: task already registered for %v: %v", ErrDuplicateRegistration, t, existing)
 	}
 	r.tasks[t] = def
 	return nil

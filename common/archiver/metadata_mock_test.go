@@ -27,7 +27,7 @@ func TestMetadataMock(t *testing.T) {
 
 		assert.True(t, config.ClusterConfiguredForArchival())
 
-		metadata.EXPECT().GetHistoryConfig().Return(NewDisabledArchvialConfig())
+		metadata.EXPECT().GetHistoryConfig().Return(NewDisabledArchivalConfig())
 		config = metadata.GetHistoryConfig()
 
 		assert.False(t, config.ClusterConfiguredForArchival())
@@ -39,7 +39,7 @@ func TestMetadataMock(t *testing.T) {
 
 		assert.True(t, config.ClusterConfiguredForArchival())
 
-		metadata.EXPECT().GetVisibilityConfig().Return(NewDisabledArchvialConfig())
+		metadata.EXPECT().GetVisibilityConfig().Return(NewDisabledArchivalConfig())
 		config = metadata.GetVisibilityConfig()
 
 		assert.False(t, config.ClusterConfiguredForArchival())
@@ -51,7 +51,7 @@ func TestMetadataMock(t *testing.T) {
 
 		assert.True(t, config.ClusterConfiguredForArchival())
 
-		metadata.EXPECT().GetHistoryConfig().Return(NewDisabledArchvialConfig())
+		metadata.EXPECT().GetHistoryConfig().Return(NewDisabledArchivalConfig())
 		config = metadata.GetHistoryConfig()
 
 		assert.False(t, config.ClusterConfiguredForArchival())
@@ -64,7 +64,7 @@ func TestMetadataMock(t *testing.T) {
 
 		assert.True(t, config.ClusterConfiguredForArchival())
 
-		metadata.EXPECT().GetVisibilityConfig().Return(NewDisabledArchvialConfig())
+		metadata.EXPECT().GetVisibilityConfig().Return(NewDisabledArchivalConfig())
 		config = metadata.GetVisibilityConfig()
 
 		assert.False(t, config.ClusterConfiguredForArchival())

@@ -46,7 +46,7 @@ func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
 	buildIdsRemoved, err := a.findBuildIdsToRemove(
 		ctx,
 		nil,
-		BuildIdScavangerInput{},
+		BuildIdScavengerInput{},
 		heartbeatDetails{},
 		namespace.NewNamespaceForTest(nil, nil, false, nil, 0),
 		&persistence.TaskQueueUserDataEntry{
@@ -67,17 +67,17 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 	env := testSuite.NewTestActivityEnvironment()
 
 	ctrl := gomock.NewController(t)
-	visiblityManager := manager.NewMockVisibilityManager(ctrl)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	rateLimiter := quotas.NewMockRateLimiter(ctrl)
 
 	a := &Activities{
 		logger:                               log.NewCLILogger(),
-		visibilityManager:                    visiblityManager,
+		visibilityManager:                    visibilityManager,
 		removableBuildIdDurationSinceDefault: dynamicconfig.GetDurationPropertyFn(time.Hour),
 		buildIdScavengerVisibilityRPS:        dynamicconfig.GetFloatPropertyFn(1.0),
 	}
 
-	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Times(4).DoAndReturn(
 		func(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
 			count := 0
 			if strings.Contains(request.Query, fmt.Sprintf("'%s'", worker_versioning.VersionedBuildIdSearchAttribute("v3.0"))) {
@@ -206,7 +206,7 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 		return a.findBuildIdsToRemove(
 			ctx,
 			rateLimiter,
-			BuildIdScavangerInput{},
+			BuildIdScavengerInput{},
 			heartbeatDetails{},
 			ns,
 			&persistence.TaskQueueUserDataEntry{
@@ -235,7 +235,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	env.SetWorkerOptions(worker.Options{Interceptors: []interceptor.WorkerInterceptor{&iceptor}})
 
 	ctrl := gomock.NewController(t)
-	visiblityManager := manager.NewMockVisibilityManager(ctrl)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	rateLimiter := quotas.NewMockRateLimiter(ctrl)
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 	taskManager := persistence.NewMockTaskManager(ctrl)
@@ -244,7 +244,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 
 	a := &Activities{
 		logger:                               log.NewCLILogger(),
-		visibilityManager:                    visiblityManager,
+		visibilityManager:                    visibilityManager,
 		metadataManager:                      metadataManager,
 		taskManager:                          taskManager,
 		namespaceRegistry:                    namespaceRegistry,
@@ -255,7 +255,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	}
 
 	rateLimiter.EXPECT().Wait(gomock.Any()).AnyTimes()
-	visiblityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(&manager.CountWorkflowExecutionsResponse{
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).AnyTimes().Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 0,
 	}, nil)
 
@@ -396,7 +396,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	)
 	env.SetHeartbeatDetails(initialHeartbeat)
 	env.RegisterActivity(a)
-	_, err := env.ExecuteActivity(a.ScavengeBuildIds, BuildIdScavangerInput{})
+	_, err := env.ExecuteActivity(a.ScavengeBuildIds, BuildIdScavengerInput{})
 	require.NoError(t, err)
 	require.Equal(t, []heartbeatDetails{
 		{

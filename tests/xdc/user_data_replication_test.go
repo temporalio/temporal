@@ -550,7 +550,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 		ID:                 workflowID,
 		TaskQueue:          build_ids.BuildIdScavengerTaskQueueName,
 		WorkflowRunTimeout: time.Second * 30,
-	}, build_ids.BuildIdScavangerWorkflowName, build_ids.BuildIdScavangerInput{
+	}, build_ids.BuildIdScavengerWorkflowName, build_ids.BuildIdScavengerInput{
 		IgnoreRetentionTime: true,
 	})
 	s.NoError(err)

@@ -370,7 +370,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(
 	var searchAttrs *commonpb.SearchAttributes
 	if len(request.SearchAttributes.GetIndexedFields()) > 0 {
 		// Remove any system search attribute from the map.
-		// This is necessary because the validation can supress errors when trying
+		// This is necessary because the validation can suppress errors when trying
 		// to set a value on a system search attribute.
 		searchAttrs = &commonpb.SearchAttributes{
 			IndexedFields: make(map[string]*commonpb.Payload),

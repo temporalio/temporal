@@ -94,13 +94,13 @@ func (mi *MaskInternalErrorDetailsInterceptor) logError(
 	statusCode codes.Code,
 ) {
 	methodName := api.MethodName(fullMethod)
-	overridedMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
+	overriddenMethodName := telemetryOverrideOperationTag(fullMethod, methodName)
 	nsName := MustGetNamespaceName(mi.namespaceRegistry, req)
 	var logTags []tag.Tag
 	if nsName == "" {
-		logTags = []tag.Tag{tag.Operation(overridedMethodName)}
+		logTags = []tag.Tag{tag.Operation(overriddenMethodName)}
 	} else {
-		logTags = []tag.Tag{tag.Operation(overridedMethodName), tag.WorkflowNamespace(nsName.String())}
+		logTags = []tag.Tag{tag.Operation(overriddenMethodName), tag.WorkflowNamespace(nsName.String())}
 	}
 
 	logTags = append(logTags, tag.NewStringTag("hash", errorHash))

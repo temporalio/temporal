@@ -48,7 +48,7 @@ Note that Failure in an Update outcome is different from Update rejection.
 persisted in mutable state.
 
 ## Update Registry
-Updates are managed through the `update.Registy` interface. A workflow's Update Registry is stored in
+Updates are managed through the `update.Registry` interface. A workflow's Update Registry is stored in
 its `workflow.ContextImpl` struct. Each Registry has an internal map which stores *admitted and
 accepted* Updates, i.e., in-flight Updates only. Completed Updates are not stored there - but can
 still be accessed through the Registry since it has a reference to the mutable state

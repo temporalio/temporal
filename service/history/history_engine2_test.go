@@ -2640,7 +2640,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventFoundOnNonCurrentBranch() {
 
-	inititatedVersion := tests.Version - 100
+	initiatedVersion := tests.Version - 100
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		ParentExecution: &commonpb.WorkflowExecution{
@@ -2652,7 +2652,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 			RunId:      "child runId",
 		},
 		ParentInitiatedId:      123,
-		ParentInitiatedVersion: inititatedVersion,
+		ParentInitiatedVersion: initiatedVersion,
 	}
 
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
@@ -2666,14 +2666,14 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 			{
 				BranchToken: []byte{1, 2, 3},
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 100, Version: inititatedVersion},
+					{EventId: 100, Version: initiatedVersion},
 					{EventId: 456, Version: tests.Version},
 				},
 			},
 			{
 				BranchToken: []byte{4, 5, 6},
 				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 456, Version: inititatedVersion},
+					{EventId: 456, Version: initiatedVersion},
 				},
 			},
 		},

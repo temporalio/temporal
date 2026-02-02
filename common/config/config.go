@@ -65,7 +65,7 @@ type (
 	PProf struct {
 		// Port is the port on which the PProf will bind to
 		Port int `yaml:"port"`
-		// Host defaults to `localhost` but can be overriden
+		// Host defaults to `localhost` but can be overridden
 		// for instance in the case of dual stack IPv4/IPv6
 		Host string `yaml:"host"`
 	}

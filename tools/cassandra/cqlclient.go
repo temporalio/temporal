@@ -185,7 +185,7 @@ func (client *cqlClient) ReadSchemaVersion() (string, error) {
 	return version, nil
 }
 
-// UpdateShemaVersion updates the schema version for the Keyspace
+// UpdateSchemaVersion updates the schema version for the Keyspace
 func (client *cqlClient) UpdateSchemaVersion(newVersion string, minCompatibleVersion string) error {
 	query := client.session.Query(writeSchemaVersionCQL, client.keyspace, time.Now().UTC(), newVersion, minCompatibleVersion)
 	return query.Exec()

@@ -855,7 +855,7 @@ func (s *executableSuite) TestTaskNack_Resubmit_Success() {
 
 		go func() {
 			// access internal state in a separate goroutine to check if there's any race condition
-			// between reschdule and nack.
+			// between reschedule and nack.
 			s.accessInternalState(executable)
 		}()
 		return true
@@ -873,7 +873,7 @@ func (s *executableSuite) TestTaskNack_Resubmit_Fail() {
 
 		go func() {
 			// access internal state in a separate goroutine to check if there's any race condition
-			// between reschdule and nack.
+			// between reschedule and nack.
 			s.accessInternalState(executable)
 		}()
 	}).Times(1)
@@ -910,7 +910,7 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 
 				go func() {
 					// access internal state in a separate goroutine to check if there's any race condition
-					// between reschdule and nack.
+					// between reschedule and nack.
 					s.accessInternalState(executable)
 				}()
 			}).Times(1)

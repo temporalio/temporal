@@ -925,7 +925,7 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 		return tracker // tracker was created while we were waiting for the lock
 	}
 
-	// Initalize all task trackers together; or the timeframes won't line up.
+	// Initialize all task trackers together; or the timeframes won't line up.
 	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
 	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
 

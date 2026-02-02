@@ -18,7 +18,7 @@ func TestGarbageCleanupInfo(t *testing.T) {
 	}
 }
 
-func TestGarbageCleanupInfo_WithColonInWorklfowID(t *testing.T) {
+func TestGarbageCleanupInfo_WithColonInWorkflowID(t *testing.T) {
 	namespaceID := "10000000-5000-f000-f000-000000000000"
 	workflowID := "workflow-id:2"
 	runID := "10000000-5000-f000-f000-000000000002"

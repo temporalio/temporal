@@ -95,7 +95,7 @@ func (s *GroupByScheduler[K, T]) getOrCreateScheduler(key K) RunnableScheduler {
 	s.mu.RUnlock()
 	if !ok {
 		s.mu.Lock()
-		// Check again in case the map was populated between releasing and aquiring the lock.
+		// Check again in case the map was populated between releasing and acquiring the lock.
 		if sched, ok = s.schedulers[key]; !ok {
 			sched = s.options.SchedulerFactory(key)
 			s.schedulers[key] = sched

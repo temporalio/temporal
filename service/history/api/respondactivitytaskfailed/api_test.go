@@ -261,7 +261,7 @@ func (s *workflowSuite) Test_LastHeartBeatDetailsExist_UpdatesMutableState() {
 }
 
 func (s *workflowSuite) Test_RetryActivityFailsWithAnError_WillReturnTheError() {
-	retryError := fmt.Errorf("bizzare error")
+	retryError := fmt.Errorf("bizarre error")
 	uc := newUseCase(UsecaseConfig{
 		attempt:             int32(1),
 		startedEventId:      int64(40),

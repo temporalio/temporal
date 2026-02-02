@@ -535,7 +535,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowOpen() 
 			s.Len(machines.MachinesById, 1)
 			machine := machines.MachinesById["child1"]
 			s.Equal([]byte(hsmtest.State3), machine.Data)
-			s.Equal(int64(24), machine.TransitionCount) // transition count is cluster local and should only be increamented by 1
+			s.Equal(int64(24), machine.TransitionCount) // transition count is cluster local and should only be incremented by 1
 			s.Len(request.UpdateWorkflowMutation.Tasks[tasks.CategoryTimer], 1)
 			s.Len(request.UpdateWorkflowMutation.Tasks[tasks.CategoryOutbound], 1)
 			s.Empty(request.UpdateWorkflowEvents)
@@ -644,7 +644,7 @@ func (s *hsmStateReplicatorSuite) TestSyncHSM_IncomingStateNewer_WorkflowClosed(
 			s.Len(machines.MachinesById, 1)
 			machine := machines.MachinesById["child1"]
 			s.Equal([]byte(hsmtest.State3), machine.Data)
-			s.Equal(int64(24), machine.TransitionCount) // transition count is cluster local and should only be increamented by 1
+			s.Equal(int64(24), machine.TransitionCount) // transition count is cluster local and should only be incremented by 1
 			s.Len(request.UpdateWorkflowMutation.Tasks[tasks.CategoryTimer], 1)
 			s.Len(request.UpdateWorkflowMutation.Tasks[tasks.CategoryOutbound], 1)
 			return tests.UpdateWorkflowExecutionResponse, nil

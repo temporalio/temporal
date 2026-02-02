@@ -145,10 +145,10 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithTransitionHistory/StalenessCheckFailure",
 			enableTransitionHistory: true,
 			mutateRef: func(ref *hsm.Ref) {
-				mutableStateVersonedTransition := ref.StateMachineRef.MutableStateVersionedTransition
+				mutableStateVersionedTransition := ref.StateMachineRef.MutableStateVersionedTransition
 				ref.StateMachineRef.MutableStateVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: mutableStateVersonedTransition.NamespaceFailoverVersion + 1,
-					TransitionCount:          mutableStateVersonedTransition.TransitionCount,
+					NamespaceFailoverVersion: mutableStateVersionedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          mutableStateVersionedTransition.TransitionCount,
 				}
 			},
 			mutateNode: func(node *hsm.Node) {},
@@ -160,10 +160,10 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CanBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
+				machineInitialVersionedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
 				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
-					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
+					NamespaceFailoverVersion: machineInitialVersionedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          machineInitialVersionedTransition.TransitionCount,
 				}
 			},
 			mutateNode: func(node *hsm.Node) {},
@@ -175,10 +175,10 @@ func TestValidateStateMachineRef(t *testing.T) {
 			name:                    "WithoutTransitionHistory/CannotBeStale/MachineStalenessCheckFailure",
 			enableTransitionHistory: false,
 			mutateRef: func(ref *hsm.Ref) {
-				machineInitialVersonedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
+				machineInitialVersionedTransition := ref.StateMachineRef.MachineInitialVersionedTransition
 				ref.StateMachineRef.MachineInitialVersionedTransition = &persistencespb.VersionedTransition{
-					NamespaceFailoverVersion: machineInitialVersonedTransition.NamespaceFailoverVersion + 1,
-					TransitionCount:          machineInitialVersonedTransition.TransitionCount,
+					NamespaceFailoverVersion: machineInitialVersionedTransition.NamespaceFailoverVersion + 1,
+					TransitionCount:          machineInitialVersionedTransition.TransitionCount,
 				}
 				ref.TaskID = tasks.MaximumKey.TaskID
 			},

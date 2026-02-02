@@ -191,7 +191,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 			tag.NewStringTag("mutable-state-archetype", mutableStateArchetype),
 		)
 		return nil, serviceerror.NewNotFoundf(
-			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
+			"CHASM Archetype mismatch for %v, expected: %s, actual: %s",
 			c.workflowKey,
 			contextArchetype,
 			mutableStateArchetype,

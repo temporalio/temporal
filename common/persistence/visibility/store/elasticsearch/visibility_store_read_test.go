@@ -1861,7 +1861,7 @@ func (s *ESVisibilitySuite) Test_parsePageTokenValue() {
 			value: "123",
 			tp:    enumspb.INDEXED_VALUE_TYPE_INT,
 			res:   nil,
-			err:   serviceerror.NewInvalidArgument("invalid page token: expected interger type, got \"123\""),
+			err:   serviceerror.NewInvalidArgument("invalid page token: expected integer type, got \"123\""),
 		},
 		{
 			name:  "DoubleFieldError",

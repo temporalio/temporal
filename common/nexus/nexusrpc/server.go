@@ -274,7 +274,7 @@ func (h *httpHandler) contextWithTimeoutFromHTTPRequest(writer http.ResponseWrit
 type HandlerOptions struct {
 	// Handler for handling service requests.
 	Handler nexus.Handler
-	// A stuctured logger.
+	// A structured logger.
 	// Defaults to slog.Default().
 	Logger *slog.Logger
 	// Max duration to allow waiting for a single get result request.

@@ -82,7 +82,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.testShardContext.GetLogger(),
 		metrics.NoopMetricsHandler,
 		config,
-		true, // isActive (irelevant for test)
+		true, // isActive (irrelevant for test)
 	)
 }
 

@@ -158,7 +158,7 @@ make install-schema-mysql
 make start-mysql
 ```
 
-Now you can create a namespace with the Temporal CLI (While you can select any name for a namespace, we reccomend using `default` while learning, because a number of samples assume there is a namespace named `default`):
+Now you can create a namespace with the Temporal CLI (While you can select any name for a namespace, we recommend using `default` while learning, because a number of samples assume there is a namespace named `default`):
 
 ```bash
 temporal operator namespace create -n default

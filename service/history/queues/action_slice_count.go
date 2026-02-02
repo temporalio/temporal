@@ -58,7 +58,7 @@ func (a *actionSliceCount) Run(readerGroup *ReaderGroup) (actionTaken bool) {
 	isUniversalPredicate := func(s Slice) bool { return tasks.IsUniverisalPredicate(s.Scope().Predicate) }
 	isNotUniversalPredicate := func(s Slice) bool { return !isUniversalPredicate(s) }
 
-	// peform compaction in four stages:
+	// perform compaction in four stages:
 	// 1. compact slices in non-default reader with non-universal predicate
 	// 2. compact slices in default reader with non-universal predicate
 	// 3. compact slices in non-default reader with universal predicate

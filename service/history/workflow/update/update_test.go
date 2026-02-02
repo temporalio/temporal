@@ -529,14 +529,14 @@ func TestUpdateState(t *testing.T) {
 				title: "transition to stateCompleted via stateAccepted in one WFT",
 				apply: func() {
 					// start waiters
-					accptCh := make(chan any, 1)
+					acceptCh := make(chan any, 1)
 					go func() {
 						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
 						if err != nil {
-							accptCh <- err
+							acceptCh <- err
 							return
 						}
-						accptCh <- status.Outcome
+						acceptCh <- status.Outcome
 					}()
 					complCh := make(chan any, 1)
 					go func() {
@@ -565,9 +565,9 @@ func TestUpdateState(t *testing.T) {
 					require.True(t, completed, "update state should now be completed")
 
 					// ensure both waiter received completed response
-					accptWaiterRes := <-accptCh
+					acceptWaiterRes := <-acceptCh
 					complWaiterRes := <-complCh
-					require.EqualExportedValues(t, successOutcome, accptWaiterRes)
+					require.EqualExportedValues(t, successOutcome, acceptWaiterRes)
 					require.EqualExportedValues(t, successOutcome, complWaiterRes)
 
 					// new waiter receives same response
@@ -580,14 +580,14 @@ func TestUpdateState(t *testing.T) {
 				title: "transition to stateAborted via stateAccepted in one WFT",
 				apply: func() {
 					// start waiters
-					accptCh := make(chan any, 1)
+					acceptCh := make(chan any, 1)
 					go func() {
 						status, err := upd.WaitLifecycleStage(context.Background(), UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, 100*time.Millisecond)
 						if err != nil {
-							accptCh <- err
+							acceptCh <- err
 							return
 						}
-						accptCh <- status.Outcome
+						acceptCh <- status.Outcome
 					}()
 					complCh := make(chan any, 1)
 					go func() {
@@ -615,9 +615,9 @@ func TestUpdateState(t *testing.T) {
 					require.False(t, completed, "completed call back should not be called when aborted")
 
 					// ensure both waiter received completed response
-					accptWaiterRes := <-accptCh
+					acceptWaiterRes := <-acceptCh
 					complWaiterRes := <-complCh
-					require.EqualExportedValues(t, abortedOutcome, accptWaiterRes)
+					require.EqualExportedValues(t, abortedOutcome, acceptWaiterRes)
 					require.EqualExportedValues(t, abortedOutcome, complWaiterRes)
 
 					// new waiter receives same response
