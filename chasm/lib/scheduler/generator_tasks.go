@@ -75,7 +75,7 @@ func (g *GeneratorTaskExecutor) Execute(
 	t1 := generator.LastProcessedTime.AsTime()
 	t2 := ctx.Now(generator).UTC()
 	if t2.Before(t1) {
-		logger.Warn("time went backwards",
+		logger.Error("time went backwards",
 			tag.NewStringerTag("time", t1),
 			tag.NewStringerTag("time", t2))
 		t2 = t1

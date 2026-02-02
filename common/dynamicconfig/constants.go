@@ -125,6 +125,11 @@ query.`,
 		`EnableNamespaceNotActiveAutoForwarding whether enabling DC auto forwarding to active cluster
 for signal / start / signal with start API if namespace is not active`,
 	)
+	ForceNamespaceSelectedAPIAutoForwarding = NewNamespaceBoolSetting(
+		"system.forceNamespaceSelectedAPIAutoForwarding",
+		false,
+		`ForceNamespaceSelectedAPIAutoForwarding forces selective (whitelist) API forwarding for the namespace when true, overriding all-apis-forwarding policy for that namespace`,
+	)
 	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
 		"system.enableNamespaceHandoverWait",
 		false,
@@ -1447,6 +1452,14 @@ all namespaces. When exceeded, the oldest entries (older than MinEvictAge) are e
 		`MatchingWorkerRegistryEvictionInterval is how often the worker registry runs background eviction
 to remove expired entries. Should be shorter than EntryTTL for timely cleanup. Lower values mean faster cleanup but more CPU overhead.`,
 	)
+	MatchingSpreadRoutingBatchSize = NewGlobalTypedSettingWithConverter(
+		"matching.spreadRoutingBatchSize",
+		ConvertGradualChange[int](0),
+		StaticGradualChange[int](0),
+		`If non-zero, try to spread task queue partitions across matching nodes better, using the given batch size.
+Don't change this on a live cluster without using the gradual change mechanism.
+`,
+	)
 
 	// keys for history
 
@@ -1564,11 +1577,10 @@ timeout timer when execution timeout is specified when starting a workflow.`,
 		`EnableUpdateWorkflowModeIgnoreCurrent controls whether to enable the new logic for updating closed workflow execution
 by mutation using UpdateWorkflowModeIgnoreCurrent`,
 	)
-	EnableTransitionHistory = NewGlobalBoolSetting(
+	EnableTransitionHistory = NewNamespaceBoolSetting(
 		"history.enableTransitionHistory",
-		false,
-		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.
-This feature is still under development and should NOT be enabled.`,
+		true,
+		`EnableTransitionHistory controls whether to enable the new logic for recording the history for each state transition.`,
 	)
 	HistoryStartupMembershipJoinDelay = NewGlobalDurationSetting(
 		"history.startupMembershipJoinDelay",
@@ -2711,12 +2723,15 @@ that task will be sent to DLQ.`,
 		false,
 		`SendRawHistoryBetweenInternalServices is whether to send raw history events between internal temporal services`,
 	)
-
-	// TODO(rodrigozhou): This is temporary dynamic config to be removed before the next release.
-	EnableRequestIdRefLinks = NewGlobalBoolSetting(
-		"history.enableRequestIdRefLinks",
+	// SendRawHistoryBytesToMatchingService controls which field is used when sending raw history
+	// from history service to matching service. IMPORTANT: Only enable this flag after all services
+	// (history, matching, frontend) are upgraded to a version that supports this feature.
+	// NOTE: This flag only has effect when SendRawHistoryBetweenInternalServices is also enabled.
+	// If SendRawHistoryBetweenInternalServices is false, this flag is ignored.
+	SendRawHistoryBytesToMatchingService = NewGlobalBoolSetting(
+		"history.sendRawHistoryBytesToMatchingService",
 		false,
-		"Enable generating request ID reference links",
+		`SendRawHistoryBytesToMatchingService controls whether to use the new raw_history_bytes field (21) instead of raw_history field (20) when sending history to matching service. Only enable after all services are upgraded. NOTE: This flag only has effect when SendRawHistoryBetweenInternalServices is also enabled.`,
 	)
 
 	EnableChasm = NewNamespaceBoolSetting(
@@ -2762,6 +2777,18 @@ instead of the previous HSM backed implementation.`,
 		"history.versionMembershipCacheMaxSize",
 		10000,
 		`Maximum number of entries in the version membership cache.`,
+	)
+
+	RoutingInfoCacheTTL = NewGlobalDurationSetting(
+		"history.routingInfoCacheTTL",
+		1*time.Second,
+		`TTL for caching task queue routing info (deployment versions and ramping state).`,
+	)
+
+	RoutingInfoCacheMaxSize = NewGlobalIntSetting(
+		"history.routingInfoCacheMaxSize",
+		10000,
+		`Maximum number of entries in the routing info cache.`,
 	)
 
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(

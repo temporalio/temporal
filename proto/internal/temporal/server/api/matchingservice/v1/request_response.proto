@@ -60,6 +60,59 @@ message PollWorkflowTaskQueueResponse {
     temporal.api.history.v1.History history = 19;
     bytes next_page_token = 20;
     temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 21;
+    // Raw history bytes sent from matching service when history.sendRawHistoryBetweenInternalServices is enabled.
+    // Matching client will deserialize this to History when it receives the response.
+    temporal.api.history.v1.History raw_history = 22;
+}
+
+// PollWorkflowTaskQueueResponseWithRawHistory is wire-compatible with PollWorkflowTaskQueueResponse.
+//
+// WIRE COMPATIBILITY PATTERN:
+// This message uses the same field numbers as PollWorkflowTaskQueueResponse (1-21 are identical),
+// but field 22 differs in type: `repeated bytes raw_history` vs `History raw_history`.
+// This enables the following optimization:
+//
+// 1. Matching service serializes PollWorkflowTaskQueueResponseWithRawHistory with raw_history as [][]byte
+// 2. Matching client receives the raw bytes and deserializes them as PollWorkflowTaskQueueResponse
+// 3. Protobuf automatically deserializes the [][]byte into a History message because:
+//    - Field 22 in PollWorkflowTaskQueueResponse expects History
+//    - Each []byte in the repeated field is a valid proto-encoded HistoryEventBatch
+//    - Protobuf concatenates repeated message fields into a single message
+//
+// This pattern avoids deserialization in matching service, reducing CPU usage.
+// The matching service passes raw history bytes through without parsing them.
+//
+// IMPORTANT: Field numbers and all other fields must remain identical between these two messages.
+// Any change to PollWorkflowTaskQueueResponse must be mirrored here.
+message PollWorkflowTaskQueueResponseWithRawHistory {
+    bytes task_token = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.api.common.v1.WorkflowType workflow_type = 3;
+    int64 previous_started_event_id = 4;
+    int64 started_event_id = 5;
+    int32 attempt = 6;
+    int64 next_event_id = 7;
+    int64 backlog_count_hint = 8;
+    bool sticky_execution_enabled = 9;
+    temporal.api.query.v1.WorkflowQuery query = 10;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 11;
+    temporal.api.taskqueue.v1.TaskQueue workflow_execution_task_queue = 12;
+    reserved 13;
+    bytes branch_token = 14;
+    google.protobuf.Timestamp scheduled_time = 15;
+    google.protobuf.Timestamp started_time = 16;
+    map<string, temporal.api.query.v1.WorkflowQuery> queries = 17;
+    repeated temporal.api.protocol.v1.Message messages = 18;
+    // The history for this workflow, which will either be complete or partial. Partial histories
+    // are sent to workers who have signaled that they are using a sticky queue when completing
+    // a workflow task. Sticky query tasks will not include any history.
+    temporal.api.history.v1.History history = 19;
+    bytes next_page_token = 20;
+    temporal.api.taskqueue.v1.PollerScalingDecision poller_scaling_decision = 21;
+    // Raw history bytes. Each element is a proto-encoded batch of history events.
+    // When matching client deserializes this to PollWorkflowTaskQueueResponse, this field
+    // will be automatically deserialized to the raw_history field as History.
+    repeated bytes raw_history = 22;
 }
 
 message PollActivityTaskQueueRequest {
