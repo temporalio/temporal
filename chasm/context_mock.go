@@ -26,7 +26,8 @@ type MockContext struct {
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method.
 	// Defaults to context.Background() if nil.
-	GoCtx context.Context
+	GoCtx         context.Context
+	HandleLibrary func(name string) (Library, bool)
 }
 
 func (c *MockContext) goContext() context.Context {
