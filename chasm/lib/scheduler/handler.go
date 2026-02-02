@@ -41,10 +41,33 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 
 	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 	if errors.As(err, &alreadyStartedErr) {
+		// Check if the existing schedule is a sentinel.
+		//
+		// TODO lina@ - this can be removed (as well as all other sentinel business)
+		// after fully migrated to CHASM schedulers.
+		_, readErr := chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Scheduler](
+				chasm.ExecutionKey{
+					NamespaceID: req.NamespaceId,
+					BusinessID:  req.FrontendRequest.ScheduleId,
+				},
+			),
+			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+				if s.IsSentinel() {
+					return nil, ErrSentinel
+				}
+				return nil, nil
+			},
+			(*struct{})(nil),
+		)
+		if readErr != nil {
+			return nil, readErr // Returns ErrSentinel (409) if sentinel
+		}
 		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
 	}
 
-	return result.Output, nil
+	return result.Output, err
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
