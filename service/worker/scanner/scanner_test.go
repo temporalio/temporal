@@ -50,8 +50,8 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 		TaskQueueName: historyScannerTaskQueueName,
 	}
 	buildIdScavenger := expectedScanner{
-		WFTypeName:    build_ids.BuildIdScavengerWorkflowName,
-		TaskQueueName: build_ids.BuildIdScavengerTaskQueueName,
+		WFTypeName:    build_ids.BuildIDScavengerWorkflowName,
+		TaskQueueName: build_ids.BuildIDScavengerTaskQueueName,
 	}
 
 	type testCase struct {
@@ -59,7 +59,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 		ExecutionsScannerEnabled bool
 		TaskQueueScannerEnabled  bool
 		HistoryScannerEnabled    bool
-		BuildIdScavengerEnabled  bool
+		BuildIDScavengerEnabled  bool
 		DefaultStore             string
 		ExpectedScanners         []expectedScanner
 	}
@@ -70,7 +70,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{},
 		},
@@ -79,7 +79,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{},
 		},
@@ -88,7 +88,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    true,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{historyScanner},
 		},
@@ -97,7 +97,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    true,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{historyScanner},
 		},
@@ -106,7 +106,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{}, // TODO: enable task queue scanner for NoSQL?
 		},
@@ -115,7 +115,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{taskQueueScanner},
 		},
@@ -124,7 +124,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{executionScanner},
 		},
@@ -133,25 +133,25 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  false,
+			BuildIDScavengerEnabled:  false,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{}, // ExecutionsScanner is not supported for SQL store
 		},
 		{
-			Name:                     "BuildIdScavengerNoSQL",
+			Name:                     "BuildIDScavengerNoSQL",
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  true,
+			BuildIDScavengerEnabled:  true,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{buildIdScavenger},
 		},
 		{
-			Name:                     "BuildIdScavengerSQL",
+			Name:                     "BuildIDScavengerSQL",
 			ExecutionsScannerEnabled: false,
 			TaskQueueScannerEnabled:  false,
 			HistoryScannerEnabled:    false,
-			BuildIdScavengerEnabled:  true,
+			BuildIDScavengerEnabled:  true,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{buildIdScavenger},
 		},
@@ -160,7 +160,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    true,
-			BuildIdScavengerEnabled:  true,
+			BuildIDScavengerEnabled:  true,
 			DefaultStore:             config.StoreTypeSQL,
 			ExpectedScanners:         []expectedScanner{historyScanner, taskQueueScanner, buildIdScavenger}, // ExecutionsScanner is not supported for SQL store
 		},
@@ -169,7 +169,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 			ExecutionsScannerEnabled: true,
 			TaskQueueScannerEnabled:  true,
 			HistoryScannerEnabled:    true,
-			BuildIdScavengerEnabled:  true,
+			BuildIDScavengerEnabled:  true,
 			DefaultStore:             config.StoreTypeNoSQL,
 			ExpectedScanners:         []expectedScanner{historyScanner, executionScanner, buildIdScavenger}, // TaskQueueScanner is only supported for SQL store
 		},
@@ -188,7 +188,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 					MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 					HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
-					BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
+					BuildIDScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIDScavengerEnabled),
 					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
 					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
 					Persistence: &config.Persistence{
@@ -270,7 +270,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
 			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
 			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
-			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			BuildIDScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
 			Persistence: &config.Persistence{
 				DefaultStore: config.StoreTypeNoSQL,
 				DataStores: map[string]config.DataStore{

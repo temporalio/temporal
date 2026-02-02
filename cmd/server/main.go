@@ -183,15 +183,15 @@ func buildCLI() *cli.App {
 
 				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))
 				logger.Info("Build info.",
-					tag.NewTimeTag("git-time", build.InfoData.GitTime),
-					tag.NewStringTag("git-revision", build.InfoData.GitRevision),
-					tag.NewBoolTag("git-modified", build.InfoData.GitModified),
-					tag.NewStringTag("go-arch", build.InfoData.GoArch),
-					tag.NewStringTag("go-os", build.InfoData.GoOs),
-					tag.NewStringTag("go-version", build.InfoData.GoVersion),
-					tag.NewBoolTag("cgo-enabled", build.InfoData.CgoEnabled),
-					tag.NewStringTag("server-version", headers.ServerVersion),
-					tag.NewBoolTag("debug-mode", debug.Enabled),
+					tag.Time("git-time", build.InfoData.GitTime),
+					tag.String("git-revision", build.InfoData.GitRevision),
+					tag.Bool("git-modified", build.InfoData.GitModified),
+					tag.String("go-arch", build.InfoData.GoArch),
+					tag.String("go-os", build.InfoData.GoOs),
+					tag.String("go-version", build.InfoData.GoVersion),
+					tag.Bool("cgo-enabled", build.InfoData.CgoEnabled),
+					tag.String("server-version", headers.ServerVersion),
+					tag.Bool("debug-mode", debug.Enabled),
 				)
 
 				var dynamicConfigClient dynamicconfig.Client

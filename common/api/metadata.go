@@ -3,7 +3,7 @@ package api
 import "strings"
 
 type (
-	// Describes the scope of a method (whole cluster or individual namespace).
+	// Scope describes the scope of a method (whole cluster or individual namespace).
 	Scope int32
 
 	// Describes what level of access is needed for a method. Note that this field is

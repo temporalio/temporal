@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:imports
+	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"

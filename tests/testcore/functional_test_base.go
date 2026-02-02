@@ -445,6 +445,7 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	}
 }
 
+// TearDownTest cleans up after each test.
 // **IMPORTANT**: When overriding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
@@ -452,6 +453,7 @@ func (s *FunctionalTestBase) TearDownTest() {
 	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
+// TearDownSubTest cleans up after each subtest.
 // **IMPORTANT**: When overriding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
 func (s *FunctionalTestBase) TearDownSubTest() {
 	s.exportOTELTraces()

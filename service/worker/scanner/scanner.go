@@ -44,8 +44,8 @@ type (
 		Persistence *config.Persistence
 		// TaskQueueScannerEnabled indicates if taskQueue scanner should be started as part of scanner
 		TaskQueueScannerEnabled dynamicconfig.BoolPropertyFn
-		// BuildIdScavengerEnabled indicates if the build ID scavenger should be started as part of scanner
-		BuildIdScavengerEnabled dynamicconfig.BoolPropertyFn
+		// BuildIDScavengerEnabled indicates if the build ID scavenger should be started as part of scanner
+		BuildIDScavengerEnabled dynamicconfig.BoolPropertyFn
 		// HistoryScannerEnabled indicates if history scanner should be started as part of scanner
 		HistoryScannerEnabled dynamicconfig.BoolPropertyFn
 		// ExecutionsScannerEnabled indicates if executions scanner should be started as part of scanner
@@ -69,8 +69,8 @@ type (
 		// RemovableBuildIdDurationSinceDefault is the minimum duration since a build ID was last default in its
 		// containing set for it to be considered for removal.
 		RemovableBuildIdDurationSinceDefault dynamicconfig.DurationPropertyFn
-		// BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
-		BuildIdScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
+		// BuildIDScavengerVisibilityRPS is the rate limit for visibility calls from the build ID scavenger
+		BuildIDScavengerVisibilityRPS dynamicconfig.FloatPropertyFn
 	}
 
 	// scannerContext is the context object that gets
@@ -183,9 +183,9 @@ func (s *Scanner) Start() error {
 		workerTaskQueueNames = append(workerTaskQueueNames, historyScannerTaskQueueName)
 	}
 
-	if s.context.cfg.BuildIdScavengerEnabled() {
+	if s.context.cfg.BuildIDScavengerEnabled() {
 		s.wg.Add(1)
-		go s.startWorkflowWithRetry(ctx, build_ids.BuildIdScavengerWFStartOptions, build_ids.BuildIdScavengerWorkflowName)
+		go s.startWorkflowWithRetry(ctx, build_ids.BuildIDScavengerWFStartOptions, build_ids.BuildIDScavengerWorkflowName)
 
 		buildIdsActivities := build_ids.NewActivities(
 			s.context.logger,
@@ -196,12 +196,12 @@ func (s *Scanner) Start() error {
 			s.context.matchingClient,
 			s.context.currentClusterName,
 			s.context.cfg.RemovableBuildIdDurationSinceDefault,
-			s.context.cfg.BuildIdScavengerVisibilityRPS,
+			s.context.cfg.BuildIDScavengerVisibilityRPS,
 		)
 
-		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIdScavengerTaskQueueName, workerOpts)
-		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavengerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavengerWorkflowName})
-		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavengerActivityName})
+		work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), build_ids.BuildIDScavengerTaskQueueName, workerOpts)
+		work.RegisterWorkflowWithOptions(build_ids.BuildIDScavengerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIDScavengerWorkflowName})
+		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIDScavengerActivityName})
 
 		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
 		if err := work.Start(); err != nil {

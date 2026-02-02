@@ -86,10 +86,10 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
-		tag.NewTimeTag("start", start),
-		tag.NewTimeTag("end", end),
-		tag.NewAnyTag("overlap-policy", overlapPolicy),
-		tag.NewBoolTag("manual", manual))
+		tag.Time("start", start),
+		tag.Time("end", end),
+		tag.Any("overlap-policy", overlapPolicy),
+		tag.Bool("manual", manual))
 
 	// Peek at paused/remaining actions state and don't bother if we're not going to
 	// take an action now. (Don't count as missed catchup window either.)
@@ -132,15 +132,15 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			// Skip this check for manual (backfill) actions since they explicitly request
 			// past times.
 			s.logger.Info("ProcessBuffer skipped an action due to update time",
-				tag.NewTimeTag("updateTime", scheduler.Info.UpdateTime.AsTime()),
-				tag.NewTimeTag("droppedActionTime", next.Next))
+				tag.Time("updateTime", scheduler.Info.UpdateTime.AsTime()),
+				tag.Time("droppedActionTime", next.Next))
 			continue
 		}
 
 		if !manual && end.Sub(next.Next) > catchupWindow {
 			s.logger.Info("Schedule missed catchup window",
-				tag.NewTimeTag("now", end),
-				tag.NewTimeTag("time", next.Next))
+				tag.Time("now", end),
+				tag.Time("time", next.Next))
 			metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++

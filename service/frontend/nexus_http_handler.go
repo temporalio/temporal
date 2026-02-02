@@ -36,7 +36,7 @@ import (
 type NexusHTTPHandler struct {
 	logger                               log.Logger
 	nexusHandler                         http.Handler
-	endpointRegistry                      commonnexus.EndpointRegistry
+	endpointRegistry                     commonnexus.EndpointRegistry
 	namespaceRegistry                    namespace.Registry
 	preprocessErrorCounter               metrics.CounterFunc
 	auth                                 *authorization.Interceptor
@@ -68,7 +68,7 @@ func NewNexusHTTPHandler(
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		logger:                               logger,
-		endpointRegistry:                      endpointRegistry,
+		endpointRegistry:                     endpointRegistry,
 		namespaceRegistry:                    namespaceRegistry,
 		auth:                                 authInterceptor,
 		namespaceValidationInterceptor:       namespaceValidationInterceptor,
