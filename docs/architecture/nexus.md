@@ -61,7 +61,15 @@ To enable Nexus in your deployment:
           httpAddress: $PUBLIC_URL:7243
     ```
 
-2a. Prior to version 1.30.X, you must enable Nexus through [dynamic config](https://docs.temporal.io/references/dynamic-configuration), set the public callback URL, and set the allowed callback addresses.
+2. Configure Nexus settings in the [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
+
+- 2a. Since version 1.30.X, Nexus is enabled by default, just set SystemCallbackURL for Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
+
+    ```yaml
+   component.nexusoperations.useSystemCallbackURL: true
+   ```
+
+- 2b. Prior to version 1.30.X, you must enable Nexus through , set the public callback URL, and set the allowed callback addresses.
 
     ```yaml
     system.enableNexus:
@@ -81,12 +89,6 @@ To enable Nexus in your deployment:
            AllowInsecure: true # In production, set to false when HTTPS/TLS is supported. 
     ```
 
-2a. Since version 1.30.X, Nexus is enabled by default, just set SystemCallbackURL for Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
-
-    ```yaml
-   component.nexusoperations.useSystemCallbackURL:
-     - value: true
-   ```
 
 ## Disabling Nexus
 
