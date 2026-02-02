@@ -17,11 +17,14 @@ var _ MutableContext = (*MockMutableContext)(nil)
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey   func() ExecutionKey
-	HandleNow            func(component Component) time.Time
-	HandleRef            func(component Component) ([]byte, error)
-	HandleExecutionInfo  func() ExecutionInfo
-	HandleMetricsHandler func() metrics.Handler
+	HandleExecutionKey         func() ExecutionKey
+	HandleNow                  func(component Component) time.Time
+	HandleRef                  func(component Component) ([]byte, error)
+	HandleExecutionCloseTime   func() time.Time
+	HandleStateTransitionCount func() int64
+	HandleExecutionInfo        func() ExecutionInfo
+	HandleMetricsHandler       func() metrics.Handler
+	HandleLibrary              func(name string) (Library, bool)
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
