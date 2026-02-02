@@ -79,6 +79,29 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Success() {
 	require.Nil(s.T(), rc3)
 }
 
+func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
+	r := chasm.NewRegistry(s.logger)
+	ctrl := gomock.NewController(s.T())
+	lib := chasm.NewMockLibrary(ctrl)
+	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
+	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*chasm.MockComponent]("DetachedComponent", chasm.WithDetached()),
+	})
+	lib.EXPECT().Tasks().Return(nil)
+
+	err := r.Register(lib)
+	s.Require().NoError(err)
+
+	// Detached component should have IsDetached() return true
+	detachedRC, ok := r.Component("TestLibrary.DetachedComponent")
+	s.Require().True(ok)
+	s.Require().True(detachedRC.IsDetached())
+
+	// Verify that a component without WithDetached() has IsDetached() return false
+	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
+	s.Require().False(normalRC.IsDetached())
+}
+
 func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {
 	r := chasm.NewRegistry(s.logger)
 	ctrl := gomock.NewController(s.T())

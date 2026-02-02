@@ -606,7 +606,7 @@ func (c *matchingServiceClient) CheckTaskQueueVersionMembership(ctx context.Cont
 type MatchingServiceServer interface {
 	// PollWorkflowTaskQueue is called by frontend to process WorkflowTask from a specific task queue.  A
 	// WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
-	PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error)
+	PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponseWithRawHistory, error)
 	// PollActivityTaskQueue is called by frontend to process ActivityTask from a specific task queue.  ActivityTask
 	// is dispatched to callers whenever a ScheduleTask command is made for a workflow execution.
 	PollActivityTaskQueue(context.Context, *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error)
@@ -785,7 +785,7 @@ type MatchingServiceServer interface {
 type UnimplementedMatchingServiceServer struct {
 }
 
-func (UnimplementedMatchingServiceServer) PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponse, error) {
+func (UnimplementedMatchingServiceServer) PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponseWithRawHistory, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowTaskQueue not implemented")
 }
 func (UnimplementedMatchingServiceServer) PollActivityTaskQueue(context.Context, *PollActivityTaskQueueRequest) (*PollActivityTaskQueueResponse, error) {

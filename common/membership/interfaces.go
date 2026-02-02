@@ -69,8 +69,10 @@ type (
 	ServiceResolver interface {
 		// Lookup looks up the host that currently owns the resource identified by the given key.
 		Lookup(key string) (HostInfo, error)
-		// LookupN looks n hosts that owns the resource identified by the given key, if n greater than total number
-		// of hosts total number of hosts will be returned
+		// LookupN looks up n hosts that owns the resource identified by the given key, if n is
+		// greater than total number of hosts, all hosts will be returned in some order.
+		// The result of Lookup(key) must be equal to LookupN(key, n)[0] for any n, i.e.
+		// LookupN must be an extension of Lookup.
 		LookupN(key string, n int) []HostInfo
 		// AddListener adds a listener which will get notified on the given channel whenever membership changes.
 		AddListener(name string, notifyChannel chan<- *ChangedEvent) error

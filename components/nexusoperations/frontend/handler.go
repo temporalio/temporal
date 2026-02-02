@@ -150,7 +150,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 				"namespace ID in token doesn't match the token",
 				tag.WorkflowNamespaceID(ns.ID().String()),
 				tag.Error(err),
-				tag.NewStringTag("completion-namespace-id", completion.GetNamespaceId()),
+				tag.String("completion-namespace-id", completion.GetNamespaceId()),
 			)
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
@@ -226,7 +226,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		}
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
-		logger.Error("invalid operation state in completion request", tag.NewStringTag("state", string(r.State)), tag.Error(err))
+		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)), tag.Error(err))
 		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 	_, err = h.HistoryClient.CompleteNexusOperation(ctx, hr)
@@ -587,6 +587,5 @@ func (c *requestContext) shouldForwardRequest(ctx context.Context, header http.H
 	return redirectAllowed &&
 		c.RedirectionInterceptor.RedirectionAllowed(ctx) &&
 		c.namespace.IsGlobalNamespace() &&
-		len(c.namespace.ClusterNames(businessID)) > 1 &&
 		c.Config.ForwardingEnabledForNamespace(c.namespace.Name().String())
 }
