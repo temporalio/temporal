@@ -84,7 +84,8 @@ To enable Nexus in your deployment:
 2a. Since version 1.30.X, Nexus is enabled by default, just set SystemCallbackURL for Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
 
     ```yaml
-   component.nexusoperations.useSystemCallbackURL: true
+   component.nexusoperations.useSystemCallbackURL:
+     - value: true
    ```
 
 ## Disabling Nexus
