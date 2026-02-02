@@ -2949,6 +2949,11 @@ If the service configures with archival feature enabled, update worker.historySc
 		true,
 		`EnableBatcher decides whether to start new (per-namespace) batcher in our worker`,
 	)
+	EnableDummyWorkflow = NewNamespaceBoolSetting(
+		"worker.enableDummyWorkflow",
+		false,
+		`EnableDummyWorkflow enables the dummy sentinel workflow for a namespace`,
+	)
 	BatcherRPS = NewNamespaceIntSetting(
 		"worker.batcherRPS",
 		50,
