@@ -329,6 +329,8 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		handlerOpts := chasmcommand.HandlerOptions{
 			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 		}
+
+		// Invoke command handler.
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 
 		// Try CHASM command handler first, fall back to HSM if not supported.
