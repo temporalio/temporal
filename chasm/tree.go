@@ -176,7 +176,7 @@ type (
 		Nodes map[string]*persistencespb.ChasmNode // encoded node path -> chasm node
 	}
 
-	// NodeBackend is a set of methods needed from MutableState
+	// NodeBackend is a set of methods needed from MutableState.
 	//
 	// This is for breaking cycle dependency between
 	// this package and service/history/workflow package
