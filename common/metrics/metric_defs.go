@@ -901,7 +901,6 @@ var (
 	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
 	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
 	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
-	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
 	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
 	WorkflowExecutionUpdateWaitStageCompleted            = NewCounterDef("workflow_update_wait_stage_completed")
 	WorkflowExecutionUpdateClientTimeout                 = NewCounterDef("workflow_update_client_timeout")

@@ -422,9 +422,6 @@ func (u *Update) Send(
 	}
 
 	u.instrumentation.countSent()
-	if u.state == stateSent {
-		u.instrumentation.countSentAgain()
-	}
 
 	if u.state == stateAdmitted {
 		u.setState(stateSent)

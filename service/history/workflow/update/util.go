@@ -74,10 +74,6 @@ func (i *instrumentation) countSent() {
 	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorker.Name())
 }
 
-func (i *instrumentation) countSentAgain() {
-	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorkerAgain.Name())
-}
-
 func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Message, state state) {
 	i.oneOf(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.Name())
 	softassert.Fail(
