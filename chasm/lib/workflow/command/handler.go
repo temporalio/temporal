@@ -6,13 +6,17 @@ import (
 	"go.temporal.io/server/chasm"
 )
 
+type HandlerOptions struct {
+	WorkflowTaskCompletedEventID int64
+}
+
 // Handler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
 // worker request.
 type Handler func(
 	chasmCtx chasm.MutableContext,
 	validator Validator,
-	workflowTaskCompletedEventID int64,
 	command *commandpb.Command,
+	opts HandlerOptions,
 ) error
 
 // Validator is a helper for validating workflow commands.

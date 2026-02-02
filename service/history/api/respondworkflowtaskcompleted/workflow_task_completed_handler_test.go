@@ -399,7 +399,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		sentinelErr := errors.New("sentinel: CHASM handler invoked")
 		err := tc.chasmCommandRegistry.Register(
 			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-			func(chasm.MutableContext, chasmcommand.Validator, int64, *commandpb.Command) error {
+			func(chasm.MutableContext, chasmcommand.Validator, *commandpb.Command, chasmcommand.HandlerOptions) error {
 				return sentinelErr
 			},
 		)

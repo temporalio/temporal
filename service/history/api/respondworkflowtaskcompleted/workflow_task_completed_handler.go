@@ -347,14 +347,16 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			}
 
 			// Wrap HSM command handler to match CHASM command handler signature.
-			commandHandler = func(_ chasm.MutableContext, v chasmcommand.Validator, id int64, cmd *commandpb.Command) error {
-				return legacyHandler(ctx, handler.mutableState, v, id, cmd)
+			commandHandler = func(_ chasm.MutableContext, v chasmcommand.Validator, cmd *commandpb.Command, opts chasmcommand.HandlerOptions) error {
+				return legacyHandler(ctx, handler.mutableState, v, opts.WorkflowTaskCompletedEventID, cmd)
 			}
 		}
 
 		// Invoke command handler.
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err = commandHandler(chasmCtx, validator, handler.workflowTaskCompletedID, command)
+		err = commandHandler(chasmCtx, validator, command, chasmcommand.HandlerOptions{
+			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
+		})
 		var failWFTErr chasmcommand.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.TerminateWorkflow {

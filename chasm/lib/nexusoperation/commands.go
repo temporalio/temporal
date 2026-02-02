@@ -24,8 +24,8 @@ func registerCommandHandlers(registry *command.Registry) error {
 func handleScheduleCommand(
 	chasmCtx chasm.MutableContext,
 	validator command.Validator,
-	workflowTaskCompletedEventID int64,
 	cmd *commandpb.Command,
+	opts command.HandlerOptions,
 ) error {
 	// TODO: Implement CHASM nexus operation scheduling
 	return serviceerror.NewUnimplemented("CHASM nexus operation scheduling not yet implemented")
@@ -34,8 +34,8 @@ func handleScheduleCommand(
 func handleCancelCommand(
 	chasmCtx chasm.MutableContext,
 	validator command.Validator,
-	workflowTaskCompletedEventID int64,
 	cmd *commandpb.Command,
+	opts command.HandlerOptions,
 ) error {
 	// TODO: Implement CHASM nexus operation cancellation
 	return serviceerror.NewUnimplemented("CHASM nexus operation cancellation not yet implemented")
