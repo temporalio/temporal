@@ -47,14 +47,8 @@ func LegacyToSchedulerMigrationState(
 	infoClone.RunningWorkflows = nil
 	infoClone.RecentActions = nil
 
-	scheduleClone := common.CloneProto(schedule)
-	if scheduleClone.State == nil {
-		scheduleClone.State = &schedulepb.ScheduleState{}
-	}
-	scheduleClone.State.Paused = true
-
 	schedulerState := &schedulerpb.SchedulerState{
-		Schedule:      scheduleClone,
+		Schedule:      common.CloneProto(schedule),
 		Info:          infoClone,
 		Namespace:     state.Namespace,
 		NamespaceId:   state.NamespaceId,

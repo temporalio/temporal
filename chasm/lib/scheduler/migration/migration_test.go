@@ -83,7 +83,7 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	// Scheduler state
 	require.NotNil(t, migrationState)
 	require.NotNil(t, migrationState.SchedulerState)
-	require.True(t, migrationState.SchedulerState.Schedule.State.Paused, "schedule should be paused after migration")
+	require.False(t, migrationState.SchedulerState.Schedule.State.Paused, "schedule should preserve unpaused state")
 	require.Equal(t, "test-ns", migrationState.SchedulerState.Namespace)
 	require.Equal(t, "test-ns-id", migrationState.SchedulerState.NamespaceId)
 	require.Equal(t, "test-sched-id", migrationState.SchedulerState.ScheduleId)
