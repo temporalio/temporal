@@ -3,15 +3,12 @@ package dummy
 import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
 
-type workerComponent struct {
-	enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
-}
+type workerComponent struct{}
 
 type fxResult struct {
 	fx.Out
@@ -20,11 +17,9 @@ type fxResult struct {
 
 var Module = fx.Options(fx.Provide(NewResult))
 
-func NewResult(dc *dynamicconfig.Collection) fxResult {
+func NewResult() fxResult {
 	return fxResult{
-		Component: &workerComponent{
-			enabledForNs: dynamicconfig.EnableDummyWorkflow.Get(dc),
-		},
+		Component: &workerComponent{},
 	}
 }
 
@@ -35,6 +30,6 @@ func (c *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 
 func (c *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled: c.enabledForNs(ns.Name().String()),
+		Enabled: true,
 	}
 }
