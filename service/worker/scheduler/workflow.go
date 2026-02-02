@@ -226,8 +226,11 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 		ctx:               ctx,
 		a:                 nil,
 		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
-		metrics:           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.State.Namespace}),
-		specBuilder:       specBuilder,
+		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
+			"namespace":                args.State.Namespace,
+			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
+		}),
+		specBuilder: specBuilder,
 	}
 	return scheduler.run()
 }

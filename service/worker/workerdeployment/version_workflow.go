@@ -47,6 +47,8 @@ type (
 		signalHandler                *SignalHandler
 		drainageStatusSyncInProgress bool
 		forceCAN                     bool
+		// Optional override state for force-CaN
+		overrideState *deploymentspb.VersionLocalState
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
 		// When true, all the ongoing propagations should cancel themselves
@@ -99,9 +101,15 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
-		// Process Signal
-		c.Receive(ctx, nil)
+
+		var args *deploymentspb.ForceCANVersionSignalArgs
+		c.Receive(ctx, &args)
 		d.forceCAN = true
+
+		// Apply override state if provided
+		if args.GetOverrideState() != nil {
+			d.overrideState = args.GetOverrideState()
+		}
 	})
 	d.signalHandler.signalSelector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
@@ -245,7 +253,10 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	d.logger.Debug("Version doing continue-as-new")
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
-	nextArgs.VersionState = d.VersionState
+	// Apply override state if provided during force-CaN
+	if d.overrideState != nil {
+		nextArgs.VersionState = d.overrideState
+	}
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
 }
 

@@ -200,7 +200,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	s.OverrideDynamicConfig(callbacks.AllowedAddresses, []any{
 		map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false},
 		map[string]any{"Pattern": "some-random-address", "AllowInsecure": false},
@@ -440,7 +439,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_Dedup() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.RequestID(),
@@ -571,7 +569,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_NoDedup() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
