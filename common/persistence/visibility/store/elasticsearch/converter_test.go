@@ -66,7 +66,7 @@ var supportedWhereCases = map[string]string{
 	"value = 1528358645.123456790":                                            `{"bool":{"filter":{"match":{"value":{"query":1528358645.1234567}}}}}`,
 	"id in (\"text1\",'text2') and content = 'aaaa'":                          `{"bool":{"filter":[{"terms":{"id":["text1","text2"]}},{"match":{"content":{"query":"aaaa"}}}]}}`,
 	"create_time BETWEEN '2015-01-01 00:00:00' and '2016-02-02 00:00:00'":     `{"bool":{"filter":{"range":{"create_time":{"from":"2015-01-01 00:00:00","include_lower":true,"include_upper":true,"to":"2016-02-02 00:00:00"}}}}}`,
-	"create_time nOt between '2015-01-01 00:00:00' and '2016-02-02 00:00:00'": `{"bool":{"must_not":{"range":{"create_time":{"from":"2015-01-01 00:00:00","include_lower":true,"include_upper":true,"to":"2016-02-02 00:00:00"}}}}}`, // typos:disable-line
+	"create_time nOt between '2015-01-01 00:00:00' and '2016-02-02 00:00:00'": `{"bool":{"must_not":{"range":{"create_time":{"from":"2015-01-01 00:00:00","include_lower":true,"include_upper":true,"to":"2016-02-02 00:00:00"}}}}}`,
 	"create_time between '2015-01-01T00:00:00+0800' and '2017-01-01T00:00:00+0800' and process_id = 0 and status >= 1 and content = '三个男人' and phone = '15810324322'": `{"bool":{"filter":[{"range":{"create_time":{"from":"2015-01-01T00:00:00+0800","include_lower":true,"include_upper":true,"to":"2017-01-01T00:00:00+0800"}}},{"term":{"process_id":0}},{"range":{"status":{"from":1,"include_lower":true,"include_upper":true,"to":null}}},{"match":{"content":{"query":"三个男人"}}},{"match":{"phone":{"query":"15810324322"}}}]}}`,
 	"value starts_with 'prefix'":     `{"bool":{"filter":{"prefix":{"value":"prefix"}}}}`,
 	"value not starts_with 'prefix'": `{"bool":{"must_not":{"prefix":{"value":"prefix"}}}}`,
