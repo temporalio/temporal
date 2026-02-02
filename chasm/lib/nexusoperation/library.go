@@ -28,7 +28,7 @@ func (l *Library) Name() string {
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Operation]("operation"),
-		chasm.NewRegistrableComponent[*Operation]("cancellation"),
+		chasm.NewRegistrableComponent[*Cancellation]("cancellation"),
 	}
 }
 
