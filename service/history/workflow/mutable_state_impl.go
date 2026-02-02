@@ -4182,7 +4182,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowStartedEventID(startedEventID))
 		return nil, ms.createInternalServerError(opTag)
@@ -4231,7 +4231,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowStartedEventID(startedEventID))
 		return nil, ms.createInternalServerError(opTag)
@@ -4282,7 +4282,7 @@ func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(ai.ScheduledEventId),
 			tag.WorkflowStartedEventID(ai.StartedEventId),
 			tag.WorkflowTimeoutType(timeoutType))
@@ -4333,7 +4333,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 			ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 				tag.WorkflowEventID(ms.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
-				tag.Bool(ok),
+				tag.Bool("hasActivityInfo", ok),
 				tag.WorkflowScheduledEventID(scheduledEventID))
 
 			return nil, nil, ms.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
@@ -4345,7 +4345,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID))
 
 		return nil, nil, ms.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
@@ -4602,7 +4602,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowState(ms.executionState.State),
-			tag.Bool(ms.executionInfo.CancelRequested),
+			tag.Bool("cancelRequested", ms.executionInfo.CancelRequested),
 			tag.Key(ms.executionInfo.CancelRequestId),
 		)
 		return nil, ms.createInternalServerError(opTag)
@@ -5867,7 +5867,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -5928,7 +5928,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -5973,7 +5973,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6021,7 +6021,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(!ok),
+			tag.Bool("doesntHaveChildInfo", !ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6070,7 +6070,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6117,7 +6117,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6164,7 +6164,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6512,16 +6512,16 @@ func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []s
 	if oldPayload == nil && newPayload != nil {
 		// Adding search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute added",
-			tag.NewStringsTag("reported-problems", newPayload))
+			tag.Strings("reported-problems", newPayload))
 	} else if oldPayload != nil && newPayload == nil {
 		// Removing search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute removed",
-			tag.NewStringsTag("previous-reported-problems", oldPayload))
+			tag.Strings("previous-reported-problems", oldPayload))
 	} else if oldPayload != nil && newPayload != nil {
 		// Updating search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute updated",
-			tag.NewStringsTag("previous-reported-problems", oldPayload),
-			tag.NewStringsTag("reported-problems", newPayload))
+			tag.Strings("previous-reported-problems", oldPayload),
+			tag.Strings("reported-problems", newPayload))
 	}
 }
 

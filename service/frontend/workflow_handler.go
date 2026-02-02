@@ -3343,7 +3343,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 	wh.logger.Debug("Received CreateSchedule",
 		tag.ScheduleID(request.ScheduleId),
 		tag.WorkflowNamespace(namespaceName.String()),
-		tag.NewBoolTag("chasm-enabled", useChasmScheduler))
+		tag.Bool("chasm-enabled", useChasmScheduler))
 
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
@@ -5323,7 +5323,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 	default:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
-		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))
+		wh.throttledLogger.Warn("Unknown batch operation type", tag.String("batch-operation-type", operationTypeString))
 	}
 
 	batchOperationResp := &workflowservice.DescribeBatchOperationResponse{
