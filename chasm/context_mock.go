@@ -16,6 +16,7 @@ type MockContext struct {
 	HandleRef                  func(component Component) ([]byte, error)
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
+	HandleLibrary              func(name string) (Library, bool)
 }
 
 func (c *MockContext) getContext() context.Context {
