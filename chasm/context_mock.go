@@ -23,6 +23,7 @@ type MockContext struct {
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
 	HandleMetricsHandler       func() metrics.Handler
+	HandleLibrary              func(name string) (Library, bool)
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
