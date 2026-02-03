@@ -90,24 +90,6 @@ func sendUpdateInternal(
 	updateResultCh := make(chan updateResponseErr)
 	go func() {
 		updateResp, updateErr := s.FrontendClient().UpdateWorkflowExecution(ctx, updateWorkflowRequest(s, tv, waitPolicy))
-		// var updateResp *workflowservice.UpdateWorkflowExecutionResponse
-		// var updateErr error
-
-		// // Retry loop to simulate SDK behavior for Aborted errors
-		// maxRetries := 3
-		// for range maxRetries {
-		// 	updateResp, updateErr = s.FrontendClient().UpdateWorkflowExecution(ctx, updateWorkflowRequest(s, tv, waitPolicy))
-		// 	if updateErr == nil {
-		// 		break
-		// 	}
-
-		// 	var abortedErr *serviceerror.Aborted
-		// 	if !errors.As(updateErr, &abortedErr) {
-		// 		// Not an Aborted error, don't retry
-		// 		break
-		// 	}
-		// }
-
 		if requireNoError && updateErr != nil {
 			s.T().Errorf("Update failed: %v", updateErr)
 		}
