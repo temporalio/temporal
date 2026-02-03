@@ -44,11 +44,8 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
-<<<<<<< HEAD
 	ReactivationSignalCacheTypeTagValue               = "reactivation_signal"
-=======
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
->>>>>>> main
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
