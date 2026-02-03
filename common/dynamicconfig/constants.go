@@ -662,11 +662,6 @@ used here will be the effective RPS from global and per-instance limits. The val
 		50,
 		`FrontendGlobalWorkerDeploymentReadRPS is the global, per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion). The limit is evenly distributed among available frontend service instances.`,
 	)
-	FrontendGlobalWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
-		"frontend.globalNamespaceWorkerDeploymentReadBurstRatio",
-		2.0,
-		`FrontendGlobalWorkerDeploymentReadBurstRatio is the global, per-namespace burst ratio for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion)`,
-	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
 		1200,

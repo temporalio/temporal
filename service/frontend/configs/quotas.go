@@ -147,7 +147,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -204,6 +203,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -391,7 +391,6 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 func NewGlobalNamespaceRateLimiter(
 	memberCounter calculator.MemberCounter,
 	globalQuota dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	burstRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	rateFn := calculator.NewLoggedNamespaceCalculator(
@@ -407,7 +406,7 @@ func NewGlobalNamespaceRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return quotas.NewRequestRateLimiterAdapter(
 				quotas.NewDynamicRateLimiter(
-					NewNamespaceRateBurst(req.Caller, rateFn, burstRatio),
+					quotas.NewDefaultIncomingRateBurst(func() float64 { return rateFn(req.Caller) }),
 					time.Minute,
 				),
 			)

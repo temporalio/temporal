@@ -65,9 +65,8 @@ type Config struct {
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	GlobalWorkerDeploymentReadRPS                                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalWorkerDeploymentReadBurstRatio                              dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalWorkerDeploymentReadRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	InternalFEGlobalNamespaceRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceVisibilityRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	InternalFEGlobalNamespaceVisibilityRPS                            dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -289,8 +288,7 @@ func NewConfig(
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Get(dc),
-		GlobalWorkerDeploymentReadRPS:                                     dynamicconfig.FrontendGlobalWorkerDeploymentReadRPS.Get(dc),
-		GlobalWorkerDeploymentReadBurstRatio:                              dynamicconfig.FrontendGlobalWorkerDeploymentReadBurstRatio.Get(dc),
+		GlobalWorkerDeploymentReadRPS: dynamicconfig.FrontendGlobalWorkerDeploymentReadRPS.Get(dc),
 
 		GlobalNamespaceRPS:                     dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		InternalFEGlobalNamespaceRPS:           dynamicconfig.InternalFrontendGlobalNamespaceRPS.Get(dc),
