@@ -1446,13 +1446,11 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-
-	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	var invalidArgument *serviceerror.InvalidArgument
+	if errors.As(err, &invalidArgument) {
 		return handler.failWorkflowTask(wtFailedCause, err)
-	default:
-		return err
 	}
+	return err
 }
 
 func (handler *workflowTaskCompletedHandler) failWorkflowTask(
