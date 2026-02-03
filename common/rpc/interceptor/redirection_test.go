@@ -421,6 +421,7 @@ func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_NoRedirection
 
 	redirector := NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
 		log.NewNoopLogger(),
@@ -455,6 +456,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_LocalRouting
 
 	redirector := NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
 		log.NewNoopLogger(),
@@ -507,6 +509,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_RemoteRoutin
 
 	redirector := NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
 		log.NewNoopLogger(),
@@ -569,6 +572,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_LocalRouting
 
 	redirector := NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
 		log.NewNoopLogger(),
@@ -623,6 +627,7 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_RemoteRoutin
 
 	redirector := NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
 		log.NewNoopLogger(),
