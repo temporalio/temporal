@@ -184,6 +184,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		config.VisibilityProcessorEnsureCloseBeforeDelete,
 		func(_ string) bool { return s.enableCloseWorkflowCleanup },
 		config.VisibilityProcessorRelocateAttributesMinBlobSize,
+		config.ExternalPayloadsEnabled,
 	)
 }
 

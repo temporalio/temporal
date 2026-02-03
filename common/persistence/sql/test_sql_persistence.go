@@ -134,7 +134,7 @@ func (s *TestCluster) CreateDatabase() {
 	if err != nil {
 		panic(err)
 	}
-	s.logger.Info("created database", tag.NewStringTag("database", s.cfg.DatabaseName))
+	s.logger.Info("created database", tag.String("database", s.cfg.DatabaseName))
 }
 
 // DropDatabase from PersistenceTestCluster interface
@@ -143,10 +143,11 @@ func (s *TestCluster) DropDatabase() {
 
 	if cfg2.PluginName == "sqlite" && cfg2.DatabaseName != ":memory:" && cfg2.ConnectAttributes["mode"] != "memory" {
 		if len(cfg2.DatabaseName) > 3 { // 3 should mean not ., .., empty, or /
-			err := os.Remove(cfg2.DatabaseName)
-			if err != nil {
-				panic(err)
-			}
+			// Remove main database file
+			_ = os.Remove(cfg2.DatabaseName)
+			// Remove WAL mode files (may not exist if WAL wasn't used)
+			_ = os.Remove(cfg2.DatabaseName + "-wal")
+			_ = os.Remove(cfg2.DatabaseName + "-shm")
 		}
 		return
 	}
@@ -167,7 +168,7 @@ func (s *TestCluster) DropDatabase() {
 	if err != nil {
 		panic(err)
 	}
-	s.logger.Info("dropped database", tag.NewStringTag("database", s.cfg.DatabaseName))
+	s.logger.Info("dropped database", tag.String("database", s.cfg.DatabaseName))
 }
 
 // LoadSchema from PersistenceTestCluster interface

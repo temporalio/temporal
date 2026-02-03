@@ -53,6 +53,7 @@ func (g *GeneratorTaskExecutor) Execute(
 ) error {
 	scheduler := generator.Scheduler.Get(ctx)
 	logger := newTaggedLogger(g.baseLogger, scheduler)
+	metricsHandler := newTaggedMetricsHandler(g.metricsHandler, scheduler)
 	invoker := scheduler.Invoker.Get(ctx)
 
 	// If we have no last processed time, this is a new schedule.
@@ -74,9 +75,9 @@ func (g *GeneratorTaskExecutor) Execute(
 	t1 := generator.LastProcessedTime.AsTime()
 	t2 := ctx.Now(generator).UTC()
 	if t2.Before(t1) {
-		logger.Warn("time went backwards",
-			tag.NewStringerTag("time", t1),
-			tag.NewStringerTag("time", t2))
+		logger.Error("time went backwards",
+			tag.Stringer("time", t1),
+			tag.Stringer("time", t2))
 		t2 = t1
 	}
 
@@ -98,8 +99,8 @@ func (g *GeneratorTaskExecutor) Execute(
 	// Emit metrics and update state for any dropped actions.
 	if result.DroppedCount > 0 {
 		logger.Warn("Buffer overrun, dropping actions",
-			tag.NewInt64("dropped-count", result.DroppedCount))
-		g.metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
+			tag.Int64("dropped-count", result.DroppedCount))
+		metricsHandler.Counter(metrics.ScheduleBufferOverruns.Name()).Record(result.DroppedCount)
 		scheduler.Info.BufferDropped += result.DroppedCount
 	}
 
@@ -142,8 +143,8 @@ func (g *GeneratorTaskExecutor) Execute(
 
 func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler *Scheduler) {
 	logger.Debug(msg,
-		tag.NewStringerTag("spec", jsonStringer{scheduler.Schedule.Spec}),
-		tag.NewStringerTag("policies", jsonStringer{scheduler.Schedule.Policies}))
+		tag.Stringer("spec", jsonStringer{scheduler.Schedule.Spec}),
+		tag.Stringer("policies", jsonStringer{scheduler.Schedule.Policies}))
 }
 
 func (g *GeneratorTaskExecutor) Validate(

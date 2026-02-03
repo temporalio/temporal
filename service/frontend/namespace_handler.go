@@ -863,6 +863,7 @@ func (d *namespaceHandler) createResponse(
 			ReportedProblemsSearchAttribute: numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute > 0,
 			WorkerHeartbeats:                d.config.WorkerHeartbeatsEnabled(info.Name),
 			WorkflowPause:                   d.config.WorkflowPauseEnabled(info.Name),
+			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
 			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
@@ -1028,9 +1029,9 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 ) []*persistencespb.FailoverStatus {
 	d.logger.Debug(
 		"maybeUpdateFailoverHistory",
-		tag.NewAnyTag("failoverHistory", failoverHistory),
-		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
-		tag.NewAnyTag("namespaceDetail", namespaceDetail),
+		tag.Any("failoverHistory", failoverHistory),
+		tag.Any("updateReplConfig", updateReplicationConfig),
+		tag.Any("namespaceDetail", namespaceDetail),
 	)
 	if updateReplicationConfig == nil {
 		d.logger.Debug("updateReplicationConfig was nil")

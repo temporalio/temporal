@@ -44,6 +44,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -457,6 +458,10 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
+	// RoutingInfoCacheGetScope is the scope used by routing info cache
+	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
+	// RoutingInfoCachePutScope is the scope used by routing info cache
+	RoutingInfoCachePutScope = "RoutingInfoCachePut"
 )
 
 // Matching Scope
@@ -598,6 +603,9 @@ const (
 const (
 	ScheduleActionTypeTag       = "schedule_action"
 	ScheduleActionStartWorkflow = "start_workflow"
+	ScheduleBackendTag          = "scheduler_backend"
+	ScheduleBackendChasm        = "chasm"
+	ScheduleBackendLegacy       = "legacy"
 )
 
 var (
@@ -1159,6 +1167,18 @@ var (
 	WorkerRegistryCapacityUtilizationMetric = NewGaugeDef(
 		"worker_registry_capacity_utilization",
 		WithDescription("Tracks the ratio of total entries to maxItems."),
+	)
+	WorkerRegistryWorkersAdded = NewCounterDef(
+		"worker_registry_workers_added",
+		WithDescription("Count of new workers registered in the worker registry."),
+	)
+	WorkerRegistryWorkersRemoved = NewCounterDef(
+		"worker_registry_workers_removed",
+		WithDescription("Count of workers removed from the worker registry."),
+	)
+	WorkerRegistryActivitySlotsUsed = NewDimensionlessHistogramDef(
+		"worker_registry_activity_slots_used",
+		WithDescription("Number of activity slots in use per worker."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand plugin adoption.

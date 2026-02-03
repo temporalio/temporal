@@ -2046,6 +2046,8 @@ func (*VersionedTransitionArtifact_SyncWorkflowStateMutationAttributes) isVersio
 func (*VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes) isVersionedTransitionArtifact_StateAttributes() {
 }
 
+// MigrationExecutionInfo is only used in unit tests for validation compatibility.
+// Remove it after v1.30 is released.
 type MigrationExecutionInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The proto json name of this field needs to be "workflowId",

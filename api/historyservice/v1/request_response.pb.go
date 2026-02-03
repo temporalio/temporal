@@ -1293,9 +1293,25 @@ type RecordWorkflowTaskStartedResponse struct {
 	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
 	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	RawHistory                 *v115.History                  `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+	// instead of a proto-decoded History. This avoids matching service having to decode history.
+	// TODO: PRATHYUSH
+	// DEPRECATION PLAN:
+	// Two dynamic config flags control the raw history optimization:
+	// - history.sendRawHistoryBetweenInternalServices: enables raw history (uses field 18 when OFF, field 20/21 when ON)
+	// - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
+	//
+	// Version timeline (current version: v1.29):
+	//   - v1.31: This change is released. Both flags default to false for backward compatibility.
+	//   - v1.32: Both flags will be enabled by default in code.
+	//   - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+	//     as raw_history_bytes (field 21) will be the only field used.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+	RawHistory      *v115.History `protobuf:"bytes,20,opt,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
+	RawHistoryBytes [][]byte      `protobuf:"bytes,21,rep,name=raw_history_bytes,json=rawHistoryBytes,proto3" json:"raw_history_bytes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedResponse) Reset() {
@@ -1454,6 +1470,7 @@ func (x *RecordWorkflowTaskStartedResponse) GetNextPageToken() []byte {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 func (x *RecordWorkflowTaskStartedResponse) GetRawHistory() *v115.History {
 	if x != nil {
 		return x.RawHistory
@@ -1461,10 +1478,31 @@ func (x *RecordWorkflowTaskStartedResponse) GetRawHistory() *v115.History {
 	return nil
 }
 
-// RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
-// The only difference is that RecordWorkflowTaskStartedResponseWithRawHistory has a `history` field that contains the
-// raw history batches. RecordWorkflowTaskStartedResponseWithRawHistory will be returned by history service.
-// History client will deserialize this message to RecordWorkflowTaskStartedResponse.
+func (x *RecordWorkflowTaskStartedResponse) GetRawHistoryBytes() [][]byte {
+	if x != nil {
+		return x.RawHistoryBytes
+	}
+	return nil
+}
+
+// RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
+//
+// WIRE COMPATIBILITY PATTERN:
+// This message uses the same field numbers as RecordWorkflowTaskStartedResponse (1-19 are identical),
+// but fields 20 and 21 differ in type:
+// - Field 20: `repeated bytes raw_history` (deprecated) vs `History raw_history` (deprecated)
+// - Field 21: `repeated bytes raw_history_bytes` (same in both)
+//
+// This enables the following optimization when SendRawHistoryBetweenInternalServices is enabled:
+// 1. History service serializes raw_history_bytes as [][]byte (raw proto-encoded history batches)
+// 2. History client receives raw bytes and deserializes as RecordWorkflowTaskStartedResponse
+// 3. Matching service passes these raw bytes through to frontend without deserializing
+// 4. Frontend client deserializes the final response with History field populated
+//
+// This pattern avoids deserialization in matching service, reducing CPU usage.
+//
+// IMPORTANT: Field numbers and all other fields must remain identical between these two messages.
+// Any change to RecordWorkflowTaskStartedResponse must be mirrored here.
 type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	state                      protoimpl.MessageState         `protogen:"open.v1"`
 	WorkflowType               *v14.WorkflowType              `protobuf:"bytes,1,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
@@ -1485,9 +1523,14 @@ type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	Version                    int64                          `protobuf:"varint,17,opt,name=version,proto3" json:"version,omitempty"`
 	History                    *v115.History                  `protobuf:"bytes,18,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken              []byte                         `protobuf:"bytes,19,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-	RawHistory                 [][]byte                       `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+	// instead of a proto-decoded History. This avoids matching service having to decode history.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
+	RawHistory      [][]byte `protobuf:"bytes,20,rep,name=raw_history,json=rawHistory,proto3" json:"raw_history,omitempty"`
+	RawHistoryBytes [][]byte `protobuf:"bytes,21,rep,name=raw_history_bytes,json=rawHistoryBytes,proto3" json:"raw_history_bytes,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) Reset() {
@@ -1646,9 +1689,17 @@ func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetNextPageToken() []b
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/historyservice/v1/request_response.proto.
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetRawHistory() [][]byte {
 	if x != nil {
 		return x.RawHistory
+	}
+	return nil
+}
+
+func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetRawHistoryBytes() [][]byte {
+	if x != nil {
+		return x.RawHistoryBytes
 	}
 	return nil
 }
@@ -10245,7 +10296,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12\x14\n" +
 	"\x05stamp\x18\v \x01(\x05R\x05stamp\x12A\n" +
 	"\x1dtask_dispatch_revision_number\x18\f \x01(\x03R\x1ataskDispatchRevisionNumber\x12o\n" +
-	"\x19target_deployment_version\x18\r \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x17targetDeploymentVersion:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\x94\n" +
+	"\x19target_deployment_version\x18\r \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x17targetDeploymentVersion:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_idJ\x04\b\x04\x10\x05\"\xc4\n" +
 	"\n" +
 	"!RecordWorkflowTaskStartedResponse\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
@@ -10265,13 +10316,14 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\bmessages\x18\x10 \x03(\v2!.temporal.api.protocol.v1.MessageR\bmessages\x12\x18\n" +
 	"\aversion\x18\x11 \x01(\x03R\aversion\x12:\n" +
 	"\ahistory\x18\x12 \x01(\v2 .temporal.api.history.v1.HistoryR\ahistory\x12&\n" +
-	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12A\n" +
-	"\vraw_history\x18\x14 \x01(\v2 .temporal.api.history.v1.HistoryR\n" +
-	"rawHistory\x1a`\n" +
+	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12E\n" +
+	"\vraw_history\x18\x14 \x01(\v2 .temporal.api.history.v1.HistoryB\x02\x18\x01R\n" +
+	"rawHistory\x12*\n" +
+	"\x11raw_history_bytes\x18\x15 \x03(\fR\x0frawHistoryBytes\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\v\"\x8e\n" +
+	"\x10\v\"\xbe\n" +
 	"\n" +
 	"/RecordWorkflowTaskStartedResponseWithRawHistory\x12I\n" +
 	"\rworkflow_type\x18\x01 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x129\n" +
@@ -10291,9 +10343,10 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\bmessages\x18\x10 \x03(\v2!.temporal.api.protocol.v1.MessageR\bmessages\x12\x18\n" +
 	"\aversion\x18\x11 \x01(\x03R\aversion\x12:\n" +
 	"\ahistory\x18\x12 \x01(\v2 .temporal.api.history.v1.HistoryR\ahistory\x12&\n" +
-	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12\x1f\n" +
-	"\vraw_history\x18\x14 \x03(\fR\n" +
-	"rawHistory\x1a`\n" +
+	"\x0fnext_page_token\x18\x13 \x01(\fR\rnextPageToken\x12#\n" +
+	"\vraw_history\x18\x14 \x03(\fB\x02\x18\x01R\n" +
+	"rawHistory\x12*\n" +
+	"\x11raw_history_bytes\x18\x15 \x03(\fR\x0frawHistoryBytes\x1a`\n" +
 	"\fQueriesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12:\n" +
 	"\x05value\x18\x02 \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05value:\x028\x01J\x04\b\n" +

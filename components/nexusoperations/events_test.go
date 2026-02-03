@@ -11,12 +11,15 @@ import (
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestCherryPick(t *testing.T) {
 	setup := func(t *testing.T) (*hsm.Node, nexusoperations.Operation, int64) {
-		node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
+		node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+			ScheduleToCloseTimeout: durationpb.New(time.Hour),
+		}))
 		op, err := hsm.MachineData[nexusoperations.Operation](node)
 		require.NoError(t, err)
 		eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)
@@ -159,7 +162,9 @@ func TestTerminalStatesDeletion(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), time.Hour))
+			node := newOperationNode(t, &hsmtest.NodeBackend{}, mustNewScheduledEvent(time.Now(), &historypb.NexusOperationScheduledEventAttributes{
+				ScheduleToCloseTimeout: durationpb.New(time.Hour),
+			}))
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
 			require.NoError(t, err)
 			eventID, err := hsm.EventIDFromToken(op.ScheduledEventToken)

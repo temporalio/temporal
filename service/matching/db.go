@@ -303,9 +303,9 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 	if newAckLevel < dbQueue.AckLevel {
 		softassert.Fail(db.logger,
 			"ack level in subqueue should not move backwards",
-			tag.NewInt("subqueue-id", int(subqueue)),
-			tag.NewAnyTag("cur-ack-level", dbQueue.AckLevel),
-			tag.NewAnyTag("new-ack-level", newAckLevel))
+			tag.Int("subqueue-id", int(subqueue)),
+			tag.Any("cur-ack-level", dbQueue.AckLevel),
+			tag.Any("new-ack-level", newAckLevel))
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
@@ -334,9 +334,9 @@ func (db *taskQueueDB) updateFairAckLevel(subqueue subqueueIndex, newAckLevel fa
 	if prev := fairLevelFromProto(dbQueue.FairAckLevel); newAckLevel.less(prev) {
 		softassert.Fail(db.logger,
 			"ack level in subqueue should not move backwards",
-			tag.NewInt("subqueue-id", int(subqueue)),
-			tag.NewAnyTag("cur-ack-level", prev),
-			tag.NewAnyTag("new-ack-level", newAckLevel))
+			tag.Int("subqueue-id", int(subqueue)),
+			tag.Any("cur-ack-level", prev),
+			tag.Any("new-ack-level", newAckLevel))
 	}
 	dbQueue.FairAckLevel = newAckLevel.toProto()
 
@@ -416,6 +416,20 @@ func (db *taskQueueDB) getTotalApproximateBacklogCount() int64 {
 		total += s.ApproximateBacklogCount
 	}
 	return total
+}
+
+// SetOtherHasTasks updates the otherHasTasks flag and attempts to persist immediately.
+// The in-memory state is updated regardless of whether persistence succeeds.
+// Returns any error from the persistence attempt.
+func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
+	db.Lock()
+	defer db.Unlock()
+	if db.otherHasTasks == value {
+		return nil
+	}
+	db.otherHasTasks = value
+	db.lastChange = time.Now()
+	return db.updateTaskQueueLocked(ctx, false)
 }
 
 // CreateTasks creates a batch of given tasks for this task queue

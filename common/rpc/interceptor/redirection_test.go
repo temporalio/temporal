@@ -63,6 +63,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 
 	s.redirector = NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,
@@ -152,6 +153,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"PatchSchedule":                    {},
 		"DeleteSchedule":                   {},
 		"ListSchedules":                    {},
+		"CountSchedules":                   {},
 		"ListScheduleMatchingTimes":        {},
 		"UpdateWorkerBuildIdCompatibility": {},
 		"GetWorkerBuildIdCompatibility":    {},

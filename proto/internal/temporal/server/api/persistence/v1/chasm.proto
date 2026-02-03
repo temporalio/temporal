@@ -59,6 +59,10 @@ message ChasmComponentAttributes {
     // Tasks are ordered by their scheduled time, breaking ties by
     // versioned transition and versioned_transition_offset. 
     repeated Task pure_tasks = 3;
+    // When true, this component ignores parent lifecycle validation.
+    // Detached components can continue operating, accepting writes and executing
+    // tasks, even when their parent is closed/terminated.
+    bool detached = 4;
 }
 
 message ChasmDataAttributes {}

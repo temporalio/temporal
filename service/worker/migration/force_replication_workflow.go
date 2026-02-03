@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -478,7 +477,7 @@ func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-	var migrationExecutions []*replicationspb.MigrationExecutionInfo
+	var migrationExecutions []*ExecutionInfo
 	var lastActivityErr error
 	var a *activities
 
@@ -578,7 +577,7 @@ func enqueueReplicationTasksLocal(
 	}
 
 	lactx := workflow.WithLocalActivityOptions(ctx, lao)
-	var migrationExecutions []*replicationspb.MigrationExecutionInfo
+	var migrationExecutions []*ExecutionInfo
 	var lastActivityErr error
 	var a *activities
 
