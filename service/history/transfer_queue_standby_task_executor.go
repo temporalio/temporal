@@ -108,6 +108,9 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
+	case *tasks.CancelActivityNexusTask:
+		// Cancel activity nexus task is best-effort and only processed in active cluster
+		err = nil
 	default:
 		err = errUnknownTransferTask
 	}

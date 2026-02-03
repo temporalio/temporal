@@ -78,6 +78,12 @@ func GetTransferTaskEventID(
 		eventID = common.FirstEventID
 	case *ChasmTask:
 		return getChasmTaskEventID()
+	case *CancelActivityNexusTask:
+		if len(task.ScheduledEventIDs) > 0 {
+			eventID = task.ScheduledEventIDs[0]
+		} else {
+			eventID = common.FirstEventID
+		}
 	case *FakeTask:
 		// no-op
 	default:

@@ -354,11 +354,12 @@ type Config struct {
 	ESProcessorFlushInterval          dynamicconfig.DurationPropertyFn
 	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
 
-	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
-	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
-	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
+	EnableCrossNamespaceCommands              dynamicconfig.BoolPropertyFn
+	EnableActivityEagerExecution              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableActivityRetryStampIncrement         dynamicconfig.BoolPropertyFn
+	EnableActivityCancellationNexusTask dynamicconfig.BoolPropertyFn
+	EnableEagerWorkflowStart                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NamespaceCacheRefreshInterval             dynamicconfig.DurationPropertyFn
 
 	// ArchivalQueueProcessor settings
 	ArchivalProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -721,11 +722,12 @@ func NewConfig(
 		ESProcessorFlushInterval: dynamicconfig.WorkerESProcessorFlushInterval.Get(dc),
 		ESProcessorAckTimeout:    dynamicconfig.WorkerESProcessorAckTimeout.Get(dc),
 
-		EnableCrossNamespaceCommands:      dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
-		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
-		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
-		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
-		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
+		EnableCrossNamespaceCommands:              dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
+		EnableActivityEagerExecution:              dynamicconfig.EnableActivityEagerExecution.Get(dc),
+		EnableActivityRetryStampIncrement:         dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
+		EnableActivityCancellationNexusTask: dynamicconfig.EnableActivityCancellationNexusTask.Get(dc),
+		EnableEagerWorkflowStart:                  dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		NamespaceCacheRefreshInterval:             dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
 		// Archival related
 		ArchivalTaskBatchSize:                               dynamicconfig.ArchivalTaskBatchSize.Get(dc),

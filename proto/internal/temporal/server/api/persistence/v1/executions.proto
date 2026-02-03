@@ -349,11 +349,21 @@ message TransferTaskInfo {
         // by some other task, so this task doesn't need to worry about it.
         bool can_skip_visibility_archival = 1;
     }
+
+    // Details for a Nexus task that cancels activities belonging to a specific worker.
+    message CancelActivityNexusTaskDetails {
+        // Scheduled event IDs of activities to cancel.
+        repeated int64 scheduled_event_ids = 1;
+        string worker_instance_key = 2;
+    }
+
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
 
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 18;
+
+        CancelActivityNexusTaskDetails cancel_activity_nexus_task_details = 19;
     }
     // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
     // It increases monotonically when the entity's options are modified.

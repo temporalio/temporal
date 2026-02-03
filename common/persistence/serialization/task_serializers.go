@@ -38,6 +38,8 @@ func serializeTransferTask(
 		transferTask = transferDeleteExecutionTaskToProto(task)
 	case *tasks.ChasmTask:
 		transferTask = transferChasmTaskToProto(task)
+	case *tasks.CancelActivityNexusTask:
+		transferTask = transferCancelActivityNexusTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", task)
 	}
@@ -86,6 +88,8 @@ func deserializeTransferTask(
 		task = transferDeleteExecutionTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_CHASM:
 		task = transferChasmTaskFromProto(transferTask)
+	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_ACTIVITY_NEXUS:
+		task = transferCancelActivityNexusTaskFromProto(transferTask)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", transferTask.TaskType)
 	}
@@ -103,6 +107,40 @@ func transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Tas
 		TaskID:              task.TaskId,
 		Category:            tasks.CategoryTransfer,
 		Info:                task.GetChasmTaskInfo(),
+	}
+}
+
+func transferCancelActivityNexusTaskToProto(task *tasks.CancelActivityNexusTask) *persistencespb.TransferTaskInfo {
+	return &persistencespb.TransferTaskInfo{
+		NamespaceId:    task.WorkflowKey.NamespaceID,
+		WorkflowId:     task.WorkflowKey.WorkflowID,
+		RunId:          task.WorkflowKey.RunID,
+		TaskId:         task.TaskID,
+		TaskType:       task.GetType(),
+		Version:        task.Version,
+		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+		TaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails_{
+			CancelActivityNexusTaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails{
+				ScheduledEventIds: task.ScheduledEventIDs,
+				WorkerInstanceKey: task.WorkerInstanceKey,
+			},
+		},
+	}
+}
+
+func transferCancelActivityNexusTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Task {
+	details := task.GetCancelActivityNexusTaskDetails()
+	return &tasks.CancelActivityNexusTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			task.NamespaceId,
+			task.WorkflowId,
+			task.RunId,
+		),
+		VisibilityTimestamp: task.VisibilityTime.AsTime(),
+		TaskID:              task.TaskId,
+		Version:             task.Version,
+		ScheduledEventIDs:   details.GetScheduledEventIds(),
+		WorkerInstanceKey:   details.GetWorkerInstanceKey(),
 	}
 }
 
