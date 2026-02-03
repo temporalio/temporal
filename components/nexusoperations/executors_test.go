@@ -221,12 +221,12 @@ func TestProcessInvocationTask(t *testing.T) {
 						},
 						Cause: &failurepb.Failure{
 							Message: "cause",
-							FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
-								NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-									Metadata: map[string]string{"encoding": "json/plain"},
-									Details:  []byte(`"details"`),
-								},
-							},
+							// FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
+							// 	NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
+							// 		Metadata: map[string]string{"encoding": "json/plain"},
+							// 		Details:  []byte(`"details"`),
+							// 	},
+							// },
 						},
 					},
 				}
@@ -255,7 +255,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					ScheduledEventId: 1,
 					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
-						Message: "operation canceled from handler",
+						Message: "nexus operation completed unsuccessfully",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 							NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
 								ScheduledEventId: 1,
@@ -265,17 +265,19 @@ func TestProcessInvocationTask(t *testing.T) {
 							},
 						},
 						Cause: &failurepb.Failure{
+							Message: "operation canceled from handler",
 							FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 								CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 							},
 							Cause: &failurepb.Failure{
-								Message: "cause",
-								FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
-									NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-										Metadata: map[string]string{"encoding": "json/plain"},
-										Details:  []byte(`"details"`),
-									},
-								},
+								Message:     "cause",
+								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{},
+								// FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
+								// 	NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
+								// 		Metadata: map[string]string{"encoding": "json/plain"},
+								// 		Details:  []byte(`"details"`),
+								// 	},
+								// },
 							},
 						},
 					},

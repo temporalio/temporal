@@ -114,33 +114,6 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 	}
 
 	switch info := failure.GetFailureInfo().(type) {
-	case *failurepb.Failure_NexusSdkOperationFailureInfo:
-		var encodedAttributes string
-		if failure.EncodedAttributes != nil {
-			b, err := protojson.Marshal(failure.EncodedAttributes)
-			if err != nil {
-				return nexus.Failure{}, fmt.Errorf("failed to deserialize OperationError attributes: %w", err)
-			}
-			encodedAttributes = base64.StdEncoding.EncodeToString(b)
-		}
-		operationError := serializedOperationError{
-			State:             info.NexusSdkOperationFailureInfo.GetState(),
-			EncodedAttributes: encodedAttributes,
-		}
-
-		details, err := json.Marshal(operationError)
-		if err != nil {
-			return nexus.Failure{}, err
-		}
-		return nexus.Failure{
-			Message:    failure.GetMessage(),
-			StackTrace: failure.GetStackTrace(),
-			Metadata: map[string]string{
-				"type": "nexus.OperationError",
-			},
-			Details: details,
-			Cause:   causep,
-		}, nil
 	case *failurepb.Failure_NexusHandlerFailureInfo:
 		var encodedAttributes string
 		if failure.EncodedAttributes != nil {
@@ -179,14 +152,6 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 			},
 			Details: details,
 			Cause:   causep,
-		}, nil
-	case *failurepb.Failure_NexusSdkFailureErrorInfo:
-		return nexus.Failure{
-			Message:    failure.GetMessage(),
-			StackTrace: failure.GetStackTrace(),
-			Metadata:   info.NexusSdkFailureErrorInfo.GetMetadata(),
-			Details:    info.NexusSdkFailureErrorInfo.GetDetails(),
-			Cause:      causep,
 		}, nil
 	}
 	// Unset message and stack trace so it's not serialized in the details.
@@ -228,31 +193,29 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 	if f.Metadata != nil {
 		switch f.Metadata["type"] {
 		case failureTypeString:
-			if err := protojson.Unmarshal(f.Details, apiFailure); err != nil {
+			opts := protojson.UnmarshalOptions{DiscardUnknown: true}
+			if err := opts.Unmarshal(f.Details, apiFailure); err != nil {
 				return nil, err
 			}
 			// Restore these fields as they are not included in the marshalled failure.
 			apiFailure.Message = f.Message
 			apiFailure.StackTrace = f.StackTrace
 		case "nexus.OperationError":
-			var se serializedOperationError
-			err := json.Unmarshal(f.Details, &se)
+			var operationError *nexus.OperationError
+			err := json.Unmarshal(f.Details, &operationError)
 			if err != nil {
 				return nil, fmt.Errorf("failed to deserialize OperationError: %w", err)
 			}
-			apiFailure.FailureInfo = &failurepb.Failure_NexusSdkOperationFailureInfo{
-				NexusSdkOperationFailureInfo: &failurepb.NexusSDKOperationFailureInfo{
-					State: se.State,
-				},
-			}
-			if len(se.EncodedAttributes) > 0 {
-				decoded, err := base64.StdEncoding.DecodeString(se.EncodedAttributes)
-				if err != nil {
-					return nil, fmt.Errorf("failed to decode base64 OperationError attributes: %w", err)
+			if operationError.State == nexus.OperationStateCanceled {
+				apiFailure.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
+					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 				}
-				apiFailure.EncodedAttributes = &commonpb.Payload{}
-				if err := protojson.Unmarshal(decoded, apiFailure.EncodedAttributes); err != nil {
-					return nil, fmt.Errorf("failed to deserialize OperationError attributes: %w", err)
+			} else {
+				apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NonRetryable: true,
+						Type:         "OperationError",
+					},
 				}
 			}
 		case "nexus.HandlerError":
@@ -286,17 +249,24 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 				}
 			}
 		default:
-			apiFailure.FailureInfo = &failurepb.Failure_NexusSdkFailureErrorInfo{
-				NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-					Metadata: f.Metadata,
-					Details:  f.Details,
+			payloads, err := nexusFailureMetadataToPayloads(f)
+			if err != nil {
+				return nil, fmt.Errorf("failed to serialize failure: %w", err)
+			}
+			apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Details: payloads,
 				},
 			}
 		}
 	} else if len(f.Details) > 0 {
-		apiFailure.FailureInfo = &failurepb.Failure_NexusSdkFailureErrorInfo{
-			NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-				Details: f.Details,
+		payloads, err := nexusFailureMetadataToPayloads(f)
+		if err != nil {
+			return nil, fmt.Errorf("failed to serialize failure: %w", err)
+		}
+		apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				Details: payloads,
 			},
 		}
 	}
@@ -309,6 +279,29 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 		}
 	}
 	return apiFailure, nil
+}
+
+func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, error) {
+	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
+		return nil, nil
+	}
+	// Delete before serializing.
+	failure.Message = ""
+	failure.StackTrace = ""
+	data, err := json.Marshal(failure)
+	if err != nil {
+		return nil, err
+	}
+	return &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("json/plain"),
+				},
+				Data: data,
+			},
+		},
+	}, err
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.

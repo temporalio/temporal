@@ -46,6 +46,7 @@ const (
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
 type nexusContext struct {
+	callerFailureSupport                 bool // Whether to use the new Temporal failure responses path.
 	requestStartTime                     time.Time
 	apiName                              string
 	namespaceName                        string
@@ -414,7 +415,7 @@ func (h *nexusHandler) StartOperation(
 			StartOperation: &startOperationRequest,
 		},
 		Capabilities: &nexuspb.Request_Capabilities{
-			TemporalFailureResponses: true,
+			TemporalFailureResponses: oc.callerFailureSupport,
 		},
 	})
 
@@ -515,12 +516,20 @@ func (h *nexusHandler) StartOperation(
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 			}
-			oe, err := nexus.DefaultFailureConverter().FailureToError(nf)
+			cause, err := nexus.DefaultFailureConverter().FailureToError(nf)
 			if err != nil {
 				oc.logger.Error("error converting Nexus failure to Nexus OperationError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 			}
-			return nil, oe
+			state := nexus.OperationStateFailed
+			if t.Failure.GetCanceledFailureInfo() != nil {
+				state = nexus.OperationStateCanceled
+			}
+			return nil, &nexus.OperationError{
+				Message: "operation error",
+				State:   state,
+				Cause:   cause,
+			}
 		}
 	}
 	// This is the worker's fault.
@@ -617,7 +626,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 			},
 		},
 		Capabilities: &nexuspb.Request_Capabilities{
-			TemporalFailureResponses: true,
+			TemporalFailureResponses: oc.callerFailureSupport,
 		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {

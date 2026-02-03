@@ -3,10 +3,12 @@ package nexus
 import (
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
@@ -23,50 +25,6 @@ func TestRoundTrip_ApplicationFailure(t *testing.T) {
 					Payloads: []*commonpb.Payload{mustToPayload(t, "encoded")},
 				},
 			},
-		},
-	}
-
-	nexusFailure, err := TemporalFailureToNexusFailure(original)
-	require.NoError(t, err)
-
-	converted, err := NexusFailureToTemporalFailure(nexusFailure)
-	require.NoError(t, err)
-
-	protorequire.ProtoEqual(t, original, converted)
-}
-
-func TestRoundTrip_NexusSDKOperationFailure_WithoutAttributes(t *testing.T) {
-	original := &failurepb.Failure{
-		Message:    "operation failed",
-		StackTrace: "operation stack trace",
-		FailureInfo: &failurepb.Failure_NexusSdkOperationFailureInfo{
-			NexusSdkOperationFailureInfo: &failurepb.NexusSDKOperationFailureInfo{
-				State: "failed",
-			},
-		},
-	}
-
-	nexusFailure, err := TemporalFailureToNexusFailure(original)
-	require.NoError(t, err)
-
-	converted, err := NexusFailureToTemporalFailure(nexusFailure)
-	require.NoError(t, err)
-
-	protorequire.ProtoEqual(t, original, converted)
-}
-
-func TestRoundTrip_NexusSDKOperationFailure_WithAttributes(t *testing.T) {
-	original := &failurepb.Failure{
-		Message:    "operation failed with details",
-		StackTrace: "operation stack trace",
-		FailureInfo: &failurepb.Failure_NexusSdkOperationFailureInfo{
-			NexusSdkOperationFailureInfo: &failurepb.NexusSDKOperationFailureInfo{
-				State: "failed",
-			},
-		},
-		EncodedAttributes: &commonpb.Payload{
-			Metadata: map[string][]byte{"encoding": []byte("json/plain")},
-			Data:     []byte(`{"custom":"attribute"}`),
 		},
 	}
 
@@ -164,30 +122,6 @@ func TestRoundTrip_NexusHandlerFailure_WithAttributes(t *testing.T) {
 	protorequire.ProtoEqual(t, original, converted)
 }
 
-func TestRoundTrip_NexusSDKFailureErrorInfo(t *testing.T) {
-	original := &failurepb.Failure{
-		Message:    "sdk failure error",
-		StackTrace: "sdk stack trace",
-		FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
-			NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-				Metadata: map[string]string{
-					"custom-key": "custom-value",
-					"error-type": "SomeError",
-				},
-				Details: []byte(`{"field":"value"}`),
-			},
-		},
-	}
-
-	nexusFailure, err := TemporalFailureToNexusFailure(original)
-	require.NoError(t, err)
-
-	converted, err := NexusFailureToTemporalFailure(nexusFailure)
-	require.NoError(t, err)
-
-	protorequire.ProtoEqual(t, original, converted)
-}
-
 func TestRoundTrip_WithNestedCauses(t *testing.T) {
 	original := &failurepb.Failure{
 		Message:    "top level failure",
@@ -212,36 +146,6 @@ func TestRoundTrip_WithNestedCauses(t *testing.T) {
 					ServerFailureInfo: &failurepb.ServerFailureInfo{
 						NonRetryable: true,
 					},
-				},
-			},
-		},
-	}
-
-	nexusFailure, err := TemporalFailureToNexusFailure(original)
-	require.NoError(t, err)
-
-	converted, err := NexusFailureToTemporalFailure(nexusFailure)
-	require.NoError(t, err)
-
-	protorequire.ProtoEqual(t, original, converted)
-}
-
-func TestRoundTrip_NexusOperationFailureWithNexusHandlerCause(t *testing.T) {
-	original := &failurepb.Failure{
-		Message:    "operation failed",
-		StackTrace: "operation stack trace",
-		FailureInfo: &failurepb.Failure_NexusSdkOperationFailureInfo{
-			NexusSdkOperationFailureInfo: &failurepb.NexusSDKOperationFailureInfo{
-				State: "failed",
-			},
-		},
-		Cause: &failurepb.Failure{
-			Message:    "handler caused the failure",
-			StackTrace: "handler stack trace",
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type:          "BadRequest",
-					RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE,
 				},
 			},
 		},
@@ -283,19 +187,83 @@ func TestRoundTrip_OnlyStackTrace(t *testing.T) {
 	protorequire.ProtoEqual(t, original, converted)
 }
 
-func TestRoundTrip_OnlyDetails(t *testing.T) {
-	original := &failurepb.Failure{
-		FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
-			NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-				Details: []byte(`{"only":"details"}`),
-			},
-		},
-	}
-
-	nexusFailure, err := TemporalFailureToNexusFailure(original)
+func TestFromOperationFailedError(t *testing.T) {
+	nexusFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
+		State:      nexus.OperationStateFailed,
+		Message:    "operation failed",
+		StackTrace: "stack trace",
+	})
+	cause, err := TemporalFailureToNexusFailure(
+		temporal.GetDefaultFailureConverter().ErrorToFailure(
+			temporal.NewApplicationError("app err", "CustomError", "details"),
+		),
+	)
 	require.NoError(t, err)
+	nexusFailure.Cause = &cause
 
 	converted, err := NexusFailureToTemporalFailure(nexusFailure)
 	require.NoError(t, err)
-	protorequire.ProtoEqual(t, original, converted)
+
+	expected := &failurepb.Failure{
+		Message:    "operation failed",
+		StackTrace: "stack trace",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				NonRetryable: true,
+				Type:         "OperationError",
+			},
+		},
+		Cause: &failurepb.Failure{
+			Message: "app err",
+			Source:  "GoSDK",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type: "CustomError",
+					Details: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{mustToPayload(t, "details")},
+					},
+				},
+			},
+		},
+	}
+	protorequire.ProtoEqual(t, expected, converted)
+}
+
+func TestFromOperationCanceledError(t *testing.T) {
+	nexusFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
+		State:      nexus.OperationStateCanceled,
+		Message:    "operation canceled",
+		StackTrace: "stack trace",
+	})
+	cause, err := TemporalFailureToNexusFailure(
+		temporal.GetDefaultFailureConverter().ErrorToFailure(
+			temporal.NewApplicationError("app err", "CustomError", "details"),
+		),
+	)
+	require.NoError(t, err)
+	nexusFailure.Cause = &cause
+
+	converted, err := NexusFailureToTemporalFailure(nexusFailure)
+	require.NoError(t, err)
+
+	expected := &failurepb.Failure{
+		Message:    "operation canceled",
+		StackTrace: "stack trace",
+		FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+			CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+		},
+		Cause: &failurepb.Failure{
+			Message: "app err",
+			Source:  "GoSDK",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					Type: "CustomError",
+					Details: &commonpb.Payloads{
+						Payloads: []*commonpb.Payload{mustToPayload(t, "details")},
+					},
+				},
+			},
+		},
+	}
+	protorequire.ProtoEqual(t, expected, converted)
 }

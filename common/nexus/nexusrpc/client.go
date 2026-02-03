@@ -219,6 +219,7 @@ func (c *HTTPClient) StartOperation(
 	}
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
+	request.Header.Set("temporal-nexus-failure-support", "true")
 
 	response, err := c.options.HTTPCaller(request)
 	if err != nil {
@@ -302,7 +303,7 @@ func (c *HTTPClient) StartOperation(
 				Message: "operation failed",
 				Cause:   wireErr,
 			}
-			originalFailure, err := c.options.FailureConverter.ErrorToFailure(wireErr)
+			originalFailure, err := c.options.FailureConverter.ErrorToFailure(opErr)
 			if err != nil {
 				return nil, err
 			}

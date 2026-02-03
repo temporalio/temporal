@@ -11,6 +11,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -50,36 +51,23 @@ func handleOperationError(
 	if err != nil {
 		return err
 	}
-	var originalFailure *failurepb.Failure
-
-	// This should never be nil, but better be defensive here than to panic.
-	if opErr.OriginalFailure == nil {
-		if opErr.Message == "" {
-			// Add a generic message to ensure the failure converter does not unwrap the failure for compatibility.
-			opErr.Message = "nexus operation completed unsuccessfully"
-		}
-		originalNexusFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(opErr)
+	var originalCause *failurepb.Failure
+	if opErr.OriginalFailure != nil && opErr.OriginalFailure.Cause != nil {
+		var err error
+		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
 		if err != nil {
 			return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
 		}
-		opErr.OriginalFailure = &originalNexusFailure
-	}
-
-	nexusFailure := opErr.OriginalFailure
-	originalFailure, err = commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
-	if err != nil {
-		return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
 	}
 
 	switch opErr.State { // nolint:exhaustive
 	case nexus.OperationStateFailed:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-			failure := convertToNexusOperationFailure(operation, eventID, originalFailure)
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
-					Failure:          failure,
+					Failure:          createNexusOperationFailure(operation, eventID, originalCause),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},
@@ -88,16 +76,15 @@ func handleOperationError(
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
-		if originalFailure.GetCause().GetCanceledFailureInfo() == nil {
+		if originalCause.GetCause().GetCanceledFailureInfo() == nil {
 			// Wrap the original failure in a CanceledFailureInfo to indicate cancellation. All workflow commands expected a
 			// nested CanceledFailure.
-			originalFailure.Cause = &failurepb.Failure{
+			originalCause.Cause = &failurepb.Failure{
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 				},
-				// TODO(bergundy): This might be confusing.
-				// Preserve the original cause.
-				Cause: originalFailure.GetCause(),
+				// Preserve the original cause (+clone to avoid infinite self reference).
+				Cause: common.CloneProto(originalCause),
 			}
 		}
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
@@ -105,7 +92,7 @@ func handleOperationError(
 			// nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
-					Failure:          convertToNexusOperationFailure(operation, eventID, originalFailure),
+					Failure:          createNexusOperationFailure(operation, eventID, originalCause),
 					ScheduledEventId: eventID,
 					RequestId:        operation.RequestId,
 				},

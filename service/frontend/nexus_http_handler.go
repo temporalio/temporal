@@ -140,7 +140,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	}
 
 	var err error
-	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName)
+	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, r.Header)
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
@@ -216,7 +216,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		return
 	}
 
-	nc, ok := h.nexusContextFromEndpoint(endpointEntry, w)
+	nc, ok := h.nexusContextFromEndpoint(endpointEntry, w, r.Header)
 	if !ok {
 		// nexusContextFromEndpoint already writes the failure response.
 		return
@@ -239,7 +239,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 	h.serveResolvedURL(w, r, u, nc)
 }
 
-func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
+func (h *NexusHTTPHandler) baseNexusContext(apiName string, header http.Header) *nexusContext {
 	return &nexusContext{
 		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
@@ -248,6 +248,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
 		apiName:                              apiName,
 		requestStartTime:                     time.Now(),
 		responseHeaders:                      make(map[string]string),
+		callerFailureSupport:                 header.Get("temporal-nexus-failure-support") == "true",
 	}
 }
 
@@ -255,7 +256,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
 // endpoint is valid for dispatching.
 // For security reasons, at the moment only worker target endpoints are considered valid, in the future external
 // endpoints may also be supported.
-func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter) (*nexusContext, bool) {
+func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusEndpointEntry, w http.ResponseWriter, header http.Header) (*nexusContext, bool) {
 	switch v := entry.Endpoint.Spec.GetTarget().GetVariant().(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		nsName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(v.Worker.GetNamespaceId()))
@@ -270,7 +271,7 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 			}
 			return nil, false
 		}
-		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName)
+		nc := h.baseNexusContext(configs.DispatchNexusTaskByEndpointAPIName, header)
 		nc.namespaceName = nsName.String()
 		nc.taskQueue = v.Worker.GetTaskQueue()
 		nc.endpointName = entry.Endpoint.Spec.Name

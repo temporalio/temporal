@@ -526,17 +526,15 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 	if err != nil {
 		return err
 	}
-	failure, err := callErrToFailure(callErr, false)
+	cause, err := callErrToFailure(callErr, false)
 	if err != nil {
 		return err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
-		Failure: convertToNexusOperationFailure(
+		Failure: createNexusOperationFailure(
 			operation,
 			eventID,
-			&failurepb.Failure{
-				Cause: failure,
-			},
+			cause,
 		),
 		ScheduledEventId: eventID,
 		RequestId:        operation.RequestId,
@@ -581,16 +579,14 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb
 			// nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-					Failure: convertToNexusOperationFailure(
+					Failure: createNexusOperationFailure(
 						op,
 						eventID,
 						&failurepb.Failure{
-							Cause: &failurepb.Failure{
-								Message: "operation timed out",
-								FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-									TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-										TimeoutType: timeoutType,
-									},
+							Message: "operation timed out",
+							FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+								TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+									TimeoutType: timeoutType,
 								},
 							},
 						},
@@ -845,13 +841,9 @@ func (e taskExecutor) lookupEndpoint(ctx context.Context, namespaceID namespace.
 	return entry, nil
 }
 
-// Copy over message and stack trace if present since to preserve as much as possible from the original operation
-// error.
-func convertToNexusOperationFailure(operation Operation, scheduledEventID int64, originalFailure *failurepb.Failure) *failurepb.Failure {
-	f := &failurepb.Failure{
-		Message:           originalFailure.GetMessage(),
-		StackTrace:        originalFailure.GetStackTrace(),
-		EncodedAttributes: originalFailure.GetEncodedAttributes(),
+func createNexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: "nexus operation completed unsuccessfully",
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
 				Endpoint:       operation.Endpoint,
@@ -863,12 +855,8 @@ func convertToNexusOperationFailure(operation Operation, scheduledEventID int64,
 				ScheduledEventId: scheduledEventID,
 			},
 		},
-		Cause: originalFailure.GetCause(),
+		Cause: cause,
 	}
-	if originalFailure.GetMessage() == "" {
-		f.Message = "nexus operation completed unsuccessfully"
-	}
-	return f
 }
 
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*nexus.LazyValue], callErr error) string {
