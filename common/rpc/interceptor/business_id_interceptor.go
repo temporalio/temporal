@@ -126,7 +126,7 @@ func (i *BusinessIDInterceptor) Intercept(
 		if businessID := extractor(ctx, req, info.FullMethod); businessID != "" {
 			i.logger.Debug("business ID extraction: adding business ID to context",
 				tag.WorkflowID(businessID),
-				tag.NewStringTag("grpc-method", info.FullMethod),
+				tag.String("grpc-method", info.FullMethod),
 			)
 			ctx = AddBusinessIDToContext(ctx, businessID)
 			break
