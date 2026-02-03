@@ -97,7 +97,7 @@ func Invoke(
 			}
 
 			// Notify version workflow if we're pinning to a potentially drained version
-			api.ReactivateVersionWorkflowIfPinned(ctx, shardCtx, ns.ID(), mergedOpts.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler)
+			api.ReactivateVersionWorkflowIfPinned(ctx, shardCtx, ns.ID(), mergedOpts.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
 
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{

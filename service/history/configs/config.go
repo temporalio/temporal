@@ -406,6 +406,7 @@ type Config struct {
 	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
 	ReactivationSignalCacheTTL           dynamicconfig.DurationPropertyFn
 	ReactivationSignalCacheMaxSize       dynamicconfig.IntPropertyFn
+	EnableVersionReactivationSignals     dynamicconfig.BoolPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -772,6 +773,7 @@ func NewConfig(
 		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
 		ReactivationSignalCacheTTL:           dynamicconfig.ReactivationSignalCacheTTL.Get(dc),
 		ReactivationSignalCacheMaxSize:       dynamicconfig.ReactivationSignalCacheMaxSize.Get(dc),
+		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
 	}
 
 	return cfg

@@ -30,7 +30,13 @@ func ReactivateVersionWorkflowIfPinned(
 	override *workflowpb.VersioningOverride,
 	signalCache worker_versioning.ReactivationSignalCache,
 	signaler VersionReactivationSignalerFn,
+	enabled bool,
 ) {
+	// Check if signals are enabled globally
+	if !enabled {
+		return
+	}
+
 	// Only process if we're pinning to a specific version
 	if !worker_versioning.OverrideIsPinned(override) {
 		return
@@ -49,12 +55,6 @@ func ReactivateVersionWorkflowIfPinned(
 	) {
 		return
 	}
-
-	// TODO (Shivam): Can remove this
-	shardContext.GetLogger().Debug("Sending reactivation signal to version workflow",
-		tag.WorkflowNamespaceID(namespaceID.String()),
-		tag.NewStringTag("deployment", pinnedVersion.GetDeploymentName()),
-		tag.NewStringTag("build_id", pinnedVersion.GetBuildId()))
 
 	// Get namespace entry from registry
 	nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)

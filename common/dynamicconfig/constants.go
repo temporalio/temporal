@@ -2777,6 +2777,14 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the reactivation signal cache.`,
 	)
 
+	EnableVersionReactivationSignals = NewGlobalBoolSetting(
+		"history.enableVersionReactivationSignals",
+		true,
+		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
+		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
+		globally if load becomes problematic.`,
+	)
+
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(
 		"history.externalPayloadsEnabled",
 		false,
