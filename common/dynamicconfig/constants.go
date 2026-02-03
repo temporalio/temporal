@@ -659,13 +659,13 @@ used here will be the effective RPS from global and per-instance limits. The val
 	)
 	FrontendWorkerDeploymentReadRPS = NewNamespaceIntSetting(
 		"frontend.workerDeploymentReadRPS",
-		100,
-		`FrontendWorkerDeploymentReadRPS is the per-namespace rate limit for DescribeWorkerDeployment and DescribeWorkerDeploymentVersion APIs`,
+		50,
+		`FrontendWorkerDeploymentReadRPS is the per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion)`,
 	)
 	FrontendWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
 		"frontend.workerDeploymentReadBurstRatio",
 		2.0,
-		`FrontendWorkerDeploymentReadBurstRatio is the burst ratio for worker deployment read API rate limiter`,
+		`FrontendWorkerDeploymentReadBurstRatio is the burst ratio for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion)`,
 	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
