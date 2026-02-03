@@ -169,6 +169,19 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 	s.assertEqualTasks(resetTask)
 }
 
+func (s *taskSerializerSuite) TestTransferCancelActivityNexusTask() {
+	cancelActivityNexusTask := &tasks.CancelActivityNexusTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+		ScheduledEventIDs:   []int64{rand.Int63(), rand.Int63(), rand.Int63()},
+		WorkerInstanceKey:   "test-worker-instance-key",
+	}
+
+	s.assertEqualTasks(cancelActivityNexusTask)
+}
+
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
 	workflowTaskTimer := &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey:         s.workflowKey,
