@@ -189,6 +189,11 @@ config as the other services.`,
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
+	EnableActivityCancellationViaControlQueue = NewGlobalBoolSetting(
+		"system.enableActivityCancellationViaControlQueue",
+		false,
+		`EnableActivityCancellationViaControlQueue enables pushing activity cancellation to workers via the control queue (Nexus)`,
+	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
 		24*time.Hour,

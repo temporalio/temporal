@@ -4,11 +4,13 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func Invoke(
@@ -83,6 +85,11 @@ func Invoke(
 				return nil, err
 			}
 
+			// Create activity cancel control tasks for running activities (grouped by worker).
+			if shard.GetConfig().EnableActivityCancellationViaControlQueue() {
+				createActivityCancelControlTasks(mutableState)
+			}
+
 			return api.UpdateWorkflowWithNewWorkflowTask, nil
 		},
 		nil,
@@ -93,4 +100,30 @@ func Invoke(
 		return nil, err
 	}
 	return &historyservice.RequestCancelWorkflowExecutionResponse{}, nil
+}
+
+// createActivityCancelControlTasks creates transfer tasks to cancel running activities.
+// Activities are grouped by worker_instance_key to batch cancellations per worker.
+func createActivityCancelControlTasks(mutableState historyi.MutableState) {
+	// Group running activities by worker instance key
+	activityByWorker := make(map[string][]int64)
+	for _, ai := range mutableState.GetPendingActivityInfos() {
+		// Only include started activities with a worker instance key
+		if ai.StartedEventId == common.EmptyEventID || ai.WorkerInstanceKey == "" {
+			continue
+		}
+		activityByWorker[ai.WorkerInstanceKey] = append(
+			activityByWorker[ai.WorkerInstanceKey],
+			ai.ScheduledEventId,
+		)
+	}
+
+	// Create one transfer task per worker
+	for workerKey, scheduledEventIDs := range activityByWorker {
+		mutableState.AddTasks(&tasks.ActivityCancelControlTask{
+			WorkflowKey:       mutableState.GetWorkflowKey(),
+			ScheduledEventIDs: scheduledEventIDs,
+			WorkerInstanceKey: workerKey,
+		})
+	}
 }

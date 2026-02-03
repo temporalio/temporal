@@ -142,6 +142,9 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 		err = t.processDeleteExecutionTask(ctx, task)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
+	case *tasks.ActivityCancelControlTask:
+		// TODO: Implement dispatch to worker control queue
+		err = nil
 	default:
 		err = errUnknownTransferTask
 	}
