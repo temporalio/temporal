@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -86,6 +87,7 @@ var Module = fx.Options(
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
 	fx.Provide(ReactivationSignalCacheProvider),
+	fx.Provide(workerdeployment.ClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,

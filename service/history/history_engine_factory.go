@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -51,6 +52,7 @@ type (
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipCache
 		ReactivationSignalCache         worker_versioning.ReactivationSignalCache
+		WorkerDeploymentClient          workerdeployment.Client
 	}
 
 	historyEngineFactory struct {
@@ -70,6 +72,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.Config,
 		f.VersionMembershipCache,
 		f.ReactivationSignalCache,
+		f.WorkerDeploymentClient,
 		f.RawMatchingClient,
 		f.WorkflowCache,
 		f.ReplicationProgressCache,

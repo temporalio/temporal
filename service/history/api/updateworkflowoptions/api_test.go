@@ -59,6 +59,11 @@ func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string) bool {
 	return false // Always return false to skip sending signals in tests
 }
 
+// noopReactivationSignaler is a no-op signaler function for tests
+func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string) error {
+	return nil
+}
+
 var (
 	emptyOptions            = &workflowpb.WorkflowExecutionOptions{}
 	unpinnedOverrideOptions = &workflowpb.WorkflowExecutionOptions{
@@ -271,6 +276,7 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		s.mockMatchingClient,
 		noopVersionMembershipCache{},  // cache not meant to be used in this test
 		noopReactivationSignalCache{}, // cache not meant to be used in this test
+		noopReactivationSignaler,      // signaler not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)

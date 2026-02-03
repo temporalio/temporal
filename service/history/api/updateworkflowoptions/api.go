@@ -29,6 +29,7 @@ func Invoke(
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
@@ -96,7 +97,7 @@ func Invoke(
 			}
 
 			// Notify version workflow if we're pinning to a potentially drained version
-			api.ReactivateVersionWorkflowIfPinned(ctx, shardCtx, ns.ID(), mergedOpts.GetVersioningOverride(), reactivationSignalCache)
+			api.ReactivateVersionWorkflowIfPinned(ctx, shardCtx, ns.ID(), mergedOpts.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler)
 
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{

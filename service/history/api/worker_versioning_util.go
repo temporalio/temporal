@@ -3,19 +3,21 @@ package api
 import (
 	"context"
 
-	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
-// ReactivateVersionSignalName is the signal name for reactivating a version workflow.
-// This duplicates the constant from workerdeployment package to avoid import cycles.
-const ReactivateVersionSignalName = "reactivate-version"
+// VersionReactivationSignalerFn is a function type for sending reactivation signals to version workflows.
+// This abstraction allows the history API layer to use the deployment client without importing it directly,
+// avoiding import cycles between history/api and worker/workerdeployment packages.
+type VersionReactivationSignalerFn func(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+) error
 
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
 // when workflows are pinned to a potentially DRAINED/INACTIVE version. It also deduplicates
@@ -27,6 +29,7 @@ func ReactivateVersionWorkflowIfPinned(
 	namespaceID namespace.ID,
 	override *workflowpb.VersioningOverride,
 	signalCache worker_versioning.ReactivationSignalCache,
+	signaler VersionReactivationSignalerFn,
 ) {
 	// Only process if we're pinning to a specific version
 	if !worker_versioning.OverrideIsPinned(override) {
@@ -47,6 +50,7 @@ func ReactivateVersionWorkflowIfPinned(
 		return
 	}
 
+	// TODO (Shivam): Can remove this
 	shardContext.GetLogger().Debug("Sending reactivation signal to version workflow",
 		tag.WorkflowNamespaceID(namespaceID.String()),
 		tag.NewStringTag("deployment", pinnedVersion.GetDeploymentName()),
@@ -61,33 +65,12 @@ func ReactivateVersionWorkflowIfPinned(
 		return
 	}
 
-	// Generate the workflow ID for the version workflow
-	workflowID := worker_versioning.GenerateVersionWorkflowID(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())
-
-	// Build the signal request for the version workflow
-	// Version workflows run in the same namespace as user workflows
-	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: nsEntry.ID().String(),
-		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: nsEntry.Name().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: workflowID,
-			},
-			SignalName: ReactivateVersionSignalName,
-			Input:      nil, // No payload needed
-			Identity:   "history-service",
-		},
-	}
-
-	// Use history client to route signal to the correct shard (version workflow may be on a different shard)
-	historyClient := shardContext.GetHistoryClient()
-
-	_, err = historyClient.SignalWorkflowExecution(ctx, signalRequest)
+	// Use signaler function to send the signal
+	err = signaler(ctx, nsEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())
 	if err != nil {
 		shardContext.GetLogger().Warn("Failed to signal version workflow for reactivation",
 			tag.WorkflowNamespace(nsEntry.Name().String()),
-			tag.WorkflowID(workflowID),
+			tag.WorkflowID(worker_versioning.GenerateVersionWorkflowID(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())),
 			tag.Error(err))
-		return
 	}
 }
