@@ -106,6 +106,8 @@ const (
 	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 	defaultUserTerminateReason   = "terminated by user via frontend"
 	defaultUserTerminateIdentity = "frontend-service"
+
+	workerDeploymentReadRateLimitDefaultToken = 1
 )
 
 type (
@@ -143,10 +145,10 @@ type (
 		membershipMonitor               membership.Monitor
 		healthInterceptor               *interceptor.HealthInterceptor
 		scheduleSpecBuilder             *scheduler.SpecBuilder
-		outstandingPollers                      collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
-		httpEnabled                             bool
-		registry                                *chasm.Registry
-		workerDeploymentReadRateLimiter     quotas.RequestRateLimiter
+		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		httpEnabled                     bool
+		registry                        *chasm.Registry
+		workerDeploymentReadRateLimiter quotas.RequestRateLimiter
 	}
 )
 
@@ -3491,7 +3493,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, errDeploymentVersionsNotAllowed
 	}
 
-	if err := wh.checkWorkerDeploymentReadRateLimit(request.GetNamespace()); err != nil {
+	if err := wh.checkWorkerDeploymentReadRateLimit(ctx, request.GetNamespace(), "DescribeWorkerDeploymentVersion"); err != nil {
 		return nil, err
 	}
 
@@ -3692,7 +3694,7 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.checkWorkerDeploymentReadRateLimit(request.GetNamespace()); err != nil {
+	if err := wh.checkWorkerDeploymentReadRateLimit(ctx, request.GetNamespace(), "DescribeWorkerDeployment"); err != nil {
 		return nil, err
 	}
 
@@ -5716,20 +5718,21 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 	return nil
 }
 
-func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(namespaceName string) error {
+func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Context, namespaceName, apiName string) error {
+	callerInfo := headers.GetCallerInfo(ctx)
 	req := quotas.NewRequest(
-		"",            // API name not needed
-		1,             // token count
-		namespaceName, // caller (namespace)
-		"",            // caller type
-		0,             // caller segment
-		"",            // initiation
+		apiName,
+		workerDeploymentReadRateLimitDefaultToken,
+		namespaceName,
+		callerInfo.CallerType,
+		-1,
+		callerInfo.CallOrigin,
 	)
 
-	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now(), req) {
+	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now().UTC(), req) {
 		return serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
-			fmt.Sprintf("Worker deployment describe API rate limit exceeded for namespace %q", namespaceName),
+			fmt.Sprintf("%s rate limit exceeded for namespace %q", apiName, namespaceName),
 		)
 	}
 	return nil
