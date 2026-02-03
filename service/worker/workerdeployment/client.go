@@ -1228,8 +1228,8 @@ func (d *ClientImpl) convertAndRecordError(operation string, deploymentName stri
 					tag.Error(*retErr),
 					tag.Operation(operation),
 					tag.Deployment(deploymentName),
-					tag.NewDurationTag("elapsed", elapsed),
-					tag.NewAnyTag("args", args),
+					tag.Duration("elapsed", elapsed),
+					tag.Any("args", args),
 				)
 			} else {
 				if isRetryableUpdateError(*retErr) || isRetryableQueryError(*retErr) {
@@ -1237,8 +1237,8 @@ func (d *ClientImpl) convertAndRecordError(operation string, deploymentName stri
 						tag.Error(*retErr),
 						tag.Operation(operation),
 						tag.Deployment(deploymentName),
-						tag.NewDurationTag("elapsed", elapsed),
-						tag.NewAnyTag("args", args),
+						tag.Duration("elapsed", elapsed),
+						tag.Any("args", args),
 					)
 					var errResourceExhausted *serviceerror.ResourceExhausted
 					if !errors.As(*retErr, &errResourceExhausted) || errResourceExhausted.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
@@ -1259,16 +1259,16 @@ func (d *ClientImpl) convertAndRecordError(operation string, deploymentName stri
 						tag.Error(*retErr),
 						tag.Operation(operation),
 						tag.Deployment(deploymentName),
-						tag.NewDurationTag("elapsed", elapsed),
-						tag.NewAnyTag("args", args),
+						tag.Duration("elapsed", elapsed),
+						tag.Any("args", args),
 					)
 				} else {
 					d.logger.Error("deployment client unexpected error",
 						tag.Error(*retErr),
 						tag.Operation(operation),
 						tag.Deployment(deploymentName),
-						tag.NewDurationTag("elapsed", elapsed),
-						tag.NewAnyTag("args", args),
+						tag.Duration("elapsed", elapsed),
+						tag.Any("args", args),
 					)
 				}
 			}
@@ -1276,8 +1276,8 @@ func (d *ClientImpl) convertAndRecordError(operation string, deploymentName stri
 			d.logger.Debug("deployment client success",
 				tag.Operation(operation),
 				tag.Deployment(deploymentName),
-				tag.NewDurationTag("elapsed", elapsed),
-				tag.NewAnyTag("args", args),
+				tag.Duration("elapsed", elapsed),
+				tag.Any("args", args),
 			)
 		}
 	}
@@ -1462,10 +1462,14 @@ func (d *ClientImpl) GetVersionDrainageStatus(
 }
 
 func makeDeploymentQuery(version string) string {
-	var statusFilter string
-	deploymentFilter := fmt.Sprintf("= '%s'", worker_versioning.PinnedBuildIdSearchAttribute(version))
-	statusFilter = "= 'Running'"
-	return fmt.Sprintf("%s %s AND %s %s", sadefs.BuildIds, deploymentFilter, sadefs.ExecutionStatus, statusFilter)
+	deploymentFilter := fmt.Sprintf("= '%s'", version)
+	statusFilter := "= 'Running'"
+	behaviorFilter := "= 'Pinned'"
+	return fmt.Sprintf("%s %s AND %s %s AND %s %s",
+		sadefs.TemporalWorkerDeploymentVersion, deploymentFilter,
+		sadefs.TemporalWorkflowVersioningBehavior, behaviorFilter,
+		sadefs.ExecutionStatus, statusFilter,
+	)
 }
 
 func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEntry *namespace.Namespace, prevCurrentVersion, newVersion string) (bool, error) {

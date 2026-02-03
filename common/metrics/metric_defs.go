@@ -44,7 +44,11 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+<<<<<<< HEAD
 	ReactivationSignalCacheTypeTagValue               = "reactivation_signal"
+=======
+	RoutingInfoCacheTypeTagValue                      = "routing_info"
+>>>>>>> main
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -460,6 +464,10 @@ const (
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
 	// ReactivationSignalCacheShouldSendScope is the scope used by reactivation signal cache
 	ReactivationSignalCacheShouldSendScope = "ReactivationSignalCacheShouldSend"
+	// RoutingInfoCacheGetScope is the scope used by routing info cache
+	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
+	// RoutingInfoCachePutScope is the scope used by routing info cache
+	RoutingInfoCachePutScope = "RoutingInfoCachePut"
 )
 
 // Matching Scope
@@ -601,6 +609,9 @@ const (
 const (
 	ScheduleActionTypeTag       = "schedule_action"
 	ScheduleActionStartWorkflow = "start_workflow"
+	ScheduleBackendTag          = "scheduler_backend"
+	ScheduleBackendChasm        = "chasm"
+	ScheduleBackendLegacy       = "legacy"
 )
 
 var (

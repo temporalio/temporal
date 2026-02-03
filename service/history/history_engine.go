@@ -138,6 +138,7 @@ type (
 		versionMembershipCache     worker_versioning.VersionMembershipCache
 		reactivationSignalCache    worker_versioning.ReactivationSignalCache
 		workerDeploymentClient     workerdeployment.Client
+		routingInfoCache           worker_versioning.RoutingInfoCache
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
@@ -160,6 +161,7 @@ func NewEngineWithShardContext(
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 	reactivationSignalCache worker_versioning.ReactivationSignalCache,
 	workerDeploymentClient workerdeployment.Client,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
@@ -232,6 +234,7 @@ func NewEngineWithShardContext(
 		versionMembershipCache:     versionMembershipCache,
 		reactivationSignalCache:    reactivationSignalCache,
 		workerDeploymentClient:     workerDeploymentClient,
+		routingInfoCache:           routingInfoCache,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -533,7 +536,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found

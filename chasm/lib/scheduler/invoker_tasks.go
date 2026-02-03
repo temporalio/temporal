@@ -247,7 +247,7 @@ func (e *InvokerExecuteTaskExecutor) cancelWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				logger.Info("failed to cancel workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
@@ -285,7 +285,7 @@ func (e *InvokerExecuteTaskExecutor) terminateWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
+				logger.Info("failed to terminate workflow", tag.Error(err), tag.WorkflowID(wf.WorkflowId))
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
@@ -342,7 +342,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflows(
 			defer resultMutex.Unlock()
 
 			if err != nil {
-				logger.Error("failed to start workflow", tag.Error(err))
+				logger.Info("failed to start workflow", tag.Error(err))
 
 				// Don't count "already started" for the error metric or retry, as it is most likely
 				// due to misconfiguration.

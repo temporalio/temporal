@@ -215,8 +215,9 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 			// Collect test cases.
 			for j := range len(suite.Testcases) {
 				testCase := suite.Testcases[j]
-				// Check if this is a parent test case (ie prefix of next test).
-				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name) {
+				// Check if this is a parent test case (ie prefix of next subtest).
+				// Use testCase.Name+"/" to avoid matching iteration suffixes like #01.
+				if j != len(suite.Testcases)-1 && strings.HasPrefix(suite.Testcases[j+1].Name, testCase.Name+"/") {
 					// Discard test case parents since they provide no value.
 					continue
 				}

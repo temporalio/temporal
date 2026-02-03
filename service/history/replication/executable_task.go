@@ -285,7 +285,9 @@ func (e *ExecutableTaskImpl) MarkTaskDuplicated() {
 }
 
 func (e *ExecutableTaskImpl) MarkExecutionStart() {
-	e.taskExecuteStartTime = time.Now().UTC()
+	if e.taskExecuteStartTime.IsZero() {
+		e.taskExecuteStartTime = time.Now().UTC()
+	}
 }
 
 func (e *ExecutableTaskImpl) GetPriority() enumsspb.TaskPriority {
@@ -346,6 +348,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 				tag.WorkflowRunID(e.replicationTask.RawTaskInfo.RunId),
 				tag.ReplicationTask(e.replicationTask.GetRawTaskInfo()),
 				tag.ShardID(e.Config.GetShardID(namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId), e.replicationTask.RawTaskInfo.WorkflowId)),
+				tag.AttemptCount(int64(e.Attempt())),
 			)
 		}
 	}
@@ -458,8 +461,8 @@ func (e *ExecutableTaskImpl) Resend(
 				tag.WorkflowNamespaceID(retryErr.NamespaceId),
 				tag.WorkflowID(retryErr.WorkflowId),
 				tag.WorkflowRunID(retryErr.RunId),
-				tag.NewStringTag("first-resend-error", retryErr.Error()),
-				tag.NewStringTag("second-resend-error", resendErr.Error()),
+				tag.String("first-resend-error", retryErr.Error()),
+				tag.String("second-resend-error", resendErr.Error()),
 			)
 		}
 		// handle 2nd resend error, then 1st resend error
@@ -471,8 +474,8 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowNamespaceID(resendErr.NamespaceId),
 			tag.WorkflowID(resendErr.WorkflowId),
 			tag.WorkflowRunID(resendErr.RunId),
-			tag.NewStringTag("first-resend-error", retryErr.Error()),
-			tag.NewStringTag("second-resend-error", resendErr.Error()),
+			tag.String("first-resend-error", retryErr.Error()),
+			tag.String("second-resend-error", resendErr.Error()),
 			tag.Error(err),
 		)
 		return false, resendErr
@@ -481,8 +484,8 @@ func (e *ExecutableTaskImpl) Resend(
 			tag.WorkflowNamespaceID(retryErr.NamespaceId),
 			tag.WorkflowID(retryErr.WorkflowId),
 			tag.WorkflowRunID(retryErr.RunId),
-			tag.NewStringTag("first-resend-error", retryErr.Error()),
-			tag.NewStringTag("second-resend-error", resendErr.Error()),
+			tag.String("first-resend-error", retryErr.Error()),
+			tag.String("second-resend-error", resendErr.Error()),
 		)
 		return false, resendErr
 	}
@@ -785,6 +788,10 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 		},
 		ClosedWorkflowOnly: false,
 	})
+	var notFoundErr *serviceerror.NotFound
+	if errors.As(err, &notFoundErr) {
+		return nil
+	}
 	return err
 }
 

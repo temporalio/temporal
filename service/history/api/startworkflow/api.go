@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
@@ -60,7 +59,6 @@ type Starter struct {
 	request                    *historyservice.StartWorkflowExecutionRequest
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
-	enableRequestIdRefLinks    dynamicconfig.BoolPropertyFn
 	versionMembershipCache     worker_versioning.VersionMembershipCache
 	reactivationSignalCache    worker_versioning.ReactivationSignalCache
 	reactivationSignaler       api.VersionReactivationSignalerFn
@@ -112,7 +110,6 @@ func NewStarter(
 		request:                    request,
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
-		enableRequestIdRefLinks:    shardContext.GetConfig().EnableRequestIdRefLinks,
 		versionMembershipCache:     versionMembershipCache,
 		reactivationSignalCache:    reactivationSignalCache,
 		reactivationSignaler:       reactivationSignaler,
@@ -835,9 +832,6 @@ func (s *Starter) generateStartedEventRefLink(runID string) *commonpb.Link {
 }
 
 func (s *Starter) generateRequestIdRefLink(runID string) *commonpb.Link {
-	if !s.enableRequestIdRefLinks() {
-		return s.generateStartedEventRefLink(runID)
-	}
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{

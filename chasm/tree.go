@@ -414,13 +414,8 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	// Access check always begins on the target node's parent, and ignored for nodes
-	// without ancestors.
-	if node.parent != nil {
-		err := node.parent.validateAccess(validationContext)
-		if err != nil {
-			return nil, err
-		}
+	if err := node.validateAccess(validationContext); err != nil {
+		return nil, err
 	}
 
 	if ref.validationFn != nil {
@@ -440,7 +435,7 @@ func (n *Node) Component(
 //
 // When the context's intent is OperationIntentProgress, This check validates that
 // all of a node's ancestors are still in a running state, and can accept writes. In
-// the case of a newly-created node, a detached node, or an OperationIntentObserve
+// the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
 func (n *Node) validateAccess(ctx Context) error {
 	intent := operationIntentFromContext(ctx.getContext())
@@ -449,11 +444,21 @@ func (n *Node) validateAccess(ctx Context) error {
 		return nil
 	}
 
-	// TODO - check if this is a detached node, operations are always allowed.
+	// Detached nodes skip ancestor validation entirely.
+	if n.isDetached() || n.parent == nil {
+		return nil
+	}
 
-	if n.parent != nil {
-		err := n.parent.validateAccess(ctx)
-		if err != nil {
+	return n.parent.validateAccessHelper(ctx)
+}
+
+// validateAccessHelper is a helper method that validates both the current
+// node's lifecycle state AND its ancestors recursively.
+// Do not call this method directly, call validateAccess instead.
+func (n *Node) validateAccessHelper(ctx Context) error {
+	// Check ancestors first (if not detached).
+	if !n.isDetached() && n.parent != nil {
+		if err := n.parent.validateAccessHelper(ctx); err != nil {
 			return err
 		}
 	}
@@ -464,8 +469,7 @@ func (n *Node) validateAccess(ctx Context) error {
 	}
 
 	// Hydrate the component so we can access its LifecycleState.
-	err := n.prepareComponentValue(ctx)
-	if err != nil {
+	if err := n.prepareComponentValue(ctx); err != nil {
 		return err
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
@@ -576,6 +580,10 @@ func (n *Node) isData() bool {
 
 func (n *Node) isMap() bool {
 	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
+}
+
+func (n *Node) isDetached() bool {
+	return n.serializedNode.GetMetadata().GetComponentAttributes().GetDetached()
 }
 
 func (n *Node) fieldType() fieldType {
@@ -1014,6 +1022,15 @@ func (n *Node) syncSubField(
 			}
 
 			childNode.setValueState(valueStateNeedSyncStructure)
+
+			// Set detached flag from field option or component type registration.
+			componentAttr := childNode.serializedNode.GetMetadata().GetComponentAttributes()
+			componentAttr.Detached = internal.detached
+			if !componentAttr.Detached {
+				if rc, ok := n.registry.componentFor(fieldValue); ok {
+					componentAttr.Detached = rc.IsDetached()
+				}
+			}
 		case fieldTypeData:
 			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
 				return
@@ -1167,7 +1184,7 @@ func (n *Node) deserializeComponentNode(
 			softassert.Fail(
 				n.logger,
 				"field.kind can be unspecified only if err is not nil, and there is a check for it above",
-				tag.NewStringTag("node name", n.nodeName))
+				tag.String("node name", n.nodeName))
 		case fieldKindData:
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
@@ -1773,16 +1790,11 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	// TODO: visibility component should be an (implicitly) detached component.
-	// Remove this special case when detached node is implemented.
-	if registableTask.taskTypeID != visibilityTaskTypeID && n.parent != nil {
-		err := n.parent.validateAccess(validateContext)
+	if err := n.validateAccess(validateContext); err != nil {
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
 		}
-		if err != nil {
-			return false, err
-		}
+		return false, err
 	}
 
 	defer log.CapturePanic(n.logger, &retErr)

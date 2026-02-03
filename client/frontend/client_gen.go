@@ -19,6 +19,16 @@ func (c *clientImpl) CountActivityExecutions(
 	return c.client.CountActivityExecutions(ctx, request, opts...)
 }
 
+func (c *clientImpl) CountSchedules(
+	ctx context.Context,
+	request *workflowservice.CountSchedulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountSchedulesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CountSchedules(ctx, request, opts...)
+}
+
 func (c *clientImpl) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,

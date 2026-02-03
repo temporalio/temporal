@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -742,6 +743,13 @@ func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
 	})
 	s.NotNil(v1Entry.GetInfo())
 
+	// Count with V1 handler.
+	v1CountResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.GreaterOrEqual(v1CountResp.Count, int64(1), "Expected at least 1 schedule with V1 handler")
+
 	// Flip on CHASM experiment and make sure we can still list.
 	s.newContext = func() context.Context {
 		return metadata.NewOutgoingContext(testcore.NewContext(), metadata.Pairs(
@@ -751,6 +759,13 @@ func (s *ScheduleV1FunctionalSuite) TestCHASMCanListV1Schedules() {
 	chasmEntry := s.getScheduleEntryFomVisibility(sid, nil)
 	s.NotNil(chasmEntry.GetInfo())
 	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
+
+	// Count with CHASM handler and verify it matches V1 count.
+	chasmCountResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.Equal(v1CountResp.Count, chasmCountResp.Count, "CHASM and V1 counts should match")
 }
 
 // TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
@@ -1414,4 +1429,176 @@ func (s *ScheduleCHASMFunctionalSuite) TestCreateScheduleAlreadyExists() {
 	var alreadyExists *serviceerror.AlreadyExists
 	s.ErrorAs(err, &alreadyExists)
 	s.Contains(err.Error(), sid)
+}
+
+func (s *scheduleFunctionalSuiteBase) TestCountSchedules() {
+	// Create multiple schedules with different paused states
+	sidPrefix := "sched-test-count-"
+	wid := "sched-test-count-wf"
+	wt := "sched-test-count-wt"
+
+	// Create 3 schedules: 2 active, 1 paused
+	for i := range 3 {
+		sid := fmt.Sprintf("%s%d", sidPrefix, i)
+		paused := i == 2 // Third schedule is paused
+
+		schedule := &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   fmt.Sprintf("%s-%d", wid, i),
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+			State: &schedulepb.ScheduleState{
+				Paused: paused,
+			},
+		}
+
+		_, err := s.FrontendClient().CreateSchedule(s.newContext(), &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.NoError(err)
+		s.cleanup(sid)
+	}
+
+	// Wait for schedules to appear in visibility
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		if err != nil {
+			return false
+		}
+		return countResp.Count >= 3
+	}, 15*time.Second, 1*time.Second)
+
+	// Test basic count (all schedules)
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+		})
+		return err == nil && countResp.Count >= 3
+	}, 15*time.Second, 1*time.Second, "Expected at least 3 schedules")
+
+	// Test count with query filter for paused schedules
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
+		})
+		return err == nil && countResp.Count >= 1
+	}, 15*time.Second, 1*time.Second, "Expected at least 1 paused schedule")
+
+	// Test count with query filter for non-paused schedules
+	s.Eventually(func() bool {
+		countResp, err := s.FrontendClient().CountSchedules(s.newContext(), &workflowservice.CountSchedulesRequest{
+			Namespace: s.Namespace().String(),
+			Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
+		})
+		return err == nil && countResp.Count >= 2
+	}, 15*time.Second, 1*time.Second, "Expected at least 2 non-paused schedules")
+}
+
+func (s *scheduleFunctionalSuiteBase) TestSchedule_InternalTaskQueue() {
+	errorMessageKeyword := "internal per namespace task queue"
+
+	// Test CreateSchedule with internal task queue
+	s.Run("CreateSchedule_PerNSWorkerTaskQueue", func() {
+		sid := "sched-test-internal-tq-create"
+		schedule := &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "wf-internal-tq",
+						WorkflowType: &commonpb.WorkflowType{Name: "action"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+		req := &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		}
+
+		ctx := s.newContext()
+		_, err := s.FrontendClient().CreateSchedule(ctx, req)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), errorMessageKeyword)
+	})
+
+	// Test UpdateSchedule with internal task queue
+	s.Run("UpdateSchedule_PerNSWorkerTaskQueue", func() {
+		// First create a schedule with a valid task queue
+		sid := "sched-test-internal-tq-update"
+		schedule := &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(1 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "wf-update-internal-tq",
+						WorkflowType: &commonpb.WorkflowType{Name: "action"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		}
+		req := &workflowservice.CreateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		}
+
+		ctx := s.newContext()
+		_, err := s.FrontendClient().CreateSchedule(ctx, req)
+		s.NoError(err)
+		s.cleanup(sid)
+
+		// Now try to update with internal task queue
+		schedule.Action.GetStartWorkflow().TaskQueue = &taskqueuepb.TaskQueue{
+			Name: primitives.PerNSWorkerTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+		updateReq := &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Schedule:   schedule,
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		}
+
+		_, err = s.FrontendClient().UpdateSchedule(ctx, updateReq)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), errorMessageKeyword)
+	})
 }

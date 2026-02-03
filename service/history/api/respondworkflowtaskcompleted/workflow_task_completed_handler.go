@@ -245,9 +245,9 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 			tag.WorkflowID(wfKey.WorkflowID),
 			tag.WorkflowRunID(wfKey.RunID),
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
-			tag.NewStringTag("worker-identity", workerIdentity),
-			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
-			tag.NewInt("rejected-count", len(rejectedUpdateIDs)),
+			tag.String("worker-identity", workerIdentity),
+			tag.Strings("update-ids", rejectedUpdateIDs),
+			tag.Int("rejected-count", len(rejectedUpdateIDs)),
 		)
 	}
 
@@ -1446,13 +1446,11 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-
-	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	var invalidArgument *serviceerror.InvalidArgument
+	if errors.As(err, &invalidArgument) {
 		return handler.failWorkflowTask(wtFailedCause, err)
-	default:
-		return err
 	}
+	return err
 }
 
 func (handler *workflowTaskCompletedHandler) failWorkflowTask(

@@ -51,6 +51,7 @@ type (
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableUnifiedQueryConverter    dynamicconfig.BoolPropertyFn
 		metricsHandler                 metrics.Handler
+		logger                         log.Logger
 	}
 
 	visibilityPageToken struct {
@@ -166,6 +167,7 @@ func NewVisibilityStore(
 		enableManualPagination:         enableManualPagination,
 		enableUnifiedQueryConverter:    enableUnifiedQueryConverter,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
+		logger:                         logger,
 	}, nil
 }
 
@@ -784,7 +786,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider, chasmMapper, archetypeID)
 	queryConverter := NewQueryConverterLegacy(
 		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap, chasmMapper),
+		NewValuesInterceptor(namespace, saTypeMap, chasmMapper, s.metricsHandler, s.logger),
 		saTypeMap,
 		chasmMapper,
 	)
