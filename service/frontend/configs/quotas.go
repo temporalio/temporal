@@ -6,7 +6,9 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 )
 
 const (
@@ -382,6 +384,35 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+// NewGlobalNamespaceRateLimiter creates a namespace-aware rate limiter that uses
+// only a global quota with no per-instance fallback.
+func NewGlobalNamespaceRateLimiter(
+	memberCounter calculator.MemberCounter,
+	globalQuota dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	burstRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) quotas.RequestRateLimiter {
+	rateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    memberCounter,
+			PerInstanceQuota: func(ns string) int { return 0 },
+			GlobalQuota:      globalQuota,
+		},
+		logger,
+	).GetQuota
+
+	return quotas.NewNamespaceRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDynamicRateLimiter(
+					NewNamespaceRateBurst(req.Caller, rateFn, burstRatio),
+					time.Minute,
+				),
+			)
+		},
+	)
 }
 
 func IsAPIOperation(apiFullName string) bool {

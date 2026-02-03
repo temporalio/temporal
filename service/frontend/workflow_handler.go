@@ -75,7 +75,6 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -106,8 +105,6 @@ const (
 	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 	defaultUserTerminateReason   = "terminated by user via frontend"
 	defaultUserTerminateIdentity = "frontend-service"
-
-	workerDeploymentReadRateLimitDefaultToken = 1
 )
 
 type (
@@ -181,6 +178,7 @@ func NewWorkflowHandler(
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
 	registry *chasm.Registry,
+	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		FrontendHandler: activityHandler,
@@ -227,33 +225,17 @@ func NewWorkflowHandler(
 			),
 			config.SuppressErrorSetSystemSearchAttribute,
 		),
-		archivalMetadata:    archivalMetadata,
-		healthServer:        healthServer,
-		overrides:           NewOverrides(),
-		membershipMonitor:   membershipMonitor,
-		healthInterceptor:   healthInterceptor,
-		scheduleSpecBuilder: scheduleSpecBuilder,
-		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
-		httpEnabled:         httpEnabled,
-		registry:            registry,
+		archivalMetadata:                archivalMetadata,
+		healthServer:                    healthServer,
+		overrides:                       NewOverrides(),
+		membershipMonitor:               membershipMonitor,
+		healthInterceptor:               healthInterceptor,
+		scheduleSpecBuilder:             scheduleSpecBuilder,
+		outstandingPollers:              collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
+		httpEnabled:                     httpEnabled,
+		registry:                        registry,
+		workerDeploymentReadRateLimiter: workerDeploymentReadRateLimiter,
 	}
-
-	handler.workerDeploymentReadRateLimiter = quotas.NewNamespaceRequestRateLimiter(
-		func(req quotas.Request) quotas.RequestRateLimiter {
-			return quotas.NewRequestRateLimiterAdapter(
-				quotas.NewDynamicRateLimiter(
-					configs.NewNamespaceRateBurst(
-						req.Caller,
-						func(ns string) float64 {
-							return float64(config.WorkerDeploymentReadRPS(ns))
-						},
-						config.WorkerDeploymentReadBurstRatio,
-					),
-					time.Minute,
-				),
-			)
-		},
-	)
 
 	return handler
 }
@@ -5730,7 +5712,7 @@ func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Contex
 	callerInfo := headers.GetCallerInfo(ctx)
 	req := quotas.NewRequest(
 		apiName,
-		workerDeploymentReadRateLimitDefaultToken,
+		1,
 		namespaceName,
 		callerInfo.CallerType,
 		-1,
