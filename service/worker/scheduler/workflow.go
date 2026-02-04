@@ -256,6 +256,7 @@ func (s *scheduler) run() error {
 		s.State.LastProcessedTime = timestamppb.New(s.now())
 		s.State.ConflictToken = InitialConflictToken
 		s.Info.CreateTime = s.State.LastProcessedTime
+		s.Info.UpdateTime = s.Info.CreateTime
 
 		s.recordActionPayloadMetrics()
 	}
