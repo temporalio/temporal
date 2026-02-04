@@ -665,7 +665,7 @@ func (d *ClientImpl) SetCurrentVersion(
 	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
-	if allowNoPollers {
+	if allowNoPollers && versionObj.GetBuildId() != "" {
 		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
 		outcome, err = d.updateWithStartWorkerDeployment(
 			ctx,
@@ -685,6 +685,7 @@ func (d *ClientImpl) SetCurrentVersion(
 		}
 	} else {
 		// we *don't* want to start the Worker Deployment workflow; it should be started by a poller
+		// (or we're unsetting the current version, in which case the deployment workflow must already exist)
 		outcome, err = updateWorkflow(
 			ctx,
 			d.historyClient,
@@ -777,7 +778,7 @@ func (d *ClientImpl) SetRampingVersion(
 	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
-	if allowNoPollers {
+	if allowNoPollers && versionObj.GetBuildId() != "" {
 		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
 		outcome, err = d.updateWithStartWorkerDeployment(
 			ctx,
@@ -796,6 +797,8 @@ func (d *ClientImpl) SetRampingVersion(
 			return nil, err
 		}
 	} else {
+		// we *don't* want to start the Worker Deployment workflow; it should be started by a poller
+		// (or we're unsetting the ramping version, in which case the deployment workflow must already exist)
 		outcome, err = updateWorkflow(
 			ctx,
 			d.historyClient,
