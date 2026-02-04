@@ -1,8 +1,10 @@
 package testcore
 
 import (
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -12,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
@@ -33,18 +36,21 @@ type testEnv struct {
 
 	Logger log.Logger
 
-	cluster    *TestCluster
-	nsName     namespace.Name
-	taskPoller *taskpoller.TaskPoller
-	t          *testing.T
-	tv         *testvars.TestVars
+	cluster       *TestCluster
+	nsName        namespace.Name
+	taskPoller    *taskpoller.TaskPoller
+	t             *testing.T
+	tv            *testvars.TestVars
+	eventTracker  *testtelemetry.EventTracker
+	waitForCalled bool
 }
 
-type TestOption func(*testOptions)
+type TestOption func(*envOptions)
 
-type testOptions struct {
+type envOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	eventTracker          bool
 }
 
 type dynamicConfigOverride struct {
@@ -55,7 +61,7 @@ type dynamicConfigOverride struct {
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
 func WithDedicatedCluster() TestOption {
-	return func(o *testOptions) {
+	return func(o *envOptions) {
 		o.dedicatedCluster = true
 	}
 }
@@ -64,7 +70,7 @@ func WithDedicatedCluster() TestOption {
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // For all others that require a dedicated cluster, this implies `WithDedicatedCluster`.
 func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOption {
-	return func(o *testOptions) {
+	return func(o *envOptions) {
 		if err := setting.Validate(value); err != nil {
 			panic(fmt.Sprintf("invalid value for setting %s: %v", setting.Key(), err))
 		}
@@ -75,26 +81,26 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
+// WithEventTracker enables OTEL event tracking for the test environment.
+// This allows using WaitFor() to wait for specific OTEL events.
+// If this option is used but WaitFor() is never called, the test will fail.
+func WithEventTracker() TestOption {
+	return func(o *envOptions) {
+		o.eventTracker = true
+	}
+}
+
 // NewEnv creates a new test environment with access to a Temporal cluster.
 // The test is automatically marked as parallel.
 func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	t.Parallel()
 
-	var options testOptions
+	var options envOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
 
-	// For dedicated clusters, pass all dynamic config settings at cluster creation.
-	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-		for _, override := range options.dynamicConfigSettings {
-			startupConfig[override.setting.Key()] = override.value
-		}
-	}
-
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -126,6 +132,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
+	}
+
+	// Create EventTracker if requested.
+	if options.eventTracker {
+		env.eventTracker = testtelemetry.NewEventTracker(t, base.memoryExporter)
+		t.Cleanup(func() {
+			if !env.waitForCalled {
+				t.Fatalf("WithEventTracker() was used but WaitFor() was never called; remove unused option")
+			}
+		})
 	}
 
 	return env
@@ -184,5 +200,29 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+// WaitFor waits until a specific telemetry event is observed or the timeout expires.
+// Requires WithEventTracker() option to be set when creating the test environment.
+//
+// NOTE: Subsequent WaitFor invocations will only see events that occurred after the
+// last matched event to avoid re-matching. Not concurrency safe.
+func (e *testEnv) WaitFor(
+	matcher testtelemetry.EventMatcher,
+	timeout time.Duration,
+) {
+	e.t.Helper()
+
+	if e.eventTracker == nil {
+		e.t.Fatalf("WaitFor requires WithEventTracker() option")
+	}
+	e.waitForCalled = true
+
+	ctx, cancel := context.WithTimeout(e.t.Context(), timeout)
+	defer cancel()
+
+	if err := e.eventTracker.WaitFor(ctx, matcher); err != nil {
+		e.t.Fatalf("WaitFor failed: %v", err)
 	}
 }

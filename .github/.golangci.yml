@@ -33,16 +33,16 @@ linters:
     forbidigo:
       forbid:
         - pattern: time.Sleep
-          msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
+          msg: "Please use require.Eventually or assert.Eventually or TestEnv's WaitFor instead unless you've no other option"
         - pattern: panic
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
-        - pattern: '^Unix$'
+        - pattern: "^Unix$"
           msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
-        - pattern: '^UnixMilli$'
+        - pattern: "^UnixMilli$"
           msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
-        - pattern: '^UnixNano$'
+        - pattern: "^UnixNano$"
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
     depguard:
       rules:
