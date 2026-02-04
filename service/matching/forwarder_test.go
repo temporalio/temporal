@@ -282,6 +282,34 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollWorkflowTaskQueueRequest
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding workflow poll")
+}
+
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
@@ -310,6 +338,34 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal(t.partition.Kind(), request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollActivityTaskQueueResponse())
 	t.Nil(task.pollWorkflowTaskQueueResponse())
+}
+
+func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollActivityTaskQueueRequest
+	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...interface{}) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding activity poll")
 }
 
 // TODO(pri): old matcher cleanup
