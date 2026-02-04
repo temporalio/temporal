@@ -1957,8 +1957,8 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_AllowNoPollers
 		Namespace:      s.Namespace().String(),
 		DeploymentName: currentVars.DeploymentSeries(),
 	})
-	s.Nil(err)
-	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+	s.NoError(err)
+	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 }
 
 // TestSetRampingVersion_Unset_AllowNoPollers tests unsetting ramping version with allowNoPollers=true
@@ -1981,8 +1981,8 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Unset_AllowNoPollers() {
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
-	s.Equal("", resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+	s.NoError(err)
+	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 }
 
 // Should see that the current version of the task queue becomes unversioned, and the unversioned ramping version of the task queue is removed
