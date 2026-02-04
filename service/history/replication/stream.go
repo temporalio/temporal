@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -98,6 +99,7 @@ func livenessMonitor(
 	shutdownChan channel.ShutdownOnce,
 	stopStream func(),
 	logger log.Logger,
+	timeSource clock.TimeSource,
 ) {
 	select {
 	case <-shutdownChan.Channel():
@@ -106,22 +108,16 @@ func livenessMonitor(
 		// Wait for the first message into stream before monitoring.
 	}
 
-	heartbeatTimeout := time.NewTimer(timeoutFn() * time.Duration(timeoutMultiplier()))
+	heartbeatTimeoutC, heartbeatTimeout := timeSource.NewTimer(timeoutFn() * time.Duration(timeoutMultiplier()))
 	defer heartbeatTimeout.Stop()
 
 	for !shutdownChan.IsShutdown() {
 		select {
 		case <-shutdownChan.Channel():
 			return
-		case <-heartbeatTimeout.C:
+		case <-heartbeatTimeoutC:
 			select {
 			case <-signalChan:
-				if !heartbeatTimeout.Stop() {
-					select {
-					case <-heartbeatTimeout.C:
-					default:
-					}
-				}
 				heartbeatTimeout.Reset(timeoutFn() * time.Duration(timeoutMultiplier()))
 				continue
 			default:

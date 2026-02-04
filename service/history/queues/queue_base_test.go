@@ -227,7 +227,7 @@ func (s *queueBaseSuite) TestStartStop() {
 	base.processNewRange()
 
 	<-doneCh
-	<-base.checkpointTimer.C
+	<-base.checkpointTimerCh
 
 	s.mockRescheduler.EXPECT().Stop().Times(1)
 	base.Stop()
@@ -303,7 +303,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_PerformRangeCompletion(
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
-	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+	base.checkpointTimerCh, base.checkpointTimer = base.timeSource.NewTimer(s.options.CheckpointInterval())
 
 	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
@@ -372,7 +372,7 @@ func (s *queueBaseSuite) TestCheckPoint_WithPendingTasks_SkipRangeCompletion() {
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
-	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+	base.checkpointTimerCh, base.checkpointTimer = base.timeSource.NewTimer(s.options.CheckpointInterval())
 
 	s.True(scopeMinKey.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
@@ -415,7 +415,7 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
-	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+	base.checkpointTimerCh, base.checkpointTimer = base.timeSource.NewTimer(s.options.CheckpointInterval())
 
 	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
@@ -490,7 +490,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
-	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+	base.checkpointTimerCh, base.checkpointTimer = base.timeSource.NewTimer(s.options.CheckpointInterval())
 	s.True(scopes[0].Range.InclusiveMin.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 
 	// set to a smaller value so that delete will be triggered
@@ -539,7 +539,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
-	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+	base.checkpointTimerCh, base.checkpointTimer = base.timeSource.NewTimer(s.options.CheckpointInterval())
 
 	// set to a smaller value so that delete will be triggered
 	base.exclusiveDeletionHighWatermark = tasks.MinimumKey

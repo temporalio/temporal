@@ -181,7 +181,7 @@ func (r *reschedulerImpl) Len() int {
 func (r *reschedulerImpl) rescheduleLoop() {
 	defer r.shutdownWG.Done()
 
-	cleanupTimer := time.NewTimer(backoff.Jitter(
+	cleanupTimerCh, cleanupTimer := r.timeSource.NewTimer(backoff.Jitter(
 		reschedulerPQCleanupDuration,
 		reschedulerPQCleanupJitterCoefficient,
 	))
@@ -194,7 +194,7 @@ func (r *reschedulerImpl) rescheduleLoop() {
 			return
 		case <-r.timerGate.FireCh():
 			r.reschedule()
-		case <-cleanupTimer.C:
+		case <-cleanupTimerCh:
 			r.cleanupPQ()
 			cleanupTimer.Reset(backoff.Jitter(
 				reschedulerPQCleanupDuration,

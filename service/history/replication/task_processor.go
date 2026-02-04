@@ -174,13 +174,13 @@ func (p *taskProcessorImpl) Stop() {
 }
 
 func (p *taskProcessorImpl) eventLoop() {
-	syncShardTimer := time.NewTimer(backoff.Jitter(
+	syncShardTimerC, syncShardTimer := p.shard.GetTimeSource().NewTimer(backoff.Jitter(
 		p.config.ShardSyncMinInterval(),
 		p.config.ShardSyncTimerJitterCoefficient(),
 	))
 	defer syncShardTimer.Stop()
 
-	replicationTimer := time.NewTimer(0)
+	replicationTimerC, replicationTimer := p.shard.GetTimeSource().NewTimer(0)
 	defer replicationTimer.Stop()
 
 	var syncShardTask *replicationspb.SyncShardStatus
@@ -188,7 +188,7 @@ func (p *taskProcessorImpl) eventLoop() {
 		select {
 		case syncShardTask = <-p.syncShardChan:
 
-		case <-syncShardTimer.C:
+		case <-syncShardTimerC:
 			if err := p.handleSyncShardStatus(syncShardTask); err != nil {
 				p.logger.Error("unable to sync shard status", tag.Error(err))
 				metrics.SyncShardFromRemoteFailure.With(p.metricsHandler).Record(
@@ -203,7 +203,7 @@ func (p *taskProcessorImpl) eventLoop() {
 		case <-p.shutdownChan:
 			return
 
-		case <-replicationTimer.C:
+		case <-replicationTimerC:
 			if err := p.pollProcessReplicationTasks(); err != nil {
 				p.logger.Error("unable to process replication tasks", tag.Error(err))
 			}

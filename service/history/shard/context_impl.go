@@ -1213,7 +1213,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 }
 
 func (s *ContextImpl) monitorQueueMetrics() {
-	timer := time.NewTimer(queueMetricUpdateInterval)
+	timerC, timer := s.GetTimeSource().NewTimer(queueMetricUpdateInterval)
 	defer timer.Stop()
 
 	done := s.lifecycleCtx.Done()
@@ -1221,7 +1221,7 @@ func (s *ContextImpl) monitorQueueMetrics() {
 		select {
 		case <-done:
 			return
-		case <-timer.C:
+		case <-timerC:
 			s.emitShardInfoMetricsLogs()
 			// We reset the timer (rather than using a ticker) so that delays in grabbing the shard lock
 			// don't cause us to pile up

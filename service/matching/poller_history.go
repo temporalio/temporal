@@ -5,6 +5,7 @@ import (
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
@@ -27,10 +28,11 @@ type pollerHistory struct {
 	history cache.Cache
 }
 
-func newPollerHistory(pollerHistoryTTL time.Duration) *pollerHistory {
+func newPollerHistory(pollerHistoryTTL time.Duration, timeSource clock.TimeSource) *pollerHistory {
 	opts := &cache.Options{
-		TTL: pollerHistoryTTL,
-		Pin: false,
+		TTL:        pollerHistoryTTL,
+		Pin:        false,
+		TimeSource: timeSource,
 	}
 
 	return &pollerHistory{

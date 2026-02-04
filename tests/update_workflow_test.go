@@ -1391,7 +1391,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithFakeTime())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -1457,9 +1457,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRespondSticky, testcore.WithoutRetries)
 		s.NoError(err)
 
-		s.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
-		time.Sleep(10*time.Second + 100*time.Millisecond) //nolint:forbidigo
-		s.Logger.Info("Sleep 10+ seconds is done.")
+		// Wait for sticky poller to become unavailable (10s window).
+		s.AdvanceTime(10 * time.Second)
 
 		// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
 		// and resend it to normal.
@@ -2744,7 +2743,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_ScheduleToStartTimeoutOnNormalTaskQueue", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithFakeTime())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2813,11 +2812,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		// which will time out in 5 seconds and create new normal WT.
 		updateResultCh := sendUpdateNoError(s, s.Tv())
 
-		// TODO: it would be nice to shutdown matching before sending an update to emulate case which is actually being tested here.
-		//  But test infrastructure doesn't support it. 5 seconds sleep will cause same observable effect.
-		s.Logger.Info("Sleep 5+ seconds to make sure tasks.SpeculativeWorkflowTaskScheduleToStartTimeout time has passed.")
-		time.Sleep(5*time.Second + 100*time.Millisecond) //nolint:forbidigo
-		s.Logger.Info("Sleep 5+ seconds is done.")
+		// Wait for the speculative workflow task schedule-to-start timeout (5s).
+		s.AdvanceTime(5 * time.Second)
 
 		// Process update in workflow.
 		res, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -3876,7 +3872,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.Name, func(t *testing.T) {
 				// Uses closeShard conditionally which requires a dedicated cluster.
-				var opts []testcore.TestOption
+				var opts []testcore.EnvOption
 				if tc.CloseShard {
 					opts = append(opts, testcore.WithDedicatedCluster())
 				}

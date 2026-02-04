@@ -77,7 +77,7 @@ type (
 		nextReadSlice *list.Element
 		notifyCh      chan struct{}
 
-		throttleTimer *time.Timer
+		throttleTimer clock.Timer
 		retrier       backoff.Retrier
 
 		rateLimitContext       context.Context
@@ -392,7 +392,7 @@ func (r *ReaderImpl) pauseLocked(duration time.Duration) {
 		r.throttleTimer.Stop()
 	}
 
-	r.throttleTimer = time.AfterFunc(duration, func() {
+	r.throttleTimer = r.timeSource.AfterFunc(duration, func() {
 		r.Lock()
 		defer r.Unlock()
 
