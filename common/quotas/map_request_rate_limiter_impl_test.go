@@ -73,13 +73,13 @@ func (s *mapRequestRateLimiterSuite) TestCleanup() {
 	s.Equal(2, createCount)
 
 	// Verify both entries exist
-	s.Equal(2, len(rateLimiter.rateLimiters))
+	s.Len(rateLimiter.rateLimiters, 2)
 
 	// Trigger cleanup after TTL expires for both
 	rateLimiter.cleanup(now.Add(200 * time.Millisecond))
 
 	// Both should be evicted
-	s.Equal(0, len(rateLimiter.rateLimiters))
+	s.Empty(rateLimiter.rateLimiters)
 }
 
 func (s *mapRequestRateLimiterSuite) TestAccessRefreshesTTL() {
@@ -111,7 +111,7 @@ func (s *mapRequestRateLimiterSuite) TestAccessRefreshesTTL() {
 	// but namespace1 should survive (last accessed at now+50ms, only 100ms ago)
 	rateLimiter.cleanup(now.Add(150 * time.Millisecond))
 
-	s.Equal(1, len(rateLimiter.rateLimiters))
+	s.Len(rateLimiter.rateLimiters, 1)
 	_, exists := rateLimiter.rateLimiters["namespace1"]
 	s.True(exists)
 	_, exists = rateLimiter.rateLimiters["namespace2"]
