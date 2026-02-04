@@ -78,6 +78,9 @@ func GetTransferTaskEventID(
 		eventID = common.FirstEventID
 	case *ChasmTask:
 		return getChasmTaskEventID()
+	case *ActivityCancelControlTask:
+		// Control tasks don't correspond to a specific event
+		eventID = common.FirstEventID
 	case *FakeTask:
 		// no-op
 	default:
