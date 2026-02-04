@@ -2,11 +2,9 @@ package matching
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -43,7 +41,6 @@ type (
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
 		workersRegistry   workers.Registry
-		ready             atomic.Bool
 	}
 
 	HandlerParams struct {
@@ -124,19 +121,11 @@ func NewHandler(
 // Start starts the handler
 func (h *Handler) Start() {
 	h.engine.Start()
-	h.ready.Store(true)
 }
 
 // Stop stops the handler
 func (h *Handler) Stop() {
 	h.engine.Stop()
-	h.ready.Store(false)
-}
-func (h *Handler) checkReady() error {
-	if !h.ready.Load() {
-		return serviceerror.NewUnavailable("matching handler is not ready")
-	}
-	return nil
 }
 
 func (h *Handler) opMetricsHandler(
@@ -161,9 +150,6 @@ func (h *Handler) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	opMetrics := h.opMetricsHandler(
@@ -189,9 +175,6 @@ func (h *Handler) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	opMetrics := h.opMetricsHandler(
@@ -217,9 +200,6 @@ func (h *Handler) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -248,9 +228,6 @@ func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -279,9 +256,6 @@ func (h *Handler) QueryWorkflow(
 	ctx context.Context,
 	request *matchingservice.QueryWorkflowRequest,
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -504,17 +478,11 @@ func (h *Handler) CheckTaskQueueVersionMembership(
 }
 
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.DispatchNexusTask(ctx, request)
 }
 
 func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-	if err := h.checkReady(); err != nil {
-		return nil, err
-	}
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
