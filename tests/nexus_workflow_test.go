@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -2507,14 +2508,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(handlerErr.Cause, &appErr)
 	s.Equal(appErr.Message(), "fail me")
-	// NOTE: We broke compatibility here but the likelyhood of anyone using FailureErrors directly is practically zero.
-	// TODO(bergundy): test when the new SDK supports deserializing Nexus SDK failures
-	// var failure nexus.Failure
-	// s.NoError(appErr.Details(&failure))
-	// s.Equal(map[string]string{"key": "val"}, failure.Metadata)
-	// var details string
-	// s.NoError(json.Unmarshal(failure.Details, &details))
-	// s.Equal("details", details)
+	var failure nexus.Failure
+	s.NoError(appErr.Details(&failure))
+	s.Equal(map[string]string{"key": "val"}, failure.Metadata)
+	var details string
+	s.NoError(json.Unmarshal(failure.Details, &details))
+	s.Equal("details", details)
 
 	snap := capture.Snapshot()
 	s.Len(snap["nexus_outbound_requests"], 1)

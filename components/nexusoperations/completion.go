@@ -51,6 +51,9 @@ func handleOperationError(
 		return err
 	}
 	var originalCause *failurepb.Failure
+	// Special marker for Temporal->Temporal calls to indicate that the original failure should be unwrapped.
+	// Temporal uses a wrapper operation error with no additional information to transmit the OperationError over the network.
+	// The meaningful information is in the operation error's cause.
 	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
 
 	if unwrapError && opErr.OriginalFailure.Cause != nil {

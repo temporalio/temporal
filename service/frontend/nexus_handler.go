@@ -46,7 +46,9 @@ const (
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
 type nexusContext struct {
-	callerFailureSupport                 bool // Whether to use the new Temporal failure responses path.
+	// Whether to use the new Temporal failure responses path.
+	// Set from the incoming nexus request's "temporal-nexus-failure-support" header.
+	callerFailureSupport                 bool
 	requestStartTime                     time.Time
 	apiName                              string
 	namespaceName                        string
@@ -448,6 +450,10 @@ func (h *nexusHandler) StartOperation(
 	// Convert to standard Nexus SDK response.
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
+		// Set the failure source to "worker" if we've reached this case.
+		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
+		// the worker.
+		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
 		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
 		if err != nil {
@@ -459,8 +465,6 @@ func (h *nexusHandler) StartOperation(
 			oc.logger.Error("error converting Nexus failure to Nexus HandlerError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
-		// Failure conversions are our fault so only set this after converting the Temporal failure to a HandlerError.
-		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		return nil, he
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
@@ -509,6 +513,9 @@ func (h *nexusHandler) StartOperation(
 			return nil, err
 
 		case *nexuspb.StartOperationResponse_Failure:
+			// Set the failure source to "worker" if we've reached this case.
+			// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
+			// the worker.
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
 			oc.setFailureSource(commonnexus.FailureSourceWorker)
 			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
@@ -535,6 +542,9 @@ func (h *nexusHandler) StartOperation(
 				oc.logger.Error("error converting OperationError to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 			}
+			// Mark that the original failure is an OperationError wrapper to be unwrapped.
+			// Newer server callers will unwrap the cause automatically if this metadata key is set.
+			// This is required to support calling non Temporal based implementations where OpeationErrors carry additional information.
 			nf.Metadata["unwrap-error"] = "true"
 			opErr.OriginalFailure = &nf
 
@@ -658,6 +668,9 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	switch t := response.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
+		// Set the failure source to "worker" if we've reached this case.
+		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
+		// the worker.
 		oc.setFailureSource(commonnexus.FailureSourceWorker)
 		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
 		if err != nil {
@@ -669,7 +682,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 			oc.logger.Error("error converting Nexus failure to Nexus HandlerError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
-		// Failure conversions are our fault so only set this after converting the Temporal failure to a HandlerError.
 		return he
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError:

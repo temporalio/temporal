@@ -2175,6 +2175,8 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			if err != nil {
 				return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
 			}
+			// Special header to signal that this error should be unwrapped by the completion handler as old servers will send
+			// back empty wrappers for underlying causes.
 			origFailure.Metadata["unwrap-error"] = "true"
 			opErr.OriginalFailure = &origFailure
 		}

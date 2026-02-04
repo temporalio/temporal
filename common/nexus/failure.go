@@ -93,8 +93,9 @@ type serializedHandlerError struct {
 // TemporalFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
 // the proto fullname of the temporal API Failure message or the standard Nexus SDK failure types.
 // Returns an error if the failure cannot be converted.
-// Mutates the failure temporarily, unsetting the Message field to avoid duplicating the information in the serialized
-// failure. Mutating was chosen over cloning for performance reasons since this function may be called frequently.
+// Mutates the failure temporarily, unsetting the Message and StackTrace fields to avoid duplicating the information in
+// the serialized failure. Mutating was chosen over cloning for performance reasons since this function may be called
+// frequently.
 func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
 	var causep *nexus.Failure
 	if failure.GetCause() != nil {
@@ -115,7 +116,7 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 			if err != nil {
 				return nexus.Failure{}, fmt.Errorf("failed to deserialize HandlerError attributes: %w", err)
 			}
-			encodedAttributes = base64.StdEncoding.EncodeToString(b)
+			encodedAttributes = base64.RawURLEncoding.EncodeToString(b)
 		}
 		var retryableOverride *bool
 		// nolint:exhaustive,revive // There are only two valid values other than unspecified.
@@ -195,16 +196,21 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 			apiFailure.Message = f.Message
 			apiFailure.StackTrace = f.StackTrace
 		case "nexus.OperationError":
+			// Special case for OperationError that adapts from Nexus semantics to Temporal semantics.
+			// Note that Temporal -> Temporal doesn't go through this code path, operation errors are always used as empty
+			// wrappers for an underlying causes.
 			var operationError *nexus.OperationError
 			err := json.Unmarshal(f.Details, &operationError)
 			if err != nil {
 				return nil, fmt.Errorf("failed to deserialize OperationError: %w", err)
 			}
 			if operationError.State == nexus.OperationStateCanceled {
+				// Canceled operation errors are represented as CanceledFailure in Temporal.
 				apiFailure.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 				}
 			} else {
+				// Failed operation errors are represented as non-retryable ApplicationFailure in Temporal.
 				apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
 					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 						NonRetryable: true,
@@ -233,7 +239,7 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 				},
 			}
 			if len(se.EncodedAttributes) > 0 {
-				decoded, err := base64.StdEncoding.DecodeString(se.EncodedAttributes)
+				decoded, err := base64.RawURLEncoding.DecodeString(se.EncodedAttributes)
 				if err != nil {
 					return nil, fmt.Errorf("failed to decode base64 HandlerError attributes: %w", err)
 				}
@@ -243,26 +249,22 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 				}
 			}
 		default:
-			payloads, err := nexusFailureMetadataToPayloads(f)
+			// We don't recognize this type, convert to a generic ApplicationFailure and preserve the original Nexus failure
+			// as serialized details.
+			applicationFailureInfo, err := nexusFailureMetadataToApplicationFailureInfo(f)
 			if err != nil {
-				return nil, fmt.Errorf("failed to serialize failure: %w", err)
+				return nil, fmt.Errorf("failed to serialize Nexus failure: %w", err)
 			}
-			apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-					Details: payloads,
-				},
-			}
+			apiFailure.FailureInfo = applicationFailureInfo
 		}
 	} else if len(f.Details) > 0 {
-		payloads, err := nexusFailureMetadataToPayloads(f)
+		// We don't recognize this type, convert to a generic ApplicationFailure and preserve the original Nexus failure as
+		// serialized details.
+		applicationFailureInfo, err := nexusFailureMetadataToApplicationFailureInfo(f)
 		if err != nil {
-			return nil, fmt.Errorf("failed to serialize failure: %w", err)
+			return nil, fmt.Errorf("failed to serialize Nexus failure: %w", err)
 		}
-		apiFailure.FailureInfo = &failurepb.Failure_ApplicationFailureInfo{
-			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-				Details: payloads,
-			},
-		}
+		apiFailure.FailureInfo = applicationFailureInfo
 	}
 
 	if f.Cause != nil {
@@ -275,27 +277,32 @@ func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) 
 	return apiFailure, nil
 }
 
-func nexusFailureMetadataToPayloads(failure nexus.Failure) (*commonpb.Payloads, error) {
-	if len(failure.Metadata) == 0 && len(failure.Details) == 0 {
-		return nil, nil
-	}
-	// Delete before serializing.
-	failure.Message = ""
-	failure.StackTrace = ""
-	data, err := json.Marshal(failure)
-	if err != nil {
-		return nil, err
-	}
-	return &commonpb.Payloads{
-		Payloads: []*commonpb.Payload{
-			{
-				Metadata: map[string][]byte{
-					"encoding": []byte("json/plain"),
+func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failurepb.Failure_ApplicationFailureInfo, error) {
+	var payloads *commonpb.Payloads
+	if len(failure.Metadata) > 0 || len(failure.Details) > 0 {
+		// Delete before serializing (note the failure here is passed by value).
+		failure.Message = ""
+		failure.StackTrace = ""
+		data, err := json.Marshal(failure)
+		if err != nil {
+			return nil, err
+		}
+		payloads = &commonpb.Payloads{
+			Payloads: []*commonpb.Payload{
+				{
+					Metadata: map[string][]byte{
+						"encoding": []byte("json/plain"),
+					},
+					Data: data,
 				},
-				Data: data,
 			},
+		}
+	}
+	return &failurepb.Failure_ApplicationFailureInfo{
+		ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Details: payloads,
 		},
-	}, err
+	}, nil
 }
 
 // ConvertGRPCError converts either a serviceerror or a gRPC status error into a Nexus HandlerError if possible.

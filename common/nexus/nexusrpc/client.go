@@ -219,6 +219,7 @@ func (c *HTTPClient) StartOperation(
 	}
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
+	// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
 	request.Header.Set("temporal-nexus-failure-support", "true")
 
 	response, err := c.options.HTTPCaller(request)
@@ -300,13 +301,16 @@ func (c *HTTPClient) StartOperation(
 			}
 			opErr := &nexus.OperationError{
 				State:   state,
-				Message: "operation failed",
+				Message: "nexus operation completed unsuccessfully",
 				Cause:   wireErr,
 			}
+			// Ensure we the original failure is available, the calling code expects it.
 			originalFailure, err := c.options.FailureConverter.ErrorToFailure(opErr)
 			if err != nil {
 				return nil, err
 			}
+			// Special header to signal that this error should be unwrapped by the completion handler as old servers will send
+			// back empty wrappers for underlying causes.
 			originalFailure.Metadata["unwrap-error"] = "true"
 			opErr.OriginalFailure = &originalFailure
 			wireErr = opErr
@@ -386,6 +390,8 @@ func (c *HTTPClient) defaultErrorFromResponse(response *http.Response, body []by
 		RetryBehavior: retryBehaviorFromHeader(response.Header),
 		Cause:         cause,
 	}
+
+	// Ensure we the original failure is available, the calling code expects it.
 	originalFailure, err := c.options.FailureConverter.ErrorToFailure(handlerErr)
 	if err != nil {
 		return newUnexpectedResponseError("failed to construct handler error from response: "+err.Error(), response, body)

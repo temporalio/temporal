@@ -929,7 +929,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			nf = *handlerErr.OriginalFailure
 		} else {
 			var err error
-			// Ensure the error message is set to ensure the failure converter does not unwrap the cause.
+			// Ensure the error message is set to prevent the Nexus failure converter from unwrapping the cause.
 			if handlerErr.Message == "" {
 				handlerErr.Message = "handler error"
 			}
