@@ -5,10 +5,12 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -43,6 +45,7 @@ type testEnv struct {
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
+	timeSource *clock.EventTimeSource
 }
 
 type TestOption func(*testOptions)
@@ -50,6 +53,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	fakeTimeSource        *clock.EventTimeSource // non-nil when using fake time
 }
 
 type dynamicConfigOverride struct {
@@ -93,6 +97,19 @@ func MustRunSequential(t *testing.T, reason string) {
 	sequentialSuites.Store(t.Name(), true)
 }
 
+// WithFakeTime configures the test to use an EventTimeSource for controlling time.
+// This enables tests to advance time without waiting for real time to pass.
+// Implies `WithDedicatedCluster` since time source is global to the cluster.
+func WithFakeTime() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.fakeTimeSource = clock.NewEventTimeSource()
+		// Must use async timers because timer callbacks may create new timers,
+		// which would deadlock with synchronous timers.
+		o.fakeTimeSource.UseAsyncTimers(true)
+	}
+}
+
 // NewEnv creates a new test environment with access to a Temporal cluster.
 // Tests are run in parallel - use MustRunSequential to run suite sequentially.
 func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
@@ -110,17 +127,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		opt(&options)
 	}
 
-	// For dedicated clusters, pass all dynamic config settings at cluster creation.
-	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-		for _, override := range options.dynamicConfigSettings {
-			startupConfig[override.setting.Key()] = override.value
-		}
+	// Initialize fake time source with current wall clock time if using fake time
+	if options.fakeTimeSource != nil {
+		options.fakeTimeSource.Update(time.Now().UTC())
 	}
 
-	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	base := testClusterPool.get(t, options)
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
@@ -145,6 +157,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
+		timeSource:         options.fakeTimeSource, // Only set if using fake time
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
@@ -172,6 +185,17 @@ func (e *testEnv) T() *testing.T {
 
 func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// AdvanceTime advances the fake time source by the given duration.
+// Only works when the test was created with WithFakeTime().
+// After advancing time, goroutines need a small amount of real time to process.
+func (e *testEnv) AdvanceTime(d time.Duration) {
+	if e.timeSource == nil {
+		e.t.Fatal("AdvanceTime called but test was not created with WithFakeTime()")
+	}
+	e.t.Logf("AdvanceTime: advancing time by %v", d)
+	e.timeSource.Advance(d)
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.

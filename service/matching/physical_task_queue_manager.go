@@ -161,7 +161,7 @@ func newPhysicalTaskQueueManager(
 	}
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
-	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
+	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL(), e.timeSource)
 
 	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
@@ -818,6 +818,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
+}
+
+func (c *physicalTaskQueueManagerImpl) TimeSource() clock.TimeSource {
+	return c.partitionMgr.engine.timeSource
 }
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
