@@ -44,6 +44,15 @@ var (
 		dynamicconfig.ExecutionsScannerEnabled.Key():                            false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():                             false,
 
+		// Reduce scheduler worker counts for tests (don't need production-level parallelism).
+		dynamicconfig.TimerProcessorSchedulerWorkerCount.Key():                  128,
+		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():               128,
+		dynamicconfig.VisibilityProcessorSchedulerWorkerCount.Key():             128,
+		dynamicconfig.ArchivalProcessorSchedulerWorkerCount.Key():               128,
+		dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Key():            128,
+		dynamicconfig.ReplicationLowPriorityProcessorSchedulerWorkerCount.Key(): 32,
+		dynamicconfig.MemoryTimerProcessorSchedulerWorkerCount.Key():            16,
+
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 
