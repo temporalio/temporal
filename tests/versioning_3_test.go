@@ -5452,7 +5452,6 @@ func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.Deployment
 	}
 }
 
-// Context implementations for testcore.Env interface compatibility
 func (s *Versioning3Suite) Context() context.Context {
 	return context.Background()
 }

@@ -1153,7 +1153,6 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }
 
-// Context implementations for testcore.Env interface compatibility
 func (s *ResetWorkflowTestSuite) Context() context.Context {
 	return context.Background()
 }

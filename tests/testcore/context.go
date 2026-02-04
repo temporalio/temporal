@@ -27,6 +27,6 @@ func NewContext(parent ...context.Context) context.Context {
 	}
 
 	// Create standalone RPC context
-	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(90 * time.Second * debug.TimeoutMultiplier)
+	ctx, _ := rpc.NewContextWithTimeoutAndVersionHeaders(defaultTestTimeout)
 	return ctx
 }

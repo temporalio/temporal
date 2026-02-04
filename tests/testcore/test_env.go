@@ -24,8 +24,9 @@ import (
 )
 
 var (
-	_                Env = (*testEnv)(nil)
-	sequentialSuites sync.Map
+	_                  Env = (*testEnv)(nil)
+	sequentialSuites   sync.Map
+	defaultTestTimeout = 90 * time.Second * debug.TimeoutMultiplier
 )
 
 type Env interface {
@@ -50,7 +51,7 @@ type testEnv struct {
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
-	ctx        context.Context // Test-level timeout context
+	ctx        context.Context
 }
 
 type TestOption func(*testOptions)
@@ -294,8 +295,7 @@ func calculateTimeout(t *testing.T, customTimeout time.Duration) time.Duration {
 		return timeout
 	}
 
-	// Use default timeout of 90 seconds
-	return 90 * time.Second * debug.TimeoutMultiplier
+	return defaultTestTimeout
 }
 
 // setupTestTimeoutWithContext creates a context that will be canceled on timeout,
