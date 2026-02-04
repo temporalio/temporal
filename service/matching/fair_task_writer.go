@@ -184,8 +184,8 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		// maybe persist fairness key counts if it's time
 		select {
 		case <-persistFairnessKeys:
-			for subqueue, counter := range w.counters {
-				w.db.persistTopKFairnessKeys(subqueue, counter.TopK())
+			for subqueue, cntr := range w.counters {
+				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
 			}
 		default:
 		}
