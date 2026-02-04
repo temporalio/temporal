@@ -15,6 +15,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -101,6 +102,20 @@ func Invoke(
 					resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(ctx, mutableState, updateRegistry, workflowTask, req.PollRequest.GetIdentity(), false)
 					if err != nil {
 						return nil, err
+					}
+					// Log when transient/speculative events are included in poll response
+					if resp.TransientWorkflowTask != nil && len(resp.TransientWorkflowTask.GetHistorySuffix()) > 0 {
+						shardContext.GetLogger().Info(
+							"Including transient/speculative workflow task events in poll response",
+							tag.WorkflowNamespaceID(req.NamespaceId),
+							tag.WorkflowID(req.WorkflowExecution.WorkflowId),
+							tag.WorkflowRunID(req.WorkflowExecution.RunId),
+							tag.WorkflowScheduledEventID(scheduledEventID),
+							tag.WorkflowStartedEventID(workflowTask.StartedEventID),
+							tag.Attempt(workflowTask.Attempt),
+							tag.WorkflowTaskType(workflowTask.Type.String()),
+							tag.Counter(len(resp.TransientWorkflowTask.GetHistorySuffix())),
+						)
 					}
 					updateAction.Noop = true
 					return updateAction, nil
@@ -226,6 +241,21 @@ func Invoke(
 			)
 			if err != nil {
 				return nil, err
+			}
+
+			// Log when transient/speculative events are included in poll response
+			if resp.TransientWorkflowTask != nil && len(resp.TransientWorkflowTask.GetHistorySuffix()) > 0 {
+				shardContext.GetLogger().Info(
+					"Including transient/speculative workflow task events in poll response",
+					tag.WorkflowNamespaceID(req.NamespaceId),
+					tag.WorkflowID(req.WorkflowExecution.WorkflowId),
+					tag.WorkflowRunID(req.WorkflowExecution.RunId),
+					tag.WorkflowScheduledEventID(scheduledEventID),
+					tag.WorkflowStartedEventID(workflowTask.StartedEventID),
+					tag.Attempt(workflowTask.Attempt),
+					tag.WorkflowTaskType(workflowTask.Type.String()),
+					tag.Counter(len(resp.TransientWorkflowTask.GetHistorySuffix())),
+				)
 			}
 
 			return updateAction, nil
