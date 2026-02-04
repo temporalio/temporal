@@ -14,43 +14,64 @@ const (
 	FlagRunID        = "run-id"
 	FlagSlackWebhook = "slack-webhook"
 	FlagDryRun       = "dry-run"
+	FlagBranch       = "branch"
 )
 
 // NewCliApp instantiates a new instance of the CLI application
 func NewCliApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "ci-notify"
-	app.Usage = "Send Slack notifications for CI failures on main branch"
+	app.Usage = "CI notification and reporting tool"
 	app.Version = headers.ServerVersion
 
-	app.Flags = []cli.Flag{
-		&cli.StringFlag{
-			Name:     FlagRunID,
-			Usage:    "GitHub Actions run ID",
-			Required: true,
-			EnvVars:  []string{"GITHUB_RUN_ID"},
+	app.Commands = []*cli.Command{
+		{
+			Name:  "failure",
+			Usage: "Send Slack notifications for CI failures",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagRunID,
+					Usage:    "GitHub Actions run ID",
+					Required: true,
+					EnvVars:  []string{"GITHUB_RUN_ID"},
+				},
+				&cli.StringFlag{
+					Name:     FlagBranch,
+					Usage:    "Branch to report failures for",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagSlackWebhook,
+					Usage:    "Slack webhook URL",
+					Required: false, // Not required for dry-run
+					EnvVars:  []string{"SLACK_WEBHOOK"},
+				},
+				&cli.BoolFlag{
+					Name:  FlagDryRun,
+					Usage: "Print message without sending to Slack",
+					Value: false,
+				},
+			},
+			Action: runFailureCommand,
 		},
-		&cli.StringFlag{
-			Name:     FlagSlackWebhook,
-			Usage:    "Slack webhook URL",
-			Required: false, // Not required for dry-run
-			EnvVars:  []string{"SLACK_WEBHOOK"},
+		{
+			Name:  "report",
+			Usage: "Generate report for CI runs",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagBranch,
+					Usage:    "Branch to generate report for",
+					Required: true,
+				},
+			},
+			Action: runReportCommand,
 		},
-		&cli.BoolFlag{
-			Name:  FlagDryRun,
-			Usage: "Print message without sending to Slack",
-			Value: false,
-		},
-	}
-
-	app.Action = func(c *cli.Context) error {
-		return run(c)
 	}
 
 	return app
 }
 
-func run(c *cli.Context) error {
+func runFailureCommand(c *cli.Context) error {
 	// Set up logger
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -60,11 +81,13 @@ func run(c *cli.Context) error {
 	defer func() { _ = logger.Sync() }()
 
 	runID := c.String(FlagRunID)
+	branch := c.String(FlagBranch)
 	slackWebhook := c.String(FlagSlackWebhook)
 	dryRun := c.Bool(FlagDryRun)
 
-	logger.Info("Starting ci-notify",
+	logger.Info("Starting ci-notify failure",
 		zap.String("run_id", runID),
+		zap.String("branch", branch),
 		zap.Bool("dry_run", dryRun),
 	)
 
@@ -117,6 +140,28 @@ func run(c *cli.Context) error {
 	}
 
 	logger.Info("Slack notification sent successfully")
+	return nil
+}
+
+func runReportCommand(c *cli.Context) error {
+	// Set up logger
+	logger, err := zap.NewProduction()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create logger: %v\n", err)
+		return nil
+	}
+	defer func() { _ = logger.Sync() }()
+
+	branch := c.String(FlagBranch)
+
+	logger.Info("Starting ci-notify report",
+		zap.String("branch", branch),
+	)
+
+	// TODO: Implement report generation
+	logger.Info("Report command not yet implemented")
+	fmt.Println("Report command placeholder - to be implemented")
+
 	return nil
 }
 
