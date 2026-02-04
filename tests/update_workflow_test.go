@@ -58,7 +58,7 @@ func loseUpdateRegistryAndAbandonPendingUpdates(s testcore.Env, tv *testvars.Tes
 func closeShard(s testcore.Env, wid string) {
 	s.T().Helper()
 
-	resp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+	resp, err := s.FrontendClient().DescribeNamespace(testcore.NewContext(s.Context()), &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.Namespace().String(),
 	})
 	if err != nil {
@@ -87,7 +87,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
 				// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 				runID := mustStartWorkflow(s, s.Tv())
 
 				tv := s.Tv()
@@ -218,7 +218,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t, testcore.WithTimeout(1*time.Millisecond))
 				runID := mustStartWorkflow(s, s.Tv())
 				tv := s.Tv()
 				if tc.useRunID {
@@ -342,7 +342,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
 				tv := s.Tv()
 				if tc.useRunID {
@@ -442,7 +442,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
 				tv := s.Tv()
 				if tc.useRunID {
@@ -548,7 +548,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 	t.Run("RunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected", func(t *testing.T) {
 		// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		mustStartWorkflow(s, s.Tv())
 
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
@@ -665,7 +665,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("RunningWorkflowTask_NewNotEmptySpeculativeWorkflowTask_Rejected", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 
 		mustStartWorkflow(s, s.Tv())
 
@@ -804,7 +804,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 	t.Run("CompletedWorkflow", func(t *testing.T) {
 		t.Run("receive outcome from completed Update", func(t *testing.T) {
-			s := testcore.NewEnv(t)
+			_, s := testcore.NewEnv(t)
 			mustStartWorkflow(s, s.Tv())
 
 			wtHandlerCalls := 0
@@ -875,7 +875,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		})
 
 		t.Run("receive update failure from accepted Update", func(t *testing.T) {
-			s := testcore.NewEnv(t)
+			_, s := testcore.NewEnv(t)
 			mustStartWorkflow(s, s.Tv())
 
 			wtHandlerCalls := 0
@@ -929,7 +929,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			s.NoError(err)
 
 			// Send Update request.
-			updateResultCh := sendUpdate(testcore.NewContext(), s, s.Tv())
+			updateResultCh := sendUpdate(testcore.NewContext(s.Context()), s, s.Tv())
 
 			// Accept Update and complete Workflow.
 			_, err = poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
@@ -941,7 +941,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", updateResult1.response.GetOutcome().GetFailure().GetMessage())
 
 			// Send same Update request again, receiving the same failure.
-			updateResultCh = sendUpdate(testcore.NewContext(), s, s.Tv())
+			updateResultCh = sendUpdate(testcore.NewContext(s.Context()), s, s.Tv())
 			updateResult2 := <-updateResultCh
 			s.NoError(updateResult2.err)
 			s.Equal("Workflow Update failed because the Workflow completed before the Update completed.", updateResult2.response.GetOutcome().GetFailure().GetMessage())
@@ -1251,7 +1251,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.Name, func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				mustStartWorkflow(s, s.Tv())
 
 				wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
@@ -1282,7 +1282,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					T:                   t,
 				}
 
-				halfSecondTimeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 500*time.Millisecond)
+				halfSecondTimeoutCtx, cancel := context.WithTimeout(s.Context(), 500*time.Millisecond)
 				defer cancel()
 				updateResultCh := sendUpdate(halfSecondTimeoutCtx, s, s.Tv())
 
@@ -1322,7 +1322,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
 				tv := s.Tv()
 				if tc.useRunID {
@@ -1391,7 +1391,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -1493,7 +1493,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("FirstNormalScheduledWorkflowTask_Reject", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -1567,7 +1567,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("EmptySpeculativeWorkflowTask_Reject", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
@@ -1648,7 +1648,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("NotEmptySpeculativeWorkflowTask_Reject", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -1783,7 +1783,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("1stAccept_2ndAccept_2ndComplete_1stComplete", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 		tv1 := s.Tv().WithUpdateIDNumber(1).WithMessageIDNumber(1).WithActivityIDNumber(1)
 		tv2 := s.Tv().WithUpdateIDNumber(2).WithMessageIDNumber(2).WithActivityIDNumber(2)
@@ -1993,7 +1993,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("1stAccept_2ndReject_1stComplete", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		tv1 := s.Tv().WithUpdateIDNumber(1).WithMessageIDNumber(1).WithActivityIDNumber(1)
@@ -2150,13 +2150,14 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_Fail", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
 		s.NoError(err)
 
-		timeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 2*time.Second)
+		// Use test context with shorter timeout for this specific operation
+		timeoutCtx, cancel := context.WithTimeout(s.Context(), 2 * time.Second)
 		defer cancel()
 		updateResultCh := sendUpdate(timeoutCtx, s, s.Tv())
 
@@ -2322,7 +2323,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StartedSpeculativeWorkflowTask_ConvertToNormalBecauseOfBufferedSignal", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2434,7 +2435,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("ScheduledSpeculativeWorkflowTask_ConvertToNormalBecauseOfSignal", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2531,7 +2532,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 	t.Run("SpeculativeWorkflowTask_StartToCloseTimeout", func(t *testing.T) {
 		// Uses CaptureMetricsHandler which requires a dedicated cluster to avoid metric interference.
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
 		defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
@@ -2544,7 +2545,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			WorkflowTaskTimeout: durationpb.New(1 * time.Second), // Important!
 		}
 
-		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), request)
 		s.NoError(err)
 
 		wtHandlerCalls := 0
@@ -2688,7 +2689,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_ScheduleToStartTimeout", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		// Drain first WT and respond with sticky enabled response to enable sticky task queue.
@@ -2744,7 +2745,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_ScheduleToStartTimeoutOnNormalTaskQueue", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2846,7 +2847,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StartedSpeculativeWorkflowTask_TerminateWorkflow", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2858,7 +2859,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 2:
 				// Terminate workflow while speculative WT is running.
-				_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+				_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(s.Context()), &workflowservice.TerminateWorkflowExecutionRequest{
 					Namespace:         s.Namespace().String(),
 					WorkflowExecution: s.Tv().WorkflowExecution(),
 					Reason:            s.Tv().Any().String(),
@@ -2910,7 +2911,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
 
-		oneSecondTimeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 1*time.Second)
+		oneSecondTimeoutCtx, cancel := context.WithTimeout(s.Context(), 1*time.Second)
 		defer cancel()
 		updateResultCh := sendUpdate(oneSecondTimeoutCtx, s, s.Tv())
 
@@ -2942,7 +2943,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   7 WorkflowTaskFailed
   8 WorkflowExecutionTerminated`, events)
 
-		msResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+		msResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(s.Context()), &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),
 			Execution: s.Tv().WorkflowExecution(),
 			Archetype: chasm.WorkflowArchetype,
@@ -2952,7 +2953,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("ScheduledSpeculativeWorkflowTask_TerminateWorkflow", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -2996,12 +2997,12 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
 
-		oneSecondTimeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 1*time.Second)
+		oneSecondTimeoutCtx, cancel := context.WithTimeout(s.Context(), 1*time.Second)
 		defer cancel()
 		updateResultCh := sendUpdate(oneSecondTimeoutCtx, s, s.Tv())
 
 		// Terminate workflow after speculative WT is scheduled but not started.
-		_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
+		_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(s.Context()), &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         s.Namespace().String(),
 			WorkflowExecution: s.Tv().WorkflowExecution(),
 			Reason:            s.Tv().Any().String(),
@@ -3028,7 +3029,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   5 WorkflowExecutionTerminated // Speculative WTScheduled event is not written to history if WF is terminated.
 `, events)
 
-		msResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+		msResp, err := s.AdminClient().DescribeMutableState(testcore.NewContext(s.Context()), &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),
 			Execution: s.Tv().WorkflowExecution(),
 			Archetype: chasm.WorkflowArchetype,
@@ -3162,7 +3163,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		for _, tc := range testCases {
 			for _, wfCC := range workflowCompletionCommands {
 				t.Run(tc.name+" "+wfCC.name, func(t *testing.T) {
-					s := testcore.NewEnv(t)
+					_, s := testcore.NewEnv(t)
 					runID := mustStartWorkflow(s, s.Tv())
 					tv := s.Tv()
 					if wfCC.useRunID {
@@ -3215,7 +3216,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					_, err := poller.PollAndProcessWorkflowTask()
 					s.NoError(err)
 
-					updateResultCh := sendUpdate(testcore.NewContext(), s, tv)
+					updateResultCh := sendUpdate(testcore.NewContext(s.Context()), s, tv)
 
 					// Complete workflow.
 					_, err = poller.PollAndProcessWorkflowTask()
@@ -3245,7 +3246,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					}
 
 					// Check that update didn't block workflow completion.
-					descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+					descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(s.Context()), &workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: s.Namespace().String(),
 						Execution: tv.WorkflowExecution(),
 					})
@@ -3260,7 +3261,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_Heartbeat", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		// Drain first WT.
@@ -3333,7 +3334,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("ScheduledSpeculativeWorkflowTask_LostUpdate", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -3393,7 +3394,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
 
-		halfSecondTimeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 500*time.Millisecond)
+		halfSecondTimeoutCtx, cancel := context.WithTimeout(s.Context(), 500*time.Millisecond)
 		defer cancel()
 		updateResult := <-sendUpdate(halfSecondTimeoutCtx, s, s.Tv())
 		s.Error(updateResult.err)
@@ -3404,7 +3405,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		loseUpdateRegistryAndAbandonPendingUpdates(s, s.Tv())
 
 		// Ensure, there is no WFT.
-		pollCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout*2)
+		pollCtx, cancel := context.WithTimeout(s.Context(), common.MinLongPollTimeout*2)
 		defer cancel()
 		pollResponse, err := s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
@@ -3441,7 +3442,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StartedSpeculativeWorkflowTask_LostUpdate", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -3521,7 +3522,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.NoError(err)
 
-		halfSecondTimeoutCtx, cancel := context.WithTimeout(testcore.NewContext(), 500*time.Millisecond)
+		halfSecondTimeoutCtx, cancel := context.WithTimeout(s.Context(), 500*time.Millisecond)
 		defer cancel()
 		updateResultCh := sendUpdate(halfSecondTimeoutCtx, s, s.Tv())
 
@@ -3563,7 +3564,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("FirstNormalWorkflowTask_UpdateResurrectedAfterRegistryCleared", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -3672,7 +3673,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("ScheduledSpeculativeWorkflowTask_DeduplicateID", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -3765,7 +3766,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StartedSpeculativeWorkflowTask_DeduplicateID", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		var updateResultCh2 <-chan *workflowservice.UpdateWorkflowExecutionResponse
@@ -3880,7 +3881,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				if tc.CloseShard {
 					opts = append(opts, testcore.WithDedicatedCluster())
 				}
-				s := testcore.NewEnv(t, opts...)
+				_, s := testcore.NewEnv(t, opts...)
 				mustStartWorkflow(s, s.Tv())
 
 				wtHandlerCalls := 0
@@ -3962,7 +3963,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				updateResult2 := <-sendUpdateNoError(s, s.Tv())
 
 				// Ensure, there is no new WT.
-				pollCtx, cancel := context.WithTimeout(testcore.NewContext(), common.MinLongPollTimeout*2)
+				pollCtx, cancel := context.WithTimeout(s.Context(), common.MinLongPollTimeout*2)
 				defer cancel()
 				pollResponse, err := s.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
 					Namespace: s.Namespace().String(),
@@ -4012,7 +4013,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartedId", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		/*
 			Test scenario:
 			An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4070,7 +4071,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		sendUpdateNoError(s, s.Tv())
 
 		// Poll 2nd speculative WT with 1st update.
-		wt2, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		wt2, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(s.Context()), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: s.Tv().TaskQueue(),
 		})
@@ -4100,7 +4101,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.NoError(err)
 
 		// Poll the 3rd WFT (not speculative anymore) but must have 2nd update.
-		wt3, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		wt3, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(s.Context()), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: s.Tv().TaskQueue(),
 		})
@@ -4122,7 +4123,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	  9 WorkflowTaskStarted`, wt3.History)
 
 		// Now try to complete 2nd WT (speculative). It should fail because WorkflowTaskStarted event Id is mismatched.
-		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(s.Context()), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: wt2.TaskToken,
 			Commands:  s.UpdateAcceptCompleteCommands(s.Tv()),
@@ -4133,7 +4134,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.Contains(err.Error(), "Workflow task not found")
 
 		// Complete 3rd WT. It should succeed.
-		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(s.Context()), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: wt3.TaskToken,
 			Commands:  s.UpdateAcceptCompleteCommands(s.Tv()),
@@ -4159,7 +4160,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StaleSpeculativeWorkflowTask_Fail_BecauseOfDifferentStartTime", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		/*
 			Test scenario:
 			An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4201,7 +4202,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		sendUpdateNoError(s, s.Tv())
 
 		// Poll 2nd speculative WT with 1st update.
-		wt2, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		wt2, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(s.Context()), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: s.Tv().TaskQueue(),
 		})
@@ -4226,7 +4227,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		waitUpdateAdmitted(s, s.Tv())
 
 		// Poll for the 3rd speculative WT.
-		wt3, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+		wt3, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(s.Context()), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: s.Tv().TaskQueue(),
 		})
@@ -4245,7 +4246,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	  6 WorkflowTaskStarted`, wt3.History)
 
 		// Now try to complete 2nd (speculative) WT, it should fail.
-		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(s.Context()), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: wt2.TaskToken,
 			Commands:  s.UpdateAcceptCompleteCommands(s.Tv()),
@@ -4256,7 +4257,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.Contains(err.Error(), "Workflow task not found")
 
 		// Try to complete 3rd WT, it should succeed
-		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err = s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(s.Context()), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: wt3.TaskToken,
 			Commands:  s.UpdateAcceptCompleteCommands(s.Tv()),
@@ -4279,7 +4280,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StaleSpeculativeWorkflowTask_Fail_NewWorkflowTaskWith2Updates", func(t *testing.T) {
-		s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+		_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 		/*
 			Test scenario:
 			An update created a speculative WT and WT is dispatched to the worker (started).
@@ -4294,7 +4295,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		tv1 := s.Tv().WithUpdateIDNumber(1).WithMessageIDNumber(1)
 		tv2 := s.Tv().WithUpdateIDNumber(2).WithMessageIDNumber(2)
 
-		testCtx := testcore.NewContext()
+		testCtx := testcore.NewContext(s.Context())
 
 		// Drain first WFT.
 		wt1, err := s.FrontendClient().PollWorkflowTaskQueue(testCtx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -4405,7 +4406,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_WorkerSkippedProcessing_RejectByServer", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 		tv1 := s.Tv().WithUpdateIDNumber(1).WithMessageIDNumber(1)
 		tv2 := s.Tv().WithUpdateIDNumber(2).WithMessageIDNumber(2)
@@ -4527,7 +4528,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("LastWorkflowTask_HasUpdateMessage", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		//nolint:staticcheck // SA1019 TaskPoller replacement needed
@@ -4572,7 +4573,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("SpeculativeWorkflowTask_QueryFailureClearsWFContext", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -4645,7 +4646,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			// But first query must not time out before 2nd query reached server,
 			// because 2 queries overflow the query buffer (default size 1),
 			// which leads to clearing of WF context.
-			shortCtx, cancel := context.WithTimeout(testcore.NewContext(), 100*time.Millisecond)
+			shortCtx, cancel := context.WithTimeout(s.Context(), 100*time.Millisecond)
 			defer cancel()
 			queryResp, err := s.FrontendClient().QueryWorkflow(shortCtx, &workflowservice.QueryWorkflowRequest{
 				Namespace: s.Namespace().String(),
@@ -4716,7 +4717,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("UpdatesAreSentToWorkerInOrderOfAdmission", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		// If our implementation is not in fact ordering updates correctly, then it may be ordering them
 		// non-deterministically. This number should be high enough that the false-negative rate of the test is low, but
 		// must not exceed our limit on number of in-flight updates. If we were picking a random ordering then the
@@ -4784,7 +4785,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("WaitAccepted_GotCompleted", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		mustStartWorkflow(s, s.Tv())
 
 		//nolint:staticcheck // SA1019 TaskPoller replacement needed
@@ -4823,7 +4824,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("ContinueAsNew_UpdateIsNotCarriedOver", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		_, s := testcore.NewEnv(t)
 		firstRunID := mustStartWorkflow(s, s.Tv())
 		tv1 := s.Tv().WithUpdateIDNumber(1).WithMessageIDNumber(1)
 		tv2 := s.Tv().WithUpdateIDNumber(2).WithMessageIDNumber(2)
@@ -4916,7 +4917,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 	t.Run("ContinueAsNew_Suggestion", func(t *testing.T) {
 		// setup CAN suggestion to be at 2nd Update
-		s := testcore.NewEnv(t,
+		_, s := testcore.NewEnv(t,
 			testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 3),
 			testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdatesSuggestContinueAsNewThreshold, 0.5),
 		)
@@ -5034,12 +5035,12 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			} {
 				t.Run(fmt.Sprintf("start workflow and send update (with conflict policy %v)", p), func(t *testing.T) {
 					t.Run("and accept", func(t *testing.T) {
-						s := testcore.NewEnv(t)
+						_, s := testcore.NewEnv(t)
 						startReq := startWorkflowReq(s, s.Tv())
 						startReq.WorkflowIdConflictPolicy = p
 						updateReq := updateWorkflowRequest(s, s.Tv(),
 							&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-						uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+						uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 						_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 							func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5072,11 +5073,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					})
 
 					t.Run("and reject", func(t *testing.T) {
-						s := testcore.NewEnv(t)
+						_, s := testcore.NewEnv(t)
 						startReq := startWorkflowReq(s, s.Tv())
 						updateReq := updateWorkflowRequest(s, s.Tv(),
 							&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-						uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+						uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 						_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 							func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5112,9 +5113,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		t.Run("workflow is running", func(t *testing.T) {
 			t.Run("workflow id conflict policy use-existing: only send update", func(t *testing.T) {
 				t.Run("and accept", func(t *testing.T) {
-					s := testcore.NewEnv(t)
+					_, s := testcore.NewEnv(t)
 					// start workflow
-					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 					s.NoError(err)
 
 					_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
@@ -5125,7 +5126,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 					updateReq := updateWorkflowRequest(s, s.Tv(),
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+					uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 					_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5161,9 +5162,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				})
 
 				t.Run("and reject", func(t *testing.T) {
-					s := testcore.NewEnv(t)
+					_, s := testcore.NewEnv(t)
 					// start workflow
-					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 					s.NoError(err)
 
 					_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
@@ -5174,7 +5175,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 					updateReq := updateWorkflowRequest(s, s.Tv(),
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+					uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 					_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5208,9 +5209,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 			t.Run("workflow id conflict policy terminate-existing", func(t *testing.T) {
 				t.Run("terminate workflow first, then start and update", func(t *testing.T) {
-					s := testcore.NewEnv(t)
+					_, s := testcore.NewEnv(t)
 					// start workflow
-					firstWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+					firstWF, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 					s.NoError(err)
 
 					_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
@@ -5221,7 +5222,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 					updateReq := updateWorkflowRequest(s, s.Tv(),
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+					uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 					_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5240,7 +5241,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					s.Equal("success-result-of-"+s.Tv().UpdateID(), testcore.DecodeString(s.T(), updateRep.GetOutcome().GetSuccess()))
 
 					// ensure workflow was terminated
-					descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
+					descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(s.Context()),
 						&workflowservice.DescribeWorkflowExecutionRequest{
 							Namespace: s.Namespace().String(),
 							Execution: &commonpb.WorkflowExecution{WorkflowId: startReq.WorkflowId, RunId: firstWF.RunId},
@@ -5256,13 +5257,13 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				})
 
 				t.Run("given an accepted update, attach to it", func(t *testing.T) {
-					s := testcore.NewEnv(t)
+					_, s := testcore.NewEnv(t)
 					// 1st update-with-start
 					startReq := startWorkflowReq(s, s.Tv())
 					startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 					updateReq := updateWorkflowRequest(s, s.Tv(),
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
-					uwsCh1 := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+					uwsCh1 := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 					// accept the update
 					_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
@@ -5282,7 +5283,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, updateRep1.Stage)
 
 					// 2nd update-with-start: attaches to update instead of terminating workflow
-					uwsCh2 := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+					uwsCh2 := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 					uwsRes2 := <-uwsCh2
 					s.NoError(uwsRes2.err)
@@ -5295,8 +5296,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("workflow id conflict policy fail: abort multi operation", func(t *testing.T) {
-				s := testcore.NewEnv(t)
-				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+				_, s := testcore.NewEnv(t)
+				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
 
 				// start workflow
@@ -5308,7 +5309,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				startReq := startWorkflowReq(s, s.Tv())
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 				updateReq := updateWorkflowRequest(s, s.Tv(), &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 				uwsRes := <-uwsCh
 				s.Error(uwsRes.err)
 				s.Equal("Update-with-Start could not be executed.", uwsRes.err.Error())
@@ -5320,20 +5321,20 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("receive completed update result", func(t *testing.T) {
-				_ = testcore.NewEnv(t) // unused s
+				_, _ = testcore.NewEnv(t) // unused s
 				for _, p := range []enumspb.WorkflowIdConflictPolicy{
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 				} {
 					t.Run(fmt.Sprintf("for workflow id conflict policy %v", p), func(t *testing.T) {
-						s := testcore.NewEnv(t)
+						_, s := testcore.NewEnv(t)
 						startReq := startWorkflowReq(s, s.Tv())
 						updReq := updateWorkflowRequest(s, s.Tv(),
 							&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 
 						// 1st update-with-start
-						uwsCh1 := sendUpdateWithStart(s, testcore.NewContext(), startReq, updReq)
+						uwsCh1 := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updReq)
 						_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 							func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 								return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -5345,7 +5346,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 						s.NoError(uwsRes1.err)
 
 						// 2nd update-with-start: using *same* UpdateID - but *different* RequestID
-						uwsRes2 := <-sendUpdateWithStart(s, testcore.NewContext(), startReq, updReq)
+						uwsRes2 := <-sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updReq)
 						s.NoError(uwsRes2.err)
 
 						s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
@@ -5361,14 +5362,14 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("dedupes start", func(t *testing.T) {
-				_ = testcore.NewEnv(t) // unused s
+				_, _ = testcore.NewEnv(t) // unused s
 				for _, p := range []enumspb.WorkflowIdConflictPolicy{
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 				} {
 					t.Run(fmt.Sprintf("for workflow id conflict policy %v", p), func(t *testing.T) {
-						s := testcore.NewEnv(t)
+						_, s := testcore.NewEnv(t)
 						startReq := startWorkflowReq(s, s.Tv())
 						startReq.RequestId = "request_id"
 						startReq.WorkflowIdConflictPolicy = p
@@ -5376,7 +5377,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 							&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 
 						// 1st update-with-start
-						uwsCh1 := sendUpdateWithStart(s, testcore.NewContext(), startReq, updReq1)
+						uwsCh1 := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updReq1)
 						_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 							func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 								return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -5390,7 +5391,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 						// 2nd update-with-start: using *same* RequestID - but *different* UpdateID
 						updReq2 := updateWorkflowRequest(s, s.Tv().WithUpdateIDNumber(2),
 							&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-						uwsCh2 := sendUpdateWithStart(s, testcore.NewContext(), startReq, updReq2)
+						uwsCh2 := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updReq2)
 						_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 							func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 								return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -5409,15 +5410,15 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		t.Run("workflow is closed", func(t *testing.T) {
 			t.Run("workflow id reuse policy allow-duplicate", func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				// start and terminate workflow
-				initialWorkflow, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+				initialWorkflow, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
 
 				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
 				s.NoError(err)
 
-				_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
+				_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(s.Context()),
 					&workflowservice.TerminateWorkflowExecutionRequest{
 						Namespace:         s.Namespace().String(),
 						WorkflowExecution: s.Tv().WorkflowExecution(),
@@ -5430,7 +5431,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5462,15 +5463,15 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("workflow id reuse policy reject-duplicate", func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				// start and terminate workflow
-				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
 
 				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
 				s.NoError(err)
 
-				_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
+				_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(s.Context()),
 					&workflowservice.TerminateWorkflowExecutionRequest{
 						Namespace:         s.Namespace().String(),
 						WorkflowExecution: s.Tv().WorkflowExecution(),
@@ -5483,7 +5484,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 				uwsRes := <-uwsCh
 				s.Error(uwsRes.err)
@@ -5497,20 +5498,20 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("receive completed update result", func(t *testing.T) {
-				_ = testcore.NewEnv(t) // unused s
+				_, _ = testcore.NewEnv(t) // unused s
 				for _, p := range []enumspb.WorkflowIdConflictPolicy{
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 					enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 				} {
 					t.Run(fmt.Sprintf("for workflow id conflict policy %v", p), func(t *testing.T) {
-						s := testcore.NewEnv(t)
+						_, s := testcore.NewEnv(t)
 						// 1st update-with-start
 						startReq := startWorkflowReq(s, s.Tv())
 						startReq.WorkflowIdConflictPolicy = p
 						updateReq := updateWorkflowRequest(s, s.Tv(),
 							&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-						uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+						uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 						_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 							func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5528,7 +5529,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 						requireStartedAndRunning(s.T(), startResp1)
 
 						// terminate workflow
-						_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(),
+						_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(s.Context()),
 							&workflowservice.TerminateWorkflowExecutionRequest{
 								Namespace:         s.Namespace().String(),
 								WorkflowExecution: s.Tv().WorkflowExecution(),
@@ -5537,7 +5538,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 						s.NoError(err)
 
 						// 2nd update-with-start (using the same Update ID but different Request ID)
-						uwsRes = <-sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+						uwsRes = <-sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 						s.NoError(uwsRes.err)
 						startResp := uwsRes.response.Responses[0].GetStartWorkflow()
@@ -5554,7 +5555,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		t.Run("workflow start conflict", func(t *testing.T) {
 			t.Run("workflow id conflict policy fail: use-existing", func(t *testing.T) {
 				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 				startReq := startWorkflowReq(s, s.Tv())
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 				updateReq := updateWorkflowRequest(s, s.Tv(),
@@ -5562,11 +5563,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 				// simulate a race condition
 				s.InjectHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
-					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
+					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startReq)
 					s.NoError(err)
 				})
 
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 				_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
@@ -5588,9 +5589,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		t.Run("update is aborted by closing workflow", func(t *testing.T) {
 			t.Run("retry request once when workflow was not started", func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				// start workflow
-				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
 				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
 				s.NoError(err)
@@ -5600,7 +5601,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 				// wait until the update is admitted - then complete workflow
 				waitUpdateAdmitted(s, s.Tv())
@@ -5635,9 +5636,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 			t.Run("return retryable error after retry", func(t *testing.T) {
 				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				_, s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 				// start workflow
-				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
 				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(), taskpoller.DrainWorkflowTask)
 				s.NoError(err)
@@ -5647,13 +5648,13 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 				// wait until the update is admitted
 				waitUpdateAdmitted(s, s.Tv())
 
 				s.InjectHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
-					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
+					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(s.Context()), startWorkflowReq(s, s.Tv()))
 					s.NoError(err)
 				})
 
@@ -5686,13 +5687,13 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("do not retry when workflow was started", func(t *testing.T) {
-				s := testcore.NewEnv(t)
+				_, s := testcore.NewEnv(t)
 				// update-with-start
 				startReq := startWorkflowReq(s, s.Tv())
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
-				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
+				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
 				// wait until the update is admitted - then complete workflow
 				waitUpdateAdmitted(s, s.Tv())
@@ -5721,11 +5722,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		t.Run("return update rate limit error", func(t *testing.T) {
 			// lower maximum total number of updates for testing purposes
-			s := testcore.NewEnv(t,
+			_, s := testcore.NewEnv(t,
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxTotalUpdates, 1),
 			)
 
-			ctx := testcore.NewContext()
+			ctx := testcore.NewContext(s.Context())
 			startReq := startWorkflowReq(s, s.Tv())
 			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 
@@ -5761,11 +5762,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		t.Run("return update in-flight limit error", func(t *testing.T) {
 			// lower maximum in-flight updates for testing purposes
 			maxInFlight := 1
-			s := testcore.NewEnv(t,
+			_, s := testcore.NewEnv(t,
 				testcore.WithDynamicConfig(dynamicconfig.WorkflowExecutionMaxInFlightUpdates, maxInFlight),
 			)
 
-			ctx := testcore.NewContext()
+			ctx := testcore.NewContext(s.Context())
 			startReq := startWorkflowReq(s, s.Tv())
 			startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 

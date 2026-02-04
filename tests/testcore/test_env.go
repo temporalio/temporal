@@ -1,12 +1,16 @@
 package testcore
 
 import (
+	"context"
 	"fmt"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -24,6 +28,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	Context() context.Context
 }
 
 type testEnv struct {
@@ -38,6 +43,7 @@ type testEnv struct {
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
+	ctx        context.Context // Test-level timeout context
 }
 
 type TestOption func(*testOptions)
@@ -45,6 +51,8 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	timeout               time.Duration
+	disableTimeout        bool
 }
 
 type dynamicConfigOverride struct {
@@ -75,9 +83,26 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
+// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
+// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
+func WithTimeout(duration time.Duration) TestOption {
+	return func(o *testOptions) {
+		o.timeout = duration
+	}
+}
+
+// WithoutTimeout disables the default test timeout.
+func WithoutTimeout() TestOption {
+	return func(o *testOptions) {
+		o.disableTimeout = true
+	}
+}
+
 // NewEnv creates a new test environment with access to a Temporal cluster.
+// Returns a context that will be canceled if the test exceeds its timeout,
+// allowing tests to be interrupted if they respect the context.
 // The test is automatically marked as parallel.
-func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
+func NewEnv(t *testing.T, opts ...TestOption) (context.Context, *testEnv) {
 	t.Parallel()
 
 	var options testOptions
@@ -109,6 +134,12 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
+	// Setup test timeout monitoring with context
+	ctx := context.Background()
+	if !options.disableTimeout {
+		ctx = setupTestTimeoutWithContext(t, options.timeout)
+	}
+
 	env := &testEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -119,6 +150,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
+		ctx:                ctx,
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
@@ -128,7 +160,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		}
 	}
 
-	return env
+	return ctx, env
 }
 
 // Use test env-specific namespace here for test isolation.
@@ -146,6 +178,19 @@ func (e *testEnv) T() *testing.T {
 
 func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// Context returns the test-level timeout context. This context will be canceled
+// when the test timeout occurs. Use this as the parent context for all operations.
+//
+// For RPC operations that need headers, use:
+//   ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(env.Context(), 90*time.Second)
+//
+// For custom timeouts, use:
+//   ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
+//   defer cancel()
+func (e *testEnv) Context() context.Context {
+	return e.ctx
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
@@ -185,4 +230,61 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
+}
+
+// calculateTimeout determines the appropriate timeout duration based on custom timeout,
+// test deadline, and default values. Returns 0 if timeout should be skipped.
+func calculateTimeout(t *testing.T, customTimeout time.Duration) time.Duration {
+	if customTimeout > 0 {
+		// Use custom timeout if provided
+		return customTimeout * debug.TimeoutMultiplier
+	}
+
+	deadline, hasDeadline := t.Deadline()
+	if hasDeadline {
+		// Leave 30 second buffer before hard deadline so cleanup can run
+		timeout := time.Until(deadline) - (30 * time.Second)
+		if timeout <= 0 {
+			// Already close to deadline, skip timeout monitoring
+			return 0
+		}
+		return timeout
+	}
+
+	// Use default timeout of 90 seconds
+	return 90 * time.Second * debug.TimeoutMultiplier
+}
+
+// setupTestTimeoutWithContext creates a context that will be canceled on timeout,
+// and reports the timeout error during cleanup. Returns a context that tests can
+// use to be interrupted when timeout occurs.
+func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) context.Context {
+	t.Helper()
+
+	timeout := calculateTimeout(t, customTimeout)
+	if timeout <= 0 {
+		return context.Background()
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	var timedOut atomic.Bool
+	go func() {
+		<-ctx.Done()
+		if ctx.Err() == context.DeadlineExceeded {
+			timedOut.Store(true)
+		}
+	}()
+
+	// Register cleanup to cancel context and check timeout
+	// t.Cleanup() functions run in LIFO order, so this runs after test code
+	t.Cleanup(func() {
+		cancel()
+
+		if timedOut.Load() {
+			t.Errorf("Test exceeded timeout of %v", timeout)
+		}
+	})
+
+	return ctx
 }

@@ -5451,3 +5451,10 @@ func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.Deployment
 		s.T().Skipf("test supports workflow version %v and newer", version)
 	}
 }
+
+// Context implementations for testcore.Env interface compatibility
+func (s *Versioning3Suite) Context() context.Context {
+	return context.Background()
+}
+
+
