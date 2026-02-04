@@ -1959,7 +1959,9 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 	if err != nil {
 		return nil, err
 	}
-	if req.GetOperation() == nil && req.GetDeploymentName() == "" {
+	// Simulating v1.29.2 validation: In v1.29.2, this checked `req.Deployment == nil && req.GetOperation() == nil`
+	// Since v1.30.0 never sets Deployment (field was removed), we simulate by checking just Operation
+	if req.GetOperation() == nil {
 		return nil, errMissingDeploymentVersion
 	}
 
