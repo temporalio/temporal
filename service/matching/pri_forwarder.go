@@ -241,6 +241,7 @@ func ForwardPollWithTarget(
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: source.RpcName(),
 			Conditions:      pollMetadata.conditions,
