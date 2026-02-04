@@ -2157,7 +2157,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.NoError(err)
 
 		// Use test context with shorter timeout for this specific operation
-		timeoutCtx, cancel := context.WithTimeout(s.Context(), 2 * time.Second)
+		timeoutCtx, cancel := context.WithTimeout(s.Context(), 2*time.Second)
 		defer cancel()
 		updateResultCh := sendUpdate(timeoutCtx, s, s.Tv())
 

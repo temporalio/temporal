@@ -122,7 +122,7 @@ func MustRunSequential(t *testing.T, reason string) {
 // Returns a context that will be canceled if the test exceeds its timeout,
 // allowing tests to be interrupted if they respect the context.
 // Tests are run in parallel - use MustRunSequential to run suite sequentially.
-func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
+func NewEnv(t *testing.T, opts ...TestOption) (context.Context, *testEnv) {
 	// Check if this is a sequential suite by looking up the parent test name.
 	suiteName := t.Name()
 	if idx := strings.Index(suiteName, "/"); idx != -1 {

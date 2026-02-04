@@ -13,8 +13,9 @@ import (
 // either the timeout expires OR the parent is canceled (whichever comes first).
 //
 // Usage:
-//   ctx := testcore.NewContext()                    // Standalone RPC context
-//   ctx := testcore.NewContext(env.Context())       // Derived from test context
+//
+//	ctx := testcore.NewContext()                    // Standalone RPC context
+//	ctx := testcore.NewContext(env.Context())       // Derived from test context
 func NewContext(parent ...context.Context) context.Context {
 	if len(parent) > 0 && parent[0] != nil && parent[0] != context.Background() {
 		// Create RPC context derived from parent
