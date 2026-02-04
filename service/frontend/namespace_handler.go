@@ -1029,9 +1029,9 @@ func (d *namespaceHandler) maybeUpdateFailoverHistory(
 ) []*persistencespb.FailoverStatus {
 	d.logger.Debug(
 		"maybeUpdateFailoverHistory",
-		tag.NewAnyTag("failoverHistory", failoverHistory),
-		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
-		tag.NewAnyTag("namespaceDetail", namespaceDetail),
+		tag.Any("failoverHistory", failoverHistory),
+		tag.Any("updateReplConfig", updateReplicationConfig),
+		tag.Any("namespaceDetail", namespaceDetail),
 	)
 	if updateReplicationConfig == nil {
 		d.logger.Debug("updateReplicationConfig was nil")

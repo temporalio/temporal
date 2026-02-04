@@ -1184,7 +1184,7 @@ func (n *Node) deserializeComponentNode(
 			softassert.Fail(
 				n.logger,
 				"field.kind can be unspecified only if err is not nil, and there is a check for it above",
-				tag.NewStringTag("node name", n.nodeName))
+				tag.String("node name", n.nodeName))
 		case fieldKindData:
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {

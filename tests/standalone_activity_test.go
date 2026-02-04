@@ -2725,9 +2725,10 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 	})
 
 	t.Run("ExceededPageSizeIsCapped", func(t *testing.T) {
+		maxPageSize := int32(1)
 		s.OverrideDynamicConfig(
 			dynamicconfig.FrontendVisibilityMaxPageSize,
-			1,
+			maxPageSize,
 		)
 
 		testActivityType := testcore.RandomizeStr(t.Name())
@@ -2748,27 +2749,34 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 			require.NoError(t, err)
 		}
 
-		// Await first page. Use pageSize > FrontendVisibilityMaxPageSize
-		var resp *workflowservice.ListActivityExecutionsResponse
+		// Wait for both activities to be indexed in Elasticsearch before testing pagination
 		s.Eventually(
 			func() bool {
-				var err error
-				resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+				countResp, err := s.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
 					Namespace: s.Namespace().String(),
-					PageSize:  2,
 					Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
 				})
-				return err == nil && len(resp.GetExecutions()) >= 1
+				return err == nil && countResp.GetCount() == 2
 			},
 			testcore.WaitForESToSettle,
 			100*time.Millisecond,
 		)
+
+		// Get first page. Use pageSize > FrontendVisibilityMaxPageSize to test it is capped by the server
+		var resp *workflowservice.ListActivityExecutionsResponse
+		var err error
+		resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+			Namespace: s.Namespace().String(),
+			PageSize:  maxPageSize + 1,
+			Query:     fmt.Sprintf("ActivityType = '%s'", testActivityType),
+		})
+		require.NoError(t, err)
 		require.Len(t, resp.GetExecutions(), 1)
 
-		// Get next page. Use pageSize > FrontendVisibilityMaxPageSize
-		resp, err := s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
+		// Get next page. Use pageSize > FrontendVisibilityMaxPageSize to test it is capped by the server
+		resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 			Namespace:     s.Namespace().String(),
-			PageSize:      2,
+			PageSize:      maxPageSize + 1,
 			Query:         fmt.Sprintf("ActivityType = '%s'", testActivityType),
 			NextPageToken: resp.GetNextPageToken(),
 		})
@@ -2778,7 +2786,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		// Ensure no more results
 		resp, err = s.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
 			Namespace:     s.Namespace().String(),
-			PageSize:      2,
+			PageSize:      maxPageSize + 1,
 			Query:         fmt.Sprintf("ActivityType = '%s'", testActivityType),
 			NextPageToken: resp.GetNextPageToken(),
 		})

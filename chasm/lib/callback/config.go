@@ -15,19 +15,19 @@ import (
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"chasm.callback.request.timeout",
+	"callback.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for executing a single callback request.`,
 )
 
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callback.retryPolicy.initialInterval",
+	"callback.retryPolicy.initialInterval",
 	time.Second,
 	`The initial backoff interval between every callback request attempt for a given callback.`,
 )
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callback.retryPolicy.maxInterval",
+	"callback.retryPolicy.maxInterval",
 	time.Hour,
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
