@@ -43,6 +43,7 @@ type priTaskMatcher struct {
 	metricsHandler   metrics.Handler // namespace metric scope
 	logger           log.Logger
 	markAlive        func() // function to mark the physical task queue alive
+	systemClock      clock.TimeSource
 
 	priorityBacklogForwarders *goro.KeyedSet[remotePriorityBacklog]
 }
@@ -102,10 +103,11 @@ func newPriTaskMatcher(
 	metricsHandler metrics.Handler,
 	rateLimitManager *rateLimitManager,
 	markAlive func(),
+	systemClock clock.TimeSource,
 ) *priTaskMatcher {
 	tm := &priTaskMatcher{
 		config:                    config,
-		data:                      newMatcherData(config, logger, clock.NewRealTimeSource(), fwdr != nil, rateLimitManager),
+		data:                      newMatcherData(config, logger, systemClock, fwdr != nil, rateLimitManager),
 		tqCtx:                     tqCtx,
 		logger:                    logger,
 		metricsHandler:            metricsHandler,
@@ -115,6 +117,7 @@ func newPriTaskMatcher(
 		validator:                 validator,
 		rateLimitManager:          rateLimitManager,
 		markAlive:                 markAlive,
+		systemClock:               systemClock,
 		priorityBacklogForwarders: goro.NewKeyedSet[remotePriorityBacklog](tqCtx),
 	}
 
@@ -125,7 +128,7 @@ func (tm *priTaskMatcher) Start() {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
-	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
+	retrier := backoff.NewRetrier(policy, tm.systemClock)
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
 	if tm.fwdr == nil {
@@ -514,7 +517,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 	}
 
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
+		tm.systemClock.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
@@ -587,7 +590,7 @@ func (tm *priTaskMatcher) UpdateRemotePriorityBacklogs(backlogs remotePriorityBa
 func (tm *priTaskMatcher) poll(
 	ctx context.Context, pollMetadata *pollMetadata, queryOnly bool,
 ) (*internalTask, error) {
-	start := time.Now()
+	start := tm.systemClock.Now()
 	pollWasForwarded := false
 	var priority int32
 
@@ -596,7 +599,7 @@ func (tm *priTaskMatcher) poll(
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls (i.e. on child if forwarded)
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-				time.Since(start),
+				tm.systemClock.Since(start),
 				metrics.StringTag("forwarded", strconv.FormatBool(pollWasForwarded)),
 				metrics.MatchingTaskPriorityTag(priority),
 			)

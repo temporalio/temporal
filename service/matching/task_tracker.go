@@ -55,11 +55,11 @@ type taskTracker struct {
 	tasksInInterval   circularTaskBuffer
 }
 
-func newTaskTracker(timeSource clock.TimeSource) *taskTracker {
+func newTaskTracker(systemClock clock.TimeSource) *taskTracker {
 	return &taskTracker{
-		clock:             timeSource,
-		startTime:         timeSource.Now(),
-		bucketStartTime:   timeSource.Now(),
+		clock:             systemClock,
+		startTime:         systemClock.Now(),
+		bucketStartTime:   systemClock.Now(),
 		bucketSize:        time.Duration(intervalSize) * time.Second,
 		numberOfBuckets:   (totalIntervalSize / intervalSize) + 1,
 		totalIntervalSize: time.Duration(totalIntervalSize) * time.Second,

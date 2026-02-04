@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -43,6 +44,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
+		systemClock       clock.TimeSource
 
 		lastValidatedTaskInfo taskValidationInfo
 	}
@@ -53,12 +55,14 @@ func newTaskValidator(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
+	systemClock clock.TimeSource,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
 		tqCtx:             tqCtx,
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
+		systemClock:       systemClock,
 	}
 }
 
@@ -110,14 +114,14 @@ func (v *taskValidatorImpl) preValidateActive(
 		} else {
 			v.lastValidatedTaskInfo = taskValidationInfo{
 				taskID:         task.TaskId,
-				validationTime: time.Now().UTC(), // if no creation time specified, use now
+				validationTime: v.systemClock.Now(), // if no creation time specified, use now
 			}
 		}
 		return false
 	}
 
 	// this task has been validated before
-	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+	return v.systemClock.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
 }
 
 // preValidatePassive track a task and return if validation should be done, if namespace is passive
@@ -134,13 +138,13 @@ func (v *taskValidatorImpl) preValidatePassive(
 		} else {
 			v.lastValidatedTaskInfo = taskValidationInfo{
 				taskID:         task.TaskId,
-				validationTime: time.Now().UTC(), // if no creation time specified, use now
+				validationTime: v.systemClock.Now(), // if no creation time specified, use now
 			}
 		}
 	}
 
 	// this task has been validated before
-	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+	return v.systemClock.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
 }
 
 // postValidate update tracked task info
@@ -149,7 +153,7 @@ func (v *taskValidatorImpl) postValidate(
 ) {
 	v.lastValidatedTaskInfo = taskValidationInfo{
 		taskID:         task.TaskId,
-		validationTime: time.Now().UTC(),
+		validationTime: v.systemClock.Now(),
 	}
 }
 

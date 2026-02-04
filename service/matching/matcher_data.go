@@ -205,7 +205,7 @@ func (t *taskPQ) ForEachTask(pred func(*internalTask) bool, post func(*internalT
 type matcherData struct {
 	config           *taskQueueConfig
 	logger           log.Logger
-	timeSource       clock.TimeSource
+	systemClock      clock.TimeSource
 	canForward       bool
 	rateLimitManager *rateLimitManager
 
@@ -224,11 +224,11 @@ type matcherData struct {
 	stopped bool // if true, reject new tasks
 }
 
-func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
+func newMatcherData(config *taskQueueConfig, logger log.Logger, systemClock clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
 	return matcherData{
 		config:           config,
 		logger:           logger,
-		timeSource:       timeSource,
+		systemClock:      systemClock,
 		canForward:       canForward,
 		rateLimitManager: rateLimitManager,
 		tasks: taskPQ{
@@ -467,8 +467,8 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 		d.reconsiderForwardTimer.unset()
 		return true
 	}
-	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - time.Since(d.lastPoller)
-	d.reconsiderForwardTimer.set(d.timeSource, d.rematchAfterTimer, delayToForwardingAllowed)
+	delayToForwardingAllowed := d.config.MaxWaitForPollerBeforeFwd() - d.systemClock.Since(d.lastPoller)
+	d.reconsiderForwardTimer.set(d.systemClock, d.rematchAfterTimer, delayToForwardingAllowed)
 	return delayToForwardingAllowed <= 0
 }
 
@@ -476,7 +476,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 func (d *matcherData) findAndWakeMatches() {
 	allowForwarding := d.canForward && d.allowForwarding()
 
-	now := d.timeSource.Now().UnixNano()
+	now := d.systemClock.Now().UnixNano()
 	// TODO(pri): for task-specific ready time, we need to do a full/partial re-heapify here
 
 	for {
@@ -490,7 +490,7 @@ func (d *matcherData) findAndWakeMatches() {
 
 		// check ready time
 		delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
-		d.rateLimitTimer.set(d.timeSource, d.rematchAfterTimer, delay)
+		d.rateLimitTimer.set(d.systemClock, d.rematchAfterTimer, delay)
 		if delay > 0 {
 			return // not ready yet, timer will call match later
 		}
@@ -520,7 +520,7 @@ func (d *matcherData) recycleToken(task *internalTask) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	now := d.timeSource.Now().UnixNano()
+	now := d.systemClock.Now().UnixNano()
 	d.rateLimitManager.consumeTokens(now, task, -1)
 	d.findAndWakeMatches() // another task may be ready to match now
 }
@@ -545,13 +545,13 @@ func (d *matcherData) FinishMatchAfterPollForward(poller *waitingPoller, task *i
 // call with lock held.
 func (d *matcherData) isBacklogNegligible() bool {
 	t := d.tasks.ages.oldestTime()
-	return t.IsZero() || time.Since(t) < d.config.BacklogNegligibleAge()
+	return t.IsZero() || d.systemClock.Since(t) < d.config.BacklogNegligibleAge()
 }
 
 func (d *matcherData) TimeSinceLastPoll() time.Duration {
 	d.lock.Lock()
 	defer d.lock.Unlock()
-	return time.Since(d.lastPoller)
+	return d.systemClock.Since(d.lastPoller)
 }
 
 // waitable match result:

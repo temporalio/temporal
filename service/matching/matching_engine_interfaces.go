@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -12,6 +13,7 @@ type (
 	Engine interface {
 		Start()
 		Stop()
+		SystemClock() clock.TimeSource
 		AddWorkflowTask(ctx context.Context, addRequest *matchingservice.AddWorkflowTaskRequest) (buildId string, syncMatch bool, err error)
 		AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (buildId string, syncMatch bool, err error)
 		PollWorkflowTaskQueue(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error)

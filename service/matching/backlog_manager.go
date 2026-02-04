@@ -12,6 +12,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -68,6 +69,7 @@ type (
 		throttledLogger  log.ThrottledLogger
 		matchingClient   matchingservice.MatchingServiceClient
 		metricsHandler   metrics.Handler
+		systemClock      clock.TimeSource
 		initializedError *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
@@ -86,6 +88,7 @@ func newBacklogManager(
 	throttledLogger log.ThrottledLogger,
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
+	systemClock clock.TimeSource,
 ) *backlogManagerImpl {
 	bmg := &backlogManagerImpl{
 		pqMgr:            pqMgr,
@@ -95,10 +98,11 @@ func newBacklogManager(
 		logger:           logger,
 		throttledLogger:  throttledLogger,
 		config:           config,
+		systemClock:      systemClock,
 		initializedError: future.NewFuture[struct{}](),
 	}
 	isDraining := false // newBacklogManager can't be used for draining
-	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining)
+	bmg.db = newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining, systemClock)
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)

@@ -9,10 +9,10 @@ import (
 
 type (
 	liveness struct {
-		timeSource clock.TimeSource
-		ttl        func() time.Duration
-		onIdle     func()
-		timer      atomic.Value
+		systemClock clock.TimeSource
+		ttl         func() time.Duration
+		onIdle      func()
+		timer       atomic.Value
 	}
 
 	timerWrapper struct {
@@ -21,19 +21,19 @@ type (
 )
 
 func newLiveness(
-	timeSource clock.TimeSource,
+	systemClock clock.TimeSource,
 	ttl func() time.Duration,
 	onIdle func(),
 ) *liveness {
 	return &liveness{
-		timeSource: timeSource,
-		ttl:        ttl,
-		onIdle:     onIdle,
+		systemClock: systemClock,
+		ttl:         ttl,
+		onIdle:      onIdle,
 	}
 }
 
 func (l *liveness) Start() {
-	l.timer.Store(timerWrapper{l.timeSource.AfterFunc(l.ttl(), l.onIdle)})
+	l.timer.Store(timerWrapper{l.systemClock.AfterFunc(l.ttl(), l.onIdle)})
 }
 
 func (l *liveness) Stop() {

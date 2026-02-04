@@ -14,6 +14,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -45,12 +46,13 @@ type (
 	// }
 
 	priBacklogManagerImpl struct {
-		pqMgr      physicalTaskQueueManager
-		config     *taskQueueConfig
-		tqCtx      context.Context
-		isDraining bool
-		db         *taskQueueDB
-		taskWriter *priTaskWriter
+		pqMgr       physicalTaskQueueManager
+		config      *taskQueueConfig
+		tqCtx       context.Context
+		isDraining  bool
+		systemClock clock.TimeSource
+		db          *taskQueueDB
+		taskWriter  *priTaskWriter
 
 		subqueueLock        sync.Mutex
 		subqueues           []*priTaskReader // subqueue index -> fairTaskReader
@@ -82,13 +84,15 @@ func newPriBacklogManager(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 	isDraining bool,
+	systemClock clock.TimeSource,
 ) *priBacklogManagerImpl {
 	bmg := &priBacklogManagerImpl{
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
 		isDraining:          isDraining,
-		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
+		systemClock:         systemClock,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining, systemClock),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
@@ -223,10 +227,12 @@ func (c *priBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) sub
 
 func (c *priBacklogManagerImpl) periodicSync() {
 	for {
+		timerC, timer := c.systemClock.NewTimer(c.config.UpdateAckInterval())
 		select {
 		case <-c.tqCtx.Done():
+			timer.Stop()
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-timerC:
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
@@ -294,7 +300,7 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 		// Find greatest backlog age for across all subqueues for the same priority.
 		oldestBacklogTime := c.subqueues[subqueueIdx].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
-			oldestBacklogAge := time.Since(oldestBacklogTime)
+			oldestBacklogAge := c.systemClock.Since(oldestBacklogTime)
 			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
 				result[pk].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
 			}

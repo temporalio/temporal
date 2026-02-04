@@ -31,7 +31,7 @@ type (
 		backlogMgr *backlogManagerImpl
 
 		backoffTimerLock      sync.Mutex
-		backoffTimer          *time.Timer
+		backoffTimer          clock.Timer
 		retrier               backoff.Retrier
 		backlogHeadCreateTime atomic.Int64
 	}
@@ -46,7 +46,7 @@ func newTaskReader(backlogMgr *backlogManagerImpl) *taskReader {
 		taskBuffer: make(chan *persistencespb.AllocatedTaskInfo, backlogMgr.config.GetTasksBatchSize()-1),
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			clock.NewRealTimeSource(),
+			backlogMgr.systemClock,
 		),
 	}
 	tr.backlogHeadCreateTime.Store(-1)
@@ -79,7 +79,7 @@ func (tr *taskReader) getBacklogHeadAge() time.Duration {
 	if tr.backlogHeadCreateTime.Load() == -1 {
 		return time.Duration(0)
 	}
-	return time.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
+	return tr.backlogMgr.systemClock.Since(time.Unix(0, tr.backlogHeadCreateTime.Load()))
 }
 
 func (tr *taskReader) dispatchBufferedTasks() {
@@ -135,7 +135,7 @@ func (tr *taskReader) getTasksPump() {
 		return
 	}
 
-	updateAckTimer := time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
+	updateAckTimerC, updateAckTimer := tr.backlogMgr.systemClock.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
 	tr.Signal() // prime pump
@@ -180,7 +180,7 @@ Loop:
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
-		case <-updateAckTimer.C:
+		case <-updateAckTimerC:
 			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
 			if err != nil && !isConditionFailed {
@@ -189,8 +189,8 @@ Loop:
 					tag.Error(err))
 				// keep going as saving ack is not critical
 			}
-			tr.Signal() // periodically signal pump to check persistence for tasks
-			updateAckTimer = time.NewTimer(tr.backlogMgr.config.UpdateAckInterval())
+			tr.Signal()                                                                                                    // periodically signal pump to check persistence for tasks
+			updateAckTimerC, updateAckTimer = tr.backlogMgr.systemClock.NewTimer(tr.backlogMgr.config.UpdateAckInterval()) //nolint:staticcheck // used by defer
 		}
 	}
 }
@@ -303,7 +303,7 @@ func (tr *taskReader) reEnqueueAfterDelay(duration time.Duration) {
 	defer tr.backoffTimerLock.Unlock()
 
 	if tr.backoffTimer == nil {
-		tr.backoffTimer = time.AfterFunc(duration, func() {
+		tr.backoffTimer = tr.backlogMgr.systemClock.AfterFunc(duration, func() {
 			tr.backoffTimerLock.Lock()
 			defer tr.backoffTimerLock.Unlock()
 

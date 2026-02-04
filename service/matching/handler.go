@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"sync"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -11,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -70,6 +70,7 @@ type (
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
+		TaskClock                     clock.TimeSource
 	}
 )
 
@@ -112,6 +113,7 @@ func NewHandler(
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
 			params.Serializer,
+			params.TaskClock,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
@@ -157,7 +159,7 @@ func (h *Handler) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	startT := time.Now().UTC()
+	startT := h.engine.SystemClock().Now()
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
@@ -171,7 +173,7 @@ func (h *Handler) AddActivityTask(
 
 	assignedBuildId, syncMatch, err := h.engine.AddActivityTask(ctx, request)
 	if syncMatch {
-		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
+		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(h.engine.SystemClock().Since(startT))
 	}
 	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
@@ -182,7 +184,7 @@ func (h *Handler) AddWorkflowTask(
 	request *matchingservice.AddWorkflowTaskRequest,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	startT := time.Now().UTC()
+	startT := h.engine.SystemClock().Now()
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
@@ -196,7 +198,7 @@ func (h *Handler) AddWorkflowTask(
 
 	assignedBuildId, syncMatch, err := h.engine.AddWorkflowTask(ctx, request)
 	if syncMatch {
-		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
+		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(h.engine.SystemClock().Since(startT))
 	}
 	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: assignedBuildId}, err
 }

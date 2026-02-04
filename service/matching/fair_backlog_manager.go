@@ -14,6 +14,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -26,12 +27,13 @@ import (
 
 type (
 	fairBacklogManagerImpl struct {
-		pqMgr      physicalTaskQueueManager
-		config     *taskQueueConfig
-		tqCtx      context.Context
-		isDraining bool
-		db         *taskQueueDB
-		taskWriter *fairTaskWriter
+		pqMgr       physicalTaskQueueManager
+		config      *taskQueueConfig
+		tqCtx       context.Context
+		isDraining  bool
+		systemClock clock.TimeSource
+		db          *taskQueueDB
+		taskWriter  *fairTaskWriter
 
 		subqueueLock        sync.Mutex
 		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
@@ -62,6 +64,7 @@ func newFairBacklogManager(
 	metricsHandler metrics.Handler,
 	counterFactory func() counter.Counter,
 	isDraining bool,
+	systemClock clock.TimeSource,
 ) *fairBacklogManagerImpl {
 	// For the purposes of taskQueueDB, call this just a TaskManager. It'll return errors if we
 	// use it incorectly. TODO(fairness): consider a cleaner way of doing this.
@@ -72,7 +75,8 @@ func newFairBacklogManager(
 		config:              config,
 		tqCtx:               tqCtx,
 		isDraining:          isDraining,
-		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
+		systemClock:         systemClock,
+		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining, systemClock),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
@@ -208,10 +212,12 @@ func (c *fairBacklogManagerImpl) getSubqueueForPriority(priority priorityKey) su
 
 func (c *fairBacklogManagerImpl) periodicSync() {
 	for {
+		timerC, timer := c.systemClock.NewTimer(c.config.UpdateAckInterval())
 		select {
 		case <-c.tqCtx.Done():
+			timer.Stop()
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-timerC:
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
@@ -296,7 +302,7 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		// Find greatest backlog age for across all subqueues for the same priority.
 		oldestBacklogTime := c.subqueues[subqueueIdx].getOldestBacklogTime()
 		if !oldestBacklogTime.IsZero() {
-			oldestBacklogAge := time.Since(oldestBacklogTime)
+			oldestBacklogAge := c.systemClock.Since(oldestBacklogTime)
 			if oldestBacklogAge > result[pk].ApproximateBacklogAge.AsDuration() {
 				result[pk].ApproximateBacklogAge = durationpb.New(oldestBacklogAge)
 			}

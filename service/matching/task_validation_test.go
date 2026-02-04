@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -70,7 +71,7 @@ func (s *taskValidatorSuite) SetupTest() {
 		},
 	}
 
-	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient)
+	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient, clock.NewRealTimeSource())
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {

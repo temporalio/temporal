@@ -65,6 +65,7 @@ type (
 		partitionMgr *taskQueuePartitionManagerImpl
 		queue        *PhysicalTaskQueueKey
 		config       *taskQueueConfig
+		systemClock  clock.TimeSource
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
@@ -148,6 +149,7 @@ func newPhysicalTaskQueueManager(
 		partitionMgr:             partitionMgr,
 		queue:                    queue,
 		config:                   config,
+		systemClock:              e.systemClock,
 		tqCtx:                    tqCtx,
 		tqCtxCancel:              tqCancel,
 		namespaceRegistry:        e.namespaceRegistry,
@@ -161,10 +163,10 @@ func newPhysicalTaskQueueManager(
 	}
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
-	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
+	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL(), pqMgr.systemClock)
 
 	pqMgr.liveness = newLiveness(
-		clock.NewRealTimeSource(),
+		pqMgr.systemClock,
 		config.MaxTaskQueueIdleTime,
 		func() { pqMgr.UnloadFromPartitionManager(unloadCauseIdle) },
 	)
@@ -174,6 +176,7 @@ func newPhysicalTaskQueueManager(
 		pqMgr.clusterMeta,
 		pqMgr.namespaceRegistry,
 		pqMgr.partitionMgr.engine.historyClient,
+		pqMgr.systemClock,
 	)
 
 	switch {
@@ -192,6 +195,7 @@ func newPhysicalTaskQueueManager(
 			newFairMetricsHandler(taggedMetricsHandler),
 			pqMgr.counterFactory,
 			false,
+			pqMgr.systemClock,
 		)
 		var fwdr *priForwarder
 		var err error
@@ -213,6 +217,7 @@ func newPhysicalTaskQueueManager(
 			newFairMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
 			pqMgr.MarkAlive,
+			pqMgr.systemClock,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -231,6 +236,7 @@ func newPhysicalTaskQueueManager(
 			e.matchingRawClient,
 			newPriMetricsHandler(taggedMetricsHandler),
 			false,
+			pqMgr.systemClock,
 		)
 		var fwdr *priForwarder
 		var err error
@@ -252,6 +258,7 @@ func newPhysicalTaskQueueManager(
 			newPriMetricsHandler(taggedMetricsHandler),
 			partitionMgr.rateLimitManager,
 			pqMgr.MarkAlive,
+			pqMgr.systemClock,
 		)
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
@@ -268,6 +275,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
 			taggedMetricsHandler,
+			pqMgr.systemClock,
 		)
 		var fwdr *Forwarder
 		var err error
@@ -278,7 +286,7 @@ func newPhysicalTaskQueueManager(
 				return nil, err
 			}
 		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
+		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter(), pqMgr.systemClock)
 		pqMgr.matcher = pqMgr.oldMatcher
 		return pqMgr, nil
 	}
@@ -376,6 +384,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 			c.partitionMgr.engine.matchingRawClient,
 			newPriMetricsHandler(c.metricsHandler),
 			true,
+			c.systemClock,
 		)
 	case *priBacklogManagerImpl:
 		logger = log.With(c.logger, backlogTagFairnessDrain)
@@ -390,6 +399,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 			newFairMetricsHandler(c.metricsHandler),
 			c.counterFactory,
 			true,
+			c.systemClock,
 		)
 	default:
 		softassert.Fail(c.logger, "SetupDraining called with unknown backlogMgr type")
@@ -598,7 +608,7 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 				// Operation-Timeout header is not required so don't fail request on parsing errors.
 				c.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.NamespaceId))
 			} else {
-				opDeadline = time.Now().Add(opTimeout)
+				opDeadline = c.systemClock.Now().Add(opTimeout)
 			}
 		}
 	}
@@ -827,6 +837,10 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
 }
 
+func (c *physicalTaskQueueManagerImpl) TimeSource() clock.TimeSource {
+	return c.systemClock
+}
+
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
 }
@@ -852,7 +866,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
 	statsFn func() *taskqueuepb.TaskQueueStats,
 ) *taskqueuepb.PollerScalingDecision {
-	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
+	pollWaitTime := c.systemClock.Since(pollStartTime)
 	// If a poller has waited around a while, we can always suggest a decrease.
 	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
@@ -867,7 +881,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	if numPollers == 0 {
 		numPollers = 1
 	}
-	if !c.pollerScalingRateLimiter.AllowN(time.Now(), 1e6/numPollers) {
+	if !c.pollerScalingRateLimiter.AllowN(c.systemClock.Now(), 1e6/numPollers) {
 		return nil
 	}
 
@@ -933,8 +947,8 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	}
 
 	// Initalize all task trackers together; or the timeframes won't line up.
-	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
-	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksAdded[priorityKey] = newTaskTracker(c.systemClock)
+	c.tasksDispatched[priorityKey] = newTaskTracker(c.systemClock)
 
 	return intervals[priorityKey]
 }

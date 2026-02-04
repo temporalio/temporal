@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -39,6 +40,7 @@ type (
 		store          persistence.TaskManager
 		logger         log.Logger
 		metricsHandler metrics.Handler
+		systemClock    clock.TimeSource
 
 		// mutable
 		sync.Mutex
@@ -96,6 +98,7 @@ func newTaskQueueDB(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	isDraining bool,
+	systemClock clock.TimeSource,
 ) *taskQueueDB {
 	return &taskQueueDB{
 		config:         config,
@@ -104,6 +107,7 @@ func newTaskQueueDB(
 		store:          store,
 		logger:         logger,
 		metricsHandler: metricsHandler,
+		systemClock:    systemClock,
 	}
 }
 
@@ -192,7 +196,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			db.rangeID = 0
 			return err
 		}
-		db.lastWrite = time.Now()
+		db.lastWrite = db.systemClock.Now()
 		// We took over the task queue and are not sure what tasks may have been written
 		// before. Set max read level id of all subqueues to just before our new block.
 		maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
@@ -218,7 +222,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			db.rangeID = 0
 			return err
 		}
-		db.lastWrite = time.Now()
+		db.lastWrite = db.systemClock.Now()
 		// In this case, ensureDefaultSubqueuesLocked already initialized subqueue 0 to have
 		// ackLevel and maxReadLevel 0, so we don't need to initialize them.
 		softassert.That(db.logger, db.subqueues[0].maxReadLevel == 0, "should have maxReadLevel 0 here")
@@ -287,7 +291,7 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
 	// Note that we use the same threshold for non-sticky queues even though they don't have a
 	// persistence TTL, since the scavenger looks for metadata that hasn't been updated in 48 hours.
-	needWrite := db.lastChange.After(db.lastWrite) || time.Since(db.lastWrite) > stickyTaskQueueTTL/2
+	needWrite := db.lastChange.After(db.lastWrite) || db.systemClock.Since(db.lastWrite) > stickyTaskQueueTTL/2
 	if !needWrite {
 		return nil
 	}
@@ -308,19 +312,19 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 			tag.Any("new-ack-level", newAckLevel))
 	}
 	if dbQueue.AckLevel != newAckLevel {
-		db.lastChange = time.Now()
+		db.lastChange = db.systemClock.Now()
 		dbQueue.AckLevel = newAckLevel
 	}
 
 	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
 		// Reset approximateBacklogCount to fix the count divergence issue
 		if dbQueue.ApproximateBacklogCount != 0 || !dbQueue.oldestTime.Equal(oldestTime) {
-			db.lastChange = time.Now()
+			db.lastChange = db.systemClock.Now()
 			dbQueue.ApproximateBacklogCount = 0
 			dbQueue.oldestTime = oldestTime
 		}
 	} else if countDelta != 0 {
-		db.lastChange = time.Now()
+		db.lastChange = db.systemClock.Now()
 		db.updateBacklogStatsLocked(subqueue, countDelta, oldestTime)
 	}
 }
@@ -356,7 +360,7 @@ func (db *taskQueueDB) setKnownFairBacklogCount(subqueue subqueueIndex, count in
 	defer db.Unlock()
 
 	if db.subqueues[subqueue].ApproximateBacklogCount != count {
-		db.lastChange = time.Now()
+		db.lastChange = db.systemClock.Now()
 		db.subqueues[subqueue].ApproximateBacklogCount = count
 		if count == 0 {
 			db.subqueues[subqueue].oldestTime = time.Time{}
@@ -493,9 +497,9 @@ func (db *taskQueueDB) CreateTasks(
 		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
 		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
-			db.lastWrite = time.Now()
+			db.lastWrite = db.systemClock.Now()
 		} else {
-			db.lastChange = time.Now()
+			db.lastChange = db.systemClock.Now()
 		}
 	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
@@ -566,9 +570,9 @@ func (db *taskQueueDB) CreateFairTasks(
 		// Only update lastWrite for persistence implementations that update metadata on CreateTasks,
 		// otherwise we have a change to ApproximateBacklogCount we need to write.
 		if resp.UpdatedMetadata {
-			db.lastWrite = time.Now()
+			db.lastWrite = db.systemClock.Now()
 		} else {
-			db.lastChange = time.Now()
+			db.lastChange = db.systemClock.Now()
 		}
 	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
 		// Tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
@@ -708,7 +712,7 @@ func (db *taskQueueDB) expiryTime() *timestamppb.Timestamp {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
 		return nil
 	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamppb.New(time.Now().Add(stickyTaskQueueTTL))
+		return timestamppb.New(db.systemClock.Now().Add(stickyTaskQueueTTL))
 	default:
 		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.queue.Partition().Kind()))
 	}
@@ -766,7 +770,7 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 	if oldestTime.IsZero() {
 		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	} else {
-		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(db.systemClock.Since(oldestTime).Seconds())
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }

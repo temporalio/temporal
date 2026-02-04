@@ -31,17 +31,17 @@ const (
 
 type (
 	internalUpdateNexusEndpointRequest struct {
-		endpointID string
-		version    int64
-		spec       *persistencespb.NexusEndpointSpec
-		clusterID  int64
-		timeSource clock.TimeSource
+		endpointID  string
+		version     int64
+		spec        *persistencespb.NexusEndpointSpec
+		clusterID   int64
+		systemClock clock.TimeSource
 	}
 
 	internalCreateNexusEndpointRequest struct {
-		spec       *persistencespb.NexusEndpointSpec
-		clusterID  int64
-		timeSource clock.TimeSource
+		spec        *persistencespb.NexusEndpointSpec
+		clusterID   int64
+		systemClock clock.TimeSource
 	}
 
 	// nexusEndpointClient manages cache and persistence access for Nexus endpoints.
@@ -106,7 +106,7 @@ func (m *nexusEndpointClient) CreateNexusEndpoint(
 		Endpoint: &persistencespb.NexusEndpoint{
 			Clock:       hlc.Zero(request.clusterID),
 			Spec:        request.spec,
-			CreatedTime: timestamppb.New(request.timeSource.Now().UTC()),
+			CreatedTime: timestamppb.New(request.systemClock.Now().UTC()),
 		},
 	}
 
@@ -160,7 +160,7 @@ func (m *nexusEndpointClient) UpdateNexusEndpoint(
 		Version: previous.Version,
 		Id:      previous.Id,
 		Endpoint: &persistencespb.NexusEndpoint{
-			Clock: hlc.Next(previous.Endpoint.Clock, request.timeSource),
+			Clock: hlc.Next(previous.Endpoint.Clock, request.systemClock),
 			Spec:  request.spec,
 		},
 	}
