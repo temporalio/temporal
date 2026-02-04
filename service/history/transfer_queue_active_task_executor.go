@@ -5,18 +5,23 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"google.golang.org/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -143,8 +148,7 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	case *tasks.CancelActivityNexusTask:
-		// TODO: Implement dispatch to worker control queue
-		err = nil
+		err = t.processCancelActivityNexus(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
@@ -1967,4 +1971,128 @@ func copyChildWorkflowInfos(
 		result[k] = common.CloneProto(v)
 	}
 	return result
+}
+
+func (t *transferQueueActiveTaskExecutor) processCancelActivityNexus(
+	ctx context.Context,
+	task *tasks.CancelActivityNexusTask,
+) (retError error) {
+	if !t.config.EnableActivityCancellationNexusTask() {
+		return nil
+	}
+
+	if task.WorkerInstanceKey == "" || len(task.ScheduledEventIDs) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTransferTask(ctx, t.shardContext, weContext, task, t.metricHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	// Build task tokens for all activities that still need cancellation
+	var taskTokens [][]byte
+	for _, scheduledEventID := range task.ScheduledEventIDs {
+		ai, ok := mutableState.GetActivityInfo(scheduledEventID)
+		if !ok || !ai.CancelRequested || ai.StartedEventId == common.EmptyEventID {
+			continue
+		}
+
+		taskToken := &tokenspb.Task{
+			NamespaceId:      task.NamespaceID,
+			WorkflowId:       task.WorkflowID,
+			RunId:            task.RunID,
+			ScheduledEventId: scheduledEventID,
+			Attempt:          ai.Attempt,
+			ActivityId:       ai.ActivityId,
+			StartedEventId:   ai.StartedEventId,
+			Version:          ai.Version,
+		}
+		taskTokenBytes, err := taskToken.Marshal()
+		if err != nil {
+			return err
+		}
+		taskTokens = append(taskTokens, taskTokenBytes)
+	}
+
+	if len(taskTokens) == 0 {
+		return nil
+	}
+
+	return t.dispatchActivityCancelToWorker(ctx, task, taskTokens)
+}
+
+func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
+	ctx context.Context,
+	task *tasks.CancelActivityNexusTask,
+	taskTokens [][]byte,
+) error {
+	nsName, err := t.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(task.NamespaceID))
+	if err != nil {
+		return err
+	}
+	// TODO: Fetch control queue name from worker registry.
+	controlQueueName := fmt.Sprintf("/temporal-sys/worker-commands/%s/%s", nsName, task.WorkerInstanceKey)
+
+	cancelPayload := &workerpb.CancelActivitiesRequestPayload{
+		TaskTokens: taskTokens,
+	}
+	payloadBytes, err := proto.Marshal(cancelPayload)
+	if err != nil {
+		return serviceerror.NewInternal(fmt.Sprintf("failed to marshal cancel activities payload: %v", err))
+	}
+
+	nexusRequest := &nexuspb.Request{
+		Header: map[string]string{},
+		Variant: &nexuspb.Request_StartOperation{
+			StartOperation: &nexuspb.StartOperationRequest{
+				Service:   "sys-worker-service",
+				Operation: "cancel-activities",
+				Payload: &commonpb.Payload{
+					Metadata: map[string][]byte{
+						"encoding": []byte("proto"),
+					},
+					Data: payloadBytes,
+				},
+			},
+		},
+	}
+
+	resp, err := t.matchingRawClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: task.NamespaceID,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: controlQueueName,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Request: nexusRequest,
+	})
+	if err != nil {
+		t.logger.Warn("Failed to dispatch activity cancel to worker",
+			tag.WorkflowNamespaceID(task.NamespaceID),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
+			tag.Error(err))
+		return err
+	}
+
+	if resp.GetRequestTimeout() != nil {
+		t.logger.Warn("No worker polling control queue for activity cancel",
+			tag.WorkflowNamespaceID(task.NamespaceID),
+			tag.WorkflowID(task.WorkflowID))
+		return serviceerror.NewUnavailable("no worker polling control queue")
+	}
+
+	return nil
 }
