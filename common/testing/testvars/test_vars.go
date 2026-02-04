@@ -396,6 +396,15 @@ func (tv *TestVars) WorkerIdentity() string {
 	return getOrCreate(tv, "worker_identity", tv.uniqueString, tv.stringNSetter)
 }
 
+func (tv *TestVars) WorkerInstanceKey() string {
+	return getOrCreate(tv, "worker_instance_key", tv.uniqueString, tv.stringNSetter)
+}
+
+// ControlQueueName returns the queue name used to deliver Nexus tasks to this worker instance.
+func (tv *TestVars) ControlQueueName(namespace string) string {
+	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", namespace, tv.WorkerInstanceKey())
+}
+
 func (tv *TestVars) TimerID() string {
 	return getOrCreate(tv, "timer_id", tv.uniqueString, tv.stringNSetter)
 }
