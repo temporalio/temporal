@@ -164,7 +164,7 @@ func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid st
 	if err != nil {
 		// We preserve the old logic (not returning error in case of invalid proto info) until it's verified that
 		// clients are not sending invalid names.
-		c.logger.Info("invalid tq partition", tag.Error(err), tag.NewStringerTag("proto", proto))
+		c.logger.Info("invalid tq partition", tag.Error(err), tag.Stringer("proto", proto))
 		metrics.MatchingClientInvalidTaskQueuePartition.With(c.metricsHandler).Record(1)
 		return tqid.UnsafeTaskQueueFamily(nsid, proto.GetName()).TaskQueue(taskType).RootPartition(), nil
 	}

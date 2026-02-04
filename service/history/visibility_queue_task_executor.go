@@ -414,7 +414,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		if err != nil {
 			// To reach here, either the search attribute has been deregistered before task execution, which is valid behavior,
 			// or there are delays in propagating search attribute mappings to History.
-			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.NewStringTag("alias", alias), tag.Error(err))
+			t.logger.Warn("Failed to get field name for alias, ignoring search attribute", tag.String("alias", alias), tag.Error(err))
 			continue
 		}
 		searchattributes[fieldName] = value
