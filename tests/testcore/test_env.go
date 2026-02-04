@@ -3,6 +3,8 @@ package testcore
 import (
 	"context"
 	"fmt"
+	"os"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -233,11 +235,24 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 }
 
 // calculateTimeout determines the appropriate timeout duration based on custom timeout,
-// test deadline, and default values. Returns 0 if timeout should be skipped.
+// environment variable, test deadline, and default values. Returns 0 if timeout should be skipped.
+//
+// Priority order:
+//  1. Custom timeout (via WithTimeout option)
+//  2. TEMPORAL_TEST_TIMEOUT environment variable (in seconds)
+//  3. Test deadline (via -timeout flag)
+//  4. Default 90 seconds
 func calculateTimeout(t *testing.T, customTimeout time.Duration) time.Duration {
 	if customTimeout > 0 {
 		// Use custom timeout if provided
 		return customTimeout * debug.TimeoutMultiplier
+	}
+
+	// Check for environment variable
+	if envTimeout := os.Getenv("TEMPORAL_TEST_TIMEOUT"); envTimeout != "" {
+		if seconds, err := strconv.Atoi(envTimeout); err == nil && seconds > 0 {
+			return time.Duration(seconds) * time.Second * debug.TimeoutMultiplier
+		}
 	}
 
 	deadline, hasDeadline := t.Deadline()
