@@ -499,8 +499,8 @@ func GenerateRandomString(n int) string {
 }
 
 // CreateMatchingPollWorkflowTaskQueueResponse create response for matching's PollWorkflowTaskQueue
-func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponse {
-	matchingResp := &matchingservice.PollWorkflowTaskQueueResponse{
+func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice.RecordWorkflowTaskStartedResponse, workflowExecution *commonpb.WorkflowExecution, token []byte) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
+	matchingResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
 		TaskToken:                  token,
 		WorkflowExecution:          workflowExecution,
 		WorkflowType:               historyResponse.WorkflowType,
@@ -518,6 +518,7 @@ func CreateMatchingPollWorkflowTaskQueueResponse(historyResponse *historyservice
 		Messages:                   historyResponse.Messages,
 		History:                    historyResponse.History,
 		NextPageToken:              historyResponse.NextPageToken,
+		RawHistory:                 historyResponse.RawHistoryBytes,
 	}
 
 	return matchingResp

@@ -62,6 +62,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 
 	s.redirector = NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,
