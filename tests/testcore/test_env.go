@@ -83,9 +83,12 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 // MustRunSequential marks a test suite to run its tests sequentially instead
 // of in parallel. Call this at the start of your test suite before any
 // subtests are created.
-func MustRunSequential(t *testing.T) {
+func MustRunSequential(t *testing.T, reason string) {
 	if strings.Contains(t.Name(), "/") {
 		panic("MustRunSequential must be called from a top-level test, not a subtest")
+	}
+	if reason == "" {
+		panic("MustRunSequential requires a reason")
 	}
 	sequentialSuites.Store(t.Name(), true)
 }
