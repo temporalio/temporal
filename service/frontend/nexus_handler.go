@@ -525,11 +525,20 @@ func (h *nexusHandler) StartOperation(
 			if t.Failure.GetCanceledFailureInfo() != nil {
 				state = nexus.OperationStateCanceled
 			}
-			return nil, &nexus.OperationError{
-				Message: "operation error",
+			opErr := &nexus.OperationError{
 				State:   state,
+				Message: "operation error",
 				Cause:   cause,
 			}
+			nf, err = nexus.DefaultFailureConverter().ErrorToFailure(opErr)
+			if err != nil {
+				oc.logger.Error("error converting OperationError to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+			}
+			nf.Metadata["unwrap-error"] = "true"
+			opErr.OriginalFailure = &nf
+
+			return nil, opErr
 		}
 	}
 	// This is the worker's fault.

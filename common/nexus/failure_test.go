@@ -193,6 +193,7 @@ func TestFromOperationFailedError(t *testing.T) {
 		Message:    "operation failed",
 		StackTrace: "stack trace",
 	})
+	require.NoError(t, err)
 	cause, err := TemporalFailureToNexusFailure(
 		temporal.GetDefaultFailureConverter().ErrorToFailure(
 			temporal.NewApplicationError("app err", "CustomError", "details"),
@@ -235,6 +236,7 @@ func TestFromOperationCanceledError(t *testing.T) {
 		Message:    "operation canceled",
 		StackTrace: "stack trace",
 	})
+	require.NoError(t, err)
 	cause, err := TemporalFailureToNexusFailure(
 		temporal.GetDefaultFailureConverter().ErrorToFailure(
 			temporal.NewApplicationError("app err", "CustomError", "details"),

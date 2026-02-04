@@ -83,12 +83,6 @@ func NexusFailureToProtoFailure(failure nexus.Failure) *nexuspb.Failure {
 	return pf
 }
 
-type serializedOperationError struct {
-	State string `json:"state,omitempty"`
-	// Bytes as base64 encoded string.
-	EncodedAttributes string `json:"encodedAttributes,omitempty"`
-}
-
 type serializedHandlerError struct {
 	Type              string `json:"type,omitempty"`
 	RetryableOverride *bool  `json:"retryableOverride,omitempty"`
@@ -124,7 +118,7 @@ func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, e
 			encodedAttributes = base64.StdEncoding.EncodeToString(b)
 		}
 		var retryableOverride *bool
-		// nolint:exhaustive // There are only two valid values other than unspecified.
+		// nolint:exhaustive,revive // There are only two valid values other than unspecified.
 		switch info.NexusHandlerFailureInfo.GetRetryBehavior() {
 		case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
 			val := true

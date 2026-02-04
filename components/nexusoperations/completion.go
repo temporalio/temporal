@@ -11,7 +11,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -52,9 +51,17 @@ func handleOperationError(
 		return err
 	}
 	var originalCause *failurepb.Failure
-	if opErr.OriginalFailure != nil && opErr.OriginalFailure.Cause != nil {
+	unwrapError := opErr.OriginalFailure.Metadata["unwrap-error"] == "true"
+
+	if unwrapError && opErr.OriginalFailure.Cause != nil {
 		var err error
 		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure.Cause)
+		if err != nil {
+			return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
+		}
+	} else {
+		// Transform the OperationError to either ApplicationFailure or CanceledFailure based on the operation error state.
+		originalCause, err = commonnexus.NexusFailureToTemporalFailure(*opErr.OriginalFailure)
 		if err != nil {
 			return serviceerror.NewInvalidArgumentf("Malformed failure: %v", err)
 		}
@@ -76,15 +83,15 @@ func handleOperationError(
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
-		if originalCause.GetCause().GetCanceledFailureInfo() == nil {
-			// Wrap the original failure in a CanceledFailureInfo to indicate cancellation. All workflow commands expected a
-			// nested CanceledFailure.
-			originalCause.Cause = &failurepb.Failure{
+		if originalCause.GetCanceledFailureInfo() == nil {
+			// Old SDKs may send an ApplicationFailure for canceled operation causes.
+			originalCause = &failurepb.Failure{
+				Message:    originalCause.GetMessage(),
+				StackTrace: originalCause.GetStackTrace(),
 				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 				},
-				// Preserve the original cause (+clone to avoid infinite self reference).
-				Cause: common.CloneProto(originalCause),
+				Cause: originalCause.GetCause(),
 			}
 		}
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {

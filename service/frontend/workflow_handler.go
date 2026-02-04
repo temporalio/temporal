@@ -5565,10 +5565,6 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
 		}
 	}
-	// TODO: assert application error or canceled error?
-	// if f := request.GetResponse().GetStartOperation().GetFailure(); f != nil && f.GetNexusSdkOperationFailureInfo() == nil {
-	// 	return nil, serviceerror.NewInvalidArgument("request StartOperation Failure must contain failure with NexusSdkOperationFailureInfo")
-	// }
 
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
 		NamespaceId: namespaceId.String(),

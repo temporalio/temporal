@@ -339,6 +339,8 @@ func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *h
 		if !ok {
 			// Backwards compatibility: wrap non-OperationError errors in an OperationError with the appropriate state.
 			completion.Error = &nexus.OperationError{
+				// Not adding Message here to ensure the failure is unwrapped.
+				// After server version 1.31.0 is out, we can add the message back.
 				State: completion.State,
 				Cause: completionErr,
 			}

@@ -307,6 +307,7 @@ func (c *HTTPClient) StartOperation(
 			if err != nil {
 				return nil, err
 			}
+			originalFailure.Metadata["unwrap-error"] = "true"
 			opErr.OriginalFailure = &originalFailure
 			wireErr = opErr
 		}

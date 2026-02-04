@@ -2132,7 +2132,10 @@ func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration() {
 			checkWorkflowError: func(t *testing.T, wfErr error) {
 				var opErr *temporal.NexusOperationError
 				require.ErrorAs(t, wfErr, &opErr)
-				require.Equal(t, "some error", opErr.Message)
+				require.Equal(t, "nexus operation completed unsuccessfully", opErr.Message)
+				var appErr *temporal.ApplicationError
+				require.ErrorAs(t, opErr.Cause, &appErr)
+				require.Equal(t, "some error", appErr.Message())
 			},
 		},
 		{

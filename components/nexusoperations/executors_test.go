@@ -210,7 +210,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					ScheduledEventId: 1,
 					RequestId:        op.RequestId,
 					Failure: &failurepb.Failure{
-						Message: "operation failed from handler",
+						Message: "nexus operation completed unsuccessfully",
 						FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 							NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
 								ScheduledEventId: 1,
@@ -220,13 +220,28 @@ func TestProcessInvocationTask(t *testing.T) {
 							},
 						},
 						Cause: &failurepb.Failure{
-							Message: "cause",
-							// FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
-							// 	NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-							// 		Metadata: map[string]string{"encoding": "json/plain"},
-							// 		Details:  []byte(`"details"`),
-							// 	},
-							// },
+							Message: "operation failed from handler",
+							FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+								ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+									Type:         "OperationError",
+									NonRetryable: true,
+								},
+							},
+							Cause: &failurepb.Failure{
+								Message: "cause",
+								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+										Details: &commonpb.Payloads{
+											Payloads: []*commonpb.Payload{
+												mustToPayload(t, nexus.Failure{
+													Metadata: map[string]string{"encoding": "json/plain"},
+													Details:  json.RawMessage("\"details\""),
+												}),
+											},
+										},
+									},
+								},
+							},
 						},
 					},
 				}
@@ -270,14 +285,19 @@ func TestProcessInvocationTask(t *testing.T) {
 								CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 							},
 							Cause: &failurepb.Failure{
-								Message:     "cause",
-								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{},
-								// FailureInfo: &failurepb.Failure_NexusSdkFailureErrorInfo{
-								// 	NexusSdkFailureErrorInfo: &failurepb.NexusSDKFailureErrorFailureInfo{
-								// 		Metadata: map[string]string{"encoding": "json/plain"},
-								// 		Details:  []byte(`"details"`),
-								// 	},
-								// },
+								Message: "cause",
+								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+										Details: &commonpb.Payloads{
+											Payloads: []*commonpb.Payload{
+												mustToPayload(t, nexus.Failure{
+													Metadata: map[string]string{"encoding": "json/plain"},
+													Details:  json.RawMessage("\"details\""),
+												}),
+											},
+										},
+									},
+								},
 							},
 						},
 					},
