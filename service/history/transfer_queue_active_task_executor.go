@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -2044,7 +2044,7 @@ func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
 		return err
 	}
 	// TODO: Fetch control queue name from worker registry.
-	controlQueueName := fmt.Sprintf("/temporal-sys/worker-commands/%s/%s", nsName, task.WorkerInstanceKey)
+	controlQueueName := fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", nsName, task.WorkerInstanceKey)
 
 	cancelPayload := &workerpb.CancelActivitiesRequestPayload{
 		TaskTokens: taskTokens,

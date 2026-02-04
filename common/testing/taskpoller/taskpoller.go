@@ -557,6 +557,9 @@ func (p *activityTaskPoller) pollActivityTask(
 	if req.Identity == "" {
 		req.Identity = opts.tv.WorkerIdentity()
 	}
+	if req.WorkerInstanceKey == "" {
+		req.WorkerInstanceKey = opts.tv.WorkerInstanceKey()
+	}
 	resp, err := p.client.PollActivityTaskQueue(ctx, req)
 	if err != nil {
 		return nil, err
