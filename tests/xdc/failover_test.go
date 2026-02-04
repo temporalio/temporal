@@ -2731,11 +2731,17 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 
 		// After failover, verify we can still heartbeat and complete
 		activity.RecordHeartbeat(ctx, hb2Val)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		select {
 		case hb2Ch <- struct{}{}:
 		default:
 		}
 		activity.RecordHeartbeat(ctx, hb3Val)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		select {
 		case hb3Ch <- struct{}{}:
 		default:
