@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -70,6 +71,7 @@ type (
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
+		TaskClock                     clock.TimeSource
 	}
 )
 
@@ -112,6 +114,7 @@ func NewHandler(
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
 			params.Serializer,
+			params.TaskClock,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,

@@ -161,10 +161,10 @@ func newPhysicalTaskQueueManager(
 	}
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
-	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
+	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL(), e.taskClock)
 
 	pqMgr.liveness = newLiveness(
-		clock.NewRealTimeSource(),
+		e.systemClock,
 		config.MaxTaskQueueIdleTime,
 		func() { pqMgr.UnloadFromPartitionManager(unloadCauseIdle) },
 	)
@@ -827,6 +827,10 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
 }
 
+func (c *physicalTaskQueueManagerImpl) TimeSource() clock.TimeSource {
+	return c.partitionMgr.engine.taskClock
+}
+
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
 }
@@ -852,7 +856,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
 	statsFn func() *taskqueuepb.TaskQueueStats,
 ) *taskqueuepb.PollerScalingDecision {
-	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
+	pollWaitTime := c.partitionMgr.engine.taskClock.Since(pollStartTime)
 	// If a poller has waited around a while, we can always suggest a decrease.
 	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
 		// Decrease if any poll matched after sitting idle for some configured period
@@ -933,8 +937,8 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 	}
 
 	// Initalize all task trackers together; or the timeframes won't line up.
-	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
-	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.timeSource)
+	c.tasksAdded[priorityKey] = newTaskTracker(c.partitionMgr.engine.taskClock)
+	c.tasksDispatched[priorityKey] = newTaskTracker(c.partitionMgr.engine.taskClock)
 
 	return intervals[priorityKey]
 }

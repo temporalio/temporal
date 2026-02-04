@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -30,6 +31,7 @@ type Service struct {
 	metricsHandler         metrics.Handler
 	healthServer           *health.Server
 	visibilityManager      manager.VisibilityManager
+	taskClock              clock.TimeSource
 }
 
 func NewService(
@@ -43,6 +45,7 @@ func NewService(
 	metricsHandler metrics.Handler,
 	healthServer *health.Server,
 	visibilityManager manager.VisibilityManager,
+	taskClock clock.TimeSource,
 ) *Service {
 	return &Service{
 		config:                 serviceConfig,
@@ -55,6 +58,7 @@ func NewService(
 		metricsHandler:         metricsHandler,
 		healthServer:           healthServer,
 		visibilityManager:      visibilityManager,
+		taskClock:              taskClock,
 	}
 }
 

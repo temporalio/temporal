@@ -112,22 +112,27 @@ type (
 
 	// Implements matching.Engine
 	matchingEngineImpl struct {
-		status                        int32
-		taskManager                   persistence.TaskManager
-		fairTaskManager               persistence.FairTaskManager
-		historyClient                 resource.HistoryClient
-		matchingRawClient             resource.MatchingRawClient
-		workerDeploymentClient        workerdeployment.Client
-		tokenSerializer               *tasktoken.Serializer
-		historySerializer             serialization.Serializer
-		logger                        log.Logger
-		throttledLogger               log.ThrottledLogger
-		namespaceRegistry             namespace.Registry
-		hostInfoProvider              membership.HostInfoProvider
-		serviceResolver               membership.ServiceResolver
-		membershipChangedCh           chan *membership.ChangedEvent
-		clusterMeta                   cluster.Metadata
-		timeSource                    clock.TimeSource
+		status                 int32
+		taskManager            persistence.TaskManager
+		fairTaskManager        persistence.FairTaskManager
+		historyClient          resource.HistoryClient
+		matchingRawClient      resource.MatchingRawClient
+		workerDeploymentClient workerdeployment.Client
+		tokenSerializer        *tasktoken.Serializer
+		historySerializer      serialization.Serializer
+		logger                 log.Logger
+		throttledLogger        log.ThrottledLogger
+		namespaceRegistry      namespace.Registry
+		hostInfoProvider       membership.HostInfoProvider
+		serviceResolver        membership.ServiceResolver
+		membershipChangedCh    chan *membership.ChangedEvent
+		clusterMeta            cluster.Metadata
+		// systemClock is always real wall-clock time. Used for infrastructure
+		// concerns: liveness timers, gradual config rollouts. Never faked in tests.
+		systemClock clock.TimeSource
+		// taskClock is used for business/semantic logic: sticky worker availability,
+		// poll timing, task tracking. May be faked in tests.
+		taskClock                     clock.TimeSource
 		visibilityManager             manager.VisibilityManager
 		nexusEndpointClient           *nexusEndpointClient
 		nexusEndpointsOwnershipLostCh chan struct{}
@@ -216,6 +221,7 @@ func NewEngine(
 	saMapperProvider searchattribute.MapperProvider,
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
+	timeSource clock.TimeSource,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -234,7 +240,8 @@ func NewEngine(
 		serviceResolver:               resolver,
 		membershipChangedCh:           make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
 		clusterMeta:                   clusterMeta,
-		timeSource:                    clock.NewRealTimeSource(), // No need to mock this at the moment
+		systemClock:                   clock.NewRealTimeSource(),
+		taskClock:                     timeSource,
 		visibilityManager:             visibilityManager,
 		nexusEndpointClient:           newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		nexusEndpointsOwnershipLostCh: make(chan struct{}),
@@ -530,7 +537,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseTask)
 	if err != nil {
 		return "", false, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
+	} else if sticky && !e.stickyWorkerAvailable(pm) {
 		return "", false, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1080,7 +1087,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, !sticky, loadCauseQuery)
 	if err != nil {
 		return nil, err
-	} else if sticky && !stickyWorkerAvailable(pm) {
+	} else if sticky && !e.stickyWorkerAvailable(pm) {
 		return nil, serviceerrors.NewStickyWorkerUnavailable()
 	}
 
@@ -1655,7 +1662,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 			)
 		}
 
-		updatedClock := hlc.Next(clk, e.timeSource)
+		updatedClock := hlc.Next(clk, e.taskClock)
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
@@ -1843,7 +1850,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clk = tmp
 		}
-		updatedClock := hlc.Next(clk, e.timeSource)
+		updatedClock := hlc.Next(clk, e.taskClock)
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
@@ -1893,7 +1900,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	if operationCreatedTombstones {
 		opts := UserDataUpdateOptions{Source: "UpdateWorkerBuildIdCompatibility/clear-tombstones"}
 		_, err = pm.GetUserDataManager().UpdateUserData(ctx, opts, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
+			updatedClock := hlc.Next(data.GetClock(), e.taskClock)
 			// Avoid mutation
 			ret := common.CloneProto(data)
 			ret.Clock = updatedClock
@@ -1978,7 +1985,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 		if clk == nil {
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
 		}
-		now := hlc.Next(clk, e.timeSource)
+		now := hlc.Next(clk, e.taskClock)
 		// clone the whole thing so we can just mutate
 		data = common.CloneProto(data)
 
@@ -2577,7 +2584,7 @@ func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *m
 	res, err := e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
 		spec:       request.GetSpec(),
 		clusterID:  e.clusterMeta.GetClusterID(),
-		timeSource: e.timeSource,
+		timeSource: e.taskClock,
 	})
 	if err != nil {
 		e.logger.Error("Failed to create Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
@@ -2594,7 +2601,7 @@ func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *m
 		version:    request.GetVersion(),
 		spec:       request.GetSpec(),
 		clusterID:  e.clusterMeta.GetClusterID(),
-		timeSource: e.timeSource,
+		timeSource: e.taskClock,
 	})
 	if err != nil {
 		e.logger.Error("Failed to update Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
@@ -2699,7 +2706,7 @@ func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *strea
 	fn := func(batch []*userDataUpdate) error {
 		return e.applyUserDataUpdateBatch(namespaceId, batch)
 	}
-	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.timeSource)
+	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.taskClock)
 	batcher, _ := e.userDataUpdateBatchers.GetOrSet(namespaceId, newBatcher)
 	return batcher
 }
@@ -2763,7 +2770,7 @@ func (e *matchingEngineImpl) pollTask(
 		return nil, false, err
 	}
 
-	pollMetadata.localPollStartTime = e.timeSource.Now()
+	pollMetadata.localPollStartTime = e.taskClock.Now()
 
 	// We need to set a shorter timeout than the original ctx; otherwise, by the time ctx deadline is
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
@@ -3238,7 +3245,7 @@ func newRecordTaskStartedContext(
 func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue string, buildId *persistencespb.BuildId) *persistencespb.BuildId {
 	// Bump the stamp and ensure it's newer than the deletion stamp.
 	prevStamp := common.CloneProto(buildId.StateUpdateTimestamp)
-	stamp := hlc.Next(prevStamp, e.timeSource)
+	stamp := hlc.Next(prevStamp, e.taskClock)
 	stamp.ClusterId = e.clusterMeta.GetClusterID()
 	e.logger.Info("Revived build ID while applying replication event",
 		tag.WorkflowNamespace(ns.Name().String()),
@@ -3254,8 +3261,8 @@ func (e *matchingEngineImpl) reviveBuildId(ns *namespace.Namespace, taskQueue st
 
 // We use a very short timeout for considering a sticky worker available, since tasks can also
 // be processed on the normal queue.
-func stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
-	return pm != nil && pm.HasPollerAfter("", time.Now().Add(-stickyPollerUnavailableWindow))
+func (e *matchingEngineImpl) stickyWorkerAvailable(pm taskQueuePartitionManager) bool {
+	return pm != nil && pm.HasPollerAfter("", e.taskClock.Now().Add(-stickyPollerUnavailableWindow))
 }
 
 func buildRateLimitConfig(update *workflowservice.UpdateTaskQueueConfigRequest_RateLimitUpdate, updateTime *timestamppb.Timestamp, updateIdentity string) *taskqueuepb.RateLimitConfig {
@@ -3357,7 +3364,7 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 			if existingClock == nil {
 				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
 			}
-			now := hlc.Next(existingClock, e.timeSource)
+			now := hlc.Next(existingClock, e.taskClock)
 			protoTs := hlc.ProtoTimestamp(now)
 
 			// Update relevant config fields

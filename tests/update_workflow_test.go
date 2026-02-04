@@ -1391,7 +1391,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 	})
 
 	t.Run("StickySpeculativeWorkflowTask_AcceptComplete_StickyWorkerUnavailable", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithFakeTime())
 		mustStartWorkflow(s, s.Tv())
 
 		wtHandlerCalls := 0
@@ -1457,9 +1457,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithRespondSticky, testcore.WithoutRetries)
 		s.NoError(err)
 
-		s.Logger.Info("Sleep 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
-		time.Sleep(10*time.Second + 100*time.Millisecond) //nolint:forbidigo
-		s.Logger.Info("Sleep 10+ seconds is done.")
+		s.Logger.Info("Advancing time 10+ seconds to make sure stickyPollerUnavailableWindow time has passed.")
+		s.AdvanceTime(10*time.Second + 100*time.Millisecond)
 
 		// Now send an update. It should try sticky task queue first, but got "StickyWorkerUnavailable" error
 		// and resend it to normal.

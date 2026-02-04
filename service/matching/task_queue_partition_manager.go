@@ -165,14 +165,14 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 		var fairness bool
 		changeKey := pm.partition.GradualChangeKey()
 		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
-			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
+			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.systemClock)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
 		pm.config.EnableFairness = fairness && pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
 		if fairness {
 			pm.config.NewMatcher = true
 		} else {
 			pm.config.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-				pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
+				pm.config.NewMatcherSub, changeKey, unload, pm.engine.systemClock)
 		}
 	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
 		pm.config.NewMatcher = false
@@ -1062,6 +1062,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 		return nil
 	}
 
+	timeSource := pm.engine.taskClock
 	var prevBacklogPriority map[PhysicalTaskQueueVersion]int64
 
 	for {
@@ -1071,11 +1072,13 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 			continue
 		}
 
+		timerC, timer := timeSource.NewTimer(backoff.Jitter(interval, 0.05))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
 
-		case <-time.After(backoff.Jitter(interval, 0.05)):
+		case <-timerC:
 			prevBacklogPriority = pm.updateEphemeralDataIteration(prevBacklogPriority)
 		}
 	}

@@ -18,6 +18,7 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
+	clock "go.temporal.io/server/common/clock"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -342,6 +343,20 @@ func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop), arg0)
+}
+
+// TimeSource mocks base method.
+func (m *MockphysicalTaskQueueManager) TimeSource() clock.TimeSource {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TimeSource")
+	ret0, _ := ret[0].(clock.TimeSource)
+	return ret0
+}
+
+// TimeSource indicates an expected call of TimeSource.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) TimeSource() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TimeSource", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).TimeSource))
 }
 
 // TrySyncMatch mocks base method.
