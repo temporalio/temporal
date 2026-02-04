@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -21,7 +23,10 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 )
 
-var _ Env = (*testEnv)(nil)
+var (
+	_                Env = (*testEnv)(nil)
+	sequentialSuites sync.Map
+)
 
 type Env interface {
 	T() *testing.T
@@ -100,12 +105,32 @@ func WithoutTimeout() TestOption {
 	}
 }
 
+// MustRunSequential marks a test suite to run its tests sequentially instead
+// of in parallel. Call this at the start of your test suite before any
+// subtests are created.
+func MustRunSequential(t *testing.T, reason string) {
+	if strings.Contains(t.Name(), "/") {
+		panic("MustRunSequential must be called from a top-level test, not a subtest")
+	}
+	if reason == "" {
+		panic("MustRunSequential requires a reason")
+	}
+	sequentialSuites.Store(t.Name(), true)
+}
+
 // NewEnv creates a new test environment with access to a Temporal cluster.
 // Returns a context that will be canceled if the test exceeds its timeout,
 // allowing tests to be interrupted if they respect the context.
-// The test is automatically marked as parallel.
-func NewEnv(t *testing.T, opts ...TestOption) (context.Context, *testEnv) {
-	t.Parallel()
+// Tests are run in parallel - use MustRunSequential to run suite sequentially.
+func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
+	// Check if this is a sequential suite by looking up the parent test name.
+	suiteName := t.Name()
+	if idx := strings.Index(suiteName, "/"); idx != -1 {
+		suiteName = suiteName[:idx]
+	}
+	if _, sequential := sequentialSuites.Load(suiteName); !sequential {
+		t.Parallel()
+	}
 
 	var options testOptions
 	for _, opt := range opts {
@@ -121,6 +146,7 @@ func NewEnv(t *testing.T, opts ...TestOption) (context.Context, *testEnv) {
 		}
 	}
 
+	// Obtain the test cluster from the pool.
 	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
 	cluster := base.GetTestCluster()
 
@@ -186,11 +212,13 @@ func (e *testEnv) Tv() *testvars.TestVars {
 // when the test timeout occurs. Use this as the parent context for all operations.
 //
 // For RPC operations that need headers, use:
-//   ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(env.Context(), 90*time.Second)
+//
+//	ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(env.Context(), 90*time.Second)
 //
 // For custom timeouts, use:
-//   ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
-//   defer cancel()
+//
+//	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
+//	defer cancel()
 func (e *testEnv) Context() context.Context {
 	return e.ctx
 }
