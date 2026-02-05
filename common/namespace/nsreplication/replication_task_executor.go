@@ -50,6 +50,7 @@ type (
 	taskExecutorImpl struct {
 		currentCluster  string
 		metadataManager persistence.MetadataManager
+		dataMerger      NamespaceDataMerger
 		logger          log.Logger
 	}
 )
@@ -58,12 +59,14 @@ type (
 func NewTaskExecutor(
 	currentCluster string,
 	metadataManagerV2 persistence.MetadataManager,
+	dataMerger NamespaceDataMerger,
 	logger log.Logger,
 ) TaskExecutor {
 
 	return &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
+		dataMerger:      dataMerger,
 		logger:          logger,
 	}
 }
@@ -266,15 +269,27 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
+	// Perform conflict-free merge of namespace data (CRDT-style for MCN failover states)
+	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	if dataMerged {
+		recordUpdated = true
+		request.Namespace.Info.Data = mergedData
+	}
+
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {
 		recordUpdated = true
+		// Use merged data if available, otherwise use task data
+		data := task.Info.Data
+		if dataMerged {
+			data = mergedData
+		}
 		request.Namespace.Info = &persistencespb.NamespaceInfo{
 			Id:          task.GetId(),
 			Name:        task.Info.GetName(),
 			State:       task.Info.GetState(),
 			Description: task.Info.GetDescription(),
 			Owner:       task.Info.GetOwnerEmail(),
-			Data:        task.Info.Data,
+			Data:        data,
 		}
 		request.Namespace.Config = &persistencespb.NamespaceConfig{
 			Retention:                    task.Config.GetWorkflowExecutionRetentionTtl(),

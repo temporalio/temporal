@@ -45,6 +45,7 @@ type (
 		archiverProvider       provider.ArchiverProvider
 		timeSource             clock.TimeSource
 		config                 *Config
+		dataUpdateChecker      NamespaceDataUpdateChecker
 	}
 )
 
@@ -72,6 +73,7 @@ func newNamespaceHandler(
 	archiverProvider provider.ArchiverProvider,
 	timeSource clock.TimeSource,
 	config *Config,
+	dataUpdateChecker NamespaceDataUpdateChecker,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -83,6 +85,7 @@ func newNamespaceHandler(
 		archiverProvider:       archiverProvider,
 		timeSource:             timeSource,
 		config:                 config,
+		dataUpdateChecker:      dataUpdateChecker,
 	}
 }
 
@@ -254,6 +257,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -355,6 +359,17 @@ func (d *namespaceHandler) UpdateNamespace(
 	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: updateRequest.GetNamespace()})
 	if err != nil {
 		return nil, err
+	}
+
+	// Check for data-only fast-path update
+	if d.dataUpdateChecker != nil {
+		result, err := d.dataUpdateChecker.CheckDataOnlyUpdate(ctx, getResponse, updateRequest)
+		if err != nil {
+			return nil, err
+		}
+		if result.ShouldFastPath {
+			return d.handleDataOnlyUpdate(ctx, getResponse, result.ModifiedData, notificationVersion, result.ShouldReplicate)
+		}
 	}
 
 	info := getResponse.Namespace.Info
@@ -594,6 +609,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		failoverVersion,
 		isGlobalNamespace,
 		failoverHistory,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -606,6 +622,73 @@ func (d *namespaceHandler) UpdateNamespace(
 	response.NamespaceInfo, response.Config, response.ReplicationConfig, _ = d.createResponse(info, config, replicationConfig)
 
 	d.logger.Info("Update namespace succeeded",
+		tag.WorkflowNamespace(info.Name),
+		tag.WorkflowNamespaceID(info.Id),
+	)
+	return response, nil
+}
+
+// handleDataOnlyUpdate handles namespace updates that only modify the data field,
+// bypassing all other update logic. This is used for fast-path updates when the
+// NamespaceDataUpdateChecker determines that only the data field should be updated.
+// If shouldReplicate is true, replication is forced even for single-cluster namespaces.
+func (d *namespaceHandler) handleDataOnlyUpdate(
+	ctx context.Context,
+	getResponse *persistence.GetNamespaceResponse,
+	modifiedData map[string]string,
+	notificationVersion int64,
+	shouldReplicate bool,
+) (*workflowservice.UpdateNamespaceResponse, error) {
+	info := getResponse.Namespace.Info
+	config := getResponse.Namespace.Config
+	replicationConfig := getResponse.Namespace.ReplicationConfig
+
+	// Apply the modified data from checker (already merged/processed by checker)
+	info.Data = modifiedData
+
+	// Persist with incremented configVersion (always increment for cache invalidation)
+	configVersion := getResponse.Namespace.ConfigVersion + 1
+	updateReq := &persistence.UpdateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:                        info,
+			Config:                      config,
+			ReplicationConfig:           replicationConfig,
+			ConfigVersion:               configVersion,
+			FailoverVersion:             getResponse.Namespace.FailoverVersion,
+			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
+		},
+		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
+		NotificationVersion: notificationVersion,
+	}
+
+	if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
+		return nil, err
+	}
+
+	// Replicate the change
+	if err := d.namespaceReplicator.HandleTransmissionTask(
+		ctx,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		false, // clusterListChanged
+		configVersion,
+		getResponse.Namespace.FailoverVersion,
+		getResponse.IsGlobalNamespace,
+		replicationConfig.FailoverHistory,
+		shouldReplicate, // forceReplicate
+	); err != nil {
+		return nil, err
+	}
+
+	response := &workflowservice.UpdateNamespaceResponse{
+		IsGlobalNamespace: getResponse.IsGlobalNamespace,
+		FailoverVersion:   getResponse.Namespace.FailoverVersion,
+	}
+	response.NamespaceInfo, response.Config, response.ReplicationConfig, _ = d.createResponse(info, config, replicationConfig)
+
+	d.logger.Info("Update namespace succeeded (data-only fast-path)",
 		tag.WorkflowNamespace(info.Name),
 		tag.WorkflowNamespaceID(info.Id),
 	)
