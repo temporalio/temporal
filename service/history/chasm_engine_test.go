@@ -1016,7 +1016,7 @@ func (s *chasmEngineSuite) TestReadComponent_NotFound() {
 	s.Error(err)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
-	s.Equal("execution not found", notFound.Message)
+	s.Equal("test_component not found for ID: non-existent-execution", notFound.Message)
 }
 
 func (s *chasmEngineSuite) buildPersistenceMutableState(

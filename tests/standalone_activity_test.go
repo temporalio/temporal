@@ -283,7 +283,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NotNil(t, pollTaskResp.TaskToken)
 }
 
-func (s *standaloneActivityTestSuite) TestCompleted() {
+func (s *standaloneActivityTestSuite) TestComplete() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -555,7 +555,7 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestFailed() {
+func (s *standaloneActivityTestSuite) TestFail() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -853,7 +853,7 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestCancellation() {
+func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1543,9 +1543,24 @@ func (s *standaloneActivityTestSuite) TestCancellation() {
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
+
+	t.Run("NonExistent", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Reason:     "Test Cancellation",
+			Identity:   "canceller",
+		})
+
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
+	})
 }
 
-func (s *standaloneActivityTestSuite) TestTerminated() {
+func (s *standaloneActivityTestSuite) TestTerminate() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1685,6 +1700,21 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		})
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	t.Run("NonExistent", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Reason:     "Test Termination",
+			Identity:   "terminator",
+		})
+
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
 	})
 }
 
@@ -2499,7 +2529,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 				RunId:      existingRunID,
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: "activity not found for ID: non-existent-activity",
 		},
 		{
 			name: "NonExistentRunID",
@@ -2509,7 +2539,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: fmt.Sprintf("activity not found for ID: %s", existingActivityID),
 		},
 	}
 
@@ -3069,7 +3099,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 				RunId:      existingRunID,
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: "activity not found for ID: non-existent-activity",
 		},
 		{
 			name: "NonExistentRunID",
@@ -3079,7 +3109,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: fmt.Sprintf("activity not found for ID: %s", existingActivityID),
 		},
 	}
 
@@ -3109,7 +3139,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 		})
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
-		require.Equal(t, "activity execution not found", notFoundErr.Message)
+		require.Equal(t, "activity not found for ID: non-existent-activity", notFoundErr.Message)
 	})
 }
 

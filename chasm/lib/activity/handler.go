@@ -119,12 +119,6 @@ func (h *handler) DescribeActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
@@ -187,12 +181,6 @@ func (h *handler) PollActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
