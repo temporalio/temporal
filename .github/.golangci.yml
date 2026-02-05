@@ -187,7 +187,7 @@ linters:
         text: "panic"
         linters:
           - forbidigo
-      - path: tests/testcore/.*\.go$ # still used in tests/testcore/
+      - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
         text: "FunctionalTestBase"
         linters:
           - forbidigo
