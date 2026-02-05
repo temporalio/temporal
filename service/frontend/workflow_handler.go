@@ -1222,9 +1222,8 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	if err != nil {
 		return nil, err
 	}
-	namespaceName := namespaceEntry.Name().String()
 
-	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+	if len(taskToken.GetComponentRef()) > 0 {
 		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
@@ -1302,20 +1301,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
-		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, errWorkflowIDNotSet
-		}
-
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
-			NamespaceID: namespaceID.String(),
-			BusinessID:  activityID,
-			RunID:       runID,
-		})
-
-		componentRef, err = ref.Serialize(wh.registry)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errWorkflowIDNotSet
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1417,7 +1403,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	}
 	namespaceName := namespaceEntry.Name().String()
 
-	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+	if len(taskToken.GetComponentRef()) > 0 {
 		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
@@ -1497,20 +1483,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
-		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, errWorkflowIDNotSet
-		}
-
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
-			NamespaceID: namespaceID.String(),
-			BusinessID:  activityID,
-			RunID:       runID,
-		})
-
-		componentRef, err = ref.Serialize(wh.registry)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errWorkflowIDNotSet
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1609,7 +1582,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	}
 	namespaceName := namespaceEntry.Name().String()
 
-	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+	if len(taskToken.GetComponentRef()) > 0 {
 		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
@@ -1705,20 +1678,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
-		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, errWorkflowIDNotSet
-		}
-
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
-			NamespaceID: namespaceID.String(),
-			BusinessID:  activityID,
-			RunID:       runID,
-		})
-
-		componentRef, err = ref.Serialize(wh.registry)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errWorkflowIDNotSet
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
@@ -1826,7 +1786,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 	}
 	namespaceName := namespaceEntry.Name().String()
 
-	if len(taskToken.GetComponentRef()) > 0 && !wh.IsStandaloneActivityEnabled(namespaceName) {
+	if len(taskToken.GetComponentRef()) > 0 {
 		return nil, activity.ErrStandaloneActivityDisabled
 	}
 
@@ -1905,20 +1865,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 	// Else this should be a validation error.
 	var componentRef []byte
 	if workflowID == "" {
-		if !wh.IsStandaloneActivityEnabled(request.GetNamespace()) {
-			return nil, errWorkflowIDNotSet
-		}
-
-		ref := chasm.NewComponentRef[*activity.Activity](chasm.ExecutionKey{
-			NamespaceID: namespaceID.String(),
-			BusinessID:  activityID,
-			RunID:       runID,
-		})
-
-		componentRef, err = ref.Serialize(wh.registry)
-		if err != nil {
-			return nil, err
-		}
+		return nil, errWorkflowIDNotSet
 	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
