@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -21,9 +20,8 @@ import (
 )
 
 var (
-	_                  Env = (*testEnv)(nil)
-	sequentialSuites   sync.Map
-	defaultTestTimeout = 90 * time.Second * debug.TimeoutMultiplier
+	_                Env = (*testEnv)(nil)
+	sequentialSuites sync.Map
 )
 
 type Env interface {
@@ -48,7 +46,6 @@ type testEnv struct {
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
-	ctx        context.Context
 }
 
 type TestOption func(*testOptions)
@@ -84,14 +81,6 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 			o.dedicatedCluster = true
 		}
 		o.dynamicConfigSettings = append(o.dynamicConfigSettings, dynamicConfigOverride{setting: setting, value: value})
-	}
-}
-
-// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
-// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
-func WithTimeout(duration time.Duration) TestOption {
-	return func(o *testOptions) {
-		o.timeout = duration
 	}
 }
 
@@ -151,7 +140,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	}
 
 	// Setup test timeout monitoring with context
-	ctx := setupTestTimeoutWithContext(t, options.timeout)
+	base.ctx = setupTestTimeoutWithContext(t, options.timeout)
 
 	env := &testEnv{
 		FunctionalTestBase: base,
@@ -163,7 +152,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
-		ctx:                ctx,
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
@@ -191,18 +179,6 @@ func (e *testEnv) T() *testing.T {
 
 func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
-}
-
-// Context returns the test-level timeout context with RPC version headers already included.
-// This context will be canceled when the test timeout occurs. Use this directly for all RPC
-// operations - no need to wrap with NewContext or add headers manually.
-//
-// For custom timeouts, use:
-//
-//	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
-//	defer cancel()
-func (e *testEnv) Context() context.Context {
-	return e.ctx
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.

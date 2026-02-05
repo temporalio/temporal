@@ -13,6 +13,8 @@ import (
 	"go.temporal.io/server/common/rpc"
 )
 
+var defaultTestTimeout = 90 * time.Second * debug.TimeoutMultiplier
+
 // NewContext creates a context with default 90-second timeout and RPC headers.
 //
 // NOTE: If you're using testcore.NewEnv, you can use env.Context() directly - it already

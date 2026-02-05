@@ -71,6 +71,8 @@ type (
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
 
+		ctx context.Context
+
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
 		testClusterConfig *TestClusterConfig
@@ -101,6 +103,7 @@ type (
 		FaultInjectionConfig   *config.FaultInjection
 		NumHistoryShards       int32
 		SharedCluster          bool
+		Timeout                time.Duration
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -169,12 +172,32 @@ func WithSharedCluster() TestClusterOption {
 	}
 }
 
+// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
+// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
+func WithTimeout(duration time.Duration) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.Timeout = duration
+	}
+}
+
 func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
 	return s.testCluster
 }
 
 func (s *FunctionalTestBase) GetTestClusterConfig() *TestClusterConfig {
 	return s.testClusterConfig
+}
+
+// Context returns the test-level timeout context with RPC version headers already included.
+// This context will be canceled when the test timeout occurs. Use this directly for all RPC
+// operations - no need to wrap with NewContext or add headers manually.
+//
+// For custom timeouts, use:
+//
+//	ctx, cancel := context.WithTimeout(s.Context(), 10*time.Second)
+//	defer cancel()
+func (s *FunctionalTestBase) Context() context.Context {
+	return s.ctx
 }
 
 func (s *FunctionalTestBase) FrontendClient() workflowservice.WorkflowServiceClient {
@@ -320,6 +343,11 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// Setup test timeout context if not already initialized (for legacy tests using suite framework)
+	if s.ctx == nil {
+		s.ctx = setupTestTimeoutWithContext(s.T(), 0)
+	}
 
 	// Annotate gRPC requests with the test name for OTEL tracing.
 	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
