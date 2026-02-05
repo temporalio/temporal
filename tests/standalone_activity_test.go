@@ -283,7 +283,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NotNil(t, pollTaskResp.TaskToken)
 }
 
-func (s *standaloneActivityTestSuite) TestCompleted() {
+func (s *standaloneActivityTestSuite) TestComplete() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -555,7 +555,7 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestFailed() {
+func (s *standaloneActivityTestSuite) TestFail() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -853,7 +853,7 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestCancelled() {
+func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1485,7 +1485,7 @@ func (s *standaloneActivityTestSuite) TestCancelled() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestTerminated() {
+func (s *standaloneActivityTestSuite) TestTerminate() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
