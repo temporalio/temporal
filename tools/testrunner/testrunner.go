@@ -1,6 +1,7 @@
 package testrunner
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 )
 
@@ -28,6 +30,10 @@ const (
 	// fullRerunThreshold is the number of test failures above which we do a full
 	// rerun instead of retrying only the failed tests.
 	fullRerunThreshold = 20
+
+	shardTotalEnv = "TEMPORAL_TEST_TOTAL_SHARDS"
+	shardIndexEnv = "TEMPORAL_TEST_SHARD_INDEX"
+	shardSaltEnv  = "TEMPORAL_TEST_SHARD_SALT"
 )
 
 const (
@@ -70,6 +76,12 @@ type runner struct {
 	maxAttempts      int
 	crashName        string
 	alerts           []alert
+
+	// Sharding config, parsed from environment variables and args.
+	shardTotal int
+	shardIndex int
+	shardSalt  string
+	packages   []string // test package paths (after "--", non-flag args)
 }
 
 func newRunner() *runner {
@@ -82,6 +94,8 @@ func newRunner() *runner {
 // nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
+	afterSep := false
+	hasRunFlag := false
 	for _, arg := range args {
 		if strings.HasPrefix(arg, maxAttemptsFlag) {
 			var err error
@@ -118,6 +132,15 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 			r.junitOutputPath = strings.Split(arg, "=")[1]
 		}
 
+		// Track packages and -run flag after the "--" separator.
+		if arg == "--" {
+			afterSep = true
+		} else if afterSep && (arg == "-run" || strings.HasPrefix(arg, "-run=")) {
+			hasRunFlag = true
+		} else if afterSep && strings.HasPrefix(arg, "./") {
+			r.packages = append(r.packages, arg)
+		}
+
 		sanitizedArgs = append(sanitizedArgs, arg)
 	}
 
@@ -135,6 +158,12 @@ func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, 
 		}
 		if r.gotestsumPath == "" {
 			return nil, fmt.Errorf("missing required argument %q", gotestsumPathFlag)
+		}
+		if err := r.parseEnvVars(); err != nil {
+			return nil, err
+		}
+		if r.shardTotal > 0 && hasRunFlag {
+			return nil, fmt.Errorf("-run flag cannot be combined with sharding env vars")
 		}
 	case crashReportCommand:
 		if r.crashName == "" {
@@ -209,6 +238,8 @@ func (r *runner) reportCrash() {
 }
 
 func (r *runner) runTests(ctx context.Context, args []string) {
+	args = r.applySharding(args)
+
 	var currentAttempt *attempt
 	for a := 1; a <= r.maxAttempts; a++ {
 		currentAttempt = r.newAttempt()
@@ -308,6 +339,78 @@ func stripRunFromArgs(args []string) (argsNoRun []string) {
 		argsNoRun = append(argsNoRun, arg)
 	}
 	return
+}
+
+func (r *runner) parseEnvVars() error {
+	totalStr := os.Getenv(shardTotalEnv)
+	indexStr := os.Getenv(shardIndexEnv)
+	if totalStr == "" && indexStr == "" {
+		return nil
+	}
+	if totalStr == "" || indexStr == "" {
+		return fmt.Errorf("%s and %s must both be set or both be unset", shardTotalEnv, shardIndexEnv)
+	}
+	total, err := strconv.Atoi(totalStr)
+	if err != nil || total < 1 {
+		return fmt.Errorf("invalid %s: %q", shardTotalEnv, totalStr)
+	}
+	index, err := strconv.Atoi(indexStr)
+	if err != nil || index < 1 || index > total {
+		return fmt.Errorf("invalid %s: %q (must be 1..%d)", shardIndexEnv, indexStr, total)
+	}
+	salt := os.Getenv(shardSaltEnv)
+	if salt == "" {
+		return fmt.Errorf("%s must be set when sharding is enabled", shardSaltEnv)
+	}
+	r.shardTotal = total
+	r.shardIndex = index - 1 // convert to 0-based for hash modulo
+	r.shardSalt = salt
+	return nil
+}
+
+// applySharding discovers top-level test names via `go test -list` and builds a
+// -run filter so that only this shard's tests are executed.
+// nolint:revive,deep-exit
+func (r *runner) applySharding(args []string) []string {
+	if r.shardTotal == 0 || len(r.packages) == 0 {
+		return args
+	}
+
+	// Discover top-level test names.
+	cmd := exec.Command("go", append([]string{"test", "-list", ".*"}, r.packages...)...)
+	cmd.Stderr = os.Stderr
+	out, err := cmd.Output()
+	if err != nil {
+		log.Fatalf("go test -list failed: %v", err)
+	}
+
+	// Find tests for this shard.
+	// go test -list output contains one test name per line, plus summary lines
+	// like "ok \t<pkg>\t<time>". Top-level test functions always start with "Test".
+	var mine []string
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		name := strings.TrimSpace(scanner.Text())
+		if !strings.HasPrefix(name, "Test") {
+			continue
+		}
+		h := farm.Fingerprint32([]byte(name+r.shardSalt)) % uint32(r.shardTotal)
+		if int(h) == r.shardIndex {
+			mine = append(mine, "^"+regexp.QuoteMeta(name)+"$")
+		}
+	}
+	if len(mine) == 0 {
+		log.Printf("shard %d/%d: no tests to run", r.shardIndex+1, r.shardTotal)
+		// Pass a regex that matches nothing so gotestsum exits cleanly.
+		mine = append(mine, "^$")
+	}
+
+	log.Printf("shard %d/%d: running %d test(s)", r.shardIndex+1, r.shardTotal, len(mine))
+
+	// Insert -run right after "--" so it's a go test flag, not a gotestsum flag.
+	sepIdx := slices.Index(args, "--")
+	args = slices.Insert(args, sepIdx+1, "-run", strings.Join(mine, "|"))
+	return args
 }
 
 func goTestNameToRunFlagRegexp(test string) string {
