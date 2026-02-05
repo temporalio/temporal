@@ -561,6 +561,14 @@ is currently processing a task.
 		`NexusEndpointListMaxPageSize is the maximum page size for listing Nexus endpoints.`,
 	)
 
+	FrontendGlobalNexusEndpointRPS = NewDestinationIntSetting(
+		"frontend.globalNexusEndpointRPS",
+		0,
+		`FrontendGlobalNexusEndpointRPS is a per-endpoint, cluster-wide rate limit for Nexus
+dispatch requests, divided across frontend instances. 0 means unlimited. Configurable per
+endpoint using the "destination" constraint.`,
+	)
+
 	RemovableBuildIdDurationSinceDefault = NewGlobalDurationSetting(
 		"worker.removableBuildIdDurationSinceDefault",
 		time.Hour,

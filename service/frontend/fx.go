@@ -846,10 +846,15 @@ func RegisterNexusHTTPHandler(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	frontendServiceResolver membership.ServiceResolver,
 	logger log.Logger,
 	router *mux.Router,
 	httpTraceProvider nexus.HTTPClientTraceProvider,
 ) {
+	endpointRateLimiter := configs.NewNexusEndpointRateLimiter(
+		frontendServiceResolver,
+		serviceConfig.GlobalNexusEndpointRPS,
+	)
 	h := NewNexusHTTPHandler(
 		serviceConfig,
 		matchingClient,
@@ -866,6 +871,7 @@ func RegisterNexusHTTPHandler(
 		namespaceRateLimiterInterceptor,
 		namespaceCountLimiterInterceptor,
 		rateLimitInterceptor,
+		endpointRateLimiter,
 		logger,
 		httpTraceProvider,
 	)

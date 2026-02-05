@@ -414,6 +414,37 @@ func NewGlobalNamespaceRateLimiter(
 	)
 }
 
+// NewNexusEndpointRateLimiter creates a per-endpoint rate limiter that uses a global quota
+// divided across frontend instances. The endpoint name is used as the rate limiter key.
+func NewNexusEndpointRateLimiter(
+	memberCounter calculator.MemberCounter,
+	globalRPS dynamicconfig.TypedPropertyFnWithDestinationFilter[int],
+) quotas.RequestRateLimiter {
+	rateFn := calculator.ClusterAwareNamespaceQuotaCalculator{
+		MemberCounter:    memberCounter,
+		PerInstanceQuota: func(string) int { return 0 },
+		GlobalQuota:      func(endpointName string) int { return globalRPS("", endpointName) },
+	}.GetQuota
+
+	return quotas.NewMapRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDynamicRateLimiter(
+					quotas.NewDefaultIncomingRateBurst(func() float64 {
+						q := rateFn(req.Caller)
+						if q <= 0 {
+							return math.MaxFloat64
+						}
+						return q
+					}),
+					time.Minute,
+				),
+			)
+		},
+		func(req quotas.Request) string { return req.Caller },
+	)
+}
+
 func IsAPIOperation(apiFullName string) bool {
 	if _, ok := operationExcludedAPIs[apiFullName]; ok {
 		return false
