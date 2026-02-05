@@ -2,10 +2,13 @@ package testcore
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -118,6 +121,9 @@ func MustRunSequential(t *testing.T, reason string) {
 // NewEnv creates a new test environment with access to a Temporal cluster.
 // Tests are run in parallel - use MustRunSequential to run suite sequentially.
 func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
+	// Check test sharding early, before any expensive operations.
+	checkTestShard(t)
+
 	// Check if this is a sequential suite by looking up the parent test name.
 	suiteName := t.Name()
 	if idx := strings.Index(suiteName, "/"); idx != -1 {
@@ -242,4 +248,34 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
+}
+
+// checkTestShard supports test sharding based on environment variables.
+// This distributes tests across multiple CI shards for parallel execution.
+func checkTestShard(t *testing.T) {
+	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
+	indexStr := os.Getenv("TEST_SHARD_INDEX")
+	if totalStr == "" || indexStr == "" {
+		return
+	}
+	total, err := strconv.Atoi(totalStr)
+	if err != nil || total < 1 {
+		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
+	}
+	index, err := strconv.Atoi(indexStr)
+	if err != nil || index < 0 || index >= total {
+		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
+	}
+
+	// This was determined empirically to distribute our existing test names
+	// reasonably well. This can be adjusted from time to time.
+	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
+	const salt = "-salt-26"
+
+	nameToHash := t.Name() + salt
+	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
+	if testIndex != index {
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
+	}
+	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
 }
