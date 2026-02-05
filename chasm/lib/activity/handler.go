@@ -232,6 +232,12 @@ func (h *handler) TerminateActivityExecution(
 	ctx context.Context,
 	req *activitypb.TerminateActivityExecutionRequest,
 ) (response *activitypb.TerminateActivityExecutionResponse, err error) {
+	defer func() {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			err = serviceerror.NewNotFound("activity execution not found")
+		}
+	}()
 	frontendReq := req.GetFrontendRequest()
 
 	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
@@ -271,6 +277,12 @@ func (h *handler) RequestCancelActivityExecution(
 	ctx context.Context,
 	req *activitypb.RequestCancelActivityExecutionRequest,
 ) (response *activitypb.RequestCancelActivityExecutionResponse, err error) {
+	defer func() {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			err = serviceerror.NewNotFound("activity execution not found")
+		}
+	}()
 	frontendReq := req.GetFrontendRequest()
 
 	ref := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{
