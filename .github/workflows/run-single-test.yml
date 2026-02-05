@@ -1,0 +1,142 @@
+name: Run Single Test
+run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit SHA"
+        required: true
+      run_functional_test:
+        description: "Run a functional test (otherwise unit test)"
+        type: boolean
+        default: true
+      unit_test_directory:
+        description: "[Unit Test Only] Directory to run unit tests in"
+        type: string
+        default: "./temporal"
+      n_runs:
+        description: "Number of times to repeat the test (start with n=25 or lower to avoid OOMKill)"
+        type: number
+        default: 1
+      test_name:
+        description: "Name of the test to run (e.g. 'TestFunctionalSuite/TestUpdateWorkflow')"
+        type: string
+        required: true
+      timeout_minutes:
+        description: "Test timeout in minutes"
+        type: number
+        default: 120
+      test_runner:
+        description: "Which runner to use. Choose higher RAM if your n_runs is high."
+        type: choice
+        default: "16GB RAM (ubuntu-latest)"
+        options:
+          - "16GB RAM (ubuntu-latest)"
+          - "64GB RAM (ubuntu-latest-16-cores)"
+      test_dbs:
+        description: '[Functional Test Only] DBs to test on (e.g. ["sqlite", "mysql8"])'
+        type: string
+        default: '["sqlite"]'
+
+permissions:
+  contents: read
+
+env:
+  COMMIT: ${{ inputs.commit }}
+  DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
+  TEMPORAL_VERSION_CHECK_DISABLED: 1
+
+jobs:
+  unit-test:
+    if: ${{ inputs.run_functional_test != true }}
+    name: Unit test
+    runs-on: ${{ inputs.test_runner == '64GB RAM (ubuntu-latest-16-cores)' && 'ubuntu-latest-16-cores' || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run unit test
+        timeout-minutes: ${{ inputs.timeout_minutes }}
+        run: make unit-test-coverage
+        env:
+          UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
+          TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
+          TEST_TIMEOUT: "${{ inputs.timeout_minutes }}m"
+
+  functional-test:
+    if: ${{ inputs.run_functional_test == true }}
+    name: Functional test (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        name: ${{ fromJson(inputs.test_dbs) }}
+        include:
+          - name: cass_es
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch]
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_es8
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, elasticsearch8]
+            runs_on_override: ubuntu-latest-8-cores
+          - name: cass_os2
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch2]
+          - name: cass_os3
+            persistence_type: nosql
+            persistence_driver: cassandra
+            containers: [cassandra, opensearch3]
+          - name: sqlite
+            persistence_type: sql
+            persistence_driver: sqlite
+            containers: []
+          - name: mysql8
+            persistence_type: sql
+            persistence_driver: mysql8
+            containers: [mysql]
+          - name: postgres12
+            persistence_type: sql
+            persistence_driver: postgres12
+            containers: [postgresql]
+          - name: postgres12_pgx
+            persistence_type: sql
+            persistence_driver: postgres12_pgx
+            containers: [postgresql]
+    runs-on: ${{ inputs.test_runner == '64GB RAM (ubuntu-latest-16-cores)' && 'ubuntu-latest-16-cores' || (matrix.runs_on_override || 'ubuntu-latest') }}
+    env:
+      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
+      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - name: Start containerized dependencies
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: "${{ join(matrix.containers, '\n') }}"
+          down-flags: -v
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+
+      - name: Run functional test
+        timeout-minutes: ${{ inputs.timeout_minutes }}
+        run: make functional-test-coverage
+        env:
+          TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
+          TEST_TIMEOUT: "${{ inputs.timeout_minutes }}m"

@@ -491,7 +491,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// checking whether targetDeploymentVersion == nil means that we won't send the CaN recommendation to workflows
 	// that are about to transition to the target version. This is good, because if their transition succeeds, they
 	// don't need to CaN to start using the new version.
-	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && targetDeploymentVersion != nil {
+	if m.ms.config.EnableSuggestCaNOnNewTargetVersion(m.ms.namespaceEntry.Name().String()) &&
+		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
+		targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
