@@ -24,17 +24,16 @@ env:
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   MAX_TEST_ATTEMPTS: 3
-  TOTAL_SHARDS: 5
 
 jobs:
   test-setup:
     name: Test setup
     runs-on: ubuntu-latest
     outputs:
-      job_matrix: ${{ steps.compute_matrix.outputs.job_matrix }}
-      full_test_reason: ${{ steps.compute_matrix.outputs.full_test_reason }}
-      runner_x64: ${{ steps.compute_matrix.outputs.runner_x64 }}
-      runner_arm: ${{ steps.compute_matrix.outputs.runner_arm }}
+      job_matrix: ${{ steps.build_matrix.outputs.job_matrix }}
+      full_test_reason: ${{ steps.determine_scope.outputs.full_test_reason }}
+      runner_x64: ${{ steps.configure_runners.outputs.runner_x64 }}
+      runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v6
@@ -53,37 +52,9 @@ jobs:
           MERGE_BASE="$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")"
           echo "MERGE_BASE=${MERGE_BASE}" >> "$GITHUB_ENV"
 
-      # Primary DBs always get full tests (5 shards), extended DBs get smoke tests (1 shard) in abridged PRs.
-      - name: Compute database matrix
-        id: compute_matrix
+      - name: Determine test scope
+        id: determine_scope
         run: |
-          # DB configurations: name -> {persistence_type, persistence_driver, containers}
-          declare -A DB_CONFIG
-          DB_CONFIG[cass_es]='{"persistence_type":"nosql","persistence_driver":"cassandra","containers":["cassandra","elasticsearch"]}'
-          DB_CONFIG[cass_es8]='{"persistence_type":"nosql","persistence_driver":"cassandra","containers":["cassandra","elasticsearch8"]}'
-          DB_CONFIG[cass_os2]='{"persistence_type":"nosql","persistence_driver":"cassandra","containers":["cassandra","opensearch2"]}'
-          DB_CONFIG[cass_os3]='{"persistence_type":"nosql","persistence_driver":"cassandra","containers":["cassandra","opensearch3"]}'
-          DB_CONFIG[sqlite]='{"persistence_type":"sql","persistence_driver":"sqlite","containers":[],"arch":"arm"}'
-          DB_CONFIG[mysql8]='{"persistence_type":"sql","persistence_driver":"mysql8","containers":["mysql"]}'
-          DB_CONFIG[postgres12]='{"persistence_type":"sql","persistence_driver":"postgres12","containers":["postgresql"]}'
-          DB_CONFIG[postgres12_pgx]='{"persistence_type":"sql","persistence_driver":"postgres12_pgx","containers":["postgresql"]}'
-
-          # Testing one NoSQL and one SQL database
-          PRIMARY_DBS=("cass_os3" "sqlite")
-          EXTENDED_DBS=("cass_es" "cass_es8" "cass_os2" "mysql8" "postgres12" "postgres12_pgx")
-
-          # Smoke tests are a small subset of the full test suite
-          SMOKE_TESTS=(
-            "TestWorkflowTestSuite"
-            "TestSignalWorkflowTestSuite"
-            "TestActivityTestSuite/TestActivityHeartBeatWorkflow_Success"
-            "TestNDCFuncTestSuite/TestSingleBranch"
-            "TestFuncClustersTestSuite/TestNamespaceFailover"
-          )
-          SMOKE_TEST_ARGS="'-run=$(IFS='|'; echo "${SMOKE_TESTS[*]}")'"
-
-          ## Determine if this is a full or abridged (smoke) test run
-
           FULL_TEST_REASON=""
 
           # Push events (main, release branches) run all tests on all DBs
@@ -97,34 +68,148 @@ jobs:
             FULL_TEST_REASON="Running full tests on all DBs (persistence code changes)."
           fi
 
-          ## Build job matrix
+          echo "full_test_reason=$FULL_TEST_REASON" >> "$GITHUB_OUTPUT"
+
+      - name: ${{ steps.determine_scope.outputs.full_test_reason && 'ℹ️ Full tests' || 'ℹ️ Smoke tests' }}
+        run: echo "::notice::${{ steps.determine_scope.outputs.full_test_reason || 'Running smoke tests on extended DBs. Add the test-all-dbs label to run all tests on all DBs.' }}"
+
+      - name: Configure runners
+        id: configure_runners
+        run: |
+          # Use 8-core runners for temporalio org, standard runners for forks
+          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
+            runner_x64="ubuntu-latest-8-cores"
+            runner_arm="ubuntu-24.04-arm64-8-cores"
+          else
+            runner_x64="ubuntu-latest"
+            runner_arm="ubuntu-24.04-arm"
+          fi
+
+          {
+            echo "runner_x64=$runner_x64"
+            echo "runner_arm=$runner_arm"
+          } >> "$GITHUB_OUTPUT"
+
+      # Primary DBs always get full tests (5 jobs), extended DBs get smoke tests (1 job) in abridged PRs.
+      - name: Build job matrix
+        id: build_matrix
+        env:
+          FULL_TEST_REASON: ${{ steps.determine_scope.outputs.full_test_reason }}
+          DB_CONFIGS: |
+            cass_es:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, elasticsearch]
+            cass_es8:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, elasticsearch8]
+            cass_os2:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, opensearch2]
+            cass_os3:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, opensearch3]
+            sqlite:
+              persistence_type: sql
+              persistence_driver: sqlite
+              containers: []
+              arch: arm
+            mysql8:
+              persistence_type: sql
+              persistence_driver: mysql8
+              containers: [mysql]
+            postgres12:
+              persistence_type: sql
+              persistence_driver: postgres12
+              containers: [postgresql]
+            postgres12_pgx:
+              persistence_type: sql
+              persistence_driver: postgres12_pgx
+              containers: [postgresql]
+          PRIMARY_DBS: |
+            - cass_os3
+            - sqlite
+          EXTENDED_DBS: |
+            - cass_es
+            - cass_es8
+            - cass_os2
+            - mysql8
+            - postgres12
+            - postgres12_pgx
+          SMOKE_TESTS: |
+            - TestWorkflowTestSuite
+            - TestSignalWorkflowTestSuite
+            - TestActivityTestSuite/TestActivityHeartBeatWorkflow_Success
+        run: |
+          DB_CONFIGS=$(yq -o=json <<< "$DB_CONFIGS")
+          db_config() { jq -c ".[\"$1\"]" <<< "$DB_CONFIGS"; }
+
+          readarray -t PRIMARY_DBS < <(yq -r '.[]' <<< "$PRIMARY_DBS")
+          readarray -t EXTENDED_DBS < <(yq -r '.[]' <<< "$EXTENDED_DBS")
+
+          SMOKE_TEST_ARGS="'-run=$(yq -r '.[]' <<< "$SMOKE_TESTS" | paste -sd'|')'"
 
           MATRIX="[]"
 
-          add_sharded_jobs() {
+          # Add 5 jobs per DB: shard1-3 (sharded functional tests), ndc, xdc
+          add_full_jobs() {
             local db=$1
-            local config=${DB_CONFIG[$db]}
-            for shard in $(seq 1 "$TOTAL_SHARDS"); do
+            local config
+            config=$(db_config "$db")
+
+            # Shard 1-3: regular functional tests with sharding
+            for shard in 1 2 3; do
               MATRIX=$(jq -c \
                 ". + [\$config + {
                   name: \"$db\",
-                  shard_index: $shard,
-                  total_shards: $TOTAL_SHARDS,
-                  test_timeout: \"20m\",
-                  github_timeout: 30
+                  display_name: \"shard$shard\",
+                  cmd: \"make functional-test-coverage\",
+                  shard_index: $((shard - 1)),
+                  total_shards: 3,
+                  test_timeout: \"35m\",
+                  github_timeout: 40
                 }]" \
                 --argjson config "$config" \
                 <<< "$MATRIX")
             done
+
+            # NDC
+            MATRIX=$(jq -c \
+              ". + [\$config + {
+                name: \"$db\",
+                display_name: \"ndc\",
+                cmd: \"make functional-test-ndc-coverage\",
+                test_timeout: \"15m\",
+                github_timeout: 20
+              }]" \
+              --argjson config "$config" \
+              <<< "$MATRIX")
+
+            # XDC
+            MATRIX=$(jq -c \
+              ". + [\$config + {
+                name: \"$db\",
+                display_name: \"xdc\",
+                cmd: \"make functional-test-xdc-coverage\",
+                test_timeout: \"35m\",
+                github_timeout: 40
+              }]" \
+              --argjson config "$config" \
+              <<< "$MATRIX")
           }
 
           add_smoke_job() {
             local db=$1
-            local config=${DB_CONFIG[$db]}
+            local config
+            config=$(db_config "$db")
             MATRIX=$(jq -c \
               ". + [\$config + {
                 name: \"$db\",
-                is_smoke: true,
+                display_name: \"smoke\",
+                cmd: \"make functional-test-coverage\",
                 test_args: \$test_args,
                 test_timeout: \"5m\",
                 github_timeout: 10
@@ -136,37 +221,20 @@ jobs:
 
           # Schedule jobs for primary databases
           for db in "${PRIMARY_DBS[@]}"; do
-            add_sharded_jobs "$db"
+            add_full_jobs "$db"
           done
 
           # Schedule jobs for extended databases
           for db in "${EXTENDED_DBS[@]}"; do
             if [[ -n "$FULL_TEST_REASON" ]]; then
-              add_sharded_jobs "$db"
+              add_full_jobs "$db"
             else
               add_smoke_job "$db"
             fi
           done
 
-          # Runner configuration: use 8-core runners for temporalio org, standard runners for forks
-          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_x64="ubuntu-latest-8-cores"
-            runner_arm="ubuntu-24.04-arm64-8-cores"
-          else
-            runner_x64="ubuntu-latest"
-            runner_arm="ubuntu-24.04-arm"
-          fi
-
-          {
-            echo "job_matrix=$MATRIX"
-            echo "full_test_reason=$FULL_TEST_REASON"
-            echo "runner_x64=$runner_x64"
-            echo "runner_arm=$runner_arm"
-          } >> "$GITHUB_OUTPUT"
+          echo "job_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Generated $(jq length <<< "$MATRIX") jobs"
-
-      - name: ${{ steps.compute_matrix.outputs.full_test_reason && 'ℹ️ Full tests' || 'ℹ️ Smoke tests' }}
-        run: echo "::notice::${{ steps.compute_matrix.outputs.full_test_reason || 'Running smoke tests on extended DBs. Add the test-all-dbs label to run all tests on all DBs.' }}"
 
   pre-build:
     name: Pre-build for cache (${{ matrix.arch }})
@@ -279,8 +347,8 @@ jobs:
         run: TEST_TIMEOUT=15m make unit-test-coverage
 
       - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: |
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -362,8 +430,8 @@ jobs:
         run: make integration-test-coverage
 
       - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: |
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -412,7 +480,7 @@ jobs:
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
   functional-test:
     # Display name shown in the UI. The job-id lookup uses this exact value.
-    name: Functional test (${{ matrix.name }}${{ matrix.is_smoke && ', smoke' || format(', shard {0}', matrix.shard_index) }})
+    name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
     needs: [pre-build, test-setup]
     strategy:
       fail-fast: false
@@ -462,21 +530,18 @@ jobs:
         id: get_job_id
         uses: ./.github/actions/get-job-id
         with:
-          job_name: Functional test (${{ matrix.name }}${{ matrix.is_smoke && ', smoke' || format(', shard {0}', matrix.shard_index) }})
+          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
           run_id: ${{ github.run_id }}
 
-      - name: ${{ matrix.is_smoke && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
-        run: echo "::notice::${{ matrix.is_smoke && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
+      - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
+        run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
-        run: ./develop/github/monitor_test.sh make functional-test-coverage
+        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
-          # Full tests use TEMPORAL_TEST_TOTAL_SHARDS/TEMPORAL_TEST_SHARD_INDEX;
-          # smoke tests run specific suites via TEST_ARGS
-          TEMPORAL_TEST_TOTAL_SHARDS: ${{ matrix.total_shards || '' }}
-          TEMPORAL_TEST_SHARD_INDEX: ${{ matrix.shard_index || '' }}
-          TEMPORAL_TEST_SHARD_SALT: "-salt-26"
+          TEST_TOTAL_SHARDS: ${{ matrix.total_shards || '' }}
+          TEST_SHARD_INDEX: ${{ matrix.shard_index || '' }}
           TEST_ARGS: ${{ matrix.test_args || '' }}
 
       - name: Print memory snapshot
@@ -484,8 +549,8 @@ jobs:
         run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: |
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -520,7 +585,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{ matrix.is_smoke && 'smoke' || matrix.shard_index }}--functional-test
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{ matrix.display_name }}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -539,8 +604,8 @@ jobs:
     steps:
       - name: Check results
         run: |
-          # All statuses must be success or skipped
-          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success" and . != "skipped")') ]]; then
+          # all statuses must be success
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
             exit 1
           fi
 
