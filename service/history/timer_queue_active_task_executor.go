@@ -980,6 +980,10 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if t.shouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -1020,6 +1024,10 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	if t.shouldDropStandaloneActivityTask(task.ArchetypeID) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

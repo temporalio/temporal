@@ -341,3 +341,11 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	}
 	return processedTimers, nil
 }
+
+// shouldDropStandaloneActivityTask indicates whether a task should be dropped based on whether it is a standalone
+// activity task or if the archetype is unknown. This is used in the event of server downgrade from a version where
+// standalone activities was supported, so that such tasks won't block queue processing.
+func (t *timerQueueTaskExecutorBase) shouldDropStandaloneActivityTask(archetypeID uint32) bool {
+	fqn, found := t.shardContext.ChasmRegistry().ComponentFqnByID(archetypeID)
+	return !found || fqn == "activity.activity"
+}

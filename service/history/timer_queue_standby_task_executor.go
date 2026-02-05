@@ -123,6 +123,10 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	if t.shouldDropStandaloneActivityTask(task.ArchetypeID) {
+		return nil
+	}
+
 	actionFn := func(
 		ctx context.Context,
 		wfContext historyi.WorkflowContext,
@@ -171,6 +175,10 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if t.shouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	actionFn := func(
 		ctx context.Context,
 		wfContext historyi.WorkflowContext,

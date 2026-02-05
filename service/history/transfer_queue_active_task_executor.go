@@ -157,6 +157,10 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if t.shouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
