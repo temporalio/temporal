@@ -264,7 +264,6 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			require.True(t, resp.GetStarted())
 		})
 	})
-
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
