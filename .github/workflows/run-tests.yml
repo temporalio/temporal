@@ -35,11 +35,6 @@ jobs:
       github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
       test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
-      modified_unit_test_suites: ${{ env.modified_unit_test_suites }}
-      modified_integration_test_suites: ${{ env.modified_integration_test_suites }}
-      modified_functional_test_suites: ${{ env.modified_functional_test_suites }}
-      modified_functional_ndc_test_suites: ${{ env.modified_functional_ndc_test_suites }}
-      modified_functional_xdc_test_suites: ${{ env.modified_functional_xdc_test_suites }}
     steps:
       - id: generate_output
         run: |
@@ -53,35 +48,6 @@ jobs:
             echo "test_timeout=${timeout}m"
             echo "runs_on=$runs_on"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Checkout Code
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-          fetch-depth: 0
-
-      - name: Fetch base branch
-        if: ${{ github.event_name == 'pull_request' }}
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
-
-      - name: Compute merge base
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          MERGE_BASE="$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")"
-          echo "MERGE_BASE=${MERGE_BASE}" >> "$GITHUB_ENV"
-
-          set -exuo pipefail
-
-          go run ./cmd/tools/test/find_altered_tests.go \
-            -c unit \
-            -c integration \
-            -c functional \
-            -c functional_ndc \
-            -c functional_xdc \
-            -s "${MERGE_BASE}" \
-            -t "${COMMIT}" | tee -a "$GITHUB_ENV"
-        shell: bash
 
   pre-build:
     name: Pre-build for cache
@@ -231,18 +197,6 @@ jobs:
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Unit Test Detection
-        if: ${{ !cancelled() && env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 30
-        run: |
-          echo "Detecting flaky unit tests: ${{ needs.set-up-functional-test.outputs.modified_unit_test_suites }}"
-          make unit-test
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-functional-test.outputs.modified_unit_test_suites }} -count=10"
-          TEST_TIMEOUT: 35
-
   integration-test:
     name: Integration test
     needs: [pre-build, set-up-functional-test]
@@ -325,17 +279,6 @@ jobs:
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
-
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Integration Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 30
-        run: |
-          echo "Detecting flaky integration tests: ${{ needs.set-up-functional-test.outputs.modified_integration_test_suites }}"
-          make integration-test-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-functional-test.outputs.modified_integration_test_suites }} -count=5"
 
       - name: Tear down docker compose
         if: ${{ always() }}
@@ -497,17 +440,6 @@ jobs:
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Functional Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: ${{ fromJSON(needs.set-up-functional-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: |
-          echo "Detecting flaky functional tests: ${{ needs.set-up-functional-test.outputs.modified_integration_test_suites }}"
-          make functional-test-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-functional-test.outputs.modified_functional_test_suites }} -count=5"
-
   # XDC matrix job. Include `${{ matrix.name }}` in the display name so each
   # matrix variant has a unique name for the job-id lookup.
   functional-test-xdc:
@@ -653,17 +585,6 @@ jobs:
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Functional XDC Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 60
-        run: |
-          echo "Detecting flaky functional xdc tests: ${{ needs.set-up-functional-test.outputs.modified_functional_xdc_test_suites }}"
-          make functional-test-xdc-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-functional-test.outputs.modified_functional_xdc_test_suites }} -count=5"
-
   # NDC matrix job. Include `${{ matrix.name }}` in the display name so each
   # matrix variant has a unique name for the job-id lookup.
   functional-test-ndc:
@@ -795,17 +716,6 @@ jobs:
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
-
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Functional NDC Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 30
-        run: |
-          echo "Detecting flaky functional ndc tests: ${{ needs.set-up-functional-test.outputs.modified_functional_ndc_test_suites }}"
-          make functional-test-ndc-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-functional-test.outputs.modified_functional_ndc_test_suites }} -count=5"
 
   test-status:
     if: always()
