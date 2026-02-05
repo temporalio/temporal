@@ -1,6 +1,4 @@
-// go:build ignore
 //go:build ignore
-// +build ignore
 
 // All tests disabled since standalone activity is expected to be disabled for the v1.30-148 release
 
