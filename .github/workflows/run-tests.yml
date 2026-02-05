@@ -35,23 +35,41 @@ jobs:
       github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
       test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
+      runner_x64: ${{ steps.generate_output.outputs.runner_x64 }}
+      runner_arm: ${{ steps.generate_output.outputs.runner_arm }}
     steps:
       - id: generate_output
         run: |
           shards=3
           timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
-          runs_on='["ubuntu-latest-8-cores"]'
+
+          # Runner configuration: use 8-core runners for temporalio org, standard runners for forks
+          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
+            runner_x64="ubuntu-latest-8-cores"
+            runner_arm="ubuntu-24.04-arm64-8-cores"
+          else
+            runner_x64="ubuntu-latest"
+            runner_arm="ubuntu-24.04-arm"
+          fi
+          runs_on="[\"${runner_x64}\"]"
+
           {
             echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
             echo "shards=$shards"
             echo "github_timeout=$((timeout+5))"
             echo "test_timeout=${timeout}m"
             echo "runs_on=$runs_on"
+            echo "runner_x64=$runner_x64"
+            echo "runner_arm=$runner_arm"
           } >> "$GITHUB_OUTPUT"
 
   pre-build:
-    name: Pre-build for cache
-    runs-on: ubuntu-latest
+    name: Pre-build for cache (${{ matrix.arch }})
+    needs: set-up-functional-test
+    strategy:
+      matrix:
+        arch: [x64, arm]
+    runs-on: ${{ matrix.arch == 'arm' && needs.set-up-functional-test.outputs.runner_arm || needs.set-up-functional-test.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -87,8 +105,8 @@ jobs:
 
   misc-checks:
     name: Misc checks
-    needs: pre-build
-    runs-on: ubuntu-latest
+    needs: [pre-build, set-up-functional-test]
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -127,7 +145,7 @@ jobs:
   unit-test:
     name: Unit test
     needs: [pre-build, set-up-functional-test]
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -200,7 +218,7 @@ jobs:
   integration-test:
     name: Integration test
     needs: [pre-build, set-up-functional-test]
-    runs-on: ubuntu-latest
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -328,6 +346,7 @@ jobs:
             persistence_type: sql
             persistence_driver: sqlite
             containers: []
+            arch: arm
           - name: mysql8
             persistence_type: sql
             persistence_driver: mysql8
@@ -340,8 +359,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    # For forks, fall back to ubuntu-latest since custom runners are not available.
-    runs-on: ${{ github.repository_owner == 'temporalio' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
+    runs-on: ${{ matrix.arch == 'arm' && needs.set-up-functional-test.outputs.runner_arm || needs.set-up-functional-test.outputs.runner_x64 }}
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-functional-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
@@ -491,8 +509,7 @@ jobs:
             persistence_driver: postgres12_pgx
             parallel_flags: "-parallel=2" # reduce parallelism for postgres
             containers: [postgresql]
-    # For forks, fall back to ubuntu-latest since custom runners are not available.
-    runs-on: ${{ github.repository_owner == 'temporalio' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -633,8 +650,7 @@ jobs:
             persistence_type: sql
             persistence_driver: postgres12_pgx
             containers: [postgresql]
-    # For forks, fall back to ubuntu-latest since custom runners are not available.
-    runs-on: ${{ github.repository_owner == 'temporalio' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
