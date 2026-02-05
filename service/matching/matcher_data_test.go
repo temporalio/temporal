@@ -295,7 +295,7 @@ func (s *MatcherDataSuite) TestTaskForward() {
 	someError := errors.New("some error")
 	// one task forwarder
 	go func() {
-		poller := &waitingPoller{isTaskForwarder: true}
+		poller := &waitingPoller{taskForwarderType: parentTaskForwarder}
 		pres := s.md.EnqueuePollerAndWait(nil, poller)
 		s.NotNil(pres.task)
 		// use some error just to check it's passed through
@@ -314,16 +314,16 @@ func (s *MatcherDataSuite) TestTaskForward() {
 	// two tasks will get matched with normal pollers first
 	tres := s.md.EnqueueTaskAndWait(nil, t1)
 	s.NotNil(tres.poller)
-	s.False(tres.poller.isTaskForwarder)
+	s.Equal(notTaskForwarder, tres.poller.taskForwarderType)
 
 	tres = s.md.EnqueueTaskAndWait(nil, t2)
 	s.NotNil(tres.poller)
-	s.False(tres.poller.isTaskForwarder)
+	s.Equal(notTaskForwarder, tres.poller.taskForwarderType)
 
 	// third task will get matched with forwarder
 	tres = s.md.EnqueueTaskAndWait(nil, t3)
 	s.NotNil(tres.poller)
-	s.True(tres.poller.isTaskForwarder)
+	s.Equal(parentTaskForwarder, tres.poller.taskForwarderType)
 	fres, ok := t3.getResponse()
 	s.True(ok)
 	s.True(fres.forwarded)
@@ -864,7 +864,7 @@ func FuzzMatcherData(f *testing.F) {
 				sleepTime := randms(100)
 				go func() {
 					defer taskForwarders.Add(-1)
-					res := md.EnqueuePollerAndWait(nil, &waitingPoller{isTaskForwarder: true})
+					res := md.EnqueuePollerAndWait(nil, &waitingPoller{taskForwarderType: parentTaskForwarder})
 					softassert.That(md.logger, res.ctxErr == nil && res.task != nil, "")
 					ts.Sleep(sleepTime)
 					res.task.finishForward(nil, nil, true)

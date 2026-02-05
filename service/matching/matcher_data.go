@@ -27,6 +27,14 @@ const (
 	priorityBacklogPollForwarder
 )
 
+type taskForwarderType int32
+
+const (
+	notTaskForwarder taskForwarderType = iota
+	parentTaskForwarder  // forwards tasks to parent partition
+	validatorTaskForwarder // validates tasks on root partition
+)
+
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
 // is used to update ready times after a rate is changed from very low (or zero) to higher: we
 // may have set a ready time far in the future and need to clip it to something reasonable so
@@ -47,9 +55,12 @@ func (p *pollerPQ) Len() int {
 // implements heap.Interface, do not call directly
 func (p *pollerPQ) Less(i int, j int) bool {
 	a, b := p.heap[i], p.heap[j]
-	if !(a.isTaskForwarder || a.isTaskValidator) && (b.isTaskForwarder || b.isTaskValidator) {
+	// task forwarders/validators have lower priority than local polls
+	aIsForwarder := a.taskForwarderType != notTaskForwarder
+	bIsForwarder := b.taskForwarderType != notTaskForwarder
+	if !aIsForwarder && bIsForwarder {
 		return true
-	} else if (a.isTaskForwarder || a.isTaskValidator) && !(b.isTaskForwarder || b.isTaskValidator) {
+	} else if aIsForwarder && !bIsForwarder {
 		return false
 	}
 	return a.startTime.Before(b.startTime)
@@ -405,12 +416,16 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 		for _, poller := range d.pollers.heap {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
+				// query-only poll only matches with query (but can match poll forwarder)
 				continue
 			} else if task.isPollForwarder() && poller.forwardCtx == nil {
+				// poll forwarder only matches polls that have a forwardCtx
 				continue
-			} else if poller.isTaskForwarder && !allowForwarding {
+			} else if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
+				// task forwarder only matches when forwarding is allowed
 				continue
-			} else if poller.isTaskValidator && task.forwardCtx != nil {
+			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
+				// validator (root only) only matches local backlog tasks
 				continue
 			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
 				// Note the ">" above: "min" priority is a numeric max.

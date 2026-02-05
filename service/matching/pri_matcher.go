@@ -49,12 +49,11 @@ type priTaskMatcher struct {
 
 type waitingPoller struct {
 	waitableMatchResult
-	startTime       time.Time
-	forwardCtx      context.Context // non-nil iff poll can be forwarded
-	pollMetadata    *pollMetadata   // non-nil iff poll can be forwarded
-	queryOnly       bool            // if true, poller can be given only query task, otherwise any task
-	isTaskForwarder bool
-	isTaskValidator bool
+	startTime        time.Time
+	forwardCtx       context.Context   // non-nil iff poll can be forwarded
+	pollMetadata     *pollMetadata     // non-nil iff poll can be forwarded
+	queryOnly        bool              // if true, poller can be given only query task, otherwise any task
+	taskForwarderType taskForwarderType // type of task forwarder (if any)
 }
 
 type matchResult struct {
@@ -158,7 +157,7 @@ func (tm *priTaskMatcher) Stop() {
 // TODO(pri): access to retrier is not synchronized
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
-	poller := waitingPoller{isTaskForwarder: true}
+	poller := waitingPoller{taskForwarderType: parentTaskForwarder}
 	skipLimiter := false
 	var err error
 	for {
@@ -242,7 +241,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 
 func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
-	poller := &waitingPoller{isTaskForwarder: true, isTaskValidator: true}
+	poller := &waitingPoller{taskForwarderType: validatorTaskForwarder}
 	for {
 		res := tm.data.EnqueuePollerAndWait(ctxs, poller)
 		if res.ctxErr != nil {

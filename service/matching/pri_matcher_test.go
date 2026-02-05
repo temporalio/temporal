@@ -33,9 +33,9 @@ func (s *PriMatcherSuite) SetupTest() {
 }
 
 // TestValidatorWorksOnRoot tests that the validator goroutine can pick up tasks
-// on a root partition (where there is no forwarder). This test should fail before
-// the fix because the validator poller has isTaskForwarder=true, and on root
-// allowForwarding is always false, causing the validator to be skipped in findMatch.
+// on a root partition (where there is no forwarder). Before the fix, this would fail
+// because the validator used isTaskForwarder=true which caused it to be skipped
+// when allowForwarding=false (which is always the case on root).
 func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
