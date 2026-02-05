@@ -26,7 +26,14 @@ import (
 )
 
 type (
-	// taskQueueStatsSuite encapsulates the test environment and parameters for task queue stats tests.
+	// taskQueueStatsSuite tests are querying task queue stats.
+	//
+	// There are currently three ways to do that:
+	// 1. DescribeTaskQueue with ReportStats=true
+	// 2. DescribeTaskQueue with ApiMode=ENHANCED and ReportStats=true [deprecated]
+	// 3. DescribeWorkerDeploymentVersion with ReportTaskQueueStats=true
+	//
+	// Unless a test calls out a specific methods, all three methods are tested in each test case.
 	taskQueueStatsSuite struct {
 		testcore.Env
 		t               *testing.T
@@ -47,7 +54,7 @@ type (
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
-func newTaskQueueStatsSuite(t *testing.T, env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
+func newTaskQueueStatsTest(t *testing.T, env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
 	return &taskQueueStatsSuite{
 		Env:             env,
 		t:               t,
@@ -84,7 +91,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestDescribeTaskQueue_NonRoot", func(t *testing.T) {
 		env := testcore.NewEnv(t)
 		applyBaseConfig(env, usePriMatcher)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsTest(t, env, usePriMatcher)
 		s.testDescribeTaskQueueNonRoot()
 	})
 
@@ -94,17 +101,18 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 		env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2)
 		env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 2)
 		env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-		env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
+		s := newTaskQueueStatsTest(t, env, usePriMatcher)
 		s.publishConsumeWorkflowTasksValidateStats(0, false)
 	})
 
+	// NOTE: Cache _eviction_ is already covered by the other tests.
 	t.Run("TestAddMultipleTasks_ValidateStats_Cached", func(t *testing.T) {
 		env := testcore.NewEnv(t)
 		applyBaseConfig(env, usePriMatcher)
 		env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-		env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour)
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour) // using a long TTL to verify caching
+		s := newTaskQueueStatsTest(t, env, usePriMatcher)
 		s.testAddMultipleTasksValidateStatsCached()
 	})
 
@@ -114,7 +122,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestMultipleTasks_WithMatchingBehavior_ValidateStats", func(t *testing.T) {
 		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 			s.publishConsumeWorkflowTasksValidateStats(4, false)
 		})
 	})
@@ -122,7 +130,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping", func(t *testing.T) {
 		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
@@ -222,7 +230,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestRampingAndCurrentAbsorbUnversionedBacklog", func(t *testing.T) {
 		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 			defer cancel()
@@ -382,7 +390,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned", func(t *testing.T) {
 		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
@@ -449,7 +457,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned", func(t *testing.T) {
 		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
@@ -517,7 +525,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	t.Run("TestInactiveVersionDoesNotAbsorbUnversionedBacklog", func(t *testing.T) {
 		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
+			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
 			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 			defer cancel()
@@ -704,7 +712,7 @@ func runWithMatchingBehavior(
 			applyBaseConfig(env, usePriMatcher)
 			behavior.Apply(env)
 
-			s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+			s := newTaskQueueStatsTest(t, env, usePriMatcher)
 			subtest(s)
 		})
 	}
