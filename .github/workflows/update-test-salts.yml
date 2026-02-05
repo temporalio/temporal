@@ -1,0 +1,86 @@
+name: Update Test Salts
+
+on:
+  schedule:
+    # Runs at 0700 UTC daily
+    - cron: "0 7 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  update-salts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          ref: main
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.generate-token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Optimize functional test sharding
+        run: |
+          go run ./cmd/tools/optimize-test-sharding \
+            -shards 3 \
+            -workflow run-tests.yml \
+            -artifact-pattern 'junit-xml--*--functional-test' \
+            -output tests/testcore/test-shard-salt
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --quiet tests/testcore/test-shard-salt; then
+            echo "No changes detected"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Changes detected:"
+            git diff tests/testcore/test-shard-salt
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Pull Request
+        if: steps.check-changes.outputs.has_changes == 'true'
+        shell: bash
+        run: |
+          timestamp=$(date +%Y%m%d-%H%M%S)
+          branch_name="bot-update-test-salts-${timestamp}"
+
+          git checkout -b "${branch_name}"
+          git add tests/testcore/test-shard-salt
+          git commit -m "ci: Update functional test sharding salt"
+          git push origin "${branch_name}"
+
+          pr_url=$(gh pr create \
+            --title "Update functional test sharding salt" \
+            --body "Automated update of functional test sharding salt to optimize shard balance. This PR was automatically generated.")
+
+          pr_number=$(gh pr view "${pr_url}" --json number --jq '.number')
+          gh pr merge "${pr_number}" --auto --merge
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}

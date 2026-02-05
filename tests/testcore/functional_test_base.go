@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	_ "embed"
 	"encoding/binary"
 	"fmt"
 	"maps"
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dgryski/go-farm"
@@ -52,6 +54,12 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+// functionalTestShardSalt is the salt used for distributing functional tests
+// across shards. Updated automatically by the update-test-salts workflow.
+//
+//go:embed test-shard-salt
+var functionalTestShardSalt string
 
 type (
 	FunctionalTestBase struct {
@@ -360,12 +368,7 @@ func (s *FunctionalTestBase) checkTestShard() {
 		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	// This was determined empirically to distribute our existing test names
-	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
-
-	nameToHash := s.T().Name() + salt
+	nameToHash := s.T().Name() + strings.TrimSpace(functionalTestShardSalt)
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
 		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
