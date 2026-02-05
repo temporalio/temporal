@@ -77,8 +77,6 @@ const (
 
 type (
 	TaskDispatchRateLimiter quotas.RequestRateLimiter
-	pollerIDCtxKey          string
-	identityCtxKey          string
 
 	taskQueueCounterKey struct {
 		namespaceID   string
@@ -88,6 +86,8 @@ type (
 	}
 
 	pollMetadata struct {
+		pollerID                  string
+		identity                  string
 		taskQueueMetadata         *taskqueuepb.TaskQueueMetadata
 		workerVersionCapabilities *commonpb.WorkerVersionCapabilities
 		deploymentOptions         *deploymentpb.WorkerDeploymentOptions
@@ -175,9 +175,6 @@ var (
 	emptyPollActivityTaskQueueResponse = &matchingservice.PollActivityTaskQueueResponse{}
 
 	errNoTasks = errors.New("no tasks")
-
-	pollerIDKey pollerIDCtxKey = "pollerID"
-	identityKey identityCtxKey = "identity"
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
 	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
@@ -626,22 +623,20 @@ pollLoop:
 		if err != nil {
 			return nil, err
 		}
-		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
-		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
-		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		if err != nil {
 			return nil, err
 		}
 		pollMetadata := &pollMetadata{
+			pollerID:                  pollerID,
+			identity:                  request.GetIdentity(),
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 		}
-		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
+		task, versionSetUsed, err := e.pollTask(ctx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return emptyPollWorkflowTaskQueueResponse, nil
@@ -934,11 +929,9 @@ pollLoop:
 			return nil, err
 		}
 
-		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
-		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
-		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		pollMetadata := &pollMetadata{
+			pollerID:                  pollerID,
+			identity:                  request.GetIdentity(),
 			taskQueueMetadata:         request.TaskQueueMetadata,
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
@@ -946,7 +939,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 		}
-		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
+		task, versionSetUsed, err := e.pollTask(ctx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return emptyPollActivityTaskQueueResponse, nil
@@ -2485,21 +2478,19 @@ pollLoop:
 		if err != nil {
 			return nil, err
 		}
-		// Add frontend generated pollerID to context so taskqueueMgr can support cancellation of
-		// long-poll when frontend calls CancelOutstandingPoll API
-		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
-		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
 		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_NEXUS)
 		if err != nil {
 			return nil, err
 		}
 		pollMetadata := &pollMetadata{
+			pollerID:                  pollerID,
+			identity:                  request.GetIdentity(),
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 		}
-		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
+		task, _, err := e.pollTask(ctx, partition, pollMetadata)
 		if err != nil {
 			if errors.Is(err, errNoTasks) {
 				return &matchingservice.PollNexusTaskQueueResponse{}, nil
@@ -2768,9 +2759,9 @@ func (e *matchingEngineImpl) pollTask(
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
-	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
-		e.outstandingPollers.Set(pollerID, cancel)
-		defer e.outstandingPollers.Delete(pollerID)
+	if pollMetadata.pollerID != "" {
+		e.outstandingPollers.Set(pollMetadata.pollerID, cancel)
+		defer e.outstandingPollers.Delete(pollMetadata.pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
