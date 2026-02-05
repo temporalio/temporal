@@ -99,6 +99,6 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 // ShouldDropStandaloneActivityTask indicates whether a task should be dropped based on whether it is a standalone
 // activity task. This is used in the event of server downgrade from a version where standalone activities was supported,
 // so that such tasks won't block queue processing.
-func ShouldDropStandaloneActivityTask(archId uint32) bool {
-	return archId == archetypeID
+func ShouldDropStandaloneActivityTask(archID uint32) bool {
+	return archID == archetypeID
 }
