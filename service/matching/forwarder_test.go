@@ -256,8 +256,6 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	pollerID := uuid.NewString()
-	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
-	ctx = context.WithValue(ctx, identityKey, "id1")
 	resp := &matchingservice.PollWorkflowTaskQueueResponse{
 		TaskToken: []byte("token1"),
 	}
@@ -269,7 +267,10 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 		},
 	).Return(resp, nil)
 
-	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
+	task, err := t.fwdr.ForwardPoll(context.Background(), &pollMetadata{
+		pollerID: pollerID,
+		identity: "id1",
+	})
 	t.NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
@@ -287,8 +288,6 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInst
 
 	pollerID := uuid.NewString()
 	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
-	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
-	ctx = context.WithValue(ctx, identityKey, "id1")
 	resp := &matchingservice.PollWorkflowTaskQueueResponse{
 		TaskToken: []byte("token1"),
 	}
@@ -300,7 +299,9 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInst
 		},
 	).Return(resp, nil)
 
-	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+	task, err := t.fwdr.ForwardPoll(context.Background(), &pollMetadata{
+		pollerID:          pollerID,
+		identity:          "id1",
 		workerInstanceKey: workerInstanceKey,
 	})
 	t.NoError(err)
@@ -314,8 +315,6 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
 	pollerID := uuid.NewString()
-	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
-	ctx = context.WithValue(ctx, identityKey, "id1")
 	resp := &matchingservice.PollActivityTaskQueueResponse{
 		TaskToken: []byte("token1"),
 	}
@@ -327,7 +326,10 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 		},
 	).Return(resp, nil)
 
-	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
+	task, err := t.fwdr.ForwardPoll(context.Background(), &pollMetadata{
+		pollerID: pollerID,
+		identity: "id1",
+	})
 	t.NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
@@ -345,8 +347,6 @@ func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKe
 
 	pollerID := uuid.NewString()
 	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
-	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
-	ctx = context.WithValue(ctx, identityKey, "id1")
 	resp := &matchingservice.PollActivityTaskQueueResponse{
 		TaskToken: []byte("token1"),
 	}
@@ -358,7 +358,9 @@ func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKe
 		},
 	).Return(resp, nil)
 
-	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+	task, err := t.fwdr.ForwardPoll(context.Background(), &pollMetadata{
+		pollerID:          pollerID,
+		identity:          "id1",
 		workerInstanceKey: workerInstanceKey,
 	})
 	t.NoError(err)

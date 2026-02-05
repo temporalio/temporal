@@ -232,20 +232,17 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 		return nil, err
 	}
 
-	pollerID, _ := ctx.Value(pollerIDKey).(string)
-	identity, _ := ctx.Value(identityKey).(string)
-
 	switch fwdr.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		resp, err := fwdr.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),
-			PollerId:    pollerID,
+			PollerId:    pollMetadata.pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
 					Kind: fwdr.partition.Kind(),
 				},
-				Identity:                  identity,
+				Identity:                  pollMetadata.identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
@@ -262,13 +259,13 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		resp, err := fwdr.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),
-			PollerId:    pollerID,
+			PollerId:    pollMetadata.pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
 					Kind: fwdr.partition.Kind(),
 				},
-				Identity:                  identity,
+				Identity:                  pollMetadata.identity,
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
@@ -286,13 +283,13 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
 		resp, err := fwdr.client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
 			NamespaceId: fwdr.partition.TaskQueue().NamespaceId(),
-			PollerId:    pollerID,
+			PollerId:    pollMetadata.pollerID,
 			Request: &workflowservice.PollNexusTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
 					Kind: fwdr.partition.Kind(),
 				},
-				Identity:                  identity,
+				Identity:                  pollMetadata.identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				// Namespace is ignored here.

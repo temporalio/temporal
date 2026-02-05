@@ -960,10 +960,12 @@ func (s *PartitionManagerTestSuite) validatePollTask(buildId string, useVersioni
 
 // UpdatePollerData is a no-op if the poller context has no identity, so we need a context with identity for any tests that check poller info
 func (s *PartitionManagerTestSuite) pollWithIdentity(pollerId, buildId string, useVersioning bool, passOptions bool) {
-	ctx, cancel := context.WithTimeout(context.WithValue(context.Background(), identityKey, pollerId), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
-	pm := &pollMetadata{}
+	pm := &pollMetadata{
+		identity: pollerId,
+	}
 	if passOptions {
 		pm.deploymentOptions = &deploymentpb.WorkerDeploymentOptions{
 			DeploymentName:       "foo",
@@ -1050,11 +1052,9 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
 
 	// Register a poller if requested
 	if config.withRecentPoller {
-		pollCtx, pollCancel := context.WithTimeout(
-			context.WithValue(context.Background(), identityKey, "test-poller"),
-			100*time.Millisecond,
-		)
+		pollCtx, pollCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		_, _, _ = pm.PollTask(pollCtx, &pollMetadata{
+			identity: "test-poller",
 			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
 				BuildId:       "",
 				UseVersioning: false,

@@ -496,10 +496,10 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 	}
 
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
-		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+	if pollMetadata.identity != "" {
+		dbq.UpdatePollerInfo(pollerIdentity(pollMetadata.identity), pollMetadata)
 		// update timestamp when long poll ends
-		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
+		defer dbq.UpdatePollerInfo(pollerIdentity(pollMetadata.identity), pollMetadata)
 	}
 
 	// The desired global rate limit for the task queue can come from multiple sources:

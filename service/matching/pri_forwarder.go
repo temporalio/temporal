@@ -201,21 +201,18 @@ func ForwardPollWithTarget(
 	source tqid.Partition,
 	target *tqid.NormalPartition,
 ) (*internalTask, error) {
-	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
-	identity, _ := ctx.Value(identityKey).(string) // nolint:revive
-
 	// nolint:exhaustive // there's a default clause
 	switch target.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		resp, err := client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: target.TaskQueue().NamespaceId(),
-			PollerId:    pollerID,
+			PollerId:    pollMetadata.pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
-				Identity:                  identity,
+				Identity:                  pollMetadata.identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
@@ -232,13 +229,13 @@ func ForwardPollWithTarget(
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		resp, err := client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: target.TaskQueue().NamespaceId(),
-			PollerId:    pollerID,
+			PollerId:    pollMetadata.pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
-				Identity:                  identity,
+				Identity:                  pollMetadata.identity,
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
@@ -256,13 +253,13 @@ func ForwardPollWithTarget(
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
 		resp, err := client.PollNexusTaskQueue(ctx, &matchingservice.PollNexusTaskQueueRequest{
 			NamespaceId: target.TaskQueue().NamespaceId(),
-			PollerId:    pollerID,
+			PollerId:    pollMetadata.pollerID,
 			Request: &workflowservice.PollNexusTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
 					Name: target.RpcName(),
 					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 				},
-				Identity:                  identity,
+				Identity:                  pollMetadata.identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				// Namespace is ignored here.
