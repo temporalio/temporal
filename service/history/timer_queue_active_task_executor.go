@@ -1025,7 +1025,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
-	if t.shouldDropStandaloneActivityTask(task.ArchetypeID) {
+	if activity.ShouldDropStandaloneActivityTask(task.ArchetypeID) {
 		return nil
 	}
 
