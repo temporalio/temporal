@@ -902,6 +902,11 @@ and deployment interaction in matching and history.`,
 		false,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
 	)
+	EnableSuggestCaNOnNewTargetVersion = NewNamespaceBoolSetting(
+		"system.enableSuggestCaNOnNewTargetVersion",
+		false,
+		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,
