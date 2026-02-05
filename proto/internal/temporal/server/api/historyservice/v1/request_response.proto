@@ -156,7 +156,7 @@ message GetMutableStateResponse {
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
     // Transient or speculative workflow task events which are not yet persisted in the history.
     // These events should be appended to the history when it is returned to the worker.
-    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_events = 26;
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
 }
 
 message PollMutableStateRequest {

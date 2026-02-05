@@ -568,6 +568,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 2:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted`, task.History)
+				// Message handled rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -689,6 +690,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled`, task.History)
+				// Message handled rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`

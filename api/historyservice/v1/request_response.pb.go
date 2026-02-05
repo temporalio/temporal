@@ -540,9 +540,9 @@ type GetMutableStateResponse struct {
 	VersioningInfo    *v15.WorkflowExecutionVersioningInfo `protobuf:"bytes,25,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
 	// Transient or speculative workflow task events which are not yet persisted in the history.
 	// These events should be appended to the history when it is returned to the worker.
-	TransientOrSpeculativeEvents *v18.TransientWorkflowTaskInfo `protobuf:"bytes,26,opt,name=transient_or_speculative_events,json=transientOrSpeculativeEvents,proto3" json:"transient_or_speculative_events,omitempty"`
-	unknownFields                protoimpl.UnknownFields
-	sizeCache                    protoimpl.SizeCache
+	TransientOrSpeculativeTasks *v18.TransientWorkflowTaskInfo `protobuf:"bytes,26,opt,name=transient_or_speculative_tasks,json=transientOrSpeculativeTasks,proto3" json:"transient_or_speculative_tasks,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *GetMutableStateResponse) Reset() {
@@ -715,9 +715,9 @@ func (x *GetMutableStateResponse) GetVersioningInfo() *v15.WorkflowExecutionVers
 	return nil
 }
 
-func (x *GetMutableStateResponse) GetTransientOrSpeculativeEvents() *v18.TransientWorkflowTaskInfo {
+func (x *GetMutableStateResponse) GetTransientOrSpeculativeTasks() *v18.TransientWorkflowTaskInfo {
 	if x != nil {
-		return x.TransientOrSpeculativeEvents
+		return x.TransientOrSpeculativeTasks
 	}
 	return nil
 }
@@ -10170,7 +10170,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16expected_next_event_id\x18\x03 \x01(\x03R\x13expectedNextEventId\x120\n" +
 	"\x14current_branch_token\x18\x04 \x01(\fR\x12currentBranchToken\x12d\n" +
 	"\x14version_history_item\x18\x05 \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x12versionHistoryItem\x12j\n" +
-	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xf6\f\n" +
+	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xf3\f\n" +
 	"\x17GetMutableStateResponse\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12I\n" +
 	"\rworkflow_type\x18\x02 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x12\"\n" +
@@ -10192,8 +10192,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x11assigned_build_id\x18\x16 \x01(\tR\x0fassignedBuildId\x12,\n" +
 	"\x12inherited_build_id\x18\x17 \x01(\tR\x10inheritedBuildId\x12f\n" +
 	"\x12transition_history\x18\x18 \x03(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x11transitionHistory\x12b\n" +
-	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfo\x12\x80\x01\n" +
-	"\x1ftransient_or_speculative_events\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1ctransientOrSpeculativeEventsJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfo\x12~\n" +
+	"\x1etransient_or_speculative_tasks\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1btransientOrSpeculativeTasksJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0f\"\xef\x02\n" +
 	"\x17PollMutableStateRequest\x12!\n" +
@@ -11182,7 +11182,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	172, // 27: temporal.server.api.historyservice.v1.GetMutableStateResponse.most_recent_worker_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
 	183, // 28: temporal.server.api.historyservice.v1.GetMutableStateResponse.transition_history:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	188, // 29: temporal.server.api.historyservice.v1.GetMutableStateResponse.versioning_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionVersioningInfo
-	189, // 30: temporal.server.api.historyservice.v1.GetMutableStateResponse.transient_or_speculative_events:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	189, // 30: temporal.server.api.historyservice.v1.GetMutableStateResponse.transient_or_speculative_tasks:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
 	181, // 31: temporal.server.api.historyservice.v1.PollMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
 	182, // 32: temporal.server.api.historyservice.v1.PollMutableStateRequest.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
 	181, // 33: temporal.server.api.historyservice.v1.PollMutableStateResponse.execution:type_name -> temporal.api.common.v1.WorkflowExecution

@@ -32,7 +32,7 @@ import (
 // appendTransientEvents queries mutable state for transient/speculative events and appends them to the response.
 // This function only queries mutable state once, on the last page, to retrieve transient/speculative events.
 // Validation of event IDs is handled separately by validateTransientWorkflowTaskEvents.
-func appendTransientEvents(
+func appendTransientTasks(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
@@ -42,7 +42,7 @@ func appendTransientEvents(
 	useRawHistory bool,
 	history *historypb.History,
 	historyBlob *[]*commonpb.DataBlob,
-) error {
+) {
 	msResp, err := api.GetOrPollWorkflowMutableState(
 		ctx,
 		shardContext,
@@ -53,24 +53,26 @@ func appendTransientEvents(
 		workflowConsistencyChecker,
 		eventNotifier,
 	)
-	if err != nil || msResp.GetTransientOrSpeculativeEvents() == nil {
+	if err != nil || msResp.GetTransientOrSpeculativeTasks() == nil {
 		// Ignore errors - if we can't get transient events, continue without them
-		return nil
+		return
 	}
 
-	transientWorkflowTask := msResp.GetTransientOrSpeculativeEvents()
+	transientWorkflowTask := msResp.GetTransientOrSpeculativeTasks()
 
 	// Manually append transient events to the response
 	if useRawHistory {
 		transientEventsBlob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTask.GetHistorySuffix())
 		if err == nil {
 			*historyBlob = append(*historyBlob, transientEventsBlob)
+		} else {
+			softassert.Fail(shardContext.GetLogger(), "GetWorkflowExecutionHistory could not serialize transient workflow tasks", )
 		}
 	} else {
 		history.Events = append(history.Events, transientWorkflowTask.GetHistorySuffix()...)
 	}
 
-	return nil
+	return
 }
 
 func Invoke(
@@ -374,9 +376,9 @@ func Invoke(
 				return nil, err
 			}
 
-			// Query and append transient/speculative events if on last page
+			// Query and append transient/speculative tasks if on last page
 			if isWorkflowRunning && len(continuationToken.PersistenceToken) == 0 {
-				transientEventsErr := appendTransientEvents(
+				appendTransientTasks(
 					ctx,
 					shardContext,
 					workflowConsistencyChecker,
@@ -387,9 +389,6 @@ func Invoke(
 					history,
 					&historyBlob,
 				)
-				if transientEventsErr != nil {
-					return nil, transientEventsErr
-				}
 			}
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
