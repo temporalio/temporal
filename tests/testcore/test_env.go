@@ -14,13 +14,20 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
 var (
-	_                Env = (*testEnv)(nil)
-	sequentialSuites sync.Map
+	_                Env      = (*testEnv)(nil)
+	sequentialSuites sync.Map // map[string]*sequentialSuite
 )
+
+// sequentialSuite holds state for a suite marked with MustRunSequential.
+// It manages a single dedicated cluster shared by all tests in the suite.
+type sequentialSuite struct {
+	cluster *FunctionalTestBase
+}
 
 type Env interface {
 	T() *testing.T
@@ -29,6 +36,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	InjectHook(key testhooks.Key, value any) (cleanup func())
 }
 
 type testEnv struct {
@@ -82,7 +90,8 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 
 // MustRunSequential marks a test suite to run its tests sequentially instead
 // of in parallel. Call this at the start of your test suite before any
-// subtests are created.
+// subtests are created. A single dedicated cluster will be created for this
+// suite and torn down when the suite completes.
 func MustRunSequential(t *testing.T, reason string) {
 	if strings.Contains(t.Name(), "/") {
 		panic("MustRunSequential must be called from a top-level test, not a subtest")
@@ -90,7 +99,20 @@ func MustRunSequential(t *testing.T, reason string) {
 	if reason == "" {
 		panic("MustRunSequential requires a reason")
 	}
-	sequentialSuites.Store(t.Name(), true)
+
+	// Create a dedicated cluster for this suite.
+	suite := &sequentialSuite{
+		cluster: testClusterPool.createCluster(t, nil, false),
+	}
+	sequentialSuites.Store(t.Name(), suite)
+
+	// Register cleanup to tear down the suite's cluster when the parent test completes.
+	t.Cleanup(func() {
+		sequentialSuites.Delete(t.Name())
+		if err := suite.cluster.testCluster.TearDownCluster(); err != nil {
+			t.Logf("Failed to tear down sequential suite cluster: %v", err)
+		}
+	})
 }
 
 // NewEnv creates a new test environment with access to a Temporal cluster.
@@ -101,7 +123,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	if idx := strings.Index(suiteName, "/"); idx != -1 {
 		suiteName = suiteName[:idx]
 	}
-	if _, sequential := sequentialSuites.Load(suiteName); !sequential {
+	suiteVal, sequential := sequentialSuites.Load(suiteName)
+	if !sequential {
 		t.Parallel()
 	}
 
@@ -110,17 +133,25 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		opt(&options)
 	}
 
-	// For dedicated clusters, pass all dynamic config settings at cluster creation.
-	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-		for _, override := range options.dynamicConfigSettings {
-			startupConfig[override.setting.Key()] = override.value
+	var base *FunctionalTestBase
+	if sequential {
+		// Sequential suites use a single dedicated cluster for all tests.
+		suite := suiteVal.(*sequentialSuite)
+		base = suite.cluster
+		base.SetT(t)
+	} else {
+		// For dedicated clusters, pass all dynamic config settings at cluster creation.
+		var startupConfig map[dynamicconfig.Key]any
+		if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+			startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+			for _, override := range options.dynamicConfigSettings {
+				startupConfig[override.setting.Key()] = override.value
+			}
 		}
-	}
 
-	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+		// Obtain the test cluster from the pool.
+		base = testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	}
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
