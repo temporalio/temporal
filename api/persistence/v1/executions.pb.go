@@ -2513,7 +2513,7 @@ type ActivityInfo struct {
 	// set to true if reset heartbeat flag was set with an activity reset
 	ResetHeartbeats bool  `protobuf:"varint,48,opt,name=reset_heartbeats,json=resetHeartbeats,proto3" json:"reset_heartbeats,omitempty"`
 	StartVersion    int64 `protobuf:"varint,50,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	// Worker instance key of the worker executing this activity.
+	// Unique identifier of the worker that is this activity.
 	WorkerInstanceKey string `protobuf:"bytes,51,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
