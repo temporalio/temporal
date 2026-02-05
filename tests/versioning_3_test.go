@@ -2338,23 +2338,43 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 }
 
 // TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
-	s.testPinnedCaNUpgradeOnCaN(true, false, false, false)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, false, true)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
-	s.testPinnedCaNUpgradeOnCaN(false, true, false, false)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, true, false, false, true)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
-	s.testPinnedCaNUpgradeOnCaN(false, false, true, false)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, false, true, false, true)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride() {
-	s.testPinnedCaNUpgradeOnCaN(true, false, false, true)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, true, true)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, true, false, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, false, true, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, true, false)
 }
 
 func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb.VersioningOverride {
@@ -2378,7 +2398,10 @@ func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb
 // 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
-func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride bool) {
+func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSuggestCaNOnNewTargetVersion bool) {
+	if enableSuggestCaNOnNewTargetVersion {
+		s.OverrideDynamicConfig(dynamicconfig.EnableSuggestCaNOnNewTargetVersion, true)
+	}
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -2439,34 +2462,30 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					historyEvents = s.GetHistory(s.Namespace().String(), execution)
 				}
 
-				// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event.
 				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
 				for _, event := range historyEvents { // get events
 					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.Greater(len(wfTaskStartedEvents), 1) // make sure there is at least one WFT started event
-
-				if transientTask {
-					// In the transient case, multiple WorkflowTaskStarted events may have CaN suggestion
-					// if they were polled after the deployment version changed. Only verify the current task.
-					lastEvent := wfTaskStartedEvents[len(wfTaskStartedEvents)-1]
-					attr := lastEvent.GetWorkflowTaskStartedEventAttributes()
-					s.True(attr.GetSuggestContinueAsNew())
-					s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
-				} else {
-					// In normal/speculative case, only the last event should have CaN
+				if enableSuggestCaNOnNewTargetVersion {
+					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
 					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
-						if i == len(wfTaskStartedEvents)-1 {
+						if i == len(wfTaskStartedEvents)-1 { // last event
 							s.True(attr.GetSuggestContinueAsNew())
 							s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
-						} else {
+						} else { // earlier events
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 						}
+					}
+				} else {
+					for _, event := range wfTaskStartedEvents {
+						attr := event.GetWorkflowTaskStartedEventAttributes()
+						s.False(attr.GetSuggestContinueAsNew())
+						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 					}
 				}
 
@@ -5317,6 +5336,147 @@ func (s *Versioning3Suite) TestMaxVersionsInTaskQueue() {
 		"Error message should mention exceeding deployment version limit")
 	s.Contains(resourceExhausted.Message, fmt.Sprintf("limit = %d", maxVersions),
 		"Error message should include the limit value")
+}
+
+func (s *Versioning3Suite) TestActivityRetryAutoUpgradeDuringBackoff() {
+	// This test verifies that when an activity is in retry backoff and the current deployment
+	// changes, the workflow will auto-upgrade to the new deployment when the activity retry
+	// executes, if the workflow's versioning behavior is AutoUpgrade.
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	numPollers := 4
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	// Track activity attempts and which version executed them
+	var attemptCount atomic.Int32
+	var v1AttemptCount atomic.Int32
+	var v2AttemptCount atomic.Int32
+
+	// Activity function for v1 - fails on first attempt
+	actV1 := func() (string, error) {
+		attempt := attemptCount.Add(1)
+		v1AttemptCount.Add(1)
+		if attempt == 1 {
+			return "", errors.New("intentional failure on v1 to trigger retry")
+		}
+		return "v1", nil
+	}
+
+	// Activity function for v2 - should succeed when it gets the retry attempt
+	actV2 := func() (string, error) {
+		attemptCount.Add(1)
+		v2AttemptCount.Add(1)
+		return "v2", nil
+	}
+
+	// Workflow that executes an activity with retry policy
+	wf := func(ctx workflow.Context) (string, error) {
+		var result string
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    5 * time.Second, // Give us time to change deployment
+				BackoffCoefficient: 1.0,
+				MaximumAttempts:    3,
+			},
+		}), "act").Get(ctx, &result)
+		return result, err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	// Create worker for v1
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{
+		Name:               "wf",
+		VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	})
+	w1.RegisterActivityWithOptions(actV1, activity.RegisterOptions{Name: "act"})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// Create worker for v2
+	w2 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv2.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w2.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{
+		Name:               "wf",
+		VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+	})
+	w2.RegisterActivityWithOptions(actV2, activity.RegisterOptions{Name: "act"})
+	s.NoError(w2.Start())
+	defer w2.Stop()
+
+	// Set v1 as current deployment
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// Start the workflow
+	run, err := s.SdkClient().ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			TaskQueue: tv1.TaskQueue().GetName(),
+		},
+		"wf",
+	)
+	s.NoError(err)
+
+	// Wait for the workflow to start on v1
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
+		if err != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Wait for first activity attempt to fail (should be on v1)
+	s.Eventually(func() bool {
+		return v1AttemptCount.Load() == 1
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Now the activity is in retry backoff. Change the current deployment to v2
+	// while the activity is waiting to retry.
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	// Wait for the workflow to complete
+	var result string
+	err = run.Get(ctx, &result)
+	s.NoError(err)
+
+	// Verify results:
+	// 1. The workflow should have succeeded
+	s.Equal("v2", result, "Expected workflow to complete with result from v2")
+
+	// 2. v1 should have processed exactly 1 attempt (the initial one that failed)
+	s.Equal(int32(1), v1AttemptCount.Load(), "Expected v1 to process exactly 1 attempt")
+
+	// 3. v2 should have processed at least 1 attempt (the retry after version change)
+	s.GreaterOrEqual(v2AttemptCount.Load(), int32(1), "Expected v2 to process at least 1 attempt")
+
+	// 4. Total attempts should be 2 (one on v1 that failed, one on v2 that succeeded)
+	s.Equal(int32(2), attemptCount.Load(), "Expected total of 2 activity attempts")
+
+	// 5. Verify the workflow is now running on v2
+	desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), "")
+	s.NoError(err)
+	s.Equal(tv2.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId(),
+		"Expected workflow to be on v2 after auto-upgrade")
 }
 
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {

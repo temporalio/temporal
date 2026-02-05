@@ -2702,7 +2702,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		sendUpdateNoError(s, s.Tv())
 
-		s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.NewDurationTag("StickyScheduleToStartTimeout", stickyScheduleToStartTimeout))
+		s.Logger.Info("Wait for sticky timeout to fire. Sleep poller.StickyScheduleToStartTimeout+ seconds.", tag.Duration("StickyScheduleToStartTimeout", stickyScheduleToStartTimeout))
 		time.Sleep(stickyScheduleToStartTimeout + 100*time.Millisecond) //nolint:forbidigo
 		s.Logger.Info("Sleep is done.")
 
