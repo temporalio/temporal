@@ -9,9 +9,7 @@ import (
 // NewContext creates a context with default 90-second timeout and RPC headers.
 // If a parent context is provided, the returned context will be canceled when
 // either the timeout expires OR the parent is canceled (whichever comes first).
-//
 // Usage:
-//
 //	ctx := testcore.NewContext()                    // Standalone RPC context
 //	ctx := testcore.NewContext(env.Context())       // Derived from test context
 func NewContext(parent ...context.Context) context.Context {
