@@ -3,11 +3,8 @@ package testcore
 import (
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -60,7 +57,6 @@ type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
 	timeout               time.Duration
-	disableTimeout        bool
 }
 
 type dynamicConfigOverride struct {
@@ -96,13 +92,6 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 func WithTimeout(duration time.Duration) TestOption {
 	return func(o *testOptions) {
 		o.timeout = duration
-	}
-}
-
-// WithoutTimeout disables the default test timeout.
-func WithoutTimeout() TestOption {
-	return func(o *testOptions) {
-		o.disableTimeout = true
 	}
 }
 
@@ -162,10 +151,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	}
 
 	// Setup test timeout monitoring with context
-	ctx := context.Background()
-	if !options.disableTimeout {
-		ctx = setupTestTimeoutWithContext(t, options.timeout)
-	}
+	ctx := setupTestTimeoutWithContext(t, options.timeout)
 
 	env := &testEnv{
 		FunctionalTestBase: base,
@@ -207,12 +193,9 @@ func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
-// Context returns the test-level timeout context. This context will be canceled
-// when the test timeout occurs. Use this as the parent context for all operations.
-//
-// For RPC operations that need headers, use:
-//
-//	ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(env.Context(), 90*time.Second)
+// Context returns the test-level timeout context with RPC version headers already included.
+// This context will be canceled when the test timeout occurs. Use this directly for all RPC
+// operations - no need to wrap with NewContext or add headers manually.
 //
 // For custom timeouts, use:
 //
@@ -259,73 +242,4 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
-}
-
-// calculateTimeout determines the appropriate timeout duration based on custom timeout,
-// environment variable, test deadline, and default values. Returns 0 if timeout should be skipped.
-//
-// Priority order:
-//  1. Custom timeout (via WithTimeout option)
-//  2. TEMPORAL_TEST_TIMEOUT environment variable (in seconds)
-//  3. Test deadline (via -timeout flag)
-//  4. Default 90 seconds
-func calculateTimeout(t *testing.T, customTimeout time.Duration) time.Duration {
-	if customTimeout > 0 {
-		// Use custom timeout if provided
-		return customTimeout * debug.TimeoutMultiplier
-	}
-
-	// Check for environment variable
-	if envTimeout := os.Getenv("TEMPORAL_TEST_TIMEOUT"); envTimeout != "" {
-		if seconds, err := strconv.Atoi(envTimeout); err == nil && seconds > 0 {
-			return time.Duration(seconds) * time.Second * debug.TimeoutMultiplier
-		}
-	}
-
-	deadline, hasDeadline := t.Deadline()
-	if hasDeadline {
-		// Leave 30 second buffer before hard deadline so cleanup can run
-		timeout := time.Until(deadline) - (30 * time.Second)
-		if timeout <= 0 {
-			// Already close to deadline, skip timeout monitoring
-			return 0
-		}
-		return timeout
-	}
-
-	return defaultTestTimeout
-}
-
-// setupTestTimeoutWithContext creates a context that will be canceled on timeout,
-// and reports the timeout error during cleanup. Returns a context that tests can
-// use to be interrupted when timeout occurs.
-func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) context.Context {
-	t.Helper()
-
-	timeout := calculateTimeout(t, customTimeout)
-	if timeout <= 0 {
-		return context.Background()
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-
-	var timedOut atomic.Bool
-	go func() {
-		<-ctx.Done()
-		if ctx.Err() == context.DeadlineExceeded {
-			timedOut.Store(true)
-		}
-	}()
-
-	// Register cleanup to cancel context and check timeout
-	// t.Cleanup() functions run in LIFO order, so this runs after test code
-	t.Cleanup(func() {
-		cancel()
-
-		if timedOut.Load() {
-			t.Errorf("Test exceeded timeout of %v", timeout)
-		}
-	})
-
-	return ctx
 }
