@@ -2,9 +2,7 @@ package testcore
 
 import (
 	"context"
-	"time"
 
-	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -21,7 +19,7 @@ func NewContext(parent ...context.Context) context.Context {
 		// Create RPC context derived from parent
 		ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(
 			parent[0],
-			90*time.Second*debug.TimeoutMultiplier,
+			defaultTestTimeout,
 		)
 		return ctx
 	}

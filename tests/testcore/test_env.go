@@ -120,10 +120,8 @@ func MustRunSequential(t *testing.T, reason string) {
 }
 
 // NewEnv creates a new test environment with access to a Temporal cluster.
-// Returns a context that will be canceled if the test exceeds its timeout,
-// allowing tests to be interrupted if they respect the context.
 // Tests are run in parallel - use MustRunSequential to run suite sequentially.
-func NewEnv(t *testing.T, opts ...TestOption) (context.Context, *testEnv) {
+func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	// Check if this is a sequential suite by looking up the parent test name.
 	suiteName := t.Name()
 	if idx := strings.Index(suiteName, "/"); idx != -1 {
@@ -189,7 +187,7 @@ func NewEnv(t *testing.T, opts ...TestOption) (context.Context, *testEnv) {
 		}
 	}
 
-	return ctx, env
+	return env
 }
 
 // Use test env-specific namespace here for test isolation.
@@ -213,11 +211,9 @@ func (e *testEnv) Tv() *testvars.TestVars {
 // when the test timeout occurs. Use this as the parent context for all operations.
 //
 // For RPC operations that need headers, use:
-//
 //	ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(env.Context(), 90*time.Second)
 //
 // For custom timeouts, use:
-//
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
 func (e *testEnv) Context() context.Context {
