@@ -532,7 +532,7 @@ func (e *ChasmEngine) handleExecutionConflict(
 	currentRunInfo currentExecutionInfo,
 	options chasm.TransitionOptions,
 ) (chasm.EngineStartExecutionResult, error) {
-	// Check if this a retired request using requestID.
+	// Check if this a retried request using requestID.
 	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
 		newExecutionParams.executionRef.RunID = currentRunInfo.RunID
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
