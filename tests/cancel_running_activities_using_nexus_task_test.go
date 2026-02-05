@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -30,6 +31,7 @@ func TestCancelRunningActivitiesUsingNexusTaskSuite(t *testing.T) {
 // Tests that when a workflow is cancelled, all running activities are also cancelled.
 // The cancellation request should be delivered to the worker's control queue via the Nexus service.
 //
+// - Record worker heartbeat with WorkerGroupingKey so the server can look it up to get the control queue name.
 // - Start a workflow that schedules a long running activity.
 // - Poll the activity task queue and start running the activity.
 // - Poll the control task queue and wait for the cancel request to be delivered.
@@ -47,9 +49,26 @@ func (s *CancelRunningActivitiesUsingNexusTaskSuite) TestDispatchCancelToWorker(
 	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
 
 	// Get the control queue name from test vars
-	controlQueueName := tv.ControlQueueName(s.Namespace().String())
+	controlQueueName := tv.ControlQueueName()
 	s.T().Logf("WorkerInstanceKey: %s", tv.WorkerInstanceKey())
+	s.T().Logf("WorkerGroupingKey: %s", tv.WorkerGroupingKey())
 	s.T().Logf("ControlQueueName: %s", controlQueueName)
+
+	// Record worker heartbeat with WorkerGroupingKey so the server can look it up
+	_, err := s.FrontendClient().RecordWorkerHeartbeat(ctx, &workflowservice.RecordWorkerHeartbeatRequest{
+		Namespace: s.Namespace().String(),
+		WorkerHeartbeat: []*workerpb.WorkerHeartbeat{
+			{
+				WorkerInstanceKey: tv.WorkerInstanceKey(),
+				TaskQueue:         tv.TaskQueue().Name,
+				HostInfo: &workerpb.WorkerHostInfo{
+					WorkerGroupingKey: tv.WorkerGroupingKey(),
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	s.T().Log("Recorded worker heartbeat with WorkerGroupingKey")
 
 	// Start the workflow
 	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
