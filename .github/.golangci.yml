@@ -187,7 +187,7 @@ linters:
         text: "panic"
         linters:
           - forbidigo
-      - path-except: tests/[^/]+\.go$ # scoped to files inside tests/ only as it's still used (and wrapped) in tests/testcore/
+      - path: tests/testcore/.*\.go$ # still used in tests/testcore/
         text: "FunctionalTestBase"
         linters:
           - forbidigo
