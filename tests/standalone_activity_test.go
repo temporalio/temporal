@@ -1613,6 +1613,51 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 	})
 }
 
+// TestTerminateNonExistentActivity verifies that terminating a non-existent activity
+// returns a user-friendly "activity execution not found" error, not internal errors
+// like "component not found". This tests Issue #3: NotFound error wrapping consistency.
+func (s *standaloneActivityTestSuite) TestTerminateNonExistentActivity() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+
+	_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		Reason:     "Test Termination",
+		Identity:   "terminator",
+	})
+
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr)
+	// The error message should be user-friendly, not leak internal details
+	require.Equal(t, "activity execution not found", notFoundErr.Message)
+}
+
+// TestCancelNonExistentActivity verifies that cancelling a non-existent activity
+// returns a user-friendly "activity execution not found" error.
+func (s *standaloneActivityTestSuite) TestCancelNonExistentActivity() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+
+	_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		Reason:     "Test Cancellation",
+		Identity:   "canceller",
+	})
+
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr)
+	// The error message should be user-friendly, not leak internal details
+	require.Equal(t, "activity execution not found", notFoundErr.Message)
+}
+
 func (s *standaloneActivityTestSuite) TestRetryWithoutScheduleToCloseTimeout() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
