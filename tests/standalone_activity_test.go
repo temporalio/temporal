@@ -217,8 +217,8 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 		taskQueue := testcore.RandomizeStr(t.Name())
 		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
-		startWithUseExisting := func(requestID string) *workflowservice.StartActivityExecutionResponse {
-			resp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		startWithUseExisting := func(requestID string) (*workflowservice.StartActivityExecutionResponse, error) {
+			return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 				Namespace:    s.Namespace().String(),
 				ActivityId:   activityID,
 				ActivityType: s.tv.ActivityType(),
@@ -231,55 +231,40 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 				IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
 				RequestId:           requestID,
 			})
-			require.NoError(t, err)
-			require.Equal(t, firstStartResp.RunId, resp.RunId)
-			require.False(t, resp.GetStarted())
-			return resp
 		}
 
 		t.Run("SecondStartReturnsExistingRun", func(t *testing.T) {
-			startWithUseExisting("different-request-id")
+			resp, err := startWithUseExisting("different-request-id")
+			require.NoError(t, err)
+			require.Equal(t, firstStartResp.RunId, resp.RunId)
+			require.False(t, resp.GetStarted())
 		})
 		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
-			startWithUseExisting(s.tv.RequestID())
+			resp, err := startWithUseExisting(s.tv.RequestID())
+			require.NoError(t, err)
+			require.Equal(t, firstStartResp.RunId, resp.RunId)
+			require.False(t, resp.GetStarted())
 		})
 
+		t.Run("DoesNotApplyToCompletedActivity", func(t *testing.T) {
+			pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, firstStartResp.RunId)
+			_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+				Namespace: s.Namespace().String(),
+				TaskToken: pollTaskResp.TaskToken,
+				Result:    defaultResult,
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
+
+			// USE_EXISTING only applies to running activities; completed activities
+			// are governed by reuse policy (default ALLOW_DUPLICATE creates new)
+			resp, err := startWithUseExisting("different-request-id")
+			require.NoError(t, err)
+			require.NotEqual(t, firstStartResp.RunId, resp.RunId)
+			require.True(t, resp.GetStarted())
+		})
 	})
 
-	t.Run("UseExistingDoesNotApplyToCompletedActivity", func(t *testing.T) {
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-
-		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, firstStartResp.RunId)
-
-		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-			Namespace: s.Namespace().String(),
-			TaskToken: pollTaskResp.TaskToken,
-			Result:    defaultResult,
-			Identity:  defaultIdentity,
-		})
-		require.NoError(t, err)
-
-		// USE_EXISTING only applies to running activities; completed activities
-		// are governed by reuse policy (default ALLOW_DUPLICATE creates new)
-		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			ActivityId:   activityID,
-			ActivityType: s.tv.ActivityType(),
-			Identity:     s.tv.WorkerIdentity(),
-			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			RequestId:           "new-request-id",
-		})
-		require.NoError(t, err)
-		require.NotEqual(t, firstStartResp.RunId, secondStartResp.RunId)
-		require.True(t, secondStartResp.GetStarted()) // New activity was started
-	})
 }
 
 func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
