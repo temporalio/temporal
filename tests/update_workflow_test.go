@@ -218,7 +218,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.name, func(t *testing.T) {
-				 s := testcore.NewEnv(t)
+				s := testcore.NewEnv(t)
 				runID := mustStartWorkflow(s, s.Tv())
 				tv := s.Tv()
 				if tc.useRunID {

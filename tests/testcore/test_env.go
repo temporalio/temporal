@@ -211,9 +211,11 @@ func (e *testEnv) Tv() *testvars.TestVars {
 // when the test timeout occurs. Use this as the parent context for all operations.
 //
 // For RPC operations that need headers, use:
+//
 //	ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(env.Context(), 90*time.Second)
 //
 // For custom timeouts, use:
+//
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
 func (e *testEnv) Context() context.Context {
