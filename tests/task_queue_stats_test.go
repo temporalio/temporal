@@ -54,7 +54,15 @@ type (
 	TaskQueueExpectationsByType map[enumspb.TaskQueueType]TaskQueueExpectations
 )
 
-func newTaskQueueStatsTest(t *testing.T, env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
+func newTaskQueueStatsTest(t *testing.T, usePriMatcher bool) *taskQueueStatsSuite {
+	return newTaskQueueStatsTestWithEnv(t, testcore.NewEnv(t), usePriMatcher)
+}
+
+func newTaskQueueStatsTestWithEnv(t *testing.T, env testcore.Env, usePriMatcher bool) *taskQueueStatsSuite {
+	env.OverrideDynamicConfig(dynamicconfig.EnableDeploymentVersions, true)
+	env.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true)
+	env.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher)
+	env.OverrideDynamicConfig(dynamicconfig.MatchingPriorityLevels, 5) // maxPriority
 	return &taskQueueStatsSuite{
 		Env:             env,
 		t:               t,
@@ -77,50 +85,34 @@ func TestTaskQueueStats_Pri_Suite(t *testing.T) {
 	runTaskQueueStatsTests(t, true) // usePriMatcher = true
 }
 
-// applyBaseConfig applies the base dynamic config settings for all task queue stats tests.
-// These are applied via OverrideDynamicConfig (not at cluster creation) to allow cluster reuse.
-func applyBaseConfig(env testcore.Env, usePriMatcher bool) {
-	env.OverrideDynamicConfig(dynamicconfig.EnableDeploymentVersions, true)
-	env.OverrideDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher)
-	env.OverrideDynamicConfig(dynamicconfig.MatchingPriorityLevels, 5) // maxPriority
-}
-
 func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
-	// Tests WITHOUT RunTestWithMatchingBehavior
 	t.Run("TestDescribeTaskQueue_NonRoot", func(t *testing.T) {
-		env := testcore.NewEnv(t)
-		applyBaseConfig(env, usePriMatcher)
-		s := newTaskQueueStatsTest(t, env, usePriMatcher)
+		s := newTaskQueueStatsTest(t, usePriMatcher)
 		s.testDescribeTaskQueueNonRoot()
 	})
 
 	t.Run("TestNoTasks_ValidateStats", func(t *testing.T) {
-		env := testcore.NewEnv(t)
-		applyBaseConfig(env, usePriMatcher)
-		env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2)
-		env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 2)
-		env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-		env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
-		s := newTaskQueueStatsTest(t, env, usePriMatcher)
+		s := newTaskQueueStatsTest(t, usePriMatcher)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 2)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+		s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 		s.publishConsumeWorkflowTasksValidateStats(0, false)
 	})
 
 	// NOTE: Cache _eviction_ is already covered by the other tests.
 	t.Run("TestAddMultipleTasks_ValidateStats_Cached", func(t *testing.T) {
-		env := testcore.NewEnv(t)
-		applyBaseConfig(env, usePriMatcher)
-		env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
-		env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour) // using a long TTL to verify caching
-		s := newTaskQueueStatsTest(t, env, usePriMatcher)
+		s := newTaskQueueStatsTest(t, usePriMatcher)
+		s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
+		s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour) // using a long TTL to verify caching
 		s.testAddMultipleTasksValidateStatsCached()
 	})
 
-	// Tests WITH RunTestWithMatchingBehavior
-	// Note: runWithMatchingBehavior already configures partition count based on forwarding behavior.
+	// Note: RunWithMatchingBehavior configures partition count based on forwarding behavior.
 	// Do NOT override MatchingNumTaskqueueReadPartitions/WritePartitions inside the subtest.
 	t.Run("TestMultipleTasks_WithMatchingBehavior_ValidateStats", func(t *testing.T) {
-		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
+		testcore.RunWithMatchingBehavior(t, func(t *testing.T, env testcore.Env) {
+			s := newTaskQueueStatsTestWithEnv(t, env, usePriMatcher)
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 			s.publishConsumeWorkflowTasksValidateStats(4, false)
@@ -128,7 +120,8 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping", func(t *testing.T) {
-		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
+		testcore.RunWithMatchingBehavior(t, func(t *testing.T, env testcore.Env) {
+			s := newTaskQueueStatsTestWithEnv(t, env, usePriMatcher)
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -228,7 +221,8 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestRampingAndCurrentAbsorbUnversionedBacklog", func(t *testing.T) {
-		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
+		testcore.RunWithMatchingBehavior(t, func(t *testing.T, env testcore.Env) {
+			s := newTaskQueueStatsTestWithEnv(t, env, usePriMatcher)
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -388,7 +382,8 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned", func(t *testing.T) {
-		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
+		testcore.RunWithMatchingBehavior(t, func(t *testing.T, env testcore.Env) {
+			s := newTaskQueueStatsTestWithEnv(t, env, usePriMatcher)
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -455,7 +450,8 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned", func(t *testing.T) {
-		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
+		testcore.RunWithMatchingBehavior(t, func(t *testing.T, env testcore.Env) {
+			s := newTaskQueueStatsTestWithEnv(t, env, usePriMatcher)
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -523,7 +519,8 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestInactiveVersionDoesNotAbsorbUnversionedBacklog", func(t *testing.T) {
-		runWithMatchingBehavior(t, usePriMatcher, func(s *taskQueueStatsSuite) {
+		testcore.RunWithMatchingBehavior(t, func(t *testing.T, env testcore.Env) {
+			s := newTaskQueueStatsTestWithEnv(t, env, usePriMatcher)
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -694,28 +691,6 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 			}, 10*time.Second, 200*time.Millisecond)
 		})
 	})
-}
-
-// runWithMatchingBehavior runs a test with all combinations of matching behaviors.
-func runWithMatchingBehavior(
-	t *testing.T,
-	usePriMatcher bool,
-	subtest func(s *taskQueueStatsSuite),
-) {
-	for _, behavior := range testcore.AllMatchingBehaviors() {
-		t.Run(behavior.Name(), func(t *testing.T) {
-			// Use only WithDedicatedCluster - no WithDynamicConfig at cluster creation.
-			// This allows the dedicated cluster pool to reuse the same cluster for all subtests.
-			env := testcore.NewEnv(t)
-
-			// Apply base config and behavior-specific config via OverrideDynamicConfig.
-			applyBaseConfig(env, usePriMatcher)
-			behavior.Apply(env)
-
-			s := newTaskQueueStatsTest(t, env, usePriMatcher)
-			subtest(s)
-		})
-	}
 }
 
 func (s *taskQueueStatsSuite) testDescribeTaskQueueNonRoot() {

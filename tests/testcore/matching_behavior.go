@@ -1,6 +1,8 @@
 package testcore
 
 import (
+	"testing"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 )
@@ -12,8 +14,8 @@ type MatchingBehavior struct {
 	ForceAsync       bool
 }
 
-// Name returns a descriptive name for this behavior combination.
-func (b MatchingBehavior) Name() string {
+// name returns a descriptive name for this behavior combination.
+func (b MatchingBehavior) name() string {
 	name := "NoTaskForward"
 	if b.ForceTaskForward {
 		name = "ForceTaskForward"
@@ -31,8 +33,8 @@ func (b MatchingBehavior) Name() string {
 	return name
 }
 
-// Apply applies the behavior's dynamic config and test hooks to the environment.
-func (b MatchingBehavior) Apply(env Env) {
+// apply applies the behavior's dynamic config and test hooks to the environment.
+func (b MatchingBehavior) apply(env Env) {
 	// Apply dynamic config
 	if b.ForceTaskForward || b.ForcePollForward {
 		env.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
@@ -60,7 +62,7 @@ func (b MatchingBehavior) Apply(env Env) {
 	}
 }
 
-func AllMatchingBehaviors() []MatchingBehavior {
+func allMatchingBehaviors() []MatchingBehavior {
 	var behaviors []MatchingBehavior
 	for _, forcePollForward := range []bool{false, true} {
 		for _, forceTaskForward := range []bool{false, true} {
@@ -74,4 +76,17 @@ func AllMatchingBehaviors() []MatchingBehavior {
 		}
 	}
 	return behaviors
+}
+
+// RunWithMatchingBehavior runs a subtest for each matching behavior combination.
+// It creates a test environment for each behavior, applies the behavior's config,
+// and passes the environment to the subtest function.
+func RunWithMatchingBehavior(t *testing.T, subtest func(t *testing.T, env Env)) {
+	for _, behavior := range allMatchingBehaviors() {
+		t.Run(behavior.name(), func(t *testing.T) {
+			env := NewEnv(t)
+			behavior.apply(env)
+			subtest(t, env)
+		})
+	}
 }
