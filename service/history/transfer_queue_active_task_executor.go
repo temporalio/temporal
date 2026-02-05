@@ -53,6 +53,12 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// workerControlQueuePrefix is the prefix for Nexus task queues used to deliver control commands
+// (e.g., activity cancellation) to workers. The full queue name is constructed as:
+// {workerControlQueuePrefix}/{worker_grouping_key}
+// where worker_grouping_key is provided by the worker in its heartbeat.
+const workerControlQueuePrefix = "/temporal-sys/worker-commands"
+
 type (
 	transferQueueActiveTaskExecutor struct {
 		*transferQueueTaskExecutorBase
@@ -2039,12 +2045,10 @@ func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
 	task *tasks.CancelActivityNexusTask,
 	taskTokens [][]byte,
 ) error {
-	nsName, err := t.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(task.NamespaceID))
+	controlQueueName, err := t.getWorkerControlQueueName(ctx, task.NamespaceID, task.WorkerInstanceKey)
 	if err != nil {
 		return err
 	}
-	// TODO: Fetch control queue name from worker registry.
-	controlQueueName := fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", nsName, task.WorkerInstanceKey)
 
 	cancelPayload := &workerpb.CancelActivitiesRequestPayload{
 		TaskTokens: taskTokens,
@@ -2095,4 +2099,35 @@ func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
 	}
 
 	return nil
+}
+
+// getWorkerControlQueueName looks up the worker's control queue name from the worker registry.
+// Returns NotFound error in the following cases:
+//   - Matching server restarted and worker hasn't heartbeated yet
+//   - Worker has died and will never heartbeat again
+//
+// There is no way to distinguish transient vs permanent failures, so we rely on bounded retries.
+func (t *transferQueueActiveTaskExecutor) getWorkerControlQueueName(
+	ctx context.Context,
+	namespaceID string,
+	workerInstanceKey string,
+) (string, error) {
+	resp, err := t.matchingRawClient.DescribeWorker(ctx, &matchingservice.DescribeWorkerRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkerRequest{
+			WorkerInstanceKey: workerInstanceKey,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	workerGroupingKey := resp.GetWorkerInfo().GetWorkerHeartbeat().GetHostInfo().GetWorkerGroupingKey()
+	if workerGroupingKey == "" {
+		return "", serviceerror.NewNotFound(fmt.Sprintf(
+			"worker_grouping_key not found for namespace=%s worker_instance_key=%s",
+			namespaceID, workerInstanceKey))
+	}
+
+	return fmt.Sprintf("%s/%s", workerControlQueuePrefix, workerGroupingKey), nil
 }
