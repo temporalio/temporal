@@ -93,6 +93,10 @@ type (
 		// Certain operations (e.g. InjectHook, CloseShard) are not safe on shared clusters
 		// and will panic if called.
 		isShared bool
+
+		// testTimeout is the custom timeout set via WithTimeout option.
+		// If zero, the default timeout is used.
+		testTimeout time.Duration
 	}
 	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
 	TestClusterParams struct {
@@ -275,6 +279,7 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	params := ApplyTestClusterOptions(options)
+	s.testTimeout = params.Timeout
 
 	// NOTE: A suite might set its own logger. Example: AcquireShardSuiteBase.
 	if s.Logger == nil {
@@ -346,7 +351,7 @@ func (s *FunctionalTestBase) SetupTest() {
 
 	// Setup test timeout context if not already initialized (for legacy tests using suite framework)
 	if s.ctx == nil {
-		s.ctx = setupTestTimeoutWithContext(s.T(), 0)
+		s.ctx = setupTestTimeoutWithContext(s.T(), s.testTimeout)
 	}
 
 	// Annotate gRPC requests with the test name for OTEL tracing.

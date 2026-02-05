@@ -75,11 +75,17 @@ func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) cont
 
 	var timedOut atomic.Bool
 	done := make(chan struct{})
+	timer := time.NewTimer(timeout)
 	go func() {
 		defer close(done)
-		<-ctx.Done()
-		if ctx.Err() == context.DeadlineExceeded {
+		select {
+		case <-ctx.Done():
+			if !timer.Stop() {
+				<-timer.C
+			}
+		case <-timer.C:
 			timedOut.Store(true)
+			cancel()
 		}
 	}()
 
@@ -88,7 +94,7 @@ func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) cont
 	t.Cleanup(func() {
 		cancel()
 		<-done
-
+		timer.Stop()
 		if timedOut.Load() {
 			t.Errorf("Test exceeded timeout of %v", timeout)
 		}
