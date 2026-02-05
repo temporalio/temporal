@@ -1,5 +1,4 @@
 name: All Tests
-run-name: ${{ inputs.test_name }}${{ inputs.test_dbs }}
 
 on:
   pull_request:
@@ -10,45 +9,6 @@ on:
       - feature/*
       - release/*
 
-  workflow_dispatch:
-    inputs:
-      commit:
-        description: "Commit SHA"
-        required: true
-      run_single_functional_test:
-        description: "Run a single functional test"
-        type: boolean
-        default: false
-      run_single_unit_test:
-        description: "Run a single unit test (INSTEAD of functional test)"
-        type: boolean
-        default: false
-      unit_test_directory:
-        description: "[Unit Test Only] Directory to run unit tests in"
-        type: string
-        default: "./temporal"
-      n_runs:
-        description: "Number of times to repeat the test per database type (except for unit tests, start with n=25 or lower to avoid OOMKill)"
-        type: number
-        default: 1
-      test_name:
-        description: "Name of the test to run (i.e. 'TestAcquireShard_DeadlineExceededErrorSuite' or 'TestFunctionalSuite/TestUpdateWorkflow')"
-        type: string
-      timeout_minutes:
-        description: "Test timeout in minutes"
-        type: number
-        default: 120
-      test_runner:
-        description: "Which runner to use. Choose higher RAM if your n_runs is high."
-        type: choice
-        default: "16GB RAM (ubuntu-latest)"
-        options:
-          - "16GB RAM (ubuntu-latest)"
-          - "64GB RAM (ubuntu-latest-16-cores)"
-      test_dbs:
-        description: 'List of DBs to test on (i.e. ["sqlite", "cassandra", "mysql8", "postgres12"])'
-        type: string
-        default: '["sqlite"]'
 permissions:
   contents: read
 
@@ -57,104 +17,53 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   cancel-in-progress: true
 
 env:
-  # For workflow_dispatch: use the given commit.
   # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
   # For push: use the pushed commit.
-  COMMIT: ${{ github.event.inputs.commit || github.event.pull_request.head.sha || github.sha }}
+  COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
   PR_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   MAX_TEST_ATTEMPTS: 3
 
 jobs:
-  set-up-single-test:
-    name: Set up single test
+  set-up-functional-test:
+    name: Set up functional test
     runs-on: ubuntu-latest
     outputs:
       shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
       total_shards: ${{ steps.generate_output.outputs.shards }}
       github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
       test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
-      single_test_args: ${{ steps.generate_output.outputs.single_test_args }}
       runs_on: ${{ steps.generate_output.outputs.runs_on }}
-      dbs: ${{ inputs.test_dbs }}
-      modified_unit_test_suites: ${{ env.modified_unit_test_suites }}
-      modified_integration_test_suites: ${{ env.modified_integration_test_suites }}
-      modified_functional_test_suites: ${{ env.modified_functional_test_suites }}
-      modified_functional_ndc_test_suites: ${{ env.modified_functional_ndc_test_suites }}
-      modified_functional_xdc_test_suites: ${{ env.modified_functional_xdc_test_suites }}
     steps:
       - id: generate_output
         run: |
           shards=3
           timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
           runs_on='["ubuntu-latest-8-cores"]'
-          if [[ "${{ inputs.run_single_functional_test }}" == "true" || "${{ inputs.run_single_unit_test }}" == "true" ]]; then
-            shards=1
-            timeout=${{ inputs.timeout_minutes }}
-            single_test_args="-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
-            if [[ "${{ inputs.test_runner }}" == "64GB RAM (ubuntu-latest-16-cores)" ]]; then
-              runs_on='[ "ubuntu-latest-16-cores" ]'
-            fi
-          fi
           {
             echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
             echo "shards=$shards"
             echo "github_timeout=$((timeout+5))"
             echo "test_timeout=${timeout}m"
-            echo "single_test_args=$single_test_args"
             echo "runs_on=$runs_on"
           } >> "$GITHUB_OUTPUT"
-      - id: cat_output
-        run: |
-          cat "$GITHUB_OUTPUT"
-
-      - name: Checkout Code
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-          fetch-depth: 0
-
-      - name: Fetch base branch
-        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
-
-      - name: Compute merge base
-        if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          MERGE_BASE="$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")"
-          echo "MERGE_BASE=${MERGE_BASE}" >> "$GITHUB_ENV"
-
-          set -exuo pipefail
-
-          go run ./cmd/tools/test/find_altered_tests.go \
-            -c unit \
-            -c integration \
-            -c functional \
-            -c functional_ndc \
-            -c functional_xdc \
-            -s "${MERGE_BASE}" \
-            -t "${COMMIT}" | tee -a "$GITHUB_ENV"
-        shell: bash
 
   pre-build:
     name: Pre-build for cache
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - uses: actions/setup-go@v6
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         id: restore-deps
         uses: actions/cache/restore@v4
         with:
@@ -162,18 +71,16 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - run: make pre-build-functional-test-coverage
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - name: Save dependencies
         uses: actions/cache/save@v4
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test && steps.restore-deps.outputs.cache-hit != 'true' }}
+        if: ${{ steps.restore-deps.outputs.cache-hit != 'true' }}
         with:
           path: ~/go/pkg/mod
           key: ${{ steps.restore-deps.outputs.cache-primary-key }}
 
       - name: Save build outputs
         uses: actions/cache/save@v4
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
@@ -184,7 +91,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -192,43 +98,35 @@ jobs:
           fetch-depth: 100
 
       - uses: actions/setup-go@v6
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
 
       - name: Restore dependencies
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
           key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
 
       - name: Restore build outputs
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - uses: arduino/setup-protoc@v3
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - run: GOOS=windows GOARCH=amd64 make clean-bins bins
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - run: GOOS=darwin GOARCH=arm64 make clean-bins bins
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
       - run: make clean-bins ci-build-misc
-        if: ${{ !inputs.run_single_functional_test && !inputs.run_single_unit_test }}
 
   unit-test:
-    if: ${{ inputs.run_single_functional_test != true }}
     name: Unit test
-    needs: [pre-build, set-up-single-test]
+    needs: [pre-build, set-up-functional-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -256,10 +154,6 @@ jobs:
       - name: Run unit tests
         timeout-minutes: 20
         run: TEST_TIMEOUT=15m make unit-test-coverage
-        env:
-          UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
-          TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
-          TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
 
       - name: Generate crash report
         if: failure()
@@ -296,29 +190,16 @@ jobs:
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
-        if: ${{ !cancelled() && !inputs.run_single_unit_test }}
+        if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Unit Test Detection
-        if: ${{ !cancelled() && !inputs.run_single_unit_test && env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 30
-        run: |
-          echo "Detecting flaky unit tests: ${{ needs.set-up-single-test.outputs.modified_unit_test_suites }}"
-          make unit-test
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_unit_test_suites }} -count=10"
-          TEST_TIMEOUT: 35
-
   integration-test:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     name: Integration test
-    needs: [pre-build, set-up-single-test]
+    needs: [pre-build, set-up-functional-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -399,17 +280,6 @@ jobs:
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Integration Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 30
-        run: |
-          echo "Detecting flaky integration tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
-          make integration-test-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_integration_test_suites }} -count=5"
-
       - name: Tear down docker compose
         if: ${{ always() }}
         run: |
@@ -418,10 +288,9 @@ jobs:
   # Root job name includes matrix details so it is unique per shard.
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
   functional-test:
-    if: ${{ inputs.run_single_unit_test != true }}
     # Display name shown in the UI. The job-id lookup uses this exact value.
     name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
-    needs: [pre-build, set-up-single-test]
+    needs: [pre-build, set-up-functional-test]
     strategy:
       fail-fast: false
       matrix:
@@ -434,8 +303,8 @@ jobs:
           - mysql8
           - postgres12
           - postgres12_pgx
-        shard_index: ${{ fromJson(needs.set-up-single-test.outputs.shard_indices) }}
-        runs-on: ${{ fromJson(needs.set-up-single-test.outputs.runs_on) }}
+        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
+        runs-on: ${{ fromJson(needs.set-up-functional-test.outputs.runs_on) }}
         include:
           - name: cass_es
             persistence_type: nosql
@@ -474,25 +343,23 @@ jobs:
     # For forks, fall back to ubuntu-latest since custom runners are not available.
     runs-on: ${{ github.repository_owner == 'temporalio' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
     env:
-      TEST_TOTAL_SHARDS: ${{ needs.set-up-single-test.outputs.total_shards }}
+      TEST_TOTAL_SHARDS: ${{ needs.set-up-functional-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      TEST_TIMEOUT: ${{ needs.set-up-single-test.outputs.test_timeout }}
+      TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           key: docker-${{ runner.os }}${{ runner.arch }}-${{ hashFiles(env.DOCKER_COMPOSE_FILE) }}
 
       - uses: actions/checkout@v6
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
+        if: ${{ toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -500,7 +367,6 @@ jobs:
           down-flags: -v
 
       - uses: actions/setup-go@v6
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         with:
           go-version-file: "go.mod"
           cache: false # do our own caching
@@ -518,7 +384,6 @@ jobs:
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
       - name: Get job ID
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
         id: get_job_id
         uses: ./.github/actions/get-job-id
         with:
@@ -526,11 +391,8 @@ jobs:
           run_id: ${{ github.run_id }}
 
       - name: Run functional test
-        if: ${{ inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER)) }}
-        timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
+        timeout-minutes: ${{ fromJSON(needs.set-up-functional-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
         run: ./develop/github/monitor_test.sh make functional-test-coverage
-        env:
-          TEST_ARGS: ${{ needs.set-up-single-test.outputs.single_test_args }}
 
       - name: Print memory snapshot
         if: always()
@@ -571,31 +433,19 @@ jobs:
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
-        if: ${{ !cancelled() && !inputs.run_single_functional_test }}
+        if: ${{ !cancelled() }}
         with:
           name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Functional Test Detection
-        if: ${{ (env.MODIFIED_TEST_SUITES != '') && (inputs.run_single_functional_test != true || (inputs.run_single_functional_test == true && contains(fromJSON(needs.set-up-single-test.outputs.dbs), env.PERSISTENCE_DRIVER))) }}
-        timeout-minutes: ${{ fromJSON(needs.set-up-single-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: |
-          echo "Detecting flaky functional tests: ${{ needs.set-up-single-test.outputs.modified_integration_test_suites }}"
-          make functional-test-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_test_suites }} -count=5"
-
   # XDC matrix job. Include `${{ matrix.name }}` in the display name so each
   # matrix variant has a unique name for the job-id lookup.
   functional-test-xdc:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     # Display name shown in the UI. The job-id lookup uses this exact value.
     name: Functional test xdc (${{ matrix.name }})
-    needs: [pre-build, set-up-single-test]
+    needs: [pre-build, set-up-functional-test]
     strategy:
       fail-fast: false
       matrix:
@@ -735,24 +585,12 @@ jobs:
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Functional XDC Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 60
-        run: |
-          echo "Detecting flaky functional xdc tests: ${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }}"
-          make functional-test-xdc-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_xdc_test_suites }} -count=5"
-
   # NDC matrix job. Include `${{ matrix.name }}` in the display name so each
   # matrix variant has a unique name for the job-id lookup.
   functional-test-ndc:
-    if: ${{ inputs.run_single_functional_test != true && inputs.run_single_unit_test != true }}
     # Display name shown in the UI. The job-id lookup uses this exact value.
     name: Functional test ndc (${{ matrix.name }})
-    needs: [pre-build, set-up-single-test]
+    needs: [pre-build, set-up-functional-test]
     strategy:
       fail-fast: false
       matrix:
@@ -879,17 +717,6 @@ jobs:
           include-hidden-files: true
           retention-days: 28
 
-      # Ensure this doesn't contribute to the junit output.
-      - name: Flaky Functional NDC Test Detection
-        if: ${{ env.MODIFIED_TEST_SUITES != '' }}
-        timeout-minutes: 30
-        run: |
-          echo "Detecting flaky functional ndc tests: ${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }}"
-          make functional-test-ndc-coverage
-        env:
-          FAILED_TEST_RETRIES: "0" # not retrying failed tests intentionally here since we're trying to detect flakes
-          TEST_ARGS: "-run=${{ needs.set-up-single-test.outputs.modified_functional_ndc_test_suites }} -count=5"
-
   test-status:
     if: always()
     name: Test Status
@@ -906,16 +733,9 @@ jobs:
     steps:
       - name: Check results
         run: |
-          if [[ "${{ inputs.run_single_functional_test }}" != "true" ]]; then
-            # if in all-tests mode, all statuses must be success
-            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
-              exit 1
-            fi
-          else
-            # if in single-test mode, skipped status is ok, failure is failure
-            if [[ -n $(echo "$RESULTS" | jq '.[] | select (. == "failure")') ]]; then
-              exit 1
-            fi
+          # all statuses must be success
+          if [[ -n $(echo "$RESULTS" | jq '.[] | select (. != "success")') ]]; then
+            exit 1
           fi
 
   notify-failure:
