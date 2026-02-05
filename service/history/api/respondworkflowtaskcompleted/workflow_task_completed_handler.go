@@ -57,15 +57,16 @@ type (
 		workflowTaskCompletedID int64
 
 		// internal state
-		hasBufferedEventsOrMessages     bool
-		workflowTaskFailedCause         *workflowTaskFailedCause
-		activityNotStartedCancelled     bool
-		newMutableState                 historyi.MutableState
-		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    historyi.MutableState
-		effects                         effect.Controller
-		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
-		updateRegistry                  update.Registry
+		hasBufferedEventsOrMessages      bool
+		workflowTaskFailedCause          *workflowTaskFailedCause
+		activityNotStartedCancelled      bool
+		newMutableState                  historyi.MutableState
+		stopProcessing                   bool                            // should stop processing any more commands
+		mutableState                     historyi.MutableState
+		effects                          effect.Controller
+		initiatedChildExecutionsInBatch  map[string]struct{}             // Set of initiated child executions in the workflow task
+		pendingActivityCancelsByWorker   map[string][]int64              // Batched activity cancels by worker instance key
+		updateRegistry                   update.Registry
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -205,7 +206,23 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		}
 	}
 
+	handler.flushActivityCancelControlTasks()
+
 	return mutations, nil
+}
+
+// flushActivityCancelControlTasks creates batched ActivityCancelControlTask for each worker.
+// We batch cancel requests by worker to minimize the number of Nexus dispatch operations.
+// All cancel commands in a single workflow task completion that target the same worker
+// are grouped into one task.
+func (handler *workflowTaskCompletedHandler) flushActivityCancelControlTasks() {
+	for workerKey, scheduledEventIDs := range handler.pendingActivityCancelsByWorker {
+		handler.mutableState.AddTasks(&tasks.ActivityCancelControlTask{
+			WorkflowKey:       handler.mutableState.GetWorkflowKey(),
+			ScheduledEventIDs: scheduledEventIDs,
+			WorkerInstanceKey: workerKey,
+		})
+	}
 }
 
 func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
@@ -660,12 +677,14 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			}
 			handler.activityNotStartedCancelled = true
 		} else if ai.WorkerInstanceKey != "" && handler.config.EnableActivityCancellationViaControlQueue() {
-			// Activity has started and worker supports control queue - create cancel control task.
-			handler.mutableState.AddTasks(&tasks.ActivityCancelControlTask{
-				WorkflowKey:       handler.mutableState.GetWorkflowKey(),
-				ScheduledEventIDs: []int64{ai.ScheduledEventId},
-				WorkerInstanceKey: ai.WorkerInstanceKey,
-			})
+			// Activity has started and worker supports control queue - collect for batched dispatch.
+			if handler.pendingActivityCancelsByWorker == nil {
+				handler.pendingActivityCancelsByWorker = make(map[string][]int64)
+			}
+			handler.pendingActivityCancelsByWorker[ai.WorkerInstanceKey] = append(
+				handler.pendingActivityCancelsByWorker[ai.WorkerInstanceKey],
+				ai.ScheduledEventId,
+			)
 		}
 	}
 	return actCancelReqEvent, nil
