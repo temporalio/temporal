@@ -6150,3 +6150,76 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	s.True(ok)
 	s.Equal(taskQueue, tq)
 }
+
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerInstanceKey() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	// Setup workflow execution
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		di.ScheduledEventID,
+		di.RequestID,
+		di.TaskQueue,
+		"identity",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		di,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	// Schedule activity
+	workflowTaskCompletedEventID := int64(4)
+	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(
+		workflowTaskCompletedEventID,
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "test-activity-1",
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		false,
+	)
+	s.NoError(err)
+	s.Empty(activityInfo.WorkerInstanceKey, "WorkerInstanceKey should be empty before activity starts")
+
+	// Start activity with workerInstanceKey
+	expectedWorkerInstanceKey := "test-worker-instance-key-12345"
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		activityInfo,
+		activityInfo.ScheduledEventId,
+		uuid.NewString(),
+		"worker-identity",
+		nil,
+		nil,
+		nil,
+		expectedWorkerInstanceKey,
+	)
+	s.NoError(err)
+
+	// Verify workerInstanceKey is stored
+	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
+	s.True(ok)
+	s.Equal(expectedWorkerInstanceKey, updatedActivityInfo.WorkerInstanceKey)
+}

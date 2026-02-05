@@ -631,7 +631,7 @@ message ActivityInfo {
 
     int64 start_version = 50;
 
-    // Worker instance key of the worker executing this activity.
+    // Unique identifier of the worker that is this activity.
     string worker_instance_key = 51;
 }
 
