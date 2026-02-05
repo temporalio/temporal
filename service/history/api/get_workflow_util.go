@@ -375,11 +375,11 @@ func MutableStateToGetResponse(
 	}
 
 	// Get transient/speculative workflow task events if present
-	var transientOrSpeculativeEvents *historyspb.TransientWorkflowTaskInfo
+	var transientOrSpeculativeTasks *historyspb.TransientWorkflowTaskInfo
 	if workflowTask := mutableState.GetPendingWorkflowTask(); workflowTask != nil {
-		transientOrSpeculativeEvents = mutableState.GetTransientWorkflowTaskInfo(workflowTask, "")
+		transientOrSpeculativeTasks = mutableState.GetTransientWorkflowTaskInfo(workflowTask, "")
 	} else if workflowTask := mutableState.GetStartedWorkflowTask(); workflowTask != nil {
-		transientOrSpeculativeEvents = mutableState.GetTransientWorkflowTaskInfo(workflowTask, "")
+		transientOrSpeculativeTasks = mutableState.GetTransientWorkflowTaskInfo(workflowTask, "")
 	}
 
 	return &historyservice.GetMutableStateResponse{
@@ -415,6 +415,6 @@ func MutableStateToGetResponse(
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
 		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
-		TransientOrSpeculativeEvents: transientOrSpeculativeEvents,
+		TransientOrSpeculativeTasks:  transientOrSpeculativeTasks,
 	}, nil
 }

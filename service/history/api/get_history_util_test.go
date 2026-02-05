@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/common/headers"
 )
 
-func TestShouldIncludeTransientOrSpeculativeEvents(t *testing.T) {
+func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -123,13 +123,13 @@ func TestShouldIncludeTransientOrSpeculativeEvents(t *testing.T) {
 				HistorySuffix: tt.historySuffix,
 			}
 
-			result := shouldIncludeTransientOrSpeculativeEvents(ctx, tranOrSpecEvents, tt.isWorkflowRunning)
+			result := shouldIncludeTransientOrSpeculativeTasks(ctx, tranOrSpecEvents, tt.isWorkflowRunning)
 			r.Equal(tt.expected, result)
 		})
 	}
 }
 
-func TestClientSupportsTranOrSpecEvents(t *testing.T) {
+func TestClientSupportsTranOrSpecTasks(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -206,7 +206,7 @@ func TestClientSupportsTranOrSpecEvents(t *testing.T) {
 	})
 }
 
-func TestAreValidTransientOrSpecEvents(t *testing.T) {
+func TestAreValidTransientOrSpecTasks(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
