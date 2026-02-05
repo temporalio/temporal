@@ -1,0 +1,135 @@
+name: Update Test Salts
+
+on:
+  schedule:
+    # Runs at 0700 UTC daily
+    - cron: "0 7 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  update-salts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          permission-contents: read
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ steps.generate-token.outputs.app-slug }}[bot]"
+          git config user.email "${{ steps.generate-token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Get latest successful CI run
+        id: get-run
+        run: |
+          # Get the most recent successful run-tests.yml run on main (push event)
+          RUN_ID=$(gh run list \
+            --workflow=run-tests.yml \
+            --event=push \
+            --branch=main \
+            --status=success \
+            --limit=1 \
+            --json=databaseId \
+            --jq='.[0].databaseId')
+
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "Latest successful CI run: $RUN_ID"
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Download functional test artifacts
+        uses: actions/download-artifact@v7
+        with:
+          pattern: junit-xml--*--functional-test
+          path: test-results/
+          merge-multiple: false
+          run-id: ${{ steps.get-run.outputs.run_id }}
+          github-token: ${{ steps.generate-token.outputs.token }}
+
+      - name: List downloaded artifacts
+        run: |
+          echo "Downloaded test artifacts:"
+          find test-results/ -name "*.xml" -type f | sort
+
+      - name: Optimize functional test sharding
+        id: optimize
+        run: |
+          set -euo pipefail
+          NEW_SALT=$(go run ./cmd/tools/optimize-test-sharding -s 3 'test-results/*/*.xml' | tr -d '\n')
+
+          echo "New functional test salt: $NEW_SALT"
+          echo "salt=$NEW_SALT" >> $GITHUB_OUTPUT
+
+      - name: Update salt value
+        run: |
+          echo -n "${{ steps.optimize.outputs.salt }}" > tests/testcore/test-shard-salt
+
+      - name: Check for changes
+        id: check-changes
+        run: |
+          if git diff --quiet tests/testcore/test-shard-salt; then
+            echo "No changes detected"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected:"
+            git diff tests/testcore/test-shard-salt
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pull Request
+        if: steps.check-changes.outputs.has_changes == 'true'
+        id: create-pr
+        shell: bash
+        run: |
+          timestamp=$(date +%Y%m%d-%H%M%S)
+          branch_name="bot-update-test-salts-${timestamp}"
+
+          # Create and switch to new branch
+          git checkout -b "${branch_name}"
+
+          # Add and commit changes
+          git add tests/testcore/test-shard-salt
+          git commit -m "ci: Update functional test sharding salt"
+
+          # Push branch to remote
+          git push origin "${branch_name}"
+
+          # Create PR using gh CLI
+          pr_url=$(gh pr create \
+            --title "ci: Update functional test sharding salt" \
+            --body "Automated update of functional test sharding salt to optimize shard balance. This PR was automatically generated.")
+
+          pr_number=$(gh pr view "${pr_url}" --json number --jq '.number')
+
+          # Enable auto-merge (will merge when all checks pass)
+          gh pr merge "${pr_number}" --auto --merge
+
+          {
+            echo "pr_url=${pr_url}"
+            echo "pr_number=${pr_number}"
+          } >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
