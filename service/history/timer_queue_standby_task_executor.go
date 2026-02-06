@@ -13,6 +13,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -123,6 +124,10 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	if activity.ShouldDropStandaloneActivityTask(task.ArchetypeID) {
+		return nil
+	}
+
 	actionFn := func(
 		ctx context.Context,
 		wfContext historyi.WorkflowContext,
@@ -171,6 +176,10 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if activity.ShouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	actionFn := func(
 		ctx context.Context,
 		wfContext historyi.WorkflowContext,
