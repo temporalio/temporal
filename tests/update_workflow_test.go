@@ -5400,8 +5400,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 							})
 						s.NoError(err)
 						uwsRes2 := <-uwsCh2
-						s.NoError(uwsRes1.err)
-
+						s.NoError(uwsRes2.err)
 						s.Equal(uwsRes1.response.Responses[0].GetStartWorkflow().RunId, uwsRes2.response.Responses[0].GetStartWorkflow().RunId)
 					})
 				}
