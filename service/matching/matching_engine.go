@@ -156,9 +156,9 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
-		// workerInstancePollers tracks pollerIDs by worker instance key for bulk cancellation
-		// during worker shutdown. Maps workerInstanceKey -> (pollerID -> struct{}).
-		workerInstancePollers collection.SyncMap[string, *collection.SyncMap[string, struct{}]]
+		// workerInstancePollers tracks cancel funcs by worker instance key for bulk cancellation
+		// during worker shutdown. Maps workerInstanceKey -> (pollerID -> CancelFunc).
+		workerInstancePollers collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -259,7 +259,7 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
-		workerInstancePollers:     collection.NewSyncMap[string, *collection.SyncMap[string, struct{}]](),
+		workerInstancePollers:     collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -1183,22 +1183,18 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
 	workerInstanceKey := request.WorkerInstanceKey
 
-	pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey)
+	pollerSet, ok := e.workerInstancePollers.Pop(workerInstanceKey)
 	if !ok {
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 0}, nil
 	}
 
 	// Cancel all pollers for this worker instance
 	var cancelledCount int32
-	for pollerID := range pollerSet.PopAll() {
-		if cancel, ok := e.outstandingPollers.Pop(pollerID); ok {
-			cancel()
-			cancelledCount++
-		}
+	for pollerID, cancel := range pollerSet.PopAll() {
+		e.outstandingPollers.Delete(pollerID)
+		cancel()
+		cancelledCount++
 	}
-
-	// Clean up the worker instance entry
-	e.workerInstancePollers.Delete(workerInstanceKey)
 
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
@@ -2815,10 +2811,10 @@ func (e *matchingEngineImpl) pollTask(
 		if hasWorkerKey && workerInstanceKey != "" {
 			pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey)
 			if !ok {
-				newPollerSet := collection.NewSyncMap[string, struct{}]()
-				pollerSet, _ = e.workerInstancePollers.GetOrSet(workerInstanceKey, &newPollerSet)
+				newPollerSet := collection.NewSyncMap[string, context.CancelFunc]()
+				pollerSet, _ = e.workerInstancePollers.GetOrSet(workerInstanceKey, newPollerSet)
 			}
-			pollerSet.Set(pollerID, struct{}{})
+			pollerSet.Set(pollerID, cancel)
 		}
 
 		defer func() {
