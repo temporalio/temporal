@@ -46,4 +46,30 @@ jobs:
           REPO: ${{ toJSON('temporal') }}
           BRANCH: ${{ toJSON(steps.get_branch.outputs.branch) }}
         run: |
+          # Dispatch the workflow
           curl -fL -X POST -H "Accept: application/vnd.github.v3+json" -H "Authorization: token $PAT" "https://api.github.com/repos/$PARENT_REPO/actions/workflows/$WORKFLOW_ID/dispatches" -d '{"ref":'"$PARENT_BRANCH"', "inputs": { "repo":'"$REPO"', "branch":'"$BRANCH"' }}'
+          
+          # Wait a few seconds for the workflow to start
+          sleep 10
+          
+          # Get the latest workflow run for this workflow
+          run_id=$(curl -fL -H "Accept: application/vnd.github.v3+json" -H "Authorization: token $PAT" "https://api.github.com/repos/$PARENT_REPO/actions/workflows/$WORKFLOW_ID/runs" | jq -r '.workflow_runs[0].id')
+          
+          # Poll the workflow run status until it completes
+          while true; do
+            status=$(curl -fL -H "Accept: application/vnd.github.v3+json" -H "Authorization: token $PAT" "https://api.github.com/repos/$PARENT_REPO/actions/runs/$run_id" | jq -r '.status')
+            conclusion=$(curl -fL -H "Accept: application/vnd.github.v3+json" -H "Authorization: token $PAT" "https://api.github.com/repos/$PARENT_REPO/actions/runs/$run_id" | jq -r '.conclusion')
+            
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" = "success" ]; then
+                echo "Triggered workflow completed successfully"
+                exit 0
+              else
+                echo "Triggered workflow failed with conclusion: $conclusion"
+                exit 1
+              fi
+            fi
+            
+            echo "Waiting for workflow to complete... Current status: $status"
+            sleep 30
+          done
