@@ -781,6 +781,7 @@ pollLoop:
 		}
 
 		task.finish(nil, true)
+		task.emitDispatchLatency()
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
@@ -1053,6 +1054,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil, true)
+		task.emitDispatchLatency()
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }

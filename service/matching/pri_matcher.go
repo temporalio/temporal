@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
@@ -371,6 +370,8 @@ func (tm *priTaskMatcher) forwardPolls(
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
 func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
+	task.dispatchMetricsHandler = tm.metricsHandler
+
 	finish := func() (bool, error) {
 		res, ok := task.getResponse()
 		if !softassert.That(tm.logger, ok, "expected a sync match task") {
@@ -379,16 +380,9 @@ func (tm *priTaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, 
 		if res.forwarded {
 			if res.forwardErr == nil {
 				// task was remotely sync matched on the parent partition
-				tm.emitDispatchLatency(task, true)
 				return true, nil
 			}
 			return false, nil // forward error, give up here
-		}
-		// TODO(pri): can we just always do this on the parent and simplify this to:
-		// if res.startErr == nil { tm.emitDispatchLatency(task, task.isForwarded) }
-		// and get rid of the call above so there's only one?
-		if res.startErr == nil && !task.isForwarded() {
-			tm.emitDispatchLatency(task, false)
 		}
 		return true, res.startErr
 	}
@@ -492,23 +486,12 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 }
 
 func (tm *priTaskMatcher) AddTask(task *internalTask) {
+	task.dispatchMetricsHandler = tm.metricsHandler
+
 	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
 		return // handle race where task is evicted from reader before being added
 	}
 	tm.data.EnqueueTaskNoWait(task)
-}
-
-func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
-	if task.event.Data.CreateTime == nil {
-		return // should not happen but for safety
-	}
-
-	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
-		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
-		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
-	)
 }
 
 // Poll blocks until a task is found or context deadline is exceeded
