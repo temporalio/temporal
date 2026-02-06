@@ -49,10 +49,10 @@ type priTaskMatcher struct {
 
 type waitingPoller struct {
 	waitableMatchResult
-	startTime        time.Time
-	forwardCtx       context.Context   // non-nil iff poll can be forwarded
-	pollMetadata     *pollMetadata     // non-nil iff poll can be forwarded
-	queryOnly        bool              // if true, poller can be given only query task, otherwise any task
+	startTime         time.Time
+	forwardCtx        context.Context   // non-nil iff poll can be forwarded
+	pollMetadata      *pollMetadata     // non-nil iff poll can be forwarded
+	queryOnly         bool              // if true, poller can be given only query task, otherwise any task
 	taskForwarderType taskForwarderType // type of task forwarder (if any)
 }
 
@@ -72,8 +72,6 @@ type remotePriorityBacklog struct {
 }
 
 type remotePriorityBacklogSet = map[remotePriorityBacklog]struct{}
-
-type pollForwarderType int32
 
 var (
 	// TODO(pri): old matcher cleanup, move to here

@@ -21,6 +21,8 @@ const (
 	pollForwarderPriority   = 1000000 // lower than any other priority. must be > maxPriorityLevels*effectivePriorityFactor.
 )
 
+type pollForwarderType int32
+
 const (
 	notPollForwarder pollForwarderType = iota
 	normalPollForwarder
@@ -30,9 +32,9 @@ const (
 type taskForwarderType int32
 
 const (
-	notTaskForwarder taskForwarderType = iota
-	parentTaskForwarder  // forwards tasks to parent partition
-	validatorTaskForwarder // validates tasks on root partition
+	notTaskForwarder       taskForwarderType = iota
+	parentTaskForwarder                      // forwards tasks to parent partition
+	validatorTaskForwarder                   // validates tasks on root partition
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
