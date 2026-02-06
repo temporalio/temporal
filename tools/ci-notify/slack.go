@@ -149,3 +149,146 @@ func SendSlackMessage(webhookURL string, message *SlackMessage) error {
 
 	return nil
 }
+
+// BuildSuccessReportMessage creates a Slack message for success report
+func BuildSuccessReportMessage(report *SuccessReport) *SlackMessage {
+	// Header
+	headerBlock := SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: fmt.Sprintf(":chart_with_upwards_trend: *Weekly CI Report - %s Branch*", report.Branch),
+		},
+	}
+
+	// Period
+	periodBlock := SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: fmt.Sprintf("*Report Period:* %s to %s",
+				report.StartDate.Format("Jan 2, 2006"),
+				report.EndDate.Format("Jan 2, 2006")),
+		},
+	}
+
+	// Metrics grid
+	metricsBlock := SlackBlock{
+		Type: "section",
+		Fields: []SlackText{
+			{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Success Rate:*\n%.1f%%", report.SuccessRate),
+			},
+			{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Total Runs:*\n%d", report.TotalRuns),
+			},
+			{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Failed Runs:*\n%d", report.FailedRuns),
+			},
+			{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Successful Runs:*\n%d", report.SuccessfulRuns),
+			},
+			{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Average Duration:*\n%s", formatDuration(report.AverageDuration)),
+			},
+			{
+				Type: "mrkdwn",
+				Text: fmt.Sprintf("*Median Duration:*\n%s", formatDuration(report.MedianDuration)),
+			},
+		},
+	}
+
+	// Timing percentiles section
+	timingBlock := SlackBlock{
+		Type: "section",
+		Text: &SlackText{
+			Type: "mrkdwn",
+			Text: fmt.Sprintf("*Run Duration Distribution:*\n"+
+				"• Under 20 minutes: %.1f%%\n"+
+				"• Under 25 minutes: %.1f%%\n"+
+				"• Under 30 minutes: %.1f%%",
+				report.Under20MinutesPercent,
+				report.Under25MinutesPercent,
+				report.Under30MinutesPercent),
+		},
+	}
+
+	blocks := []SlackBlock{headerBlock, periodBlock, metricsBlock, timingBlock}
+
+	// Add recent failures section if there are any
+	if report.FailedRuns > 0 {
+		var recentFailures []WorkflowRunSummary
+		for _, run := range report.Runs {
+			if run.Conclusion == "failure" {
+				recentFailures = append(recentFailures, run)
+				if len(recentFailures) >= 3 {
+					break
+				}
+			}
+		}
+
+		if len(recentFailures) > 0 {
+			var failureLines []string
+			for _, run := range recentFailures {
+				failureLines = append(failureLines,
+					fmt.Sprintf("• <%s|%s>", run.URL, run.DisplayTitle))
+			}
+
+			failuresBlock := SlackBlock{
+				Type: "section",
+				Text: &SlackText{
+					Type: "mrkdwn",
+					Text: fmt.Sprintf("*Recent Failures:*\n%s", strings.Join(failureLines, "\n")),
+				},
+			}
+			blocks = append(blocks, failuresBlock)
+		}
+	}
+
+	return &SlackMessage{
+		Text: fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch),
+		Blocks: blocks,
+	}
+}
+
+// FormatReportForDebug formats the success report for console output
+func FormatReportForDebug(report *SuccessReport) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("📊 Weekly CI Report - %s Branch\n\n", report.Branch))
+	sb.WriteString(fmt.Sprintf("Report Period: %s to %s\n\n",
+		report.StartDate.Format("Jan 2, 2006"),
+		report.EndDate.Format("Jan 2, 2006")))
+	sb.WriteString("Metrics:\n")
+	sb.WriteString(fmt.Sprintf("  Success Rate: %.1f%%\n", report.SuccessRate))
+	sb.WriteString(fmt.Sprintf("  Total Runs: %d\n", report.TotalRuns))
+	sb.WriteString(fmt.Sprintf("  Successful Runs: %d\n", report.SuccessfulRuns))
+	sb.WriteString(fmt.Sprintf("  Failed Runs: %d\n", report.FailedRuns))
+	sb.WriteString(fmt.Sprintf("  Average Duration: %s\n", formatDuration(report.AverageDuration)))
+	sb.WriteString(fmt.Sprintf("  Median Duration: %s\n", formatDuration(report.MedianDuration)))
+
+	sb.WriteString("\nRun Duration Distribution:\n")
+	sb.WriteString(fmt.Sprintf("  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent))
+	sb.WriteString(fmt.Sprintf("  Under 25 minutes: %.1f%%\n", report.Under25MinutesPercent))
+	sb.WriteString(fmt.Sprintf("  Under 30 minutes: %.1f%%\n", report.Under30MinutesPercent))
+
+	if report.FailedRuns > 0 {
+		sb.WriteString("\nRecent Failures:\n")
+		count := 0
+		for _, run := range report.Runs {
+			if run.Conclusion == "failure" {
+				sb.WriteString(fmt.Sprintf("  • %s\n    %s\n", run.DisplayTitle, run.URL))
+				count++
+				if count >= 3 {
+					break
+				}
+			}
+		}
+	}
+
+	return sb.String()
+}
