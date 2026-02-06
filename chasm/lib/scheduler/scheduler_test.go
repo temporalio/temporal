@@ -16,12 +16,13 @@ import (
 )
 
 func TestPatchRejectsExcessBackfillers(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
+	sched, _, node := setupSchedulerForTest(t)
 
 	now := time.Now()
 
 	// Add backfillers up to the limit in batches via Patch.
 	batchSize := 50
+	var ctx chasm.MutableContext
 	for i := 0; i < 100; i += batchSize {
 		ctx = reopenTransaction(node)
 		backfills := make([]*schedulepb.BackfillRequest, batchSize)
@@ -44,7 +45,7 @@ func TestPatchRejectsExcessBackfillers(t *testing.T) {
 	}
 
 	// The scheduler should now have exactly 100 backfillers.
-	require.Equal(t, 100, len(sched.Backfillers))
+	require.Len(t, sched.Backfillers, 100)
 
 	// Adding one more should fail with ErrTooManyBackfillers.
 	ctx = reopenTransaction(node)
@@ -63,7 +64,7 @@ func TestPatchRejectsExcessBackfillers(t *testing.T) {
 	require.ErrorIs(t, err, scheduler.ErrTooManyBackfillers)
 
 	// Backfiller count should be unchanged (no partial creation).
-	require.Equal(t, 100, len(sched.Backfillers))
+	require.Len(t, sched.Backfillers, 100)
 }
 
 func reopenTransaction(node *chasm.Node) chasm.MutableContext {
