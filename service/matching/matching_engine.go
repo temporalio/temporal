@@ -2522,6 +2522,9 @@ pollLoop:
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 
 		nexusReq := task.nexus.request.GetRequest()
+		if nexusReq.Header == nil {
+			nexusReq.Header = make(map[string]string)
+		}
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
 		// Java SDK currently expects the header in this form. We should be able to remove this duplication sometime mid 2025.
 		nexusReq.Header["Request-Timeout"] = time.Until(task.nexus.deadline).String()
