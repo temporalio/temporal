@@ -11,6 +11,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -82,6 +83,10 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx context.Context,
 	task *tasks.DeleteHistoryEventTask,
 ) (retError error) {
+	if activity.ShouldDropStandaloneActivityTask(task.ArchetypeID) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

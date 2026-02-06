@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/locks"
@@ -204,10 +203,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	task *tasks.DeleteExecutionTask,
 	ensureNoPendingCloseTask bool,
 ) error {
-	if activity.ShouldDropStandaloneActivityTask(task.ArchetypeID) {
-		return nil
-	}
-
 	if task.ArchetypeID == chasm.UnspecifiedArchetypeID {
 		task.ArchetypeID = chasm.WorkflowArchetypeID
 	}
