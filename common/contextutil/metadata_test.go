@@ -301,3 +301,63 @@ func TestMetadataContextIsolation(t *testing.T) {
 		assert.Equal(t, "value2", value2)
 	})
 }
+
+func TestContextHasMetadata(t *testing.T) {
+	t.Run("returns true when context has metadata", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		assert.True(t, ContextHasMetadata(ctx))
+	})
+
+	t.Run("returns false for context without metadata", func(t *testing.T) {
+		ctx := context.Background()
+		assert.False(t, ContextHasMetadata(ctx))
+	})
+
+	t.Run("returns true after setting metadata values", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		ContextMetadataSet(ctx, "key1", "value1")
+		ContextMetadataSet(ctx, "key2", "value2")
+
+		assert.True(t, ContextHasMetadata(ctx))
+	})
+
+	t.Run("returns true for empty metadata context", func(t *testing.T) {
+		ctx := WithMetadataContext(context.Background())
+		// No values set, but metadata context exists
+		assert.True(t, ContextHasMetadata(ctx))
+	})
+
+	t.Run("child context inherits metadata from parent", func(t *testing.T) {
+		parentCtx := WithMetadataContext(context.Background())
+		ContextMetadataSet(parentCtx, "key", "value")
+
+		type testContextKey string
+		childCtx := context.WithValue(parentCtx, testContextKey("other-key"), "other-value")
+
+		assert.True(t, ContextHasMetadata(parentCtx))
+		assert.True(t, ContextHasMetadata(childCtx))
+	})
+
+	t.Run("returns false for wrong type in context", func(t *testing.T) {
+		ctx := context.WithValue(context.Background(), metadataCtxKey, "wrong type")
+		assert.False(t, ContextHasMetadata(ctx))
+	})
+
+	t.Run("returns true for cancelled context with metadata", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		ctx = WithMetadataContext(ctx)
+		cancel()
+
+		assert.True(t, ContextHasMetadata(ctx))
+	})
+
+	t.Run("multiple contexts with metadata are independent", func(t *testing.T) {
+		ctx1 := WithMetadataContext(context.Background())
+		ctx2 := WithMetadataContext(context.Background())
+		ctx3 := context.Background()
+
+		assert.True(t, ContextHasMetadata(ctx1))
+		assert.True(t, ContextHasMetadata(ctx2))
+		assert.False(t, ContextHasMetadata(ctx3))
+	})
+}
