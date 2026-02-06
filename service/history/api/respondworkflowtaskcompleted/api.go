@@ -180,7 +180,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			}
 		}
 
-		workflowLease.GetReleaseFn()(errForRelease)
+		workflowLease.GetReleaseFn(ctx)(errForRelease)
 	}()
 
 	if !ms.IsWorkflowExecutionRunning() ||

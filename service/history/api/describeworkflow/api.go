@@ -86,7 +86,7 @@ func Invoke(
 	// We release the lock on this workflow just before we return from this method, at which point mutable state might
 	// be mutated. Take extra care to clone all response methods as marshalling happens after we return and it is unsafe
 	// to mutate proto fields during marshalling.
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn(ctx)(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
 	namespaceName := mutableState.GetNamespaceEntry().Name().String()

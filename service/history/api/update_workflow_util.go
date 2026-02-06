@@ -29,7 +29,7 @@ func GetAndUpdateWorkflowWithNew(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn(ctx)(retError) }()
 
 	return UpdateWorkflowWithNew(shard, ctx, workflowLease, action, newWorkflowFn)
 }
@@ -54,7 +54,7 @@ func GetAndUpdateWorkflowWithConsistencyCheck(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn(ctx)(retError) }()
 
 	return UpdateWorkflowWithNew(shardContext, ctx, workflowLease, action, newWorkflowFn)
 }

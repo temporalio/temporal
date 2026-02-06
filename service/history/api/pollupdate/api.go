@@ -39,7 +39,7 @@ func Invoke(
 		if err != nil {
 			return nil, nil, err
 		}
-		release := workflowLease.GetReleaseFn()
+		release := workflowLease.GetReleaseFn(ctx)
 		defer release(nil)
 		wfCtx := workflowLease.GetContext()
 		upd := wfCtx.UpdateRegistry(ctx).Find(ctx, updateRef.UpdateId)

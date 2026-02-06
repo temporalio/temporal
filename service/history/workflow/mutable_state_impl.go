@@ -6993,19 +6993,19 @@ type closeTransactionResult struct {
 	chasmNodesMutation chasm.NodesMutation
 }
 
-func (ms *MutableStateImpl) setMetaDataMap(
+func (ms *MutableStateImpl) SetContextMetadata(
 	ctx context.Context,
 ) {
 	switch ms.chasmTree.ArchetypeID() {
 	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
 		// Set workflow type
 		if wfType := ms.GetWorkflowType(); wfType != nil && wfType.GetName() != "" {
-			contextutil.ContextMetadataSet(ctx, "workflow-type", wfType.GetName())
+			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, wfType.GetName())
 		}
 
 		// Set workflow task queue
 		if ms.executionInfo != nil && ms.executionInfo.TaskQueue != "" {
-			contextutil.ContextMetadataSet(ctx, "workflow-task-queue", ms.executionInfo.TaskQueue)
+			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, ms.executionInfo.TaskQueue)
 		}
 
 		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
@@ -7016,11 +7016,9 @@ func (ms *MutableStateImpl) setMetaDataMap(
 }
 
 func (ms *MutableStateImpl) closeTransaction(
-	ctx context.Context,
+	_ context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
-	ms.setMetaDataMap(ctx)
-
 	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
 	); err != nil {

@@ -64,7 +64,7 @@ func Invoke(
 				workflowTask.Attempt != token.Attempt ||
 				(workflowTask.Version != common.EmptyVersion && token.Version != workflowTask.Version) {
 				// we have not alter mutable state yet, so release with it with nil to avoid clear MS.
-				workflowLease.GetReleaseFn()(nil)
+				workflowLease.GetReleaseFn(ctx)(nil)
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 

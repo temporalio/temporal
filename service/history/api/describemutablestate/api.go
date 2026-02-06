@@ -44,7 +44,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { chasmLease.GetReleaseFn()(retError) }()
+	defer func() { chasmLease.GetReleaseFn(ctx)(retError) }()
 
 	response := &historyservice.DescribeMutableStateResponse{}
 	if chasmLease.GetContext().(*workflow.ContextImpl).MutableState != nil {

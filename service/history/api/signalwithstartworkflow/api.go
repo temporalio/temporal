@@ -44,7 +44,7 @@ func Invoke(
 	)
 	switch err.(type) {
 	case nil:
-		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
+		defer func() { currentWorkflowLease.GetReleaseFn(ctx)(retError) }()
 	case *serviceerror.NotFound:
 		currentWorkflowLease = nil
 	default:

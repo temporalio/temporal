@@ -261,14 +261,14 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowLease(
 	currentRunID, err := c.GetCurrentChasmRunID(ctx, namespaceID, workflowID, archetypeID, lockPriority)
 
 	if err != nil {
-		workflowLease.GetReleaseFn()(err)
+		workflowLease.GetReleaseFn(ctx)(err)
 		return nil, err
 	}
 	if currentRunID == workflowLease.GetContext().GetWorkflowKey().RunID {
 		return workflowLease, nil
 	}
 
-	workflowLease.GetReleaseFn()(nil)
+	workflowLease.GetReleaseFn(ctx)(nil)
 	return nil, consts.ErrLocateCurrentWorkflowExecution
 }
 

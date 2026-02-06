@@ -53,7 +53,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { baseWorkflowLease.GetReleaseFn()(retError) }()
+	defer func() { baseWorkflowLease.GetReleaseFn(ctx)(retError) }()
 
 	baseMutableState := baseWorkflowLease.GetMutableState()
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
@@ -99,7 +99,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
+		defer func() { currentWorkflowLease.GetReleaseFn(ctx)(retError) }()
 	}
 
 	// dedup by requestID
@@ -130,7 +130,7 @@ func Invoke(
 		shardContext.GetClusterMetadata(),
 		baseWorkflowLease.GetContext(),
 		baseWorkflowLease.GetMutableState(),
-		baseWorkflowLease.GetReleaseFn(),
+		baseWorkflowLease.GetReleaseFn(ctx),
 	)
 
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespaceID, workflowID)
@@ -167,7 +167,7 @@ func Invoke(
 			shardContext.GetClusterMetadata(),
 			currentWorkflowLease.GetContext(),
 			currentWorkflowLease.GetMutableState(),
-			currentWorkflowLease.GetReleaseFn(),
+			currentWorkflowLease.GetReleaseFn(ctx),
 		),
 		request.GetReason(),
 		nil,

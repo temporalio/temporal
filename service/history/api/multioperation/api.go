@@ -192,7 +192,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		// If Update is complete, return it.
 		if outcome, err := workflowLease.GetMutableState().GetUpdateOutcome(ctx, updateID); err == nil {
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
-			workflowLease.GetReleaseFn()(nil)
+			workflowLease.GetReleaseFn(ctx)(nil)
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{
 					RunId:   workflowKey.RunID,
@@ -222,7 +222,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		}
 
 		// Release before starting workflow further down.
-		workflowLease.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn(ctx)(nil)
 	}
 
 	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart)
@@ -317,7 +317,7 @@ func (uws *updateWithStart) updateWorkflow(
 	)
 
 	// Release lock here since all changes to the workflow have been completed now.
-	currentWorkflowLease.GetReleaseFn()(err)
+	currentWorkflowLease.GetReleaseFn(ctx)(err)
 
 	if err != nil {
 		return nil, newMultiOpError(multiOpAbortedErr, err)

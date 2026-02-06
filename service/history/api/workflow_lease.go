@@ -1,13 +1,15 @@
 package api
 
 import (
+	"context"
+
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 type WorkflowLease interface {
 	GetContext() historyi.WorkflowContext
 	GetMutableState() historyi.MutableState
-	GetReleaseFn() historyi.ReleaseWorkflowContextFunc
+	GetReleaseFn(ctx context.Context) historyi.ReleaseWorkflowContextFunc
 }
 
 type workflowLease struct {
@@ -60,6 +62,9 @@ func (w *workflowLease) GetMutableState() historyi.MutableState {
 	return w.mutableState
 }
 
-func (w *workflowLease) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
+func (w *workflowLease) GetReleaseFn(ctx context.Context) historyi.ReleaseWorkflowContextFunc {
+	if w.mutableState != nil {
+		w.mutableState.SetContextMetadata(ctx)
+	}
 	return w.releaseFn
 }

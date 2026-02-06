@@ -287,7 +287,7 @@ func signalWorkflow(
 	); err != nil {
 		// in-memory mutable state is still clean, release the lock with nil error to prevent
 		// clearing and reloading mutable state
-		workflowLease.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn(ctx)(nil)
 		return err
 	}
 
@@ -295,7 +295,7 @@ func signalWorkflow(
 		// duplicate signal
 		// in-memory mutable state is still clean, release the lock with nil error to prevent
 		// clearing and reloading mutable state
-		workflowLease.GetReleaseFn()(nil)
+		workflowLease.GetReleaseFn(ctx)(nil)
 		return nil
 	}
 	if request.GetRequestId() != "" {

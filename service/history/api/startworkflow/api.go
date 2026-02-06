@@ -192,7 +192,7 @@ func (s *Starter) Invoke(
 		return nil, StartErr, err
 	}
 	defer func() {
-		creationParams.workflowLease.GetReleaseFn()(retError)
+		creationParams.workflowLease.GetReleaseFn(ctx)(retError)
 	}()
 
 	currentExecutionLock, err := s.lockCurrentWorkflowExecution(ctx)
@@ -493,7 +493,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		s.workflowConsistencyChecker,
 	)
 	if workflowLease != nil {
-		workflowLease.GetReleaseFn()(err)
+		workflowLease.GetReleaseFn(ctx)(err)
 	}
 
 	switch err {

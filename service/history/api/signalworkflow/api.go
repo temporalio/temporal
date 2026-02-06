@@ -44,7 +44,7 @@ func Invoke(
 				}, nil
 			}
 
-			releaseFn := workflowLease.GetReleaseFn()
+			releaseFn := workflowLease.GetReleaseFn(ctx)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent
 				// clearing and reloading mutable state

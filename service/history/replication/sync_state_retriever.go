@@ -126,7 +126,7 @@ func (s *SyncStateRetrieverImpl) GetSyncWorkflowStateArtifact(
 		return nil, err
 	}
 	mutableState := wfLease.GetMutableState()
-	releaseFunc := wfLease.GetReleaseFn()
+	releaseFunc := wfLease.GetReleaseFn(ctx)
 
 	defer func() {
 		if releaseFunc != nil {

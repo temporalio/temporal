@@ -46,7 +46,7 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 
-			releaseFn := workflowLease.GetReleaseFn()
+			releaseFn := workflowLease.GetReleaseFn(ctx)
 			// Make sure the workflow is not closed.
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// in-memory mutable state is still clean, release the lock with nil error to prevent

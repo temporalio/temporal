@@ -46,7 +46,7 @@ func verifyChildExecution(
 	if err != nil {
 		return nil, nil, err
 	}
-	defer func() { workflowLease.GetReleaseFn()(retError) }()
+	defer func() { workflowLease.GetReleaseFn(ctx)(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&

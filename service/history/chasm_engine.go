@@ -200,7 +200,7 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, err
 	}
 	defer func() {
-		executionLease.GetReleaseFn()(retError)
+		executionLease.GetReleaseFn(ctx)(retError)
 	}()
 
 	mutableState := executionLease.GetMutableState()
@@ -256,7 +256,7 @@ func (e *ChasmEngine) ReadComponent(
 	defer func() {
 		// Always release the lease with nil error since this is a read only operation
 		// So even if it fails, we don't need to clear and reload mutable state.
-		executionLease.GetReleaseFn()(nil)
+		executionLease.GetReleaseFn(ctx)(nil)
 	}()
 
 	chasmTree, ok := executionLease.GetMutableState().ChasmTree().(*chasm.Node)
@@ -310,7 +310,7 @@ func (e *ChasmEngine) PollComponent(
 		if err != nil {
 			return nil, err
 		}
-		defer executionLease.GetReleaseFn()(nil) //nolint:revive
+		defer executionLease.GetReleaseFn(ctx)(nil) //nolint:revive
 
 		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 		if err != nil {
@@ -765,7 +765,7 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	if predicateErr != nil {
-		executionLease.GetReleaseFn()(nil)
+		executionLease.GetReleaseFn(ctx)(nil)
 		return nil, nil, predicateErr
 	}
 
@@ -799,12 +799,12 @@ func (e *ChasmEngine) getExecutionLease(
 				tag.Error(err),
 			)
 
-			executionLease.GetReleaseFn()(nil)
+			executionLease.GetReleaseFn(ctx)(nil)
 			return nil, nil, serviceerror.NewUnavailablef("stale state, please retry")
 		}
 
 		// Stale reference case is already handled above.
-		executionLease.GetReleaseFn()(nil)
+		executionLease.GetReleaseFn(ctx)(nil)
 		return nil, nil, softassert.UnexpectedInternalErr(
 			logger,
 			"Unexpected stale reference in final execution staleness check",

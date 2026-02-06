@@ -42,7 +42,7 @@ type (
 	mockWorkflowLeaseCtx struct {
 		api.WorkflowLease
 		GetContextFn   func() historyi.WorkflowContext
-		GetReleaseFnFn func() historyi.ReleaseWorkflowContextFunc
+		GetReleaseFnFn func(context.Context) historyi.ReleaseWorkflowContextFunc
 	}
 
 	mockReg struct {
@@ -68,8 +68,8 @@ func (m mockWFConsistencyChecker) GetWorkflowLease(
 	return m.GetWorkflowContextFunc(ctx, clock, wfKey, prio)
 }
 
-func (m mockWorkflowLeaseCtx) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
-	return m.GetReleaseFnFn()
+func (m mockWorkflowLeaseCtx) GetReleaseFn(ctx context.Context) historyi.ReleaseWorkflowContextFunc {
+	return m.GetReleaseFnFn(ctx)
 }
 
 func (m mockWorkflowLeaseCtx) GetContext() historyi.WorkflowContext {
@@ -94,7 +94,7 @@ func TestPollOutcome(t *testing.T) {
 	wfCtx.EXPECT().UpdateRegistry(gomock.Any()).Return(reg).AnyTimes()
 
 	apiCtx := mockWorkflowLeaseCtx{
-		GetReleaseFnFn: func() historyi.ReleaseWorkflowContextFunc { return func(error) {} },
+		GetReleaseFnFn: func(context.Context) historyi.ReleaseWorkflowContextFunc { return func(error) {} },
 		GetContextFn: func() historyi.WorkflowContext {
 			return wfCtx
 		},
