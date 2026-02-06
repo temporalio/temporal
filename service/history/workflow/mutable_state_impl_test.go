@@ -2228,6 +2228,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 		nil,
+		false,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2286,6 +2287,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 		nil,
+		false,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
