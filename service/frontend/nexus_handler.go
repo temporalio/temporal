@@ -46,7 +46,7 @@ const (
 
 var errNexusEndpointRateLimitBusy = &serviceerror.ResourceExhausted{
 	Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
-	Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+	Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	Message: "nexus endpoint rate limit exceeded",
 }
 
