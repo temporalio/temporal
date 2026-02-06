@@ -22,7 +22,7 @@ import (
 )
 
 type TransientWorkflowTaskHistorySuite struct {
-	testcore.FunctionalTestBase
+	testcore.FunctionalTestBase //nolint:forbidigo // Temporary usage until migration to testcore.NewEnv(t)
 }
 
 func TestTransientWorkflowTaskHistorySuite(t *testing.T) {
