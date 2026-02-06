@@ -1704,7 +1704,6 @@ func (s *Versioning3Suite) TestEagerActivity() {
 	// The first WFT asks for an activity to starts and get it eagerly in the WFT completion
 	// response. The activity is processed without issues and wf completes.
 
-	s.OverrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
 	tv := testvars.New(s)
 
 	if s.useNewDeploymentData {
