@@ -154,7 +154,6 @@ jobs:
 
           MATRIX="[]"
 
-          # Add 5 jobs per DB: shard1-3 (sharded functional tests), ndc, xdc
           add_full_jobs() {
             local db=$1
             local config
