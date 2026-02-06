@@ -7,9 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	enums "go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	persistence "go.temporal.io/server/api/persistence/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -56,7 +54,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 
 	// record validator calls
 	mockValidator := NewMocktaskValidator(s.controller)
-	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(func(task *persistence.AllocatedTaskInfo, taskType enums.TaskQueueType) bool {
+	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(func(task *persistencespb.AllocatedTaskInfo, taskType enumspb.TaskQueueType) bool {
 		validatorValidatedTask.Store(true)
 		return true // task is valid
 	})
