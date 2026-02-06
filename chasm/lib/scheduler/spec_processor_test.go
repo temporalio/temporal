@@ -60,7 +60,8 @@ func newTestSpecProcessor(ctrl *gomock.Controller) *testSpecProcessor {
 
 func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
 	end := time.Now()
 	start := end.Add(-defaultInterval)
 
@@ -93,7 +94,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_LimitedActions() {
 
 func (s *specProcessorSuite) TestProcessTimeRange_UpdateAfterHighWatermark() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
 
 	// Below window would give 6 actions, but the update time halves that.
 	base := time.Now()
@@ -120,7 +122,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter(
 		}},
 		Jitter: durationpb.New(1 * time.Hour),
 	}
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	s.NoError(err)
 
 	// Generate a start with a long jitter period.
 	base := time.Date(2025, 03, 31, 1, 0, 0, 0, time.UTC)
@@ -145,7 +148,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_UpdateBetweenNominalAndJitter(
 
 func (s *specProcessorSuite) TestProcessTimeRange_CatchupWindow() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
 
 	// When an action would fall outside of the schedule's catchup window, it should
 	// be dropped.
@@ -159,7 +163,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_CatchupWindow() {
 
 func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
@@ -176,7 +181,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_Limit() {
 
 func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
@@ -204,7 +210,8 @@ func (s *specProcessorSuite) TestProcessTimeRange_OverlapPolicy() {
 
 func (s *specProcessorSuite) TestProcessTimeRange_Basic() {
 	ctx := chasm.NewMutableContext(context.Background(), s.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
 	end := time.Now()
 	start := end.Add(-defaultInterval * 5)
 
