@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -123,6 +124,10 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if activity.ShouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	actionFn := func(
 		ctx context.Context,
 		wfContext historyi.WorkflowContext,

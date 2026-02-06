@@ -6,6 +6,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const archetypeID = 3332429922
+
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
 }
@@ -92,4 +94,11 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			l.heartbeatTimeoutTaskExecutor,
 		),
 	}
+}
+
+// ShouldDropStandaloneActivityTask indicates whether a task should be dropped based on whether it is a standalone
+// activity task. This is used in the event of server downgrade from a version where standalone activities was supported,
+// so that such tasks won't block queue processing.
+func ShouldDropStandaloneActivityTask(archID uint32) bool {
+	return archID == archetypeID
 }

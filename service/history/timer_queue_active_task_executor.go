@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -980,6 +981,10 @@ func (t *timerQueueActiveTaskExecutor) executeChasmSideEffectTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if activity.ShouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -1020,6 +1025,10 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
+	if activity.ShouldDropStandaloneActivityTask(task.ArchetypeID) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

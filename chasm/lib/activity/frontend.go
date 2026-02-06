@@ -21,7 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const StandaloneActivityDisabledError = "Standalone activity is disabled"
+var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone activity is disabled")
 
 type FrontendHandler interface {
 	StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error)
@@ -67,11 +67,6 @@ func NewFrontendHandler(
 	}
 }
 
-// IsStandaloneActivityEnabled checks if standalone activities are enabled for the given namespace
-func (h *frontendHandler) IsStandaloneActivityEnabled(namespaceName string) bool {
-	return h.config.Enabled(namespaceName)
-}
-
 // StartActivityExecution initiates a standalone activity execution in the specified namespace.
 // It validates the request, resolves the namespace ID, applies default configurations,
 // and forwards the request to the activity service handler.
@@ -82,9 +77,7 @@ func (h *frontendHandler) IsStandaloneActivityEnabled(namespaceName string) bool
 // before mutation to preserve the original for retries.
 // 3. Sends the request to the history activity service.
 func (h *frontendHandler) StartActivityExecution(ctx context.Context, req *workflowservice.StartActivityExecutionRequest) (*workflowservice.StartActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
@@ -110,9 +103,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 	ctx context.Context,
 	req *workflowservice.DescribeActivityExecutionRequest,
 ) (*workflowservice.DescribeActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	err := ValidateDescribeActivityExecutionRequest(
 		req,
@@ -139,9 +130,7 @@ func (h *frontendHandler) PollActivityExecution(
 	ctx context.Context,
 	req *workflowservice.PollActivityExecutionRequest,
 ) (*workflowservice.PollActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	err := ValidatePollActivityExecutionRequest(
 		req,
@@ -166,9 +155,7 @@ func (h *frontendHandler) ListActivityExecutions(
 	ctx context.Context,
 	req *workflowservice.ListActivityExecutionsRequest,
 ) (*workflowservice.ListActivityExecutionsResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
@@ -224,9 +211,7 @@ func (h *frontendHandler) CountActivityExecutions(
 	ctx context.Context,
 	req *workflowservice.CountActivityExecutionsRequest,
 ) (*workflowservice.CountActivityExecutionsResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
@@ -261,9 +246,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,
 	req *workflowservice.TerminateActivityExecutionRequest,
 ) (*workflowservice.TerminateActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	namespaceName := req.GetNamespace()
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
@@ -309,9 +292,7 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 	ctx context.Context,
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 ) (*workflowservice.RequestCancelActivityExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
-		return nil, serviceerror.NewUnavailable(StandaloneActivityDisabledError)
-	}
+	return nil, ErrStandaloneActivityDisabled //nolint:all
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
