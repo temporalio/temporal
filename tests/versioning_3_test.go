@@ -2336,23 +2336,43 @@ func (s *Versioning3Suite) TestUnpinnedCaN_upgradeOnCaN() {
 }
 
 // TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT() {
-	s.testPinnedCaNUpgradeOnCaN(true, false, false, false)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, false, true)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT() {
-	s.testPinnedCaNUpgradeOnCaN(false, true, false, false)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, true, false, false, true)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT() {
-	s.testPinnedCaNUpgradeOnCaN(false, false, true, false)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, false, true, false, true)
 }
 
 // TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
-func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride() {
-	s.testPinnedCaNUpgradeOnCaN(true, false, false, true)
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride_WithSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, true, true)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT tests ContinueAsNew with a speculative WFT triggered by update.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_SpeculativeWFT_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, true, false, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_TransientWFT tests ContinueAsNew with a transient WFT (failed + retry).
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_TransientWFT_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(false, false, true, false, false)
+}
+
+// TestPinnedCaN_UpgradeOnCaN_NormalWFT tests ContinueAsNew with a normal WFT triggered by signal.
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeOnCaN_NormalWFT_PinnedOverride_NoSuggest() {
+	s.testPinnedCaNUpgradeOnCaN(true, false, false, true, false)
 }
 
 func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb.VersioningOverride {
@@ -2376,7 +2396,10 @@ func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb
 // 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
-func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride bool) {
+func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSuggestCaNOnNewTargetVersion bool) {
+	if enableSuggestCaNOnNewTargetVersion {
+		s.OverrideDynamicConfig(dynamicconfig.EnableSuggestCaNOnNewTargetVersion, true)
+	}
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
@@ -2438,20 +2461,28 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					historyEvents = s.GetHistory(s.Namespace().String(), execution)
 				}
 
-				// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
 				wfTaskStartedEvents := make([]*historypb.HistoryEvent, 0)
 				for _, event := range historyEvents { // get events
 					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
-				for i, event := range wfTaskStartedEvents {
-					attr := event.GetWorkflowTaskStartedEventAttributes()
-					if i == len(wfTaskStartedEvents)-1 { // last event
-						s.True(attr.GetSuggestContinueAsNew())
-						s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
-					} else { // earlier events
+				if enableSuggestCaNOnNewTargetVersion {
+					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
+					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
+					for i, event := range wfTaskStartedEvents {
+						attr := event.GetWorkflowTaskStartedEventAttributes()
+						if i == len(wfTaskStartedEvents)-1 { // last event
+							s.True(attr.GetSuggestContinueAsNew())
+							s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
+						} else { // earlier events
+							s.False(attr.GetSuggestContinueAsNew())
+							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						}
+					}
+				} else {
+					for _, event := range wfTaskStartedEvents {
+						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
 						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 					}
