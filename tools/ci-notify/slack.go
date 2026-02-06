@@ -251,7 +251,7 @@ func BuildSuccessReportMessage(report *SuccessReport) *SlackMessage {
 	}
 
 	return &SlackMessage{
-		Text: fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch),
+		Text:   fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch),
 		Blocks: blocks,
 	}
 }
