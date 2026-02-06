@@ -180,6 +180,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			}
 		}
 
+		if len(request.Commands) == 0 && len(request.Messages) > 0 {
+			// Context metadata is automatically set during mutable state transaction close. For RespondWorkflowTaskCompleted
+			// with only `update.Rejection` messages, the transaction is never closed. We explicitly call SetContextMetadata
+			// here to ensure readonly messages have workflow metadata populated in the context.
+			workflowLease.GetMutableState().SetContextMetadata(ctx)
+		}
+
 		workflowLease.GetReleaseFn()(errForRelease)
 	}()
 
