@@ -675,7 +675,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 				SuggestContinueAsNew:        false,
 				SuggestContinueAsNewReasons: nil,
 				HistorySizeBytes:            123678,
-				
+
 				TargetWorkerDeploymentVersionChanged: true,
 			},
 		},
