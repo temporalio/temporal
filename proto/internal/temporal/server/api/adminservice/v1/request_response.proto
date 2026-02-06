@@ -641,3 +641,33 @@ message StartAdminBatchOperationResponse {
 // This regenerates all pending tasks for each execution.
 message BatchOperationRefreshTasks {
 }
+
+
+message MigrateScheduleRequest {
+    // Target scheduler implementation for migration.
+    enum SchedulerTarget {
+        SCHEDULER_TARGET_UNSPECIFIED = 0;
+        // Migrate to CHASM-backed scheduler (V2).
+        SCHEDULER_TARGET_CHASM = 1;
+        // Migrate to workflow-backed scheduler (V1).
+        SCHEDULER_TARGET_WORKFLOW = 2;
+    }
+
+    // Namespace name.
+    string namespace = 1;
+
+    // Schedule ID.
+    string schedule_id = 2;
+
+    // Target scheduler implementation.
+    SchedulerTarget target = 3;
+
+    // Identity of the caller.
+    string identity = 4;
+
+    // Used for request deduplication.
+    string request_id = 5;
+}
+
+message MigrateScheduleResponse {}
+
