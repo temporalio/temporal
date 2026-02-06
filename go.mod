@@ -3,6 +3,7 @@ module go.temporal.io/server
 go 1.25.5
 
 retract (
+	v1.30.0
 	v1.26.1 // Contains retractions only.
 	v1.26.0 // Published accidentally.
 )
