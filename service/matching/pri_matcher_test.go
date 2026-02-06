@@ -96,7 +96,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 	select {
 	case res := <-completionCalled:
 		// error should be errReprocessTask
-		s.ErrorIs(res.err(), errReprocessTask)
+		s.ErrorIs(res.err(), errReprocessTask) //nolint:testifylint
 	case <-time.After(2 * time.Second):
 		s.Fail("Timeout waiting for validator to process task")
 	}
