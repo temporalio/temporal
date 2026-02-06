@@ -419,12 +419,16 @@ func NewGlobalNamespaceRateLimiter(
 func NewNexusEndpointRateLimiter(
 	memberCounter calculator.MemberCounter,
 	globalRPS dynamicconfig.TypedPropertyFnWithDestinationFilter[int],
+	logger log.Logger,
 ) quotas.RequestRateLimiter {
-	rateFn := calculator.ClusterAwareNamespaceQuotaCalculator{
-		MemberCounter:    memberCounter,
-		PerInstanceQuota: func(string) int { return 0 },
-		GlobalQuota:      func(endpointName string) int { return globalRPS("", endpointName) },
-	}.GetQuota
+	rateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    memberCounter,
+			PerInstanceQuota: func(string) int { return 0 },
+			GlobalQuota:      func(endpointName string) int { return globalRPS("", endpointName) },
+		},
+		logger,
+	).GetQuota
 
 	return quotas.NewMapRequestRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {

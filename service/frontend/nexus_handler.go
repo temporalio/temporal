@@ -234,11 +234,6 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_rate_limited"))
-		return commonnexus.ConvertGRPCError(err, true)
-	}
-
 	if c.endpointName != "" && c.endpointRateLimiter != nil {
 		if !c.endpointRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 			c.apiName,
@@ -251,6 +246,11 @@ func (c *operationContext) interceptRequest(
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("endpoint_rate_limited"))
 			return commonnexus.ConvertGRPCError(errNexusEndpointRateLimitBusy, true)
 		}
+	}
+
+	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_rate_limited"))
+		return commonnexus.ConvertGRPCError(err, true)
 	}
 
 	if err := c.rateLimitInterceptor.Allow(c.apiName, header); err != nil {
