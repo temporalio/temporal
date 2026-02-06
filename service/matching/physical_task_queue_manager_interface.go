@@ -20,6 +20,9 @@ type (
 		SetupDraining()
 		// FinishedDraining is called by a draining backlog manager when it has fully drained.
 		FinishedDraining()
+		// ReprocessRedirectedTasksAfterStop sends tasks in the matcher that came from other
+		// physical queues back to be reprocessed. Note this is called after Stop.
+		ReprocessRedirectedTasksAfterStop()
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers

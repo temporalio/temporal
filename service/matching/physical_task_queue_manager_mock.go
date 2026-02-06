@@ -280,6 +280,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
+// ReprocessRedirectedTasksAfterStop mocks base method.
+func (m *MockphysicalTaskQueueManager) ReprocessRedirectedTasksAfterStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReprocessRedirectedTasksAfterStop")
+}
+
+// ReprocessRedirectedTasksAfterStop indicates an expected call of ReprocessRedirectedTasksAfterStop.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) ReprocessRedirectedTasksAfterStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReprocessRedirectedTasksAfterStop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ReprocessRedirectedTasksAfterStop))
+}
+
 // SetupDraining mocks base method.
 func (m *MockphysicalTaskQueueManager) SetupDraining() {
 	m.ctrl.T.Helper()

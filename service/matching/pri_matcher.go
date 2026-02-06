@@ -153,6 +153,13 @@ func (tm *priTaskMatcher) Start() {
 
 func (tm *priTaskMatcher) Stop() {
 	tm.priorityBacklogForwarders.Sync(nil, nil)
+
+	// When we're stopping, sync tasks and pollers will be cancelled by tqCtx being canceled.
+	// Backlog tasks held in this matcher will be dropped. That's okay if we're stopping the
+	// whole partition, or for tasks that came from this partition's readers. The exception is
+	// backlog tasks that were redirected from another versioned queue (or the default). To
+	// handle those, the caller of Stop should also call ReprocessRedirectedTasksAfterStop
+	// when applicable.
 }
 
 // TODO(pri): access to retrier is not synchronized
@@ -535,6 +542,25 @@ func (tm *priTaskMatcher) ReprocessAllTasks() {
 		if !task.isSyncMatchTask() {
 			task.finish(errReprocessTask, true)
 		}
+	}
+}
+
+// ReprocessRedirectedTasksAfterStop can be called after Stop to send back tasks that were
+// redirected to this matcher from another backlog.
+func (tm *priTaskMatcher) ReprocessRedirectedTasksAfterStop() {
+	tasks := tm.data.ReprocessTasks(func(task *internalTask) (shouldRemove bool) {
+		return task.redirectedFromBacklog
+	})
+	if len(tasks) > 0 {
+		// we can do this async, don't need to block whatever wanted to unload
+		go func() {
+			for _, task := range tasks {
+				// these should all be from backlog (not sync-match) but check again to be sure
+				if !task.isSyncMatchTask() {
+					task.finish(errReprocessTask, true)
+				}
+			}
+		}()
 	}
 }
 

@@ -1398,14 +1398,18 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 
 	pm.versionedQueuesLock.Lock()
 	foundDbq, ok := pm.versionedQueues[version]
-	if !ok || foundDbq != unloadedDbq {
-		pm.versionedQueuesLock.Unlock()
-		unloadedDbq.Stop(unloadCause)
-		return
+	if ok && foundDbq == unloadedDbq {
+		delete(pm.versionedQueues, version)
 	}
-	delete(pm.versionedQueues, version)
 	pm.versionedQueuesLock.Unlock()
+
 	unloadedDbq.Stop(unloadCause)
+
+	// Here we're unloading a versioned queue but not unloading the whole partition. With new
+	// matcher, the matcher may be holding tasks that came from other versioned queues
+	// (including the default queue). We need to ensure we send those tasks back to get
+	// reprocessed (which may end up reloading a new instance of this queue).
+	unloadedDbq.ReprocessRedirectedTasksAfterStop()
 }
 
 func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCause) {

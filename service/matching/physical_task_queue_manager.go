@@ -436,6 +436,13 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }
 
+func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
+	if c.priMatcher == nil {
+		return
+	}
+	c.priMatcher.ReprocessRedirectedTasksAfterStop()
+}
+
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	c.liveness.markAlive()
 	return c.backlogMgr.SpoolTask(taskInfo)
