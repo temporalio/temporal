@@ -34,7 +34,7 @@ Complete a Nexus operation via callback.
 
 # Nexus Environment Configurations
 
-Nexus is disabled by default in releases prior to `1.30.X`, with the `1.30.X` release Nexus will be enabled by default.
+Nexus is enabled by default in server version `1.26.0` or newer.
 
 > NOTE: Nexus is only supported in single cluster setups due to endpoint registry replication not being implemented.
 
@@ -44,7 +44,9 @@ To enable Nexus in your deployment:
 
 > NOTE: Replace `$PUBLIC_URL` with a URL value that is accessible to external callers or internally within the cluster.
 
-1. Ensure that the server's [static configuration file](https://docs.temporal.io/references/configuration) enables the HTTP API.
+1. Ensure that the server's [static configuration file](https://docs.temporal.io/references/configuration) enables the
+   HTTP API. It is on by default in all of the Temporal provided configurations, including the default configuration
+   for the docker image and in the helm-chart.
 
     ```yaml
     services:
@@ -63,17 +65,18 @@ To enable Nexus in your deployment:
 
 2. Configure Nexus settings in the [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
 
-- 2a. Since version 1.30.X, Nexus is enabled by default, just set SystemCallbackURL for Nexus via [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
+- 2a. Since version 1.30.0, only turn on using the system callback URL (`temporal://system`), this flag will go away in
+the 1.31.0 release and will be made the default.
 
     ```yaml
-   component.nexusoperations.useSystemCallbackURL: true
+   component.nexusoperations.useSystemCallbackURL:
+    - value: true
    ```
 
-- 2b. Prior to version 1.30.X, you must enable Nexus through , set the public callback URL, and set the allowed callback addresses.
+- 2b. Prior to version 1.30.0, you must set a public callback URL, and allowed callback addresses. These configurations
+  are also required for calling **experimental** external endpoint targets.
 
     ```yaml
-    system.enableNexus:
-      - value: true
     component.nexusoperations.callback.endpoint.template:
       # The URL must be publicly accessible if the callback is meant to be called by external services.
       # When using Nexus for cross namespace calls, the URL's host is irrelevant as the address is resolved using
@@ -85,8 +88,8 @@ To enable Nexus in your deployment:
       # For production, restrict allowed hosts and set AllowInsecure to false
       # whenever HTTPS/TLS is supported. Allowing HTTP increases MITM and data exposure risk.
      - value:
-         - Pattern: "*" # Update to restrict allowed callers, e.g. "https://$EXAMPLE_URL\\.example\\.com(:1234)?/.*$"
-           AllowInsecure: true # In production, set to false when HTTPS/TLS is supported. 
+         - Pattern: "*" # Update to restrict allowed callers, e.g. "$PUBLIC_URL:7243/*"
+           AllowInsecure: true # In production, set to false and ensure traffic is HTTPS/TLS encrypted
     ```
 
 
@@ -98,8 +101,9 @@ the Outbound Queue Processor](#disabling-the-outbound-queue-processor) for shutt
 
 ## Downgrading to a Pre-Nexus Server Release
 
-In order to safely downgrade the server version to `1.24.x` or earlier, first disable nexus via dynamic config
-(`system.enableNexus`). This ensures that no unrelease Nexus functionality is triggered in these versions.
+In order to safely downgrade the server version to `1.24.x`, first disable nexus via dynamic config
+(`system.enableNexus`). This ensures that no experimental functionality while Nexus was still being developed is
+triggered.
 
 After disabling Nexus, outbound tasks currently scheduled will not be run and timer tasks will immediately go to the
 [DLQ](../admin/dlq.md) without any retries. Workflows with pending Nexus operations will be stuck.
