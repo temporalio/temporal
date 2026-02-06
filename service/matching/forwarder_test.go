@@ -362,7 +362,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKe
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
 		workerInstanceKey: workerInstanceKey,
 	})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
