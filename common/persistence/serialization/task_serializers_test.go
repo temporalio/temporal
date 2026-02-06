@@ -564,6 +564,21 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 	s.Equal(task, deserializedTask)
 }
 
+func (s *taskSerializerSuite) TestActivityCancelControlTask() {
+	task := &tasks.ActivityCancelControlTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, 0).UTC(),
+		TaskID:              rand.Int63(),
+		Version:             rand.Int63(),
+		ScheduledEventIDs:   []int64{rand.Int63(), rand.Int63(), rand.Int63()},
+		WorkerInstanceKey:   uuid.New().String(),
+	}
+	s.Assert().Equal(tasks.CategoryTransfer, task.GetCategory())
+	s.Assert().Equal(enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_CANCEL_CONTROL, task.GetType())
+
+	s.assertEqualTasks(task)
+}
+
 func (s *taskSerializerSuite) assertEqualTasksWithOpts(
 	task tasks.Task,
 	cmpFunc func(task, deserializedTask tasks.Task),
