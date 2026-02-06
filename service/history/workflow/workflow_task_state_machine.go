@@ -503,6 +503,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		}
 	}
 	// emit metric
+	if targetDeploymentVersionChanged {
+		metrics.WorkflowTargetVersionChangedCount.With(m.metricsHandler.WithTags(
+			metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
+			metrics.VersioningBehaviorTag(m.ms.GetEffectiveVersioningBehavior()),
+		)).Record(1)
+	}
 	if suggestContinueAsNew {
 		metrics.WorkflowSuggestContinueAsNewCount.With(m.metricsHandler.WithTags(
 			metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),

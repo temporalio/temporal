@@ -1334,6 +1334,7 @@ var (
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
+	WorkflowTargetVersionChangedCount                 = NewCounterDef("workflow_target_version_changed_count")
 
 	// Continue-as-new
 	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")
