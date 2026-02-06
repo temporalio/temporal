@@ -112,9 +112,9 @@ func transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Tas
 
 func transferCancelActivityNexusTaskToProto(task *tasks.CancelActivityNexusTask) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
-		NamespaceId:    task.WorkflowKey.NamespaceID,
-		WorkflowId:     task.WorkflowKey.WorkflowID,
-		RunId:          task.WorkflowKey.RunID,
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
 		TaskId:         task.TaskID,
 		TaskType:       task.GetType(),
 		Version:        task.Version,
