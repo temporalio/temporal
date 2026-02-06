@@ -82,8 +82,8 @@ func runProcessBufferTestCase(t *testing.T, env *testEnv, c *processBufferTestCa
 	}
 	require.Equal(t, c.ExpectedRunningWorkflows, runningCount)
 
-	require.Equal(t, c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
-	require.Equal(t, c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
+	require.Len(t, invoker.TerminateWorkflows, c.ExpectedTerminateWorkflows)
+	require.Len(t, invoker.CancelWorkflows, c.ExpectedCancelWorkflows)
 	require.Equal(t, c.ExpectedOverlapSkipped, env.Scheduler.Info.OverlapSkipped)
 	require.Equal(t, c.ExpectedMissedCatchupWindow, env.Scheduler.Info.MissedCatchupWindow)
 
@@ -129,9 +129,9 @@ func TestProcessBufferTask_AllowAll(t *testing.T) {
 		ExpectedBufferedStarts: 3,
 		ExpectedOverlapSkipped: 0,
 		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
-			require.Equal(t, 3, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			require.Len(t, util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
-			})))
+			}), 3)
 		},
 	})
 }
@@ -201,9 +201,9 @@ func TestProcessBufferTask_BufferOne(t *testing.T) {
 		ExpectedOverlapSkipped: 1,
 		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
 			// Only one start should be set for execution (Attempt > 0).
-			require.Equal(t, 1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			require.Len(t, util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
-			})))
+			}), 1)
 		},
 	})
 }
@@ -273,9 +273,9 @@ func TestProcessBufferTask_BackingOffReady(t *testing.T) {
 		ExpectedBufferedStarts: 1,
 		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
 			// The start should be ready for execution (Attempt > 0).
-			require.Equal(t, 1, len(util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+			require.Len(t, util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 				return start.Attempt > 0
-			})))
+			}), 1)
 		},
 	})
 }

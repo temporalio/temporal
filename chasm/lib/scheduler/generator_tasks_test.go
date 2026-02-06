@@ -83,7 +83,7 @@ func TestGeneratorTask_ExecuteBufferTask_Basic(t *testing.T) {
 
 	// We expect 5 buffered starts.
 	invoker := sched.Invoker.Get(ctx)
-	require.Equal(t, 5, len(invoker.BufferedStarts))
+	require.Len(t, invoker.BufferedStarts, 5)
 
 	// Validate RequestId -> WorkflowId mapping.
 	for _, start := range invoker.BufferedStarts {

@@ -60,7 +60,7 @@ func TestProcessTimeRange_LimitedActions(t *testing.T) {
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 1)
 
 	// When a schedule has an action limit that has been exceeded, we don't bother
 	// buffering additional actions.
@@ -68,13 +68,13 @@ func TestProcessTimeRange_LimitedActions(t *testing.T) {
 
 	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 0, len(res.BufferedStarts))
+	require.Empty(t, res.BufferedStarts)
 
 	// Manual starts should always be allowed.
 	backfillID := "backfill"
 	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), backfillID, true, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 1)
 	bufferedStart := res.BufferedStarts[0]
 	require.True(t, bufferedStart.Manual)
 	require.Contains(t, bufferedStart.RequestId, backfillID)
@@ -97,7 +97,7 @@ func TestProcessTimeRange_UpdateAfterHighWatermark(t *testing.T) {
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 3, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 3)
 }
 
 // Tests that an update between a nominal time and jittered time for a start, that doesn't
@@ -128,7 +128,7 @@ func TestProcessTimeRange_UpdateBetweenNominalAndJitter(t *testing.T) {
 	// A single start should have been buffered.
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 1)
 
 	// Validates the test case.
 	actualTime := res.BufferedStarts[0].GetActualTime().AsTime()
@@ -150,7 +150,7 @@ func TestProcessTimeRange_CatchupWindow(t *testing.T) {
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 5)
 }
 
 func TestProcessTimeRange_Limit(t *testing.T) {
@@ -169,7 +169,7 @@ func TestProcessTimeRange_Limit(t *testing.T) {
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, &limit)
 	require.NoError(t, err)
-	require.Equal(t, 2, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 2)
 	require.Equal(t, 0, limit)
 }
 
@@ -187,7 +187,7 @@ func TestProcessTimeRange_OverlapPolicy(t *testing.T) {
 
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 5)
 	for _, b := range res.BufferedStarts {
 		require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, b.OverlapPolicy)
 	}
@@ -198,7 +198,7 @@ func TestProcessTimeRange_OverlapPolicy(t *testing.T) {
 
 	res, err = processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 5)
 	for _, b := range res.BufferedStarts {
 		require.Equal(t, overlapPolicy, b.OverlapPolicy)
 	}
@@ -216,7 +216,7 @@ func TestProcessTimeRange_Basic(t *testing.T) {
 	// Validate returned BufferedStarts for unique action times and request IDs.
 	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
 	require.NoError(t, err)
-	require.Equal(t, 5, len(res.BufferedStarts))
+	require.Len(t, res.BufferedStarts, 5)
 
 	uniqueTimes := make(map[time.Time]bool)
 	uniqueIDs := make(map[string]bool)

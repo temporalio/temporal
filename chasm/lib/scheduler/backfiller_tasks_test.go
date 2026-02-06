@@ -66,7 +66,7 @@ func runBackfillTestCase(t *testing.T, env *testEnv, c *backfillTestCase) {
 	}
 
 	// Validate BufferedStarts. More detailed validation must be done in the callbacks.
-	require.Equal(t, c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+	require.Len(t, invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
 
 	// Validate RequestId -> WorkflowId mapping.
 	for _, start := range invoker.GetBufferedStarts() {

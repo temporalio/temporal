@@ -104,7 +104,7 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 
 	// Validate the results.
 	// BufferedStarts now includes both pending and running starts (they're kept after starting).
-	require.Equal(t, c.ExpectedBufferedStarts, len(invoker.GetBufferedStarts()))
+	require.Len(t, invoker.GetBufferedStarts(), c.ExpectedBufferedStarts)
 
 	// Count running workflows from BufferedStarts (has RunId but no Completed).
 	runningCount := 0
@@ -115,8 +115,8 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	}
 	require.Equal(t, c.ExpectedRunningWorkflows, runningCount)
 
-	require.Equal(t, c.ExpectedTerminateWorkflows, len(invoker.TerminateWorkflows))
-	require.Equal(t, c.ExpectedCancelWorkflows, len(invoker.CancelWorkflows))
+	require.Len(t, invoker.TerminateWorkflows, c.ExpectedTerminateWorkflows)
+	require.Len(t, invoker.CancelWorkflows, c.ExpectedCancelWorkflows)
 	require.Equal(t, c.ExpectedActionCount, env.Scheduler.Info.ActionCount)
 	require.Equal(t, c.ExpectedOverlapSkipped, env.Scheduler.Info.OverlapSkipped)
 	require.Equal(t, c.ExpectedMissedCatchupWindow, env.Scheduler.Info.MissedCatchupWindow)
