@@ -451,6 +451,7 @@ func Invoke(
 		}
 		historyBlob = nil
 	}
+
 	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
 			History:       history,
