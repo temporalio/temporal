@@ -10,6 +10,7 @@
 package ndc
 
 import (
+	context "context"
 	reflect "reflect"
 
 	interfaces "go.temporal.io/server/service/history/interfaces"
@@ -83,17 +84,17 @@ func (mr *MockWorkflowMockRecorder) GetMutableState() *gomock.Call {
 }
 
 // GetReleaseFn mocks base method.
-func (m *MockWorkflow) GetReleaseFn() interfaces.ReleaseWorkflowContextFunc {
+func (m *MockWorkflow) GetReleaseFn(ctx context.Context) interfaces.ReleaseWorkflowContextFunc {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReleaseFn")
+	ret := m.ctrl.Call(m, "GetReleaseFn", ctx)
 	ret0, _ := ret[0].(interfaces.ReleaseWorkflowContextFunc)
 	return ret0
 }
 
 // GetReleaseFn indicates an expected call of GetReleaseFn.
-func (mr *MockWorkflowMockRecorder) GetReleaseFn() *gomock.Call {
+func (mr *MockWorkflowMockRecorder) GetReleaseFn(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReleaseFn", reflect.TypeOf((*MockWorkflow)(nil).GetReleaseFn))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReleaseFn", reflect.TypeOf((*MockWorkflow)(nil).GetReleaseFn), ctx)
 }
 
 // GetVectorClock mocks base method.

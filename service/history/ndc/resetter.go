@@ -157,7 +157,7 @@ func (r *resetterImpl) getBaseBranchToken(
 	switch err.(type) {
 	case nil:
 		defer func() {
-			baseWorkflow.GetReleaseFn()(retError)
+			baseWorkflow.GetReleaseFn(ctx)(retError)
 		}()
 
 		baseVersionHistories := baseWorkflow.GetMutableState().GetExecutionInfo().GetVersionHistories()

@@ -3,6 +3,7 @@
 package ndc
 
 import (
+	"context"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -21,7 +22,7 @@ type (
 	Workflow interface {
 		GetContext() historyi.WorkflowContext
 		GetMutableState() historyi.MutableState
-		GetReleaseFn() historyi.ReleaseWorkflowContextFunc
+		GetReleaseFn(ctx context.Context) historyi.ReleaseWorkflowContextFunc
 		GetVectorClock() (int64, int64, error)
 
 		HappensAfter(that Workflow) (bool, error)
@@ -63,7 +64,7 @@ func (r *WorkflowImpl) GetMutableState() historyi.MutableState {
 	return r.mutableState
 }
 
-func (r *WorkflowImpl) GetReleaseFn() historyi.ReleaseWorkflowContextFunc {
+func (r *WorkflowImpl) GetReleaseFn(ctx context.Context) historyi.ReleaseWorkflowContextFunc {
 	return r.releaseFn
 }
 

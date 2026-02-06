@@ -68,6 +68,7 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
 
+	s.currentMutableState.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: s.workflowID,

@@ -218,10 +218,10 @@ func (r *transactionMgrImpl) BackfillWorkflow(
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			targetWorkflow.GetReleaseFn()(errPanic)
+			targetWorkflow.GetReleaseFn(ctx)(errPanic)
 			panic(rec)
 		} else {
-			targetWorkflow.GetReleaseFn()(retError)
+			targetWorkflow.GetReleaseFn(ctx)(retError)
 		}
 	}()
 

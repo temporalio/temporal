@@ -528,6 +528,7 @@ func (s *workflowSuite) setupNamespaceRegistry(uc UsecaseConfig) *namespace.Mock
 
 func (s *workflowSuite) setupMutableState(uc UsecaseConfig, ai *persistencespb.ActivityInfo) *historyi.MockMutableState {
 	currentMutableState := historyi.NewMockMutableState(s.controller)
+	currentMutableState.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,

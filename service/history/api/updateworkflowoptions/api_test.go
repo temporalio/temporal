@@ -187,6 +187,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 
 	// mock a mutable state with an existing versioning override
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
+	s.currentMutableState.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,
 		VersioningInfo: &workflowpb.WorkflowExecutionVersioningInfo{

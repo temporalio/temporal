@@ -141,7 +141,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 	}
 	mockBaseWorkflow := NewMockWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
-	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
+	mockBaseWorkflow.EXPECT().GetReleaseFn(gomock.Any()).Return(mockBaseWorkflowReleaseFn)
 
 	s.mockTransactionMgr.EXPECT().LoadWorkflow(
 		ctx,
@@ -222,7 +222,7 @@ func (s *resetterSuite) TestResetWorkflow_Error() {
 	}
 	mockBaseWorkflow := NewMockWorkflow(s.controller)
 	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
-	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
+	mockBaseWorkflow.EXPECT().GetReleaseFn(gomock.Any()).Return(mockBaseWorkflowReleaseFn)
 
 	s.mockTransactionMgr.EXPECT().LoadWorkflow(
 		ctx,

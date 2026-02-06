@@ -131,7 +131,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
-	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn(gomock.Any()).Return(currentReleaseFn).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
 	}).AnyTimes()
@@ -166,7 +166,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 	var tarGetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
-	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
+	resetWorkflow.EXPECT().GetReleaseFn(gomock.Any()).Return(tarGetReleaseFn).AnyTimes()
 
 	resetMutableState.EXPECT().GetCurrentVersion().Return(int64(0)).AnyTimes()
 	resetNewEventsSize := int64(4321)
@@ -222,7 +222,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	var currentReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { currentReleaseCalled = true }
 	currentWorkflow.EXPECT().GetContext().Return(currentContext).AnyTimes()
 	currentWorkflow.EXPECT().GetMutableState().Return(currentMutableState).AnyTimes()
-	currentWorkflow.EXPECT().GetReleaseFn().Return(currentReleaseFn).AnyTimes()
+	currentWorkflow.EXPECT().GetReleaseFn(gomock.Any()).Return(currentReleaseFn).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
 	}).AnyTimes()
@@ -241,7 +241,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	var tarGetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { resetReleaseCalled = true }
 	resetWorkflow.EXPECT().GetContext().Return(resetContext).AnyTimes()
 	resetWorkflow.EXPECT().GetMutableState().Return(resetMutableState).AnyTimes()
-	resetWorkflow.EXPECT().GetReleaseFn().Return(tarGetReleaseFn).AnyTimes()
+	resetWorkflow.EXPECT().GetReleaseFn(gomock.Any()).Return(tarGetReleaseFn).AnyTimes()
 
 	resetSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},

@@ -1,6 +1,7 @@
 package ndc
 
 import (
+	"context"
 	"reflect"
 	"runtime"
 	"testing"
@@ -86,7 +87,7 @@ func (s *workflowSuite) TestGetMethods() {
 	//  link: https://github.com/stretchr/testify/issues/182
 	// this is a hack to compare 2 functions, being the same
 	expectedReleaseFn := runtime.FuncForPC(reflect.ValueOf(wcache.NoopReleaseFn).Pointer()).Name()
-	actualReleaseFn := runtime.FuncForPC(reflect.ValueOf(nDCWorkflow.GetReleaseFn()).Pointer()).Name()
+	actualReleaseFn := runtime.FuncForPC(reflect.ValueOf(nDCWorkflow.GetReleaseFn(context.Background())).Pointer()).Name()
 	s.Equal(expectedReleaseFn, actualReleaseFn)
 	version, clock, err := nDCWorkflow.GetVectorClock()
 	s.NoError(err)

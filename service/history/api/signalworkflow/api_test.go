@@ -71,6 +71,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
+	s.currentMutableState.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.currentMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: tests.WorkflowID,

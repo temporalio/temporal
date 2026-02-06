@@ -285,7 +285,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 
 	// release lock on current workflow, since current cluster maybe the active cluster
 	//  and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
+	currentWorkflow.GetReleaseFn(ctx)(nil)
 	currentWorkflow = nil
 
 	return targetWorkflow.GetContext().UpdateWorkflowExecutionWithNew(
@@ -441,7 +441,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 
 	// release lock on current workflow, since current cluster maybe the active cluster
 	//  and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
+	currentWorkflow.GetReleaseFn(ctx)(nil)
 	currentWorkflow = nil
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
@@ -529,14 +529,15 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) cleanupTransaction(
 	newWorkflow Workflow,
 	err error,
 ) {
+	ctx := context.Background()
 
 	if currentWorkflow != nil {
-		currentWorkflow.GetReleaseFn()(err)
+		currentWorkflow.GetReleaseFn(ctx)(err)
 	}
 	if targetWorkflow != nil {
-		targetWorkflow.GetReleaseFn()(err)
+		targetWorkflow.GetReleaseFn(ctx)(err)
 	}
 	if newWorkflow != nil {
-		newWorkflow.GetReleaseFn()(err)
+		newWorkflow.GetReleaseFn(ctx)(err)
 	}
 }

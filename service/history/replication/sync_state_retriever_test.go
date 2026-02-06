@@ -108,6 +108,7 @@ func (s *syncWorkflowStateSuite) TearDownTest() {
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled() {
 	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -135,6 +136,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_TransitionHistoryDisabled
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents() {
 	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -158,6 +160,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_UnFlushedBufferedEvents()
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnMutation() {
 	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,
@@ -512,6 +515,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			mu := historyi.NewMockMutableState(s.controller)
+			mu.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 			s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 				NamespaceID: s.namespaceID,
 				WorkflowID:  s.execution.WorkflowId,
@@ -551,6 +555,7 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 
 func (s *syncWorkflowStateSuite) TestSyncWorkflowState_NoVersionTransitionProvided_ReturnSnapshot() {
 	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	s.workflowConsistencyChecker.EXPECT().GetChasmLeaseWithConsistencyCheck(gomock.Any(), nil, gomock.Any(), definition.WorkflowKey{
 		NamespaceID: s.namespaceID,
 		WorkflowID:  s.execution.WorkflowId,

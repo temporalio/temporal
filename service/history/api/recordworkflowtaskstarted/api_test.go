@@ -99,6 +99,7 @@ func invoke(t *testing.T, modifyMutableState mutableStateModifier) func() (*hist
 	shardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata).AnyTimes()
 
 	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().SetContextMetadata(gomock.Any()).AnyTimes()
 	modifyMutableState(mutableState) // must come before setting defaults
 	mutableState.EXPECT().GetWorkflowTaskByID(scheduledEventID).Return(&historyi.WorkflowTaskInfo{
 		ScheduledEventID: scheduledEventID,

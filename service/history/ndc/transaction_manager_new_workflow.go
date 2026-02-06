@@ -201,7 +201,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	// release lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
-	currentWorkflow.GetReleaseFn()(nil)
+	currentWorkflow.GetReleaseFn(ctx)(nil)
 	currentWorkflow = nil
 
 	ms := targetWorkflow.GetMutableState()
@@ -341,11 +341,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) cleanupTransaction(
 	targetWorkflow Workflow,
 	err error,
 ) {
+	ctx := context.Background()
 
 	if currentWorkflow != nil {
-		currentWorkflow.GetReleaseFn()(err)
+		currentWorkflow.GetReleaseFn(ctx)(err)
 	}
 	if targetWorkflow != nil {
-		targetWorkflow.GetReleaseFn()(err)
+		targetWorkflow.GetReleaseFn(ctx)(err)
 	}
 }

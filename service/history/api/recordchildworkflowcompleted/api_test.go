@@ -88,10 +88,10 @@ func Test_Recordchildworkflowcompleted_WithForwards(t *testing.T) {
 
 	oldParentWFLease := ndc.NewMockWorkflow(ctrl)
 	oldParentWFLease.EXPECT().GetMutableState().Return(oldParentMutableState) // old parent's mutable state is accesses just once.
-	oldParentWFLease.EXPECT().GetReleaseFn().Return(func(_ error) {})
+	oldParentWFLease.EXPECT().GetReleaseFn(gomock.Any()).Return(func(_ error) {})
 	newParentWFLease := ndc.NewMockWorkflow(ctrl)
 	newParentWFLease.EXPECT().GetMutableState().Return(newParentMutableState).AnyTimes() // new parent's mutable state would be accessed many times.
-	newParentWFLease.EXPECT().GetReleaseFn().Return(func(_ error) {})
+	newParentWFLease.EXPECT().GetReleaseFn(gomock.Any()).Return(func(_ error) {})
 	newParentWFLease.EXPECT().GetContext().Return(mockWFContext)
 
 	consistencyChecker := api.NewMockWorkflowConsistencyChecker(ctrl)
@@ -151,7 +151,7 @@ func Test_Recordchildworkflowcompleted_WithInfiniteForwards(t *testing.T) {
 
 	oldParentWFLease := ndc.NewMockWorkflow(ctrl)
 	oldParentWFLease.EXPECT().GetMutableState().Return(oldParentMutableState).Times(maxResetRedirectCount + 1)
-	oldParentWFLease.EXPECT().GetReleaseFn().Return(func(_ error) {}).Times(maxResetRedirectCount + 1)
+	oldParentWFLease.EXPECT().GetReleaseFn(gomock.Any()).Return(func(_ error) {}).Times(maxResetRedirectCount + 1)
 
 	consistencyChecker := api.NewMockWorkflowConsistencyChecker(ctrl)
 	consistencyChecker.EXPECT().GetWorkflowLeaseWithConsistencyCheck(anyArg, anyArg, anyArg, oldParentWFKey, anyArg).Return(oldParentWFLease, nil).Times(maxResetRedirectCount + 1)
