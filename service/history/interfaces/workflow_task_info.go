@@ -47,9 +47,10 @@ type WorkflowTaskInfo struct {
 	// transient event), otherwise a dynamic config change of the suggestion threshold could
 	// cause the WorkflowTaskStarted event that the worker used to not match the event we saved
 	// in history.
-	SuggestContinueAsNew        bool
-	SuggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason
-	HistorySizeBytes            int64
+	SuggestContinueAsNew                 bool
+	SuggestContinueAsNewReasons          []enumspb.SuggestContinueAsNewReason
+	TargetWorkerDeploymentVersionChanged bool
+	HistorySizeBytes                     int64
 	// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 	// info is to make sure the right redirect counter is used in the WFT started event created later
 	// for a transient/speculative WFT.
