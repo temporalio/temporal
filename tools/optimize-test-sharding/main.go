@@ -1,13 +1,12 @@
 package optimizetestsharding
 
 import (
-	"archive/zip"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
+	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -27,96 +26,63 @@ const (
 
 var testNameRe = regexp.MustCompile(`^(.*?)\s*\(.*\)$`)
 
-func Run() {
+func Main() (string, error) {
 	shards := flag.Int("shards", 0, "Number of shards (required)")
 	tries := flag.Int("tries", 10000, "Number of tries")
-	output := flag.String("output", "", "Write salt to this file instead of stdout")
 	workflow := flag.String("workflow", "", "GitHub Actions workflow name to fetch artifacts from (uses gh CLI)")
 	artifactPattern := flag.String("artifact-pattern", "", "Artifact name pattern for gh run download")
 	runs := flag.Int("runs", 5, "Number of recent successful runs to download")
-	threshold := flag.Float64("threshold", 0.05, "Only update salt if improvement exceeds this fraction (e.g. 0.05 = 5%)")
 	branch := flag.String("branch", "main", "Branch to find successful runs on")
 	event := flag.String("event", "push", "Event type to filter runs by")
 	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, "Usage: "+os.Args[0]+" [options] [FILES...]\n\n")
-		fmt.Fprint(os.Stderr, "Optimizes the salt selection for test sharding.\n\n")
-		fmt.Fprint(os.Stderr, "Provide JUnit XML files as arguments, or use -workflow and -artifact-pattern\n")
-		fmt.Fprint(os.Stderr, "to download them from the latest successful GitHub Actions run via gh CLI.\n\n")
+		log.Printf("Usage: %s [options]", os.Args[0])
+		log.Print("Optimizes the salt selection for test sharding.")
+		log.Print("Uses -workflow and -artifact-pattern to download JUnit XML files")
+		log.Print("from recent successful GitHub Actions runs via gh CLI.")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
 
 	if *shards < 1 {
-		fmt.Fprint(os.Stderr, "Error: -shards is required and must be >= 1\n")
-		os.Exit(1) //nolint:revive // deep-exit: this is the entrypoint
+		return "", errors.New("-shards is required and must be >= 1")
+	}
+	if *workflow == "" || *artifactPattern == "" {
+		return "", errors.New("-workflow and -artifact-pattern are required")
 	}
 
-	var paths []string
-	if flag.NArg() > 0 {
-		paths = flag.Args()
-	} else if *workflow != "" && *artifactPattern != "" {
-		dir, err := downloadArtifacts(*workflow, *artifactPattern, *branch, *event, *runs)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error downloading artifacts: %v\n", err)
-			os.Exit(1) //nolint:revive // deep-exit: this is the entrypoint
-		}
-		defer func() { _ = os.RemoveAll(dir) }()
-		paths = []string{dir}
-	} else {
-		flag.Usage()
-		os.Exit(1) //nolint:revive // deep-exit: this is the entrypoint
-	}
-
-	tmap, err := loadTestData(paths)
+	dir, err := downloadArtifacts(*workflow, *artifactPattern, *branch, *event, *runs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading test data: %v\n", err)
-		os.Exit(1) //nolint:revive // deep-exit: this is the entrypoint
+		return "", fmt.Errorf("downloading artifacts: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+
+	tmap, err := loadTestData(dir)
+	if err != nil {
+		return "", fmt.Errorf("loading test data: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "Loaded %d unique test names\n", len(tmap))
+	log.Printf("Loaded %d unique test names", len(tmap))
 
 	smap := aggregateByLevel(tmap)
-	fmt.Fprintf(os.Stderr, "Aggregated to %d entries for sharding\n", len(smap))
+	log.Printf("Aggregated to %d entries for sharding", len(smap))
 
 	var totalTime float64
 	for _, t := range smap {
 		totalTime += t
 	}
-	fmt.Fprintf(os.Stderr, "Total test time: %.1fs\n", totalTime)
+	log.Printf("Total test time: %.1fs", totalTime)
 
 	bestSalt, bestMax := optimizeShardingSalt(smap, *shards, *tries)
-	fmt.Fprintf(os.Stderr, "Best salt: %s (max shard: %.1fs, ideal: %.1fs)\n",
+	log.Printf("Best salt: %s (max shard: %.1fs, ideal: %.1fs)",
 		bestSalt, bestMax, totalTime/float64(*shards))
 
 	// Log per-shard breakdown for the winning salt.
 	totals := shardTotals(smap, *shards, bestSalt)
 	for i, t := range totals {
-		fmt.Fprintf(os.Stderr, "  shard %d: %.1fs\n", i, t)
+		log.Printf("  shard %d: %.1fs", i, t)
 	}
 
-	if *output != "" {
-		// Read current salt and check if the improvement is meaningful.
-		if current, err := os.ReadFile(*output); err == nil {
-			currentSalt := strings.TrimSpace(string(current))
-			if currentSalt != "" {
-				currentMax := maxShardTime(smap, *shards, currentSalt)
-				improvement := (currentMax - bestMax) / currentMax
-				fmt.Fprintf(os.Stderr, "Current salt: %s (max shard: %.1fs)\n", currentSalt, currentMax)
-				fmt.Fprintf(os.Stderr, "Improvement: %.2f%%\n", improvement*100)
-				if improvement < *threshold {
-					fmt.Fprintf(os.Stderr, "Improvement below threshold (%.0f%%), keeping current salt\n", *threshold*100)
-					return
-				}
-			}
-		}
-		if err := os.WriteFile(*output, []byte(bestSalt), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing output file: %v\n", err)
-			os.Exit(1) //nolint:revive // deep-exit: this is the entrypoint
-		}
-		fmt.Fprintf(os.Stderr, "Wrote %s to %s\n", bestSalt, *output)
-	} else {
-		fmt.Println(bestSalt)
-	}
+	return bestSalt, nil
 }
 
 // downloadArtifacts uses gh CLI to find the latest successful runs and download
@@ -133,7 +99,7 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 	}
 
 	for _, runID := range runIDs {
-		fmt.Fprintf(os.Stderr, "Downloading artifacts from run %s\n", runID)
+		log.Printf("Downloading artifacts from run %s", runID)
 		cmd := exec.Command("gh", "run", "download", runID,
 			"--pattern", artifactPattern,
 			"--dir", filepath.Join(dir, runID))
@@ -179,111 +145,44 @@ func findLatestRuns(workflow, branch, event string, limit int) ([]string, error)
 	return ids, nil
 }
 
-func loadTestData(paths []string) (map[string][]float64, error) {
-	files, err := resolveFiles(paths)
+// loadTestData returns a map of test names to durations in seconds.
+func loadTestData(dir string) (map[string][]float64, error) {
+	var files []string
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(path, ".xml") {
+			files = append(files, path)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 	if len(files) == 0 {
-		return nil, errors.New("no files found")
+		return nil, errors.New("no XML files found")
 	}
-	fmt.Fprintf(os.Stderr, "Found %d XML file(s)\n", len(files))
+	log.Printf("Found %d XML file(s)", len(files))
 
 	tmap := make(map[string][]float64)
 	for _, filename := range files {
-		if strings.HasSuffix(filename, ".zip") {
-			if err := processZip(filename, tmap); err != nil {
-				return nil, fmt.Errorf("processing zip file %s: %w", filename, err)
-			}
-		} else if strings.HasSuffix(filename, ".xml") {
-			if err := processXML(filename, tmap); err != nil {
-				return nil, fmt.Errorf("processing xml file %s: %w", filename, err)
-			}
-		} else {
-			return nil, fmt.Errorf("unknown file type: %s", filename)
+		if err := processJUnitReport(filename, tmap); err != nil {
+			return nil, fmt.Errorf("processing %s: %w", filename, err)
 		}
 	}
-
 	return tmap, nil
 }
 
-// resolveFiles expands glob patterns and walks directories to find XML/ZIP files.
-func resolveFiles(paths []string) ([]string, error) {
-	var globbed []string
-	for _, pattern := range paths {
-		matches, err := filepath.Glob(pattern)
-		if err != nil {
-			return nil, fmt.Errorf("invalid glob pattern %s: %w", pattern, err)
-		}
-		globbed = append(globbed, matches...)
-	}
-
-	var files []string
-	for _, f := range globbed {
-		info, err := os.Stat(f)
-		if err != nil {
-			return nil, err
-		}
-		if info.IsDir() {
-			if err := filepath.Walk(f, func(path string, info os.FileInfo, err error) error {
-				if err != nil {
-					return err
-				}
-				if !info.IsDir() && strings.HasSuffix(path, ".xml") {
-					files = append(files, path)
-				}
-				return nil
-			}); err != nil {
-				return nil, err
-			}
-		} else {
-			files = append(files, f)
-		}
-	}
-	return files, nil
-}
-
-func processZip(filename string, tmap map[string][]float64) error {
-	r, err := zip.OpenReader(filename)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = r.Close() }()
-
-	for _, f := range r.File {
-		if !strings.HasSuffix(f.Name, ".xml") {
-			continue
-		}
-		if err := processZipEntry(f, tmap); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func processZipEntry(f *zip.File, tmap map[string][]float64) error {
-	rc, err := f.Open()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = rc.Close() }()
-	return processXMLReader(rc, tmap)
-}
-
-func processXML(filename string, tmap map[string][]float64) error {
+func processJUnitReport(filename string, tmap map[string][]float64) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = file.Close() }()
 
-	return processXMLReader(file, tmap)
-}
-
-func processXMLReader(reader io.Reader, tmap map[string][]float64) error {
 	var testsuites junit.Testsuites
-	if err := xml.NewDecoder(reader).Decode(&testsuites); err != nil {
+	if err := xml.NewDecoder(file).Decode(&testsuites); err != nil {
 		return err
 	}
 

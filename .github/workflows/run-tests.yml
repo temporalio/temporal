@@ -40,7 +40,7 @@ jobs:
     steps:
       - id: generate_output
         run: |
-          shards=3
+          shards=3     # NOTE: must match shard count in optimize-test-sharding.yml
           timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
 
           # Runner configuration: use 8-core runners for temporalio org, standard runners for forks
@@ -363,6 +363,7 @@ jobs:
     env:
       TEST_TOTAL_SHARDS: ${{ needs.set-up-functional-test.outputs.total_shards }}
       TEST_SHARD_INDEX: ${{ matrix.shard_index }}
+      TEST_SHARD_SALT: ${{ vars.TEST_SHARD_SALT || github.repository_owner != 'temporalio' && '-salt-26' || '' }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
@@ -453,7 +454,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--shard${{matrix.shard_index}}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
