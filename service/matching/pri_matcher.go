@@ -86,6 +86,7 @@ var (
 	// - when userdata changes, on in-mem tasks (may be either sync or local backlog)
 	// This must be an error type that taskReader will treat as transient and re-enqueue the task.
 	errReprocessTask      = serviceerror.NewCanceled("reprocess task")
+	errMatcherStopped     = serviceerror.NewCanceled("matcher stopped")
 	errInternalMatchError = serviceerror.NewInternal("internal matcher error")
 )
 
@@ -152,6 +153,8 @@ func (tm *priTaskMatcher) Start() {
 }
 
 func (tm *priTaskMatcher) Stop() {
+	tm.data.Stop()
+
 	tm.priorityBacklogForwarders.Sync(nil, nil)
 
 	// When we're stopping, sync tasks and pollers will be cancelled by tqCtx being canceled.
@@ -498,11 +501,11 @@ func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask
 	return nil, err
 }
 
-func (tm *priTaskMatcher) AddTask(task *internalTask) {
+func (tm *priTaskMatcher) AddTask(task *internalTask) error {
 	if !task.setRemoveFunc(func() { tm.data.RemoveTask(task) }) {
-		return // handle race where task is evicted from reader before being added
+		return nil // handle race where task is evicted from reader before being added
 	}
-	tm.data.EnqueueTaskNoWait(task)
+	return tm.data.EnqueueTaskNoWait(task)
 }
 
 func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {

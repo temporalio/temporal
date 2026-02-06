@@ -670,8 +670,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		task.finish(nil, false)
 		return nil
 	}
-	syncMatchQueue.AddSpooledTaskToMatcher(task)
-	return nil
+	return syncMatchQueue.AddSpooledTaskToMatcher(task)
 }
 
 func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
