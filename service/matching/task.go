@@ -59,8 +59,11 @@ type (
 		// partition instructed.
 		forwardInfo *taskqueuespb.TaskForwardInfo
 		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
-		// based on forwardInfo.
+		// based on forwardInfo (V2 versioning).
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		// redirectedToDeployment is true if this task was redirected from the default queue to a
+		// deployment queue (V3 versioning).
+		redirectedToDeployment bool
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision

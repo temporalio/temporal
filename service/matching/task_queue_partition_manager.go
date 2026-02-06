@@ -643,7 +643,7 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 	// may have changed after the task was spooled.
 	task.taskDispatchRevisionNumber = taskDispatchRevisionNumber
 
-	// set redirect info if spoolQueue and syncMatchQueue build ids are different
+	// set redirect info if spoolQueue and syncMatchQueue build ids are different (V2 versioning)
 	if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
 		task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
 			AssignedBuildId: assignedBuildId,
@@ -652,6 +652,9 @@ func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
 		// make sure to reset redirectInfo in case it was set in a previous loop cycle
 		task.redirectInfo = nil
 	}
+	// mark if task is being redirected from default queue to a deployment queue (V3 versioning)
+	task.redirectedToDeployment = backlogQueue.version.Deployment() == nil &&
+		syncMatchQueue.QueueKey().Version().Deployment() != nil
 	if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
 		// Backlog queue has changed, spool to the new queue. This should happen rarely: when
 		// activity of pinned workflow was determined independent and sent to the default queue
