@@ -349,6 +349,8 @@ func extractResults(report gtr.Report) testResults {
 				})
 			case gtr.Pass:
 				results.passes = append(results.passes, test.Name)
+			default:
+				// skip other results (e.g., skip, unknown)
 			}
 		}
 	}
