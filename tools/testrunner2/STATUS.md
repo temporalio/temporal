@@ -2,6 +2,11 @@
 
 PR: https://github.com/temporalio/temporal/pull/9160
 
+## Constraint
+
+Under no circumstances do we ever skip over a test in CI. All tests must eventually
+succeed (or we give up after all attempts). Never silently ignore a test.
+
 ## Identified Issues
 
 ### Lint Issues (11 total) — blocks `golangci / All Linters Succeed`
@@ -27,9 +32,28 @@ PR: https://github.com/temporalio/temporal/pull/9160
 ### fmt-imports CI failure
 - [x] Comment indentation was off by one tab level (3 tabs instead of 4).
 
+### Functional Test Timeout (sqlite shards 1-2) — quarantine skip pattern bug
+- [x] `buildRetryPlans` added quarantined parent names (depth 2) to `regularSkip` alongside depth-3 passed tests. `buildPerLevelPattern` dropped shallower names from the pattern, so quarantined parents were NOT actually skipped. Result: regular retry re-ran quarantined subtests, wasting time and causing timeouts.
+  - Failing suites: `TestVersioning3FunctionalSuiteV0`, `TestTaskQueueStats_Classic_Suite`, `TestTaskQueueStats_Pri_Suite`, `TestWorkerDeploymentSuiteV0`
+  - Fix: instead of adding parent names at a shallower depth, add `passedTests + quarantinedTests` (all at leaf depth) to regularSkip. This keeps all skip entries at the same depth, avoiding the per-level pattern bug.
+  - Also removed `collapseForSkip` (which over-skipped by collapsing to parent names — violates the "never skip a test" constraint) and `filterNotByPrefix` (dead code after this fix).
+
+## Current CI Status
+- All linters: **PASS** (golangci, fmt-imports, All Linters Succeed)
+- Unit test: **PASS**
+- Integration test: **PASS**
+- Misc checks: **PASS**
+- All smoke tests: **PASS** (cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx)
+- NDC tests: **PASS** (sqlite, cass_os3)
+- XDC tests: TBD (awaiting re-run)
+- Functional test (sqlite, shards 1-2): **awaiting re-run** after quarantine skip fix
+- Functional test (sqlite, shard 3): TBD
+- Functional test (cass_os3, shards 1-3): TBD
+
 ## Commits
 1. Lint fixes + filterEmitted parent handling + collapseForSkip
 2. Skip list accumulation fix (mergeUnique) — the critical fix for functional test timeouts
 3. Fix comment indentation for fmt-imports CI check
 4. Fix remaining lint issues (panic forbidigo, cognitive complexity)
 5. Fix direct mode timeout: use overall timeout, pass through base args
+6. Fix quarantine skip pattern: use leaf-depth skip entries, remove collapseForSkip
