@@ -673,6 +673,15 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 		plans := buildRetryPlans(passedNames, quarantinedNames)
 		var items []*queueItem
 		for _, p := range plans {
+			// For the regular retry plan (all tests minus skips), use a longer
+			// timeout. The quarantine plan already isolates stuck tests, so the
+			// regular plan only runs non-stuck tests that need more cumulative
+			// time than a single --run-timeout allows (e.g., a suite with 200+
+			// subtests that takes 10-15 min total).
+			if p.tests == nil && len(p.skipTests) > 0 && p.timeout == 0 {
+				p.timeout = r.retryTimeout()
+			}
+
 			switch {
 			case p.tests != nil && p.skipTests != nil:
 				r.log("🔄 scheduling retry: -run %q -skip %q",
@@ -698,9 +707,26 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 	return
 }
 
+// retryTimeout returns an extended timeout for regular retry plans.
+// These plans run all non-stuck tests with a skip list and may need more time
+// than a single --run-timeout window, especially for large suites with many
+// subtests that can't be fully skipped due to Go's per-level -test.skip matching.
+func (r *runner) retryTimeout() time.Duration {
+	t := r.runTimeout * 4
+	if r.timeout > 0 && t > r.timeout {
+		t = r.timeout
+	}
+	return t
+}
+
 // --- compiled mode execConfig ---
 
-func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int) execConfig {
+func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int, timeoutOverride ...time.Duration) execConfig {
+	timeout := r.runTimeout
+	if len(timeoutOverride) > 0 && timeoutOverride[0] > 0 {
+		timeout = timeoutOverride[0]
+	}
+
 	desc := describeUnit(unit, r.groupBy)
 	coverProfile := fmt.Sprintf("%s_run_%d%s",
 		strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
@@ -755,7 +781,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 			if wouldSkipAll(wu.tests, wu.skipTests) {
 				return nil
 			}
-			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt))
+			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt, plan.timeout))
 		},
 	)
 
@@ -766,7 +792,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				pkgDir:       unit.pkg,
 				tests:        unit.tests,
 				skipPattern:  buildTestFilterPattern(unit.skipTests),
-				timeout:      r.runTimeout,
+				timeout:      timeout,
 				coverProfile: coverProfile,
 				extraArgs:    r.testBinaryArgs,
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
@@ -1009,8 +1035,9 @@ func buildRetryUnit(unit workUnit, failedTests []testCase) *workUnit {
 
 // retryPlan describes a single retry invocation in terms of -run/-skip test names.
 type retryPlan struct {
-	tests     []string // tests to -run (nil = all from original set)
-	skipTests []string // tests to -skip
+	tests     []string      // tests to -run (nil = all from original set)
+	skipTests []string      // tests to -skip
+	timeout   time.Duration // override per-test timeout (0 = use default runTimeout)
 }
 
 // buildRetryPlans computes retry plans with quarantine logic.

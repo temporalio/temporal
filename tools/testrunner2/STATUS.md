@@ -38,17 +38,26 @@ succeed (or we give up after all attempts). Never silently ignore a test.
   - Fix: instead of adding parent names at a shallower depth, add `passedTests + quarantinedTests` (all at leaf depth) to regularSkip. This keeps all skip entries at the same depth, avoiding the per-level pattern bug.
   - Also removed `collapseForSkip` (which over-skipped by collapsing to parent names — violates the "never skip a test" constraint) and `filterNotByPrefix` (dead code after this fix).
 
+### Functional Test Timeout (all shards) — cross-product skip limitation
+- [x] Root cause: Go's `-test.skip` matches per-level (split by `/`), creating a cross-product of level-2 and level-3 names. For suites with subtests × permutations (e.g., 30 subtests × 8 permutations = 240 leaf tests), the skip pattern can only skip subtests where ALL permutations passed. Partially-completed subtests must be re-run from scratch, wasting significant retry time.
+  - Failing suites: `TestVersioning3FunctionalSuiteV0`, `TestVersioning3FunctionalSuiteV2`, `TestVersioningFunctionalSuite`, `TestWorkerDeploymentSuiteV0/V2` across all shards and backends
+  - Fix: for regular retry plans (non-quarantine), use `4× --run-timeout` (capped at overall timeout). The quarantine plan catches stuck tests; the regular plan just needs enough time for the remaining non-stuck tests.
+
+### gci formatter
+- [x] Comment alignment was reformatted by `gci` (Go Code Imports formatter).
+
 ## Current CI Status
 - All linters: **PASS** (golangci, fmt-imports, All Linters Succeed)
+- Misc checks: **PASS**
 - Unit test: **PASS**
 - Integration test: **PASS**
-- Misc checks: **PASS**
 - All smoke tests: **PASS** (cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx)
 - NDC tests: **PASS** (sqlite, cass_os3)
-- XDC tests: TBD (awaiting re-run)
-- Functional test (sqlite, shards 1-2): **awaiting re-run** after quarantine skip fix
-- Functional test (sqlite, shard 3): TBD
-- Functional test (cass_os3, shards 1-3): TBD
+- Functional test (sqlite, shard 2): **PASS** (fixed by quarantine skip fix)
+- Functional test (cass_os3, shard 2): **PASS** (fixed by quarantine skip fix)
+- Functional test (sqlite, shards 1,3): **awaiting re-run** with retry timeout fix
+- Functional test (cass_os3, shards 1,3): **awaiting re-run** with retry timeout fix
+- XDC tests (sqlite, cass_os3): **awaiting re-run** — TestFuncClustersTestSuite/TestLocalNamespaceMigration times out (same issue)
 
 ## Commits
 1. Lint fixes + filterEmitted parent handling + collapseForSkip
@@ -57,3 +66,5 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 4. Fix remaining lint issues (panic forbidigo, cognitive complexity)
 5. Fix direct mode timeout: use overall timeout, pass through base args
 6. Fix quarantine skip pattern: use leaf-depth skip entries, remove collapseForSkip
+7. Fix comment alignment for gci formatter
+8. Use extended timeout for regular retry plans (4× run-timeout, capped at overall timeout)
