@@ -300,6 +300,116 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 	})
 }
 
+func TestCollapseForSkip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("all flat - no change", func(t *testing.T) {
+		names := []string{"TestA", "TestB", "TestC"}
+		result := collapseForSkip(names)
+		require.Equal(t, names, result)
+	})
+
+	t.Run("all deep - no change", func(t *testing.T) {
+		names := []string{"TestA/Sub1", "TestA/Sub2", "TestB/Sub1"}
+		result := collapseForSkip(names)
+		require.Equal(t, names, result)
+	})
+
+	t.Run("mixed depths - collapses to top-level", func(t *testing.T) {
+		names := []string{"TestFoo", "TestBar", "TestSuite/Sub1", "TestSuite/Sub2"}
+		result := collapseForSkip(names)
+		require.ElementsMatch(t, []string{"TestFoo", "TestBar", "TestSuite"}, result)
+	})
+
+	t.Run("mixed depths - deduplicates parents", func(t *testing.T) {
+		names := []string{"TestFoo", "TestSuite/Sub1", "TestSuite/Sub2", "TestOther/A"}
+		result := collapseForSkip(names)
+		require.ElementsMatch(t, []string{"TestFoo", "TestSuite", "TestOther"}, result)
+	})
+
+	t.Run("empty input", func(t *testing.T) {
+		result := collapseForSkip(nil)
+		require.Nil(t, result)
+	})
+
+	t.Run("single flat", func(t *testing.T) {
+		result := collapseForSkip([]string{"TestFoo"})
+		require.Equal(t, []string{"TestFoo"}, result)
+	})
+
+	t.Run("single deep", func(t *testing.T) {
+		result := collapseForSkip([]string{"TestFoo/Sub1"})
+		require.Equal(t, []string{"TestFoo/Sub1"}, result)
+	})
+}
+
+func TestFilterEmitted_ParentFiltering(t *testing.T) {
+	t.Parallel()
+
+	t.Run("filters exact match", func(t *testing.T) {
+		failures := []testFailure{
+			{Name: "TestA"},
+			{Name: "TestB"},
+		}
+		emitted := map[string]bool{"TestA": true}
+		result := filterEmitted(failures, emitted)
+		require.Len(t, result, 1)
+		require.Equal(t, "TestB", result[0].Name)
+	})
+
+	t.Run("filters parent when child was emitted", func(t *testing.T) {
+		failures := []testFailure{
+			{Name: "TestSuite"},
+			{Name: "TestOther"},
+		}
+		emitted := map[string]bool{
+			"TestSuite/Sub1": true,
+			"TestSuite/Sub2": true,
+		}
+		result := filterEmitted(failures, emitted)
+		require.Len(t, result, 1)
+		require.Equal(t, "TestOther", result[0].Name)
+	})
+
+	t.Run("does not filter unrelated tests", func(t *testing.T) {
+		failures := []testFailure{
+			{Name: "TestA"},
+			{Name: "TestB"},
+		}
+		emitted := map[string]bool{"TestC/Sub1": true}
+		result := filterEmitted(failures, emitted)
+		require.Len(t, result, 2)
+	})
+
+	t.Run("empty emitted keeps all", func(t *testing.T) {
+		failures := []testFailure{
+			{Name: "TestA"},
+			{Name: "TestSuite"},
+		}
+		result := filterEmitted(failures, map[string]bool{})
+		require.Len(t, result, 2)
+	})
+}
+
+func TestBuildRetryPlans_MixedDepthSkip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("mixed-depth passed tests are collapsed", func(t *testing.T) {
+		passed := []string{"TestFoo", "TestBar", "TestSuite/Sub1", "TestSuite/Sub2"}
+		plans := buildRetryPlans(passed, nil)
+		require.Len(t, plans, 1)
+		// Should be collapsed to top-level names
+		require.ElementsMatch(t, []string{"TestFoo", "TestBar", "TestSuite"}, plans[0].skipTests)
+	})
+
+	t.Run("consistent-depth passed tests are not collapsed", func(t *testing.T) {
+		passed := []string{"TestA", "TestB", "TestC"}
+		plans := buildRetryPlans(passed, nil)
+		require.Len(t, plans, 1)
+		require.Equal(t, passed, plans[0].skipTests)
+	})
+}
+
 func TestFilterParentFailures(t *testing.T) {
 	t.Parallel()
 
