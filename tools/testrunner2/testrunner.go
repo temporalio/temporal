@@ -710,12 +710,15 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				}
 				wu = *retryUnit
 			} else {
-				// Crash/quarantine retry: use the original unit with run/skip lists
+				// Crash/quarantine retry: use the original unit with run/skip lists.
+			// Merge plan's skip list with the current unit's to accumulate
+			// skips across attempts (so subtests that passed in earlier
+			// attempts don't re-run).
 				wu = workUnit{
 					pkg:       unit.pkg,
 					files:     unit.files,
 					label:     unit.label,
-					skipTests: plan.skipTests,
+					skipTests: mergeUnique(unit.skipTests, plan.skipTests),
 				}
 				if plan.tests != nil {
 					wu.tests = make([]testCase, len(plan.tests))
@@ -1099,6 +1102,33 @@ func filterNotByPrefix(names []string, prefixes []string) []string {
 		}
 	}
 	return out
+}
+
+// mergeUnique merges two string slices, deduplicating entries. Used to accumulate
+// skip test lists across retry attempts so that subtests that passed in earlier
+// attempts remain skipped in later retries.
+func mergeUnique(a, b []string) []string {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	seen := make(map[string]bool, len(a)+len(b))
+	result := make([]string, 0, len(a)+len(b))
+	for _, s := range a {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	for _, s := range b {
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+	}
+	return result
 }
 
 // collapseForSkip ensures skip test names have consistent depth for valid -skip patterns.
