@@ -114,6 +114,7 @@ type runDirectGoTestInput struct {
 	output       io.Writer     // where to write output
 	runFilter    string        // -run pattern (to target specific tests on retry)
 	skipFilter   string        // -skip pattern (to exclude passed tests on retry)
+	extraArgs    []string      // extra args to pass through to go test (e.g., -shuffle)
 }
 
 // runDirectGoTest runs `go test` directly on packages without precompilation.
@@ -145,6 +146,7 @@ func runDirectGoTest(ctx context.Context, execFn execFunc, req runDirectGoTestIn
 	if req.skipFilter != "" {
 		args = append(args, "-skip", req.skipFilter)
 	}
+	args = append(args, req.extraArgs...)
 	args = append(args, req.pkgs...)
 
 	command := fmt.Sprintf("go %s", strings.Join(args, " "))
