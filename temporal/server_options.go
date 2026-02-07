@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -40,21 +41,23 @@ type (
 
 		startupSynchronizationMode synchronizationModeParams
 
-		logger                       log.Logger
-		namespaceLogger              log.Logger
-		authorizer                   authorization.Authorizer
-		tlsConfigProvider            encryption.TLSConfigProvider
-		claimMapper                  authorization.ClaimMapper
-		audienceGetter               authorization.JWTAudienceMapper
-		persistenceServiceResolver   resolver.ServiceResolver
-		elasticsearchHttpClient      *http.Client
-		dynamicConfigClient          dynamicconfig.Client
-		customDataStoreFactory       persistenceClient.AbstractDataStoreFactory
-		customVisibilityStoreFactory visibility.VisibilityStoreFactory
-		clientFactoryProvider        client.FactoryProvider
-		searchAttributesMapper       searchattribute.Mapper
-		customFrontendInterceptors   []grpc.UnaryServerInterceptor
-		metricHandler                metrics.Handler
+		logger                          log.Logger
+		namespaceLogger                 log.Logger
+		authorizer                      authorization.Authorizer
+		tlsConfigProvider               encryption.TLSConfigProvider
+		claimMapper                     authorization.ClaimMapper
+		audienceGetter                  authorization.JWTAudienceMapper
+		persistenceServiceResolver      resolver.ServiceResolver
+		elasticsearchHttpClient         *http.Client
+		dynamicConfigClient             dynamicconfig.Client
+		customDataStoreFactory          persistenceClient.AbstractDataStoreFactory
+		customVisibilityStoreFactory    visibility.VisibilityStoreFactory
+		customHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+		clientFactoryProvider           client.FactoryProvider
+		searchAttributesMapper          searchattribute.Mapper
+		customFrontendInterceptors      []grpc.UnaryServerInterceptor
+		metricHandler                   metrics.Handler
 	}
 )
 
