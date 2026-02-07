@@ -3,6 +3,7 @@ package sql
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -36,7 +37,8 @@ type (
 		sqlplugin.DB
 
 		sync.Mutex
-		refCnt int
+		refCnt     int
+		closeTimer *time.Timer
 	}
 )
 
@@ -189,6 +191,11 @@ func (c *DbConn) Get() (sqlplugin.DB, error) {
 		c.DB = conn
 	}
 	c.refCnt++
+	if c.closeTimer != nil {
+		c.closeTimer.Stop()
+		c.closeTimer = nil
+	}
+
 	return c, nil
 }
 
@@ -197,6 +204,11 @@ func (c *DbConn) ForceClose() {
 	c.Lock()
 	defer c.Unlock()
 	if c.DB != nil {
+		if c.closeTimer != nil {
+			c.closeTimer.Stop()
+			c.closeTimer = nil
+		}
+
 		err := c.DB.Close()
 		if err != nil {
 			fmt.Println("failed to close database connection, may leak some connection", err)
@@ -209,9 +221,19 @@ func (c *DbConn) ForceClose() {
 func (c *DbConn) Close() error {
 	c.Lock()
 	defer c.Unlock()
+
 	c.refCnt--
 	if c.refCnt == 0 {
-		return c.DB.Close()
+		c.closeTimer = time.AfterFunc(time.Minute, func() {
+			c.Lock()
+			defer c.Unlock()
+
+			if c.refCnt == 0 {
+				c.closeTimer = nil
+
+				_ = c.DB.Close()
+			}
+		})
 	}
 	return nil
 }
