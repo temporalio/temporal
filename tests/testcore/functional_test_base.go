@@ -360,11 +360,10 @@ func (s *FunctionalTestBase) checkTestShard() {
 		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	// This was determined empirically to distribute our existing test names
-	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
-
+	salt := os.Getenv("TEST_SHARD_SALT")
+	if salt == "" {
+		s.T().Fatal("TEST_SHARD_SALT must be set when sharding is enabled")
+	}
 	nameToHash := s.T().Name() + salt
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {

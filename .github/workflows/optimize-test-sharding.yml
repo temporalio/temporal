@@ -1,0 +1,55 @@
+name: Optimize Test Sharding
+
+on:
+  schedule:
+    # Runs at 0700 UTC daily
+    - cron: "0 7 * * *"
+  workflow_dispatch: # Allow manual trigger
+
+permissions:
+  actions: read
+
+jobs:
+  update-salts:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+          permission-variables: write
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: main
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Optimize functional test sharding
+        id: optimize
+        run: |
+          # NOTE: shard count must match shards in run-tests.yml
+          new_salt=$(go run ./cmd/tools/optimize-test-sharding \
+            -shards 3 \
+            -workflow run-tests.yml \
+            -artifact-pattern 'junit-xml--*shard*--functional-test')
+          echo "new_salt=$new_salt" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+
+      - name: Update repository variable
+        if: steps.optimize.outputs.new_salt != vars.TEST_SHARD_SALT
+        run: |
+          echo "Updating TEST_SHARD_SALT from '${{ vars.TEST_SHARD_SALT }}' to '${{ steps.optimize.outputs.new_salt }}'"
+          gh variable set TEST_SHARD_SALT --body "${{ steps.optimize.outputs.new_salt }}"
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
