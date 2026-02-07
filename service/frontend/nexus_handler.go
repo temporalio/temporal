@@ -235,14 +235,12 @@ func (c *operationContext) interceptRequest(
 	}
 
 	if c.endpointName != "" && c.endpointRateLimiter != nil {
-		if !c.endpointRateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-			c.apiName,
-			1,
-			c.endpointName,
-			"",
-			0,
-			"",
-		)) {
+		if !c.endpointRateLimiter.Allow(time.Now().UTC(), quotas.Request{
+			API:         c.apiName,
+			Token:       1,
+			Caller:      c.namespaceName,
+			Destination: c.endpointName,
+		}) {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("endpoint_rate_limited"))
 			return commonnexus.ConvertGRPCError(errNexusEndpointRateLimitBusy, true)
 		}

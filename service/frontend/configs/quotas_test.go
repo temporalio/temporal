@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/quotastest"
 	"go.temporal.io/server/common/testing/temporalapi"
 )
 
@@ -182,6 +184,74 @@ func (s *quotasSuite) TestOperatorPriority_NamespaceReplicationInducing() {
 	s.testOperatorPrioritized(limiter, "RegisterNamespace")
 }
 
+func (s *quotasSuite) TestNexusEndpointRateLimiter_PerCallerPerEndpoint() {
+	// 1 frontend instance, 1 RPS per (caller, endpoint). Burst ratio is 2x, so burst=2.
+	limiter := NewNexusEndpointRateLimiter(
+		quotastest.NewFakeMemberCounter(1),
+		dynamicconfig.TypedPropertyFnWithDestinationFilter[int](func(namespace, destination string) int {
+			return 1
+		}),
+		func(string, string) float64 { return 2.0 },
+	)
+
+	now := time.Now()
+
+	// namespace-a → endpoint-1: exhaust burst (2 tokens).
+	reqA1 := quotas.Request{API: "api", Token: 1, Caller: "namespace-a", Destination: "endpoint-1"}
+	s.True(limiter.Allow(now, reqA1))
+	s.True(limiter.Allow(now, reqA1))
+
+	// namespace-b → endpoint-1: allowed (separate bucket).
+	reqB1 := quotas.Request{API: "api", Token: 1, Caller: "namespace-b", Destination: "endpoint-1"}
+	s.True(limiter.Allow(now, reqB1))
+
+	// namespace-a → endpoint-1: denied (burst exhausted).
+	s.False(limiter.Allow(now, reqA1))
+
+	// namespace-a → endpoint-2: allowed (separate bucket).
+	reqA2 := quotas.Request{API: "api", Token: 1, Caller: "namespace-a", Destination: "endpoint-2"}
+	s.True(limiter.Allow(now, reqA2))
+}
+
+func (s *quotasSuite) TestNexusEndpointRateLimiter_ZeroRPS() {
+	// 0 means unlimited.
+	limiter := NewNexusEndpointRateLimiter(
+		quotastest.NewFakeMemberCounter(1),
+		dynamicconfig.TypedPropertyFnWithDestinationFilter[int](func(namespace, destination string) int {
+			return 0
+		}),
+		func(string, string) float64 { return 2.0 },
+	)
+
+	now := time.Now()
+	req := quotas.Request{API: "api", Token: 1, Caller: "ns", Destination: "ep"}
+	for range 100 {
+		s.True(limiter.Allow(now, req))
+	}
+}
+
+func (s *quotasSuite) TestNexusEndpointRateLimiter_DividedByMemberCount() {
+	// Cluster limit 10, 5 instances → 2 RPS per instance, burst ratio 2x → burst=4.
+	limiter := NewNexusEndpointRateLimiter(
+		quotastest.NewFakeMemberCounter(5),
+		dynamicconfig.TypedPropertyFnWithDestinationFilter[int](func(namespace, destination string) int {
+			return 10
+		}),
+		func(string, string) float64 { return 2.0 },
+	)
+
+	now := time.Now()
+	req := quotas.Request{API: "api", Token: 1, Caller: "ns", Destination: "ep"}
+	allowed := 0
+	for range 10 {
+		if limiter.Allow(now, req) {
+			allowed++
+		}
+	}
+	// Rate=2, burst ratio=2x → burst=4 tokens available instantly.
+	s.Equal(4, allowed, "expected burst tokens")
+}
+
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
 	operatorRequest := quotas.NewRequest(
 		api,
@@ -202,7 +272,7 @@ func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter,
 	requestTime := time.Now()
 	limitCount := 0
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		if !limiter.Allow(requestTime, apiRequest) {
 			limitCount++
 			s.True(limiter.Allow(requestTime, operatorRequest))

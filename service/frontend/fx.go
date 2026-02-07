@@ -854,6 +854,7 @@ func RegisterNexusHTTPHandler(
 	endpointRateLimiter := configs.NewNexusEndpointRateLimiter(
 		frontendServiceResolver,
 		serviceConfig.NexusEndpointRPS,
+		serviceConfig.NexusEndpointRPSBurstRatio,
 	)
 	h := NewNexusHTTPHandler(
 		serviceConfig,

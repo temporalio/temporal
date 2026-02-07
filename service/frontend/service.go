@@ -204,6 +204,7 @@ type Config struct {
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
 	NexusOperationsMetricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	NexusEndpointRPS               dynamicconfig.TypedPropertyFnWithDestinationFilter[int]
+	NexusEndpointRPSBurstRatio     dynamicconfig.FloatPropertyFnWithDestinationFilter
 
 	LinkMaxSize        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxLinksPerRequest dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -373,6 +374,7 @@ func NewConfig(
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
 		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
 		NexusEndpointRPS:               dynamicconfig.FrontendNexusEndpointRPS.Get(dc),
+		NexusEndpointRPSBurstRatio:     dynamicconfig.FrontendNexusEndpointRPSBurstRatio.Get(dc),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
