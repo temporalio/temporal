@@ -88,7 +88,7 @@ func (p *testPackage) groupByMode(mode GroupMode) []workUnit {
 	case GroupByTest:
 		return p.groupUnitsTest()
 	default:
-		return p.groupUnitsTest()
+		panic(fmt.Sprintf("unsupported group mode for groupByMode: %s", mode))
 	}
 }
 
