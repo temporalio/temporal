@@ -2416,8 +2416,6 @@ func (s *VersioningIntegSuite) dispatchActivityCompatible() {
 }
 
 func (s *VersioningIntegSuite) TestDispatchActivityEager() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true)
-
 	tq := testcore.RandomizeStr(s.T().Name())
 	v1 := s.prefixed("v1")
 
