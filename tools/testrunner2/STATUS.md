@@ -41,7 +41,8 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 ### Functional Test Timeout (all shards) — cross-product skip limitation
 - [x] Root cause: Go's `-test.skip` matches per-level (split by `/`), creating a cross-product of level-2 and level-3 names. For suites with subtests × permutations (e.g., 30 subtests × 8 permutations = 240 leaf tests), the skip pattern can only skip subtests where ALL permutations passed. Partially-completed subtests must be re-run from scratch, wasting significant retry time.
   - Failing suites: `TestVersioning3FunctionalSuiteV0`, `TestVersioning3FunctionalSuiteV2`, `TestVersioningFunctionalSuite`, `TestWorkerDeploymentSuiteV0/V2` across all shards and backends
-  - Fix: for regular retry plans (non-quarantine), use `4× --run-timeout` (capped at overall timeout). The quarantine plan catches stuck tests; the regular plan just needs enough time for the remaining non-stuck tests.
+  - Fix (v1, replaced): 4× `--run-timeout` for regular retry plans.
+  - Fix (v2): Add "all-stuck" monitoring to `testEventStream`. Track when the last `=== RUN` event was seen; if no new test has started for > `--run-timeout` duration and tests are still running, cancel — remaining tests are all stuck. This replaces the 4× timeout multiplier with a smarter detection mechanism. CI should increase `--run-timeout` to 10m for functional tests.
 
 ### gci formatter
 - [x] Comment alignment was reformatted by `gci` (Go Code Imports formatter).
@@ -67,4 +68,5 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 5. Fix direct mode timeout: use overall timeout, pass through base args
 6. Fix quarantine skip pattern: use leaf-depth skip entries, remove collapseForSkip
 7. Fix comment alignment for gci formatter
-8. Use extended timeout for regular retry plans (4× run-timeout, capped at overall timeout)
+8. Use extended timeout for regular retry plans (4× run-timeout, capped at overall timeout) — replaced by commit 9
+9. Replace 4× timeout hack with all-stuck monitoring (track last test started, cancel when no new test for --run-timeout)
