@@ -494,19 +494,19 @@ integration-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=10m --stuck-test-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=10m --stuck-test-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
+	go run ./cmd/tools/test-runner2 test --max-attempts=$(MAX_TEST_ATTEMPTS) --run-timeout=10m --stuck-test-timeout=5m --junitfile=$(NEW_REPORT) --log-dir=$(TEST_OUTPUT_ROOT) --group-by=test -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
