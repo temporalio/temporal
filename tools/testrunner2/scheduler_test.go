@@ -290,7 +290,7 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 		require.ElementsMatch(t, []string{"TestA/Sub1"}, retryUnits[0].skipTests)
 	})
 
-	t.Run("no quarantine when stuck test has no parent", func(t *testing.T) {
+	t.Run("quarantines top-level test in isolation", func(t *testing.T) {
 		unit := workUnit{
 			pkg: "./pkg",
 			files: []testFile{
@@ -298,11 +298,29 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 			},
 			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
 		}
-		// Quarantined test is top-level, no parent to isolate
+		// Quarantined top-level test retried in isolation + bulk skips it
 		retryUnits := buildRetryUnitExcluding(unit, []string{"TestA"}, []string{"TestB"}, 1)
-		require.Len(t, retryUnits, 1)
-		require.ElementsMatch(t, []string{"TestA"}, retryUnits[0].skipTests)
+		require.Len(t, retryUnits, 2)
+		// First: quarantine plan runs TestB in isolation
+		require.Equal(t, []testCase{{name: "TestB", attempts: 1}}, retryUnits[0].tests)
+		require.Empty(t, retryUnits[0].skipTests)
+		// Second: bulk retry skips both passed and quarantined
+		require.ElementsMatch(t, []string{"TestA", "TestB"}, retryUnits[1].skipTests)
 	})
+}
+
+func TestQuarantinedTestNames(t *testing.T) {
+	t.Parallel()
+
+	as := alerts{
+		{Kind: failureKindTimeout, Tests: []string{"TestTimeout"}},
+		{Kind: failureKindPanic, Tests: []string{"pkg.TestPanic.func1.3"}},
+		{Kind: failureKindFatal, Tests: []string{"pkg.TestFatal"}},
+		{Kind: failureKindDataRace, Tests: []string{"pkg.TestRace.func2"}},
+		{Kind: failureKindCrash, Tests: []string{"TestCrash"}}, // crash kind is NOT quarantined
+	}
+	names := quarantinedTestNames(as)
+	require.ElementsMatch(t, []string{"TestTimeout", "TestPanic", "TestFatal", "TestRace"}, names)
 }
 
 func TestFilterEmitted_ParentFiltering(t *testing.T) {
