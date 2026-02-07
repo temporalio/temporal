@@ -711,9 +711,9 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				wu = *retryUnit
 			} else {
 				// Crash/quarantine retry: use the original unit with run/skip lists.
-			// Merge plan's skip list with the current unit's to accumulate
-			// skips across attempts (so subtests that passed in earlier
-			// attempts don't re-run).
+				// Merge plan's skip list with the current unit's to accumulate
+				// skips across attempts (so subtests that passed in earlier
+				// attempts don't re-run).
 				wu = workUnit{
 					pkg:       unit.pkg,
 					files:     unit.files,
