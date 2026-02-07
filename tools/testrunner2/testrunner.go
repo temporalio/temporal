@@ -1021,12 +1021,11 @@ type retryPlan struct {
 // at depth 2) that can't be expressed cleanly in a single -test.skip pattern.
 func buildRetryPlans(passedTests, quarantinedTests []string) []retryPlan {
 	if len(passedTests) == 0 || len(quarantinedTests) == 0 {
-		// Simple case: no quarantine needed
-		var skip []string
-		if len(passedTests) > 0 {
-			skip = collapseForSkip(passedTests)
-		}
-		return []retryPlan{{skipTests: skip}}
+		// Simple case: no quarantine needed.
+		// Pass through passedTests directly; buildTestFilterPattern handles the
+		// per-level regex. Some shallower names may be dropped from the pattern
+		// (causing those passed tests to re-run) but never over-skipped.
+		return []retryPlan{{skipTests: passedTests}}
 	}
 
 	// Build quarantine plans for each quarantined test that has a parent and passed siblings.
@@ -1053,17 +1052,15 @@ func buildRetryPlans(passedTests, quarantinedTests []string) []retryPlan {
 
 	if len(quarantinePlans) == 0 {
 		// No quarantine was possible, fall back to simple case
-		return []retryPlan{{skipTests: collapseForSkip(passedTests)}}
+		return []retryPlan{{skipTests: passedTests}}
 	}
 
-	// Build the regular retry plan: skip all passed tests + quarantined parents
-	var parentNames []string
-	for p := range quarantinedParents {
-		parentNames = append(parentNames, p)
-	}
-	slices.Sort(parentNames)
-	regularSkip := filterNotByPrefix(passedTests, parentNames)
-	regularSkip = append(regularSkip, parentNames...)
+	// Build the regular retry plan: skip all passed tests + quarantined tests.
+	// We include the quarantined tests themselves (at their full depth) rather
+	// than adding parent names at a shallower depth. Mixed depths would cause
+	// buildTestFilterPattern's per-level pattern to drop the shallower entries,
+	// silently un-skipping the quarantined parent.
+	regularSkip := append(slices.Clone(passedTests), quarantinedTests...)
 
 	return append(quarantinePlans, retryPlan{skipTests: regularSkip})
 }
@@ -1125,24 +1122,6 @@ func filterByPrefix(names []string, prefix string) []string {
 	return out
 }
 
-// filterNotByPrefix returns names that do NOT start with any of the prefixes + "/".
-func filterNotByPrefix(names []string, prefixes []string) []string {
-	var out []string
-	for _, n := range names {
-		matched := false
-		for _, p := range prefixes {
-			if strings.HasPrefix(n, p+"/") {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			out = append(out, n)
-		}
-	}
-	return out
-}
-
 // mergeUnique merges two string slices, deduplicating entries. Used to accumulate
 // skip test lists across retry attempts so that subtests that passed in earlier
 // attempts remain skipped in later retries.
@@ -1165,45 +1144,6 @@ func mergeUnique(a, b []string) []string {
 		if !seen[s] {
 			seen[s] = true
 			result = append(result, s)
-		}
-	}
-	return result
-}
-
-// collapseForSkip ensures skip test names have consistent depth for valid -skip patterns.
-// Go's -skip pattern is split by "/" before matching each level. When names have mixed
-// depths (e.g., "TestFoo" at depth 1 and "TestSuite/Sub1" at depth 2), they cannot be
-// expressed in a single pattern. This function collapses subtest names to their
-// top-level parents when depths are mixed, producing a flat skip pattern. This
-// may over-skip (all subtests of a parent are skipped, not just passed ones) but
-// ensures the skip pattern is valid.
-func collapseForSkip(names []string) []string {
-	hasFlat := false
-	hasDeep := false
-	for _, name := range names {
-		if strings.Contains(name, "/") {
-			hasDeep = true
-		} else {
-			hasFlat = true
-		}
-		if hasFlat && hasDeep {
-			break
-		}
-	}
-	if !hasFlat || !hasDeep {
-		return names // consistent depth, no collapsing needed
-	}
-	// Mixed depths: collapse to top-level names.
-	seen := make(map[string]bool)
-	var result []string
-	for _, name := range names {
-		top := name
-		if idx := strings.Index(name, "/"); idx > 0 {
-			top = name[:idx]
-		}
-		if !seen[top] {
-			seen[top] = true
-			result = append(result, top)
 		}
 	}
 	return result
