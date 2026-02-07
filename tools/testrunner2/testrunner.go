@@ -1047,11 +1047,13 @@ func buildRetryPlans(passedTests, quarantinedTests []string) []retryPlan {
 	for _, qt := range quarantinedTests {
 		parent := parentTestName(qt)
 		if parent == "" {
-			// Top-level test (e.g., panicking TestFoo): retry in isolation.
+			// Top-level test (e.g., panicking TestFoo): retry in isolation,
+			// skipping subtests that already passed.
 			if !quarantinedTopLevel[qt] {
 				quarantinedTopLevel[qt] = true
 				quarantinePlans = append(quarantinePlans, retryPlan{
-					tests: []string{qt},
+					tests:     []string{qt},
+					skipTests: filterByPrefix(passedTests, qt),
 				})
 			}
 			continue

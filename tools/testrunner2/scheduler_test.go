@@ -298,14 +298,18 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 			},
 			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
 		}
-		// Quarantined top-level test retried in isolation + bulk skips it
-		retryUnits := buildRetryUnitExcluding(unit, []string{"TestA"}, []string{"TestB"}, 1)
+		// Quarantined top-level test with passed subtests: skips them on retry
+		retryUnits := buildRetryUnitExcluding(unit,
+			[]string{"TestA", "TestB/Sub1", "TestB/Sub2"}, // passed: TestA + subtests of TestB
+			[]string{"TestB"}, // quarantined: top-level TestB
+			1,
+		)
 		require.Len(t, retryUnits, 2)
-		// First: quarantine plan runs TestB in isolation
+		// First: quarantine plan runs TestB, skipping passed subtests
 		require.Equal(t, []testCase{{name: "TestB", attempts: 1}}, retryUnits[0].tests)
-		require.Empty(t, retryUnits[0].skipTests)
-		// Second: bulk retry skips both passed and quarantined
-		require.ElementsMatch(t, []string{"TestA", "TestB"}, retryUnits[1].skipTests)
+		require.ElementsMatch(t, []string{"TestB/Sub1", "TestB/Sub2"}, retryUnits[0].skipTests)
+		// Second: bulk retry skips passed + quarantined
+		require.ElementsMatch(t, []string{"TestA", "TestB/Sub1", "TestB/Sub2", "TestB"}, retryUnits[1].skipTests)
 	})
 }
 
