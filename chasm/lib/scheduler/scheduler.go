@@ -79,11 +79,15 @@ const (
 
 	// Maximum number of matching times to return.
 	maxListMatchingTimesCount = 1000
+
+	// Maximum number of backfillers allowed on a single scheduler.
+	maxBackfillers = 100
 )
 
 var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
 	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
+	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 )
 
@@ -93,7 +97,7 @@ func NewScheduler(
 	namespace, namespaceID, scheduleID string,
 	input *schedulepb.Schedule,
 	patch *schedulepb.SchedulePatch,
-) *Scheduler {
+) (*Scheduler, error) {
 	var zero time.Time
 
 	sched := &Scheduler{
@@ -121,11 +125,13 @@ func NewScheduler(
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 
 	// Create backfillers to fulfill initialPatch.
-	sched.handlePatch(ctx, patch)
+	if err := sched.handlePatch(ctx, patch); err != nil {
+		return nil, err
+	}
 	visibility := chasm.NewVisibility(ctx)
 	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
-	return sched
+	return sched, nil
 }
 
 // setNullableFields sets fields that are nullable in API requests.
@@ -139,16 +145,27 @@ func (s *Scheduler) setNullableFields() {
 }
 
 // handlePatch creates backfillers to fulfill the given patch request.
-func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) {
-	if patch != nil {
-		if patch.TriggerImmediately != nil {
-			s.NewImmediateBackfiller(ctx, patch.TriggerImmediately)
-		}
-
-		for _, backfill := range patch.BackfillRequest {
-			s.NewRangeBackfiller(ctx, backfill)
-		}
+func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.SchedulePatch) error {
+	if patch == nil {
+		return nil
 	}
+
+	// Each TriggerImmediately and BackfillRequest creates exactly one backfiller.
+	newCount := len(patch.BackfillRequest)
+	if patch.TriggerImmediately != nil {
+		newCount++
+	}
+	if len(s.Backfillers)+newCount > maxBackfillers {
+		return ErrTooManyBackfillers
+	}
+
+	if patch.TriggerImmediately != nil {
+		s.NewImmediateBackfiller(ctx, patch.TriggerImmediately)
+	}
+	for _, backfill := range patch.BackfillRequest {
+		s.NewRangeBackfiller(ctx, backfill)
+	}
+	return nil
 }
 
 // CreateScheduler initializes a new Scheduler for CreateSchedule requests.
@@ -156,7 +173,7 @@ func CreateScheduler(
 	ctx chasm.MutableContext,
 	req *schedulerpb.CreateScheduleRequest,
 ) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
-	sched := NewScheduler(
+	sched, err := NewScheduler(
 		ctx,
 		req.FrontendRequest.Namespace,
 		req.NamespaceId,
@@ -164,6 +181,9 @@ func CreateScheduler(
 		req.FrontendRequest.Schedule,
 		req.FrontendRequest.InitialPatch,
 	)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
@@ -637,7 +657,9 @@ func (s *Scheduler) Patch(
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
 	}
 
-	s.handlePatch(ctx, req.FrontendRequest.Patch)
+	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
+		return nil, err
+	}
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
