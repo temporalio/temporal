@@ -47,10 +47,14 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 ### gci formatter
 - [x] Comment alignment was reformatted by `gci` (Go Code Imports formatter).
 
+### Unit test crash — panicking test not quarantined
+- [x] Root cause: `TestNamespaceRateLimitInterceptorProvider` panics with nil pointer dereference (flaky test in `service/frontend/fx_test.go`). The panic alert has `failureKindPanic`, but `quarantinedTestNames` only extracted from `failureKindTimeout`. So the panicking test was NOT quarantined and stayed in the bulk retry, crashing it repeatedly across all 4 attempts. Additionally, top-level panicking tests (no parent) were skipped by `buildRetryPlans` which only quarantined subtests.
+  - Fix: expand `quarantinedTestNames` to also extract from `failureKindPanic`, `failureKindFatal`, and `failureKindDataRace` alerts (with `splitTestName` to clean fully-qualified names). Update `buildRetryPlans` to create isolation plans for top-level quarantined tests and add them to the bulk skip list.
+
 ## Current CI Status (commit 313213d, run 21785828765)
 - All linters: **PASS** (golangci, fmt-imports, All Linters Succeed)
 - Misc checks: **PASS**
-- Unit test: **FAIL** (flaky tests in fx_test.go, registry_watch_test.go, memory_scheduled_queue_test.go — unrelated to testrunner2)
+- Unit test: **FAIL** (TestNamespaceRateLimitInterceptorProvider panic — see fix above)
 - Integration test: **PASS**
 - All smoke tests: **PASS** (cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx)
 - NDC tests: **PASS** (sqlite, cass_os3)
@@ -72,3 +76,4 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 10. Makefile: increase functional test timeout to 10m, enable stuck detection (--stuck-test-timeout=5m)
 11. Split checkStuck to reduce cognitive complexity
 12. Use overall timeout for Go binary (-test.timeout), run-timeout for monitors only
+13. Quarantine panicking/fatal/race tests, isolate top-level quarantined tests
