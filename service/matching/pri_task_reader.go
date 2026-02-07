@@ -299,7 +299,7 @@ func (tr *priTaskReader) addTaskToMatcher(task *internalTask) {
 
 	if drop, retry := tr.addErrorBehavior(err); drop {
 		task.finish(nil, false)
-	} else if retry && tr.backlogMgr.tqCtx.Err() == nil {
+	} else if retry {
 		// This should only be due to persistence problems. Retry in a new goroutine
 		// to not block other tasks, up to some concurrency limit.
 		if tr.addRetries.Acquire(tr.backlogMgr.tqCtx, 1) != nil {
@@ -317,8 +317,8 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	// - versioning wants to re-spool the task on a different queue and that failed
 	// - versioning says StickyWorkerUnavailable
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
-		// if tqCtx is closing, addTaskToMatcher will give up, otherwise we can retry and we'll
-		// reload a versioned queue
+		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
+		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
 		return false, true
 	}
 	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
