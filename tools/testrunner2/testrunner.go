@@ -449,11 +449,12 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			}
 
 			stream := newTestEventStream(testEventStreamConfig{
-				Writer:         lc,
-				Handler:        handler,
-				StuckThreshold: r.stuckTestTimeout,
-				StuckCancel:    cancel,
-				Log:            r.log,
+				Writer:            lc,
+				Handler:           handler,
+				StuckThreshold:    r.stuckTestTimeout,
+				AllStuckThreshold: r.runTimeout,
+				StuckCancel:       cancel,
+				Log:               r.log,
 			})
 			defer stream.Close()
 
@@ -472,12 +473,12 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 
 			detectedAlerts := parseAlerts(outputStr)
 
-			// Check stuck test
-			if stuckName, stuckDur := stream.StuckTest(); stuckName != "" {
+			// Check stuck tests (per-test or all-stuck detection)
+			if stuckNames, stuckDur := stream.StuckTests(); len(stuckNames) > 0 {
 				detectedAlerts = append(detectedAlerts, alert{
 					Kind:    failureKindTimeout,
 					Summary: fmt.Sprintf("test stuck (no progress for %v)", stuckDur.Round(time.Second)),
-					Tests:   []string{stuckName},
+					Tests:   stuckNames,
 				})
 			}
 
@@ -673,15 +674,6 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 		plans := buildRetryPlans(passedNames, quarantinedNames)
 		var items []*queueItem
 		for _, p := range plans {
-			// For the regular retry plan (all tests minus skips), use a longer
-			// timeout. The quarantine plan already isolates stuck tests, so the
-			// regular plan only runs non-stuck tests that need more cumulative
-			// time than a single --run-timeout allows (e.g., a suite with 200+
-			// subtests that takes 10-15 min total).
-			if p.tests == nil && len(p.skipTests) > 0 && p.timeout == 0 {
-				p.timeout = r.retryTimeout()
-			}
-
 			switch {
 			case p.tests != nil && p.skipTests != nil:
 				r.log("🔄 scheduling retry: -run %q -skip %q",
@@ -707,25 +699,10 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 	return
 }
 
-// retryTimeout returns an extended timeout for regular retry plans.
-// These plans run all non-stuck tests with a skip list and may need more time
-// than a single --run-timeout window, especially for large suites with many
-// subtests that can't be fully skipped due to Go's per-level -test.skip matching.
-func (r *runner) retryTimeout() time.Duration {
-	t := r.runTimeout * 4
-	if r.timeout > 0 && t > r.timeout {
-		t = r.timeout
-	}
-	return t
-}
-
 // --- compiled mode execConfig ---
 
-func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int, timeoutOverride ...time.Duration) execConfig {
+func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int) execConfig {
 	timeout := r.runTimeout
-	if len(timeoutOverride) > 0 && timeoutOverride[0] > 0 {
-		timeout = timeoutOverride[0]
-	}
 
 	desc := describeUnit(unit, r.groupBy)
 	coverProfile := fmt.Sprintf("%s_run_%d%s",
@@ -781,7 +758,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 			if wouldSkipAll(wu.tests, wu.skipTests) {
 				return nil
 			}
-			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt, plan.timeout))
+			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt))
 		},
 	)
 
@@ -1035,9 +1012,8 @@ func buildRetryUnit(unit workUnit, failedTests []testCase) *workUnit {
 
 // retryPlan describes a single retry invocation in terms of -run/-skip test names.
 type retryPlan struct {
-	tests     []string      // tests to -run (nil = all from original set)
-	skipTests []string      // tests to -skip
-	timeout   time.Duration // override per-test timeout (0 = use default runTimeout)
+	tests     []string // tests to -run (nil = all from original set)
+	skipTests []string // tests to -skip
 }
 
 // buildRetryPlans computes retry plans with quarantine logic.
