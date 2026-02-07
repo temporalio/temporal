@@ -761,7 +761,7 @@ func (e *ChasmEngine) getExecutionLease(
 		lockPriority,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, e.convertError(err, archetypeID, ref.BusinessID)
 	}
 
 	if predicateErr != nil {
@@ -813,4 +813,19 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	return shardContext, executionLease, nil
+}
+
+// convertError is a hook containing error conversion logic that creates more appropriate and/or
+// helpful errors.
+func (e *ChasmEngine) convertError(err error, archetypeID chasm.ArchetypeID, businessID string) error {
+	switch {
+	case errors.As(err, new(*serviceerror.NotFound)):
+		displayName, ok := e.registry.ArchetypeDisplayName(archetypeID)
+		if !ok {
+			displayName = "execution"
+		}
+		return serviceerror.NewNotFoundf("%s not found for ID: %s", displayName, businessID)
+	default:
+		return err
+	}
 }
