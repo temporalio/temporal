@@ -19,7 +19,7 @@ func TestMixed(t *testing.T) {
 		t.Run("Var1", func(t *testing.T) { t.Log("pass") })
 		t.Run("Var2", func(t *testing.T) {
 			if os.Getenv("TEMPORAL_TEST_ATTEMPT") == "1" {
-				time.Sleep(time.Minute) // timeout on first attempt
+				time.Sleep(time.Minute) //nolint:forbidigo // intentional sleep to test timeout handling
 			}
 		})
 		t.Run("Var3", func(t *testing.T) { t.Log("pass") }) // never reached on attempt 1
