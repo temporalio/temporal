@@ -1040,13 +1040,21 @@ func buildRetryPlans(passedTests, quarantinedTests []string) []retryPlan {
 		return []retryPlan{{skipTests: passedTests}}
 	}
 
-	// Build quarantine plans for each quarantined test that has a parent and passed siblings.
+	// Build quarantine plans for each quarantined test.
 	var quarantinePlans []retryPlan
 	quarantinedParents := make(map[string]bool)
+	quarantinedTopLevel := make(map[string]bool)
 	for _, qt := range quarantinedTests {
 		parent := parentTestName(qt)
 		if parent == "" {
-			continue // top-level test, can't meaningfully quarantine
+			// Top-level test (e.g., panicking TestFoo): retry in isolation.
+			if !quarantinedTopLevel[qt] {
+				quarantinedTopLevel[qt] = true
+				quarantinePlans = append(quarantinePlans, retryPlan{
+					tests: []string{qt},
+				})
+			}
+			continue
 		}
 		if quarantinedParents[parent] {
 			continue // already created a quarantine plan for this parent
@@ -1102,12 +1110,22 @@ func buildRetryUnitExcluding(unit workUnit, passedTests []string, quarantinedTes
 	return units
 }
 
-// quarantinedTestNames extracts test names from timeout alerts.
+// quarantinedTestNames extracts test names from alerts that crash the process.
+// These tests are quarantined (retried in isolation) so they don't take down
+// the bulk retry of remaining tests.
 func quarantinedTestNames(as alerts) []string {
 	var names []string
 	for _, a := range as {
-		if a.Kind == failureKindTimeout {
-			names = append(names, a.Tests...)
+		switch a.Kind {
+		case failureKindTimeout, failureKindPanic, failureKindFatal, failureKindDataRace:
+			for _, t := range a.Tests {
+				// Panic/fatal/race alerts use fully-qualified names
+				// (e.g., "pkg.TestFoo.func1.3") while the rest of the
+				// retry system uses plain names ("TestFoo"). Clean them.
+				_, name := splitTestName(t)
+				names = append(names, name)
+			}
+		default:
 		}
 	}
 	return names
