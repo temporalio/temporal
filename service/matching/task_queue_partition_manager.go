@@ -1062,6 +1062,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 		return nil
 	}
 
+	timeSource := pm.engine.timeSource
 	var prevBacklogPriority map[PhysicalTaskQueueVersion]int64
 
 	for {
@@ -1071,11 +1072,13 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 			continue
 		}
 
+		timerC, timer := timeSource.NewTimer(backoff.Jitter(interval, 0.05))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
 
-		case <-time.After(backoff.Jitter(interval, 0.05)):
+		case <-timerC:
 			prevBacklogPriority = pm.updateEphemeralDataIteration(prevBacklogPriority)
 		}
 	}
