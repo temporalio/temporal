@@ -178,6 +178,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -219,6 +220,8 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		HistorySizeBytes:            historySizeBytes,
 		BuildIdRedirectCounter:      redirectCounter,
 		Stamp:                       m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
+
+		TargetWorkerDeploymentVersionChanged: targetWorkerDeploymentVersionChanged,
 	}
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
@@ -491,17 +494,22 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// checking whether targetDeploymentVersion == nil means that we won't send the CaN recommendation to workflows
 	// that are about to transition to the target version. This is good, because if their transition succeeds, they
 	// don't need to CaN to start using the new version.
-	if m.ms.config.EnableSuggestCaNOnNewTargetVersion(m.ms.namespaceEntry.Name().String()) &&
-		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
+	var targetDeploymentVersionChanged bool
+	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
 		targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
-			suggestContinueAsNew = cmp.Or(suggestContinueAsNew, true)
-			suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)
+			targetDeploymentVersionChanged = true
 		}
 	}
 	// emit metric
+	if targetDeploymentVersionChanged {
+		metrics.WorkflowTargetVersionChangedCount.With(m.metricsHandler.WithTags(
+			metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
+			metrics.VersioningBehaviorTag(m.ms.GetEffectiveVersioningBehavior()),
+		)).Record(1)
+	}
 	if suggestContinueAsNew {
 		metrics.WorkflowSuggestContinueAsNewCount.With(m.metricsHandler.WithTags(
 			metrics.NamespaceTag(m.ms.namespaceEntry.Name().String()),
@@ -512,8 +520,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_HISTORY_SIZE_TOO_LARGE)),
 			metrics.SuggestContinueAsNewReasonTooManyHistoryEventsTag(
 				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_HISTORY_EVENTS)),
-			metrics.SuggestContinueAsNewReasonTargetVersionChangedTag(
-				slices.Contains(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED)),
 		)).Record(1)
 	}
 
@@ -558,6 +564,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			versioningStamp,
 			redirectCounter,
 			suggestContinueAsNewReasons,
+			targetDeploymentVersionChanged,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
@@ -575,6 +582,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		redirectCounter,
 		suggestContinueAsNewReasons,
+		targetDeploymentVersionChanged,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -751,6 +759,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			request.WorkerVersionStamp,
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
+			workflowTask.TargetWorkerDeploymentVersionChanged,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -841,6 +850,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			versioningStamp,
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
+			workflowTask.TargetWorkerDeploymentVersionChanged,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -913,6 +923,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			nil,
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
+			workflowTask.TargetWorkerDeploymentVersionChanged,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1081,6 +1092,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskType = workflowTask.Type
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNewReasons = workflowTask.SuggestContinueAsNewReasons
+	m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged = workflowTask.TargetWorkerDeploymentVersionChanged
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
@@ -1181,6 +1193,8 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 				SuggestContinueAsNewReasons: workflowTask.SuggestContinueAsNewReasons,
 				HistorySizeBytes:            workflowTask.HistorySizeBytes,
 				WorkerVersion:               versioningStamp,
+
+				TargetWorkerDeploymentVersionChanged: workflowTask.TargetWorkerDeploymentVersionChanged,
 			},
 		},
 	}
@@ -1212,6 +1226,8 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		ScheduleToStartTimeoutTask:  m.ms.GetWorkflowTaskScheduleToStartTimeoutTask(),
 		StartToCloseTimeoutTask:     m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
 		Stamp:                       m.ms.executionInfo.WorkflowTaskStamp,
+
+		TargetWorkerDeploymentVersionChanged: m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged,
 	}
 
 	return wft
@@ -1458,6 +1474,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			nil,
 			wt.BuildIdRedirectCounter,
 			nil,
+			false,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 

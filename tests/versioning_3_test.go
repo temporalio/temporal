@@ -2467,27 +2467,18 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				if enableSuggestCaNOnNewTargetVersion {
-					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
-					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
-					for i, event := range wfTaskStartedEvents {
-						attr := event.GetWorkflowTaskStartedEventAttributes()
-						if i == len(wfTaskStartedEvents)-1 { // last event
-							s.True(attr.GetSuggestContinueAsNew())
-							s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
-						} else { // earlier events
-							s.False(attr.GetSuggestContinueAsNew())
-							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
-						}
-					}
-				} else {
-					for _, event := range wfTaskStartedEvents {
-						attr := event.GetWorkflowTaskStartedEventAttributes()
-						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+				// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
+				s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
+				for i, event := range wfTaskStartedEvents {
+					attr := event.GetWorkflowTaskStartedEventAttributes()
+					s.False(attr.GetSuggestContinueAsNew())
+					s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+					if i == len(wfTaskStartedEvents)-1 { // last event
+						s.True(attr.GetTargetWorkerDeploymentVersionChanged())
+					} else { // earlier events
+						s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 					}
 				}
-
 				commands := []*commandpb.Command{
 					{
 						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
