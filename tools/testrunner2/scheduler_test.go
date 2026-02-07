@@ -264,12 +264,17 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 		require.Equal(t, 1, qUnit.tests[0].attempts)
 		require.ElementsMatch(t, []string{"TestMixed/Param/Var1"}, qUnit.skipTests)
 
-		// Second unit: regular retry skipping SimpleA, SimpleB, and the quarantined parent Param
+		// Second unit: regular retry skipping all passed + quarantined tests at original depth.
+		// This avoids mixed-depth skip patterns that buildTestFilterPattern can't express.
 		rUnit := retryUnits[1]
 		require.Len(t, rUnit.tests, 1)
 		require.Equal(t, "TestMixed", rUnit.tests[0].name)
 		require.Equal(t, 1, rUnit.tests[0].attempts)
-		require.ElementsMatch(t, []string{"TestMixed/SimpleA", "TestMixed/SimpleB", "TestMixed/Param"}, rUnit.skipTests)
+		require.ElementsMatch(t, []string{
+			"TestMixed/SimpleA", "TestMixed/SimpleB", // passed
+			"TestMixed/Param/Var1",                   // passed under quarantined parent
+			"TestMixed/Param/Var2",                   // quarantined
+		}, rUnit.skipTests)
 	})
 
 	t.Run("no quarantine when no stuck test", func(t *testing.T) {
@@ -297,49 +302,6 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 		retryUnits := buildRetryUnitExcluding(unit, []string{"TestA"}, []string{"TestB"}, 1)
 		require.Len(t, retryUnits, 1)
 		require.ElementsMatch(t, []string{"TestA"}, retryUnits[0].skipTests)
-	})
-}
-
-func TestCollapseForSkip(t *testing.T) {
-	t.Parallel()
-
-	t.Run("all flat - no change", func(t *testing.T) {
-		names := []string{"TestA", "TestB", "TestC"}
-		result := collapseForSkip(names)
-		require.Equal(t, names, result)
-	})
-
-	t.Run("all deep - no change", func(t *testing.T) {
-		names := []string{"TestA/Sub1", "TestA/Sub2", "TestB/Sub1"}
-		result := collapseForSkip(names)
-		require.Equal(t, names, result)
-	})
-
-	t.Run("mixed depths - collapses to top-level", func(t *testing.T) {
-		names := []string{"TestFoo", "TestBar", "TestSuite/Sub1", "TestSuite/Sub2"}
-		result := collapseForSkip(names)
-		require.ElementsMatch(t, []string{"TestFoo", "TestBar", "TestSuite"}, result)
-	})
-
-	t.Run("mixed depths - deduplicates parents", func(t *testing.T) {
-		names := []string{"TestFoo", "TestSuite/Sub1", "TestSuite/Sub2", "TestOther/A"}
-		result := collapseForSkip(names)
-		require.ElementsMatch(t, []string{"TestFoo", "TestSuite", "TestOther"}, result)
-	})
-
-	t.Run("empty input", func(t *testing.T) {
-		result := collapseForSkip(nil)
-		require.Nil(t, result)
-	})
-
-	t.Run("single flat", func(t *testing.T) {
-		result := collapseForSkip([]string{"TestFoo"})
-		require.Equal(t, []string{"TestFoo"}, result)
-	})
-
-	t.Run("single deep", func(t *testing.T) {
-		result := collapseForSkip([]string{"TestFoo/Sub1"})
-		require.Equal(t, []string{"TestFoo/Sub1"}, result)
 	})
 }
 
@@ -394,12 +356,14 @@ func TestFilterEmitted_ParentFiltering(t *testing.T) {
 func TestBuildRetryPlans_MixedDepthSkip(t *testing.T) {
 	t.Parallel()
 
-	t.Run("mixed-depth passed tests are collapsed", func(t *testing.T) {
+	t.Run("mixed-depth passed tests are preserved", func(t *testing.T) {
 		passed := []string{"TestFoo", "TestBar", "TestSuite/Sub1", "TestSuite/Sub2"}
 		plans := buildRetryPlans(passed, nil)
 		require.Len(t, plans, 1)
-		// Should be collapsed to top-level names
-		require.ElementsMatch(t, []string{"TestFoo", "TestBar", "TestSuite"}, plans[0].skipTests)
+		// Skip list preserves original names; buildTestFilterPattern handles per-level
+		// matching. Shallower names may be dropped from the pattern (causing re-runs)
+		// but never over-skipped.
+		require.Equal(t, passed, plans[0].skipTests)
 	})
 
 	t.Run("consistent-depth passed tests are not collapsed", func(t *testing.T) {
@@ -407,6 +371,30 @@ func TestBuildRetryPlans_MixedDepthSkip(t *testing.T) {
 		plans := buildRetryPlans(passed, nil)
 		require.Len(t, plans, 1)
 		require.Equal(t, passed, plans[0].skipTests)
+	})
+
+	t.Run("quarantine regular skip includes quarantined tests at same depth", func(t *testing.T) {
+		// Simulate: TestSuite has Sub1 (passed), Sub2 (passed), Slow (timed out).
+		// Other tests TestA/X and TestA/Y also passed.
+		// The regular plan should skip all passed + quarantined tests at their
+		// original depth, not collapse to parent names (which could over-skip).
+		passed := []string{"TestSuite/Sub1", "TestSuite/Sub2", "TestA/X", "TestA/Y"}
+		quarantined := []string{"TestSuite/Slow"}
+		plans := buildRetryPlans(passed, quarantined)
+
+		// Should have 2 plans: quarantine + regular
+		require.Len(t, plans, 2)
+
+		// Quarantine plan: run TestSuite, skip passed Sub1 and Sub2
+		require.Equal(t, []string{"TestSuite"}, plans[0].tests)
+		require.ElementsMatch(t, []string{"TestSuite/Sub1", "TestSuite/Sub2"}, plans[0].skipTests)
+
+		// Regular plan: skip passed tests + quarantined tests (all at same depth)
+		require.ElementsMatch(t, []string{
+			"TestA/X", "TestA/Y", // passed non-quarantined
+			"TestSuite/Sub1", "TestSuite/Sub2", // passed under quarantined parent
+			"TestSuite/Slow", // quarantined test itself
+		}, plans[1].skipTests)
 	})
 }
 
