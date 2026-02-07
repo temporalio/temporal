@@ -912,42 +912,49 @@ func (r *runner) newCompileItem(pkg string, units []workUnit, binaryPath string,
 func formatWorkUnits(units []workUnit, groupBy GroupMode) string {
 	var sb strings.Builder
 	if groupBy == GroupByTest {
-		// For test mode, group tests by file
-		testsByFile := make(map[string][]string)
-		fileOrder := make([]string, 0)
-		for _, u := range units {
-			for _, tf := range u.files {
-				if _, seen := testsByFile[tf.path]; !seen {
-					fileOrder = append(fileOrder, tf.path)
-					testsByFile[tf.path] = nil
-				}
-				for _, tc := range tf.tests {
-					testsByFile[tf.path] = append(testsByFile[tf.path], tc.name)
-				}
-			}
-		}
-		for _, path := range fileOrder {
-			sb.WriteString("\n  ")
-			sb.WriteString(path)
-			if tests := testsByFile[path]; len(tests) > 0 {
-				sb.WriteString(" (")
-				sb.WriteString(strings.Join(tests, ", "))
-				sb.WriteString(")")
-			}
-		}
+		formatWorkUnitsByTest(&sb, units)
 	} else {
-		seen := make(map[string]bool)
-		for _, u := range units {
-			for _, tf := range u.files {
-				if !seen[tf.path] {
-					seen[tf.path] = true
-					sb.WriteString("\n  ")
-					sb.WriteString(tf.path)
-				}
+		formatWorkUnitsByFile(&sb, units)
+	}
+	return sb.String()
+}
+
+func formatWorkUnitsByTest(sb *strings.Builder, units []workUnit) {
+	testsByFile := make(map[string][]string)
+	fileOrder := make([]string, 0)
+	for _, u := range units {
+		for _, tf := range u.files {
+			if _, seen := testsByFile[tf.path]; !seen {
+				fileOrder = append(fileOrder, tf.path)
+				testsByFile[tf.path] = nil
+			}
+			for _, tc := range tf.tests {
+				testsByFile[tf.path] = append(testsByFile[tf.path], tc.name)
 			}
 		}
 	}
-	return sb.String()
+	for _, path := range fileOrder {
+		sb.WriteString("\n  ")
+		sb.WriteString(path)
+		if tests := testsByFile[path]; len(tests) > 0 {
+			sb.WriteString(" (")
+			sb.WriteString(strings.Join(tests, ", "))
+			sb.WriteString(")")
+		}
+	}
+}
+
+func formatWorkUnitsByFile(sb *strings.Builder, units []workUnit) {
+	seen := make(map[string]bool)
+	for _, u := range units {
+		for _, tf := range u.files {
+			if !seen[tf.path] {
+				seen[tf.path] = true
+				sb.WriteString("\n  ")
+				sb.WriteString(tf.path)
+			}
+		}
+	}
 }
 
 func describeUnit(unit workUnit, mode GroupMode) string {
