@@ -103,10 +103,17 @@ func Invoke(
 			// TODO uncomment once RETRY_STATE_PAUSED is supported
 			// if retryState != enumspb.RETRY_STATE_IN_PROGRESS && retryState != enumspb.RETRY_STATE_PAUSED {
 			if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
-				// no more retry, and we want to record the failure event
-				if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity(), request.GetWorkerVersion()); err != nil {
-					// Unable to add ActivityTaskFailed event to history
-					return nil, err
+				if retryState == enumspb.RETRY_STATE_TIMEOUT {
+					if _, err := mutableState.AddActivityTaskTimedOutEvent(scheduledEventID, ai.StartedEventId, failure, retryState); err != nil {
+						// Unable to add ActivityTaskFailed event to history
+						return nil, err
+					}
+				} else {
+					// no more retry, and we want to record the failure event
+					if _, err := mutableState.AddActivityTaskFailedEvent(scheduledEventID, ai.StartedEventId, failure, retryState, request.GetIdentity(), request.GetWorkerVersion()); err != nil {
+						// Unable to add ActivityTaskFailed event to history
+						return nil, err
+					}
 				}
 				postActions.CreateWorkflowTask = true
 				closed = true

@@ -326,8 +326,6 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		return result, nil
 	}
 
-	timeoutFailure.GetTimeoutFailureInfo().LastHeartbeatDetails = ai.LastHeartbeatDetails
-
 	t.emitTimeoutMetricScopeWithNamespaceTag(
 		namespace.ID(mutableState.GetExecutionInfo().NamespaceId),
 		metrics.TimerActiveTaskActivityTimeoutScope,
