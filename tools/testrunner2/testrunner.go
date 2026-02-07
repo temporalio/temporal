@@ -702,7 +702,16 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 // --- compiled mode execConfig ---
 
 func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int) execConfig {
-	timeout := r.runTimeout
+	// The Go binary timeout (-test.timeout) limits TOTAL execution time for
+	// all subtests. Large suites (e.g., 400 leaf tests) may need much more
+	// time than --run-timeout allows. Use the overall timeout (if set) as
+	// the binary timeout so suites have enough total time. The all-stuck
+	// monitor (threshold = --run-timeout) handles detecting when individual
+	// tests are stuck and cancels the run early.
+	timeout := r.timeout
+	if timeout == 0 {
+		timeout = r.runTimeout
+	}
 
 	desc := describeUnit(unit, r.groupBy)
 	coverProfile := fmt.Sprintf("%s_run_%d%s",
