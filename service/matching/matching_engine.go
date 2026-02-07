@@ -79,7 +79,6 @@ type (
 	TaskDispatchRateLimiter quotas.RequestRateLimiter
 	pollerIDCtxKey          string
 	identityCtxKey          string
-	workerInstanceCtxKey    string
 
 	taskQueueCounterKey struct {
 		namespaceID   string
@@ -222,9 +221,8 @@ var (
 
 	errNoTasks = errors.New("no tasks")
 
-	pollerIDKey           pollerIDCtxKey       = "pollerID"
-	identityKey           identityCtxKey       = "identity"
-	workerInstanceKeyName workerInstanceCtxKey = "workerInstanceKey"
+	pollerIDKey pollerIDCtxKey = "pollerID"
+	identityKey identityCtxKey = "identity"
 
 	// The routing key for the single partition used to route Nexus endpoints CRUD RPCs to.
 	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
@@ -678,7 +676,6 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		pollerCtx = context.WithValue(pollerCtx, workerInstanceKeyName, request.GetWorkerInstanceKey())
 		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		if err != nil {
 			return nil, err
@@ -987,7 +984,6 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		pollerCtx = context.WithValue(pollerCtx, workerInstanceKeyName, request.GetWorkerInstanceKey())
 		pollMetadata := &pollMetadata{
 			taskQueueMetadata:         request.TaskQueueMetadata,
 			workerVersionCapabilities: request.WorkerVersionCapabilities,
@@ -2547,7 +2543,6 @@ pollLoop:
 		// long-poll when frontend calls CancelOutstandingPoll API
 		pollerCtx := context.WithValue(ctx, pollerIDKey, pollerID)
 		pollerCtx = context.WithValue(pollerCtx, identityKey, request.GetIdentity())
-		pollerCtx = context.WithValue(pollerCtx, workerInstanceKeyName, request.GetWorkerInstanceKey())
 		partition, err := tqid.PartitionFromProto(request.TaskQueue, req.NamespaceId, enumspb.TASK_QUEUE_TYPE_NEXUS)
 		if err != nil {
 			return nil, err
@@ -2835,14 +2830,14 @@ func (e *matchingEngineImpl) pollTask(
 		e.outstandingPollers.Set(pollerID, cancel)
 
 		// Also track by worker instance key for bulk cancellation during shutdown
-		workerInstanceKey, hasWorkerKey := ctx.Value(workerInstanceKeyName).(string)
-		if hasWorkerKey && workerInstanceKey != "" {
+		workerInstanceKey := pollMetadata.workerInstanceKey
+		if workerInstanceKey != "" {
 			e.workerInstancePollers.Add(workerInstanceKey, pollerID, cancel)
 		}
 
 		defer func() {
 			e.outstandingPollers.Delete(pollerID)
-			if hasWorkerKey && workerInstanceKey != "" {
+			if workerInstanceKey != "" {
 				e.workerInstancePollers.Remove(workerInstanceKey, pollerID)
 			}
 		}()
