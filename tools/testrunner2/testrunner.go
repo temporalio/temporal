@@ -249,44 +249,7 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 	}
 
 	// Print test files (from work units to reflect sharding)
-	var sb strings.Builder
-	if r.groupBy == GroupByTest {
-		// For test mode, group tests by file
-		testsByFile := make(map[string][]string)
-		fileOrder := make([]string, 0)
-		for _, u := range units {
-			for _, tf := range u.files {
-				if _, seen := testsByFile[tf.path]; !seen {
-					fileOrder = append(fileOrder, tf.path)
-					testsByFile[tf.path] = nil
-				}
-				for _, tc := range tf.tests {
-					testsByFile[tf.path] = append(testsByFile[tf.path], tc.name)
-				}
-			}
-		}
-		for _, path := range fileOrder {
-			sb.WriteString("\n  ")
-			sb.WriteString(path)
-			if tests := testsByFile[path]; len(tests) > 0 {
-				sb.WriteString(" (")
-				sb.WriteString(strings.Join(tests, ", "))
-				sb.WriteString(")")
-			}
-		}
-	} else {
-		seen := make(map[string]bool)
-		for _, u := range units {
-			for _, tf := range u.files {
-				if !seen[tf.path] {
-					seen[tf.path] = true
-					sb.WriteString("\n  ")
-					sb.WriteString(tf.path)
-				}
-			}
-		}
-	}
-	r.log("test files: %s", sb.String())
+	r.log("test files: %s", formatWorkUnits(units, r.groupBy))
 	r.log("work units: %d (group-by=%s)", len(units), r.groupBy)
 
 	// Create log directory
@@ -582,12 +545,26 @@ func classifyAlerts(detectedAlerts alerts) string {
 }
 
 // filterEmitted returns failures not already emitted as mid-stream retries.
+// It also filters out parent tests whose children were already emitted, since
+// retrying the parent would duplicate the child retry.
 func filterEmitted(failures []testFailure, emitted map[string]bool) []testFailure {
 	var out []testFailure
 	for _, f := range failures {
-		if !emitted[f.Name] {
-			out = append(out, f)
+		if emitted[f.Name] {
+			continue
 		}
+		// Also filter parent tests if any child was already emitted.
+		isParentOfEmitted := false
+		for name := range emitted {
+			if strings.HasPrefix(name, f.Name+"/") {
+				isParentOfEmitted = true
+				break
+			}
+		}
+		if isParentOfEmitted {
+			continue
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -928,6 +905,48 @@ func (r *runner) newCompileItem(pkg string, units []workUnit, binaryPath string,
 
 // --- helper functions ---
 
+// formatWorkUnits builds a human-readable summary of work units for logging.
+func formatWorkUnits(units []workUnit, groupBy GroupMode) string {
+	var sb strings.Builder
+	if groupBy == GroupByTest {
+		// For test mode, group tests by file
+		testsByFile := make(map[string][]string)
+		fileOrder := make([]string, 0)
+		for _, u := range units {
+			for _, tf := range u.files {
+				if _, seen := testsByFile[tf.path]; !seen {
+					fileOrder = append(fileOrder, tf.path)
+					testsByFile[tf.path] = nil
+				}
+				for _, tc := range tf.tests {
+					testsByFile[tf.path] = append(testsByFile[tf.path], tc.name)
+				}
+			}
+		}
+		for _, path := range fileOrder {
+			sb.WriteString("\n  ")
+			sb.WriteString(path)
+			if tests := testsByFile[path]; len(tests) > 0 {
+				sb.WriteString(" (")
+				sb.WriteString(strings.Join(tests, ", "))
+				sb.WriteString(")")
+			}
+		}
+	} else {
+		seen := make(map[string]bool)
+		for _, u := range units {
+			for _, tf := range u.files {
+				if !seen[tf.path] {
+					seen[tf.path] = true
+					sb.WriteString("\n  ")
+					sb.WriteString(tf.path)
+				}
+			}
+		}
+	}
+	return sb.String()
+}
+
 func describeUnit(unit workUnit, mode GroupMode) string {
 	return unit.label
 }
@@ -963,7 +982,7 @@ func buildRetryPlans(passedTests, quarantinedTests []string) []retryPlan {
 		// Simple case: no quarantine needed
 		var skip []string
 		if len(passedTests) > 0 {
-			skip = passedTests
+			skip = collapseForSkip(passedTests)
 		}
 		return []retryPlan{{skipTests: skip}}
 	}
@@ -992,7 +1011,7 @@ func buildRetryPlans(passedTests, quarantinedTests []string) []retryPlan {
 
 	if len(quarantinePlans) == 0 {
 		// No quarantine was possible, fall back to simple case
-		return []retryPlan{{skipTests: passedTests}}
+		return []retryPlan{{skipTests: collapseForSkip(passedTests)}}
 	}
 
 	// Build the regular retry plan: skip all passed tests + quarantined parents
@@ -1080,6 +1099,45 @@ func filterNotByPrefix(names []string, prefixes []string) []string {
 		}
 	}
 	return out
+}
+
+// collapseForSkip ensures skip test names have consistent depth for valid -skip patterns.
+// Go's -skip pattern is split by "/" before matching each level. When names have mixed
+// depths (e.g., "TestFoo" at depth 1 and "TestSuite/Sub1" at depth 2), they cannot be
+// expressed in a single pattern. This function collapses subtest names to their
+// top-level parents when depths are mixed, producing a flat skip pattern. This
+// may over-skip (all subtests of a parent are skipped, not just passed ones) but
+// ensures the skip pattern is valid.
+func collapseForSkip(names []string) []string {
+	hasFlat := false
+	hasDeep := false
+	for _, name := range names {
+		if strings.Contains(name, "/") {
+			hasDeep = true
+		} else {
+			hasFlat = true
+		}
+		if hasFlat && hasDeep {
+			break
+		}
+	}
+	if !hasFlat || !hasDeep {
+		return names // consistent depth, no collapsing needed
+	}
+	// Mixed depths: collapse to top-level names.
+	seen := make(map[string]bool)
+	var result []string
+	for _, name := range names {
+		top := name
+		if idx := strings.Index(name, "/"); idx > 0 {
+			top = name[:idx]
+		}
+		if !seen[top] {
+			seen[top] = true
+			result = append(result, top)
+		}
+	}
+	return result
 }
 
 func buildRetryFiles(files []testFile, failedTests []testCase) []testFile {

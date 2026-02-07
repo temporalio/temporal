@@ -780,6 +780,8 @@ func assertJUnit(t *testing.T, res integResult, opts ...junitOpt) {
 			gotFailed = append(gotFailed, tc.Name)
 		case tc.Error == nil:
 			gotPassed = append(gotPassed, tc.Name)
+		default:
+			// skip error cases without failure
 		}
 	}
 
