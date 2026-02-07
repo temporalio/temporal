@@ -9,10 +9,8 @@ import (
 	"maps"
 	"os"
 	"regexp"
-	"strconv"
 	"time"
 
-	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -346,31 +344,7 @@ func (s *FunctionalTestBase) initAssertions() {
 
 // checkTestShard supports test sharding based on environment variables.
 func (s *FunctionalTestBase) checkTestShard() {
-	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
-	indexStr := os.Getenv("TEST_SHARD_INDEX")
-	if totalStr == "" || indexStr == "" {
-		return
-	}
-	total, err := strconv.Atoi(totalStr)
-	if err != nil || total < 1 {
-		s.T().Fatal("Couldn't convert TEST_TOTAL_SHARDS")
-	}
-	index, err := strconv.Atoi(indexStr)
-	if err != nil || index < 0 || index >= total {
-		s.T().Fatal("Couldn't convert TEST_SHARD_INDEX")
-	}
-
-	// This was determined empirically to distribute our existing test names
-	// reasonably well. This can be adjusted from time to time.
-	// For parallelism 4, use 11. For 3, use 26. For 2, use 20.
-	const salt = "-salt-26"
-
-	nameToHash := s.T().Name() + salt
-	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
-	if testIndex != index {
-		s.T().Skipf("Skipping %s in test shard %d/%d (it runs in %d)", s.T().Name(), index+1, total, testIndex+1)
-	}
-	s.T().Logf("Running %s in test shard %d/%d", s.T().Name(), index+1, total)
+	checkTestShard(s.T())
 }
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
