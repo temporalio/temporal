@@ -6265,7 +6265,26 @@ func (ms *MutableStateImpl) RetryActivity(
 		ai.RetryBackoffCoefficient,
 		backoff.MakeBackoffAlgorithm(delay),
 	)
+
 	if retryState != enumspb.RETRY_STATE_IN_PROGRESS {
+		if retryState == enumspb.RETRY_STATE_TIMEOUT {
+			var cause *failurepb.Failure
+			// Clone the original failure if it's not already a timeout failure, so that we can preserve the original failure
+			// details in the cause field. If it's already a timeout failure, it is not set as the cause.
+			if activityFailure.GetTimeoutFailureInfo() == nil {
+				cause = common.CloneProto(activityFailure)
+			}
+			activityFailure.Reset()
+			activityFailure.Message = "not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying"
+			activityFailure.Source = "Server"
+			activityFailure.Cause = cause
+			activityFailure.FailureInfo = &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType:          enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+					LastHeartbeatDetails: ai.GetLastHeartbeatDetails(),
+				},
+			}
+		}
 		return retryState, nil
 	}
 

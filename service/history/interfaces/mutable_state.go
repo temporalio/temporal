@@ -138,6 +138,10 @@ type (
 		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
+		// RetryActivity asks mutable state to retry the activity.
+		// The returned retry state should be used to determine whether the activity should be retried or not
+		// (RETRY_STATE_IN_PROGRESS implies the activity should be retried).
+		// The provided failure object may be mutated completely in case there is no time to schedule the next retry.
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
 		RecordLastActivityCompleteTime(ai *persistencespb.ActivityInfo)
 		RegenerateActivityRetryTask(ai *persistencespb.ActivityInfo, newScheduledTime time.Time) error
