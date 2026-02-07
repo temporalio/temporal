@@ -342,13 +342,14 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 
 func (n *Node) SetRootComponent(
 	rootComponent Component,
-) {
+) error {
 	root := n.root()
 	root.setValue(rootComponent)
 	root.setValueState(valueStateNeedSyncStructure)
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
+	return root.syncSubComponents()
 }
 
 // setValue sets the value field of the node.

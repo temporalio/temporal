@@ -696,7 +696,9 @@ func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
 
 	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
 		mutableContext := chasm.NewMutableContext(ctx, root)
-		root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
+		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
+			softassert.Fail(ms.logger, "SetRootComponent failed", tag.Error(err))
+		}
 	}
 }
 
