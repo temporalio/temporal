@@ -308,11 +308,33 @@ func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs 
 	}
 	r.log("log directory: %s", r.logDir)
 
-	// Parse base args for race flag
+	// Parse base args: extract flags the runner manages and collect go test flags.
 	var race bool
+	var extraArgs []string
 	for _, arg := range baseArgs {
-		if arg == "-race" {
+		switch {
+		case arg == "-race":
 			race = true
+		case arg == "--":
+			// stop processing; everything after is already in testBinaryArgs
+		case strings.HasPrefix(arg, "-timeout="),
+			strings.HasPrefix(arg, "-tags="),
+			strings.HasPrefix(arg, "-coverprofile="),
+			strings.HasPrefix(arg, "--junitfile="),
+			strings.HasPrefix(arg, "--log-dir="),
+			strings.HasPrefix(arg, "--max-attempts="),
+			strings.HasPrefix(arg, "--run-timeout="),
+			strings.HasPrefix(arg, "--stuck-test-timeout="),
+			strings.HasPrefix(arg, "--parallelism="),
+			strings.HasPrefix(arg, "--group-by="),
+			strings.HasPrefix(arg, "-run="):
+			// Already managed by the runner; skip.
+		case strings.HasPrefix(arg, "-"):
+			// Pass through other go test flags (e.g., -shuffle, -count).
+			extraArgs = append(extraArgs, arg)
+		default:
+			// Pass through non-flag values that follow flags (e.g., "on" in "-shuffle on").
+			extraArgs = append(extraArgs, arg)
 		}
 	}
 
@@ -333,7 +355,7 @@ func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs 
 
 	// Run via scheduler (at least 2 workers for mid-stream retries)
 	sched := newScheduler(max(2, r.parallelism))
-	sched.run(ctx, []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, 1, "", ""))})
+	sched.run(ctx, []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, "", ""))})
 
 	// Finalize report
 	if err := r.finalizeReport(r.collector.junitReports); err != nil {
@@ -776,16 +798,25 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 
 // --- direct mode execConfig ---
 
-func (r *runner) directExecConfig(pkgs []string, race bool, attempt int, runFilter, skipFilter string) execConfig {
+func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, runFilter, skipFilter string) execConfig {
 	desc := "all"
 
 	retryForFailures, retryForCrash, retryForUnknown := r.buildRetryHooks(
 		func(plan retryPlan, attempt int) *queueItem {
 			runF := buildTestFilterPattern(plan.tests)
 			skipF := buildTestFilterPattern(plan.skipTests)
-			return r.newExecItem(r.directExecConfig(pkgs, race, attempt, runF, skipF))
+			return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF, skipF))
 		},
 	)
+
+	// In direct mode, use the overall timeout for go test's -timeout flag
+	// since the entire test suite runs as a single invocation. The per-test
+	// --run-timeout is designed for compiled mode where each test binary
+	// runs separately.
+	timeout := r.timeout
+	if timeout == 0 {
+		timeout = r.runTimeout
+	}
 
 	return execConfig{
 		startProcess: func(ctx context.Context, output io.Writer) commandResult {
@@ -794,11 +825,12 @@ func (r *runner) directExecConfig(pkgs []string, race bool, attempt int, runFilt
 				buildTags:    r.buildTags,
 				race:         race,
 				coverProfile: r.coverProfilePath,
-				timeout:      r.runTimeout,
+				timeout:      timeout,
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
 				output:       output,
 				runFilter:    runFilter,
 				skipFilter:   skipFilter,
+				extraArgs:    extraArgs,
 			}, func(command string) {
 				r.console.WriteGrouped(
 					fmt.Sprintf("%s%s 🚀 %s (attempt %d)", logPrefix, time.Now().Format("15:04:05"), desc, attempt),
