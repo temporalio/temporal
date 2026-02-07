@@ -63,7 +63,7 @@ jobs:
           go-version-file: "go.mod"
 
       - name: Run unit test
-        timeout-minutes: ${{ inputs.timeout_minutes }}
+        timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
         run: make unit-test-coverage
         env:
           UNIT_TEST_DIRS: ${{ inputs.unit_test_directory }}
@@ -76,7 +76,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        name: ${{ fromJson(inputs.test_dbs) }}
+        name:
+          - cass_es
+          - cass_es8
+          - cass_os2
+          - cass_os3
+          - sqlite
+          - mysql8
+          - postgres12
+          - postgres12_pgx
         include:
           - name: cass_es
             persistence_type: nosql
@@ -118,12 +126,13 @@ jobs:
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
     steps:
       - uses: actions/checkout@v6
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
       - name: Start containerized dependencies
-        if: ${{ toJson(matrix.containers) != '[]' }}
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) && toJson(matrix.containers) != '[]' }}
         uses: hoverkraft-tech/compose-action@v2.0.1
         with:
           compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
@@ -131,11 +140,13 @@ jobs:
           down-flags: -v
 
       - uses: actions/setup-go@v6
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         with:
           go-version-file: "go.mod"
 
       - name: Run functional test
-        timeout-minutes: ${{ inputs.timeout_minutes }}
+        if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
+        timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
         run: make functional-test-coverage
         env:
           TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
