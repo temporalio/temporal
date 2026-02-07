@@ -630,6 +630,9 @@ message ActivityInfo {
     bool reset_heartbeats = 48;
 
     int64 start_version = 50;
+
+    // Unique identifier of the worker that is this activity.
+    string worker_instance_key = 51;
 }
 
 // timer_map column

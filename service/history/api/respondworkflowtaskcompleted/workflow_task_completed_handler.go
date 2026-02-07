@@ -556,6 +556,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		stamp,
 		nil,
 		nil,
+		"", // workerInstanceKey not available for eager dispatch
 	); err != nil {
 		return nil, err
 	}
