@@ -962,8 +962,8 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 	return cleanup
 }
 
-func (c *TemporalImpl) injectHook(t *testing.T, key testhooks.Key, value any) func() {
-	cleanup := testhooks.Set(c.testHooks, key, value)
+func (c *TemporalImpl) injectHook(t *testing.T, hook testhooks.Hook, scope any) func() {
+	cleanup := hook.Apply(c.testHooks, scope)
 	t.Cleanup(cleanup)
 	return cleanup
 }

@@ -19,40 +19,68 @@ var Module = fx.Options(
 // concerns into production code. In general you should prefer other ways of writing tests
 // wherever possible, and only use TestHooks sparingly, as a last resort.
 type TestHooks struct {
-	data *sync.Map
+	lock  *sync.Mutex
+	hooks map[keyID]map[any]any // id -> scope -> value
 }
 
 func NewTestHooks() TestHooks {
-	return TestHooks{data: &sync.Map{}}
+	return TestHooks{
+		lock:  &sync.Mutex{},
+		hooks: make(map[keyID]map[any]any),
+	}
 }
 
 // Get gets the value of a test hook from the registry.
 //
 // TestHooks should be used sparingly, see comment on TestHooks.
-func Get[T any](th TestHooks, key Key) (T, bool) {
+func Get[T any, S any](th TestHooks, key Key[T, S], scope S) (T, bool) {
 	var zero T
-	if th.data == nil {
+	if th.lock == nil {
+		// This means TestHooks wasn't created via NewTestHooks. Ignore.
 		return zero, false
 	}
-	if val, ok := th.data.Load(key); ok {
-		// this is only used in test so we want to panic on type mismatch:
-		return val.(T), ok //nolint:revive
+	th.lock.Lock()
+	defer th.lock.Unlock()
+
+	if th.hooks == nil {
+		return zero, false
 	}
-	return zero, false
+	scopes, ok := th.hooks[key.id]
+	if !ok {
+		return zero, false
+	}
+	val, ok := scopes[scope]
+	if !ok {
+		return zero, false
+	}
+	return val.(T), true //nolint:revive
 }
 
 // Call calls a func() hook if present.
 //
 // TestHooks should be used sparingly, see comment on TestHooks.
-func Call(th TestHooks, key Key) {
-	if hook, ok := Get[func()](th, key); ok {
+func Call[S any](th TestHooks, key Key[func(), S], scope S) {
+	if hook, ok := Get(th, key, scope); ok {
 		hook()
 	}
 }
 
-// Set sets a test hook to a value and returns a cleanup function to unset it.
+// Set sets a test hook to a value with the given scope and returns a cleanup function to unset it.
 // Calls to Set and the cleanup function should form a stack.
-func Set[T any](th TestHooks, key Key, val T) func() {
-	th.data.Store(key, val)
-	return func() { th.data.Delete(key) }
+func Set[T any, S any](th TestHooks, key Key[T, S], val T, scope S) func() {
+	th.lock.Lock()
+	defer th.lock.Unlock()
+
+	scopes := th.hooks[key.id]
+	if scopes == nil {
+		scopes = make(map[any]any)
+		th.hooks[key.id] = scopes
+	}
+	scopes[scope] = val
+
+	return func() {
+		th.lock.Lock()
+		defer th.lock.Unlock()
+		delete(scopes, scope)
+	}
 }
