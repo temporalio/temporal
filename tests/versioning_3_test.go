@@ -5495,7 +5495,7 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 	// Ensure the task is backlogged by checking stats
 	s.validateBacklogCount(tv1, tqTypeWf, 1)
 
-	// Keep calling DescribeTaskQueue without asking for stats every second for 10 seconds to keep queue loaded
+	// Ensure the default queue is loaded by sending long polls for user data for 10 seconds
 	keepAliveDone := make(chan struct{})
 	go func() {
 		defer close(keepAliveDone)
@@ -5507,7 +5507,6 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 			case <-timeout:
 				return
 			case <-ticker.C:
-				// ensure the defaul queue is not unloaded by sending long polls for user data
 				smallCtx, cancel := context.WithTimeout(ctx, 200*time.Millisecond)
 				_, _ = s.GetTestCluster().MatchingClient().GetTaskQueueUserData(smallCtx, &matchingservice.GetTaskQueueUserDataRequest{
 					NamespaceId:   s.NamespaceID().String(),
