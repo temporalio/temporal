@@ -47,18 +47,17 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 ### gci formatter
 - [x] Comment alignment was reformatted by `gci` (Go Code Imports formatter).
 
-## Current CI Status
+## Current CI Status (commit 313213d, run 21785828765)
 - All linters: **PASS** (golangci, fmt-imports, All Linters Succeed)
 - Misc checks: **PASS**
-- Unit test: **PASS**
+- Unit test: **FAIL** (flaky tests in fx_test.go, registry_watch_test.go, memory_scheduled_queue_test.go — unrelated to testrunner2)
 - Integration test: **PASS**
 - All smoke tests: **PASS** (cass_es, cass_es8, cass_os2, mysql8, postgres12, postgres12_pgx)
 - NDC tests: **PASS** (sqlite, cass_os3)
-- Functional test (sqlite, shard 2): **PASS** (fixed by quarantine skip fix)
-- Functional test (cass_os3, shard 2): **PASS** (fixed by quarantine skip fix)
-- Functional test (sqlite, shards 1,3): **awaiting re-run** with retry timeout fix
-- Functional test (cass_os3, shards 1,3): **awaiting re-run** with retry timeout fix
-- XDC tests (sqlite, cass_os3): **awaiting re-run** — TestFuncClustersTestSuite/TestLocalNamespaceMigration times out (same issue)
+- Functional test (sqlite, shards 1-3): **PASS**
+- Functional test (sqlite, xdc): **PASS**
+- Functional test (cass_os3, shards 1-3): **PASS**
+- Functional test (cass_os3, xdc): **PASS**
 
 ## Commits
 1. Lint fixes + filterEmitted parent handling + collapseForSkip
@@ -70,3 +69,6 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 7. Fix comment alignment for gci formatter
 8. Use extended timeout for regular retry plans (4× run-timeout, capped at overall timeout) — replaced by commit 9
 9. Replace 4× timeout hack with all-stuck monitoring (track last test started, cancel when no new test for --run-timeout)
+10. Makefile: increase functional test timeout to 10m, enable stuck detection (--stuck-test-timeout=5m)
+11. Split checkStuck to reduce cognitive complexity
+12. Use overall timeout for Go binary (-test.timeout), run-timeout for monitors only
