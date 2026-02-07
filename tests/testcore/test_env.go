@@ -1,10 +1,12 @@
 package testcore
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -29,6 +31,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	Context() context.Context
 }
 
 type testEnv struct {
@@ -50,6 +53,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	timeout               time.Duration
 }
 
 type dynamicConfigOverride struct {
@@ -134,6 +138,9 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	); err != nil {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
+
+	// Setup test timeout monitoring with context
+	base.ctx = setupTestTimeoutWithContext(t, options.timeout)
 
 	env := &testEnv{
 		FunctionalTestBase: base,
