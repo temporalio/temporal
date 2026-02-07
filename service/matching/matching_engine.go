@@ -111,6 +111,13 @@ type (
 		lock                          sync.Mutex
 	}
 
+	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
+	// during worker shutdown. Thread-safe via internal mutex.
+	workerPollerTracker struct {
+		lock    sync.Mutex
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> pollerID -> cancel
+	}
+
 	// Implements matching.Engine
 	matchingEngineImpl struct {
 		status                        int32
@@ -156,9 +163,8 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
-		// workerInstancePollers tracks cancel funcs by worker instance key for bulk cancellation
-		// during worker shutdown. Maps workerInstanceKey -> (pollerID -> CancelFunc).
-		workerInstancePollers collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
+		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
+		workerInstancePollers workerPollerTracker
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -171,6 +177,42 @@ type (
 		rateLimiter TaskDispatchRateLimiter
 	}
 )
+
+// Add registers a poller for a worker instance. Thread-safe.
+func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	pollerCancels := t.pollers[workerKey]
+	if pollerCancels == nil {
+		pollerCancels = make(map[string]context.CancelFunc)
+		t.pollers[workerKey] = pollerCancels
+	}
+	pollerCancels[pollerID] = cancel
+}
+
+// Remove unregisters a poller. Cleans up empty worker entries to prevent memory leak. Thread-safe.
+func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if pollerCancels, ok := t.pollers[workerKey]; ok {
+		delete(pollerCancels, pollerID)
+		if len(pollerCancels) == 0 {
+			delete(t.pollers, workerKey)
+		}
+	}
+}
+
+// CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
+func (t *workerPollerTracker) CancelAll(workerKey string) int32 {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	pollerCancels := t.pollers[workerKey]
+	delete(t.pollers, workerKey)
+	for _, cancel := range pollerCancels {
+		cancel()
+	}
+	return int32(len(pollerCancels))
+}
 
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
@@ -259,7 +301,7 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
-		workerInstancePollers:     collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
+		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -1181,21 +1223,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	_ context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-	workerInstanceKey := request.WorkerInstanceKey
-
-	pollerSet, ok := e.workerInstancePollers.Pop(workerInstanceKey)
-	if !ok {
-		return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 0}, nil
-	}
-
-	// Cancel all pollers for this worker instance
-	var cancelledCount int32
-	for pollerID, cancel := range pollerSet.PopAll() {
-		e.outstandingPollers.Delete(pollerID)
-		cancel()
-		cancelledCount++
-	}
-
+	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
@@ -2809,20 +2837,13 @@ func (e *matchingEngineImpl) pollTask(
 		// Also track by worker instance key for bulk cancellation during shutdown
 		workerInstanceKey, hasWorkerKey := ctx.Value(workerInstanceKeyName).(string)
 		if hasWorkerKey && workerInstanceKey != "" {
-			pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey)
-			if !ok {
-				newPollerSet := collection.NewSyncMap[string, context.CancelFunc]()
-				pollerSet, _ = e.workerInstancePollers.GetOrSet(workerInstanceKey, newPollerSet)
-			}
-			pollerSet.Set(pollerID, cancel)
+			e.workerInstancePollers.Add(workerInstanceKey, pollerID, cancel)
 		}
 
 		defer func() {
 			e.outstandingPollers.Delete(pollerID)
 			if hasWorkerKey && workerInstanceKey != "" {
-				if pollerSet, ok := e.workerInstancePollers.Get(workerInstanceKey); ok {
-					pollerSet.Delete(pollerID)
-				}
+				e.workerInstancePollers.Remove(workerInstanceKey, pollerID)
 			}
 		}()
 	}
