@@ -58,9 +58,12 @@ type (
 		// a parent partition receiving forwarded tasks makes no versioning decisions and only follows what the source
 		// partition instructed.
 		forwardInfo *taskqueuespb.TaskForwardInfo
-		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks, this is populated
-		// based on forwardInfo.
+		// redirectInfo is only set when redirect rule is applied on the task. for forwarded tasks,
+		// this is populated based on forwardInfo (V2 versioning).
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
+		// redirectedFromBacklog is true if this task was redirectedFromBacklog from the backlog it was read from
+		// (V2 and V3 versioning).
+		redirectedFromBacklog bool
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
