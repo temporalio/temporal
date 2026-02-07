@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -44,6 +45,7 @@ type NexusHTTPHandler struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
+	endpointRateLimiter                  quotas.RequestRateLimiter
 	enabled                              dynamicconfig.BoolPropertyFn
 }
 
@@ -63,6 +65,7 @@ func NewNexusHTTPHandler(
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
 	namespaceConcurrencyLimitIntercptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	endpointRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 ) *NexusHTTPHandler {
@@ -75,6 +78,7 @@ func NewNexusHTTPHandler(
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
+		endpointRateLimiter:                  endpointRateLimiter,
 		enabled:                              serviceConfig.EnableNexusAPIs,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
@@ -245,6 +249,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string) *nexusContext {
 		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
 		rateLimitInterceptor:                 h.rateLimitInterceptor,
+		endpointRateLimiter:                  h.endpointRateLimiter,
 		apiName:                              apiName,
 		requestStartTime:                     time.Now(),
 		responseHeaders:                      make(map[string]string),

@@ -414,6 +414,43 @@ func NewGlobalNamespaceRateLimiter(
 	)
 }
 
+type nexusEndpointRateLimiterKey struct {
+	namespace string
+	endpoint  string
+}
+
+// NewNexusEndpointRateLimiter creates a per-caller-per-endpoint rate limiter that uses a global
+// quota divided across frontend instances. Each (callerNamespace, endpoint) pair gets its own
+// rate limiter bucket.
+func NewNexusEndpointRateLimiter(
+	memberCounter calculator.MemberCounter,
+	globalRPS dynamicconfig.TypedPropertyFnWithDestinationFilter[int],
+	burstRatioFn dynamicconfig.FloatPropertyFnWithDestinationFilter,
+) quotas.RequestRateLimiter {
+	return quotas.NewMapRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDynamicRateLimiter(
+					quotas.NewDefaultRateBurst(func() float64 {
+						clusterLimit := globalRPS(req.Caller, req.Destination)
+						if clusterLimit <= 0 {
+							return math.MaxFloat64
+						}
+						if memberCount := memberCounter.AvailableMemberCount(); memberCount > 0 {
+							return float64(clusterLimit) / float64(memberCount)
+						}
+						return float64(clusterLimit)
+					}, quotas.BurstRatioFn(func() float64 { return burstRatioFn(req.Caller, req.Destination) })),
+					time.Minute,
+				),
+			)
+		},
+		func(req quotas.Request) nexusEndpointRateLimiterKey {
+			return nexusEndpointRateLimiterKey{namespace: req.Caller, endpoint: req.Destination}
+		},
+	)
+}
+
 func IsAPIOperation(apiFullName string) bool {
 	if _, ok := operationExcludedAPIs[apiFullName]; ok {
 		return false
