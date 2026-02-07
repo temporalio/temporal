@@ -272,8 +272,8 @@ func TestBuildRetryUnitExcluding(t *testing.T) {
 		require.Equal(t, 1, rUnit.tests[0].attempts)
 		require.ElementsMatch(t, []string{
 			"TestMixed/SimpleA", "TestMixed/SimpleB", // passed
-			"TestMixed/Param/Var1",                   // passed under quarantined parent
-			"TestMixed/Param/Var2",                   // quarantined
+			"TestMixed/Param/Var1", // passed under quarantined parent
+			"TestMixed/Param/Var2", // quarantined
 		}, rUnit.skipTests)
 	})
 
