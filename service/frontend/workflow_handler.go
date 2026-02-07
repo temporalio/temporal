@@ -2836,45 +2836,66 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 		return nil, errRequestNotSet
 	}
 
-	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	// Eagerly cancel outstanding polls for this worker before processing shutdown.
-	// This prevents task orphaning when tasks are dispatched to a shutting-down worker.
+	// Run all shutdown operations concurrently to minimize latency.
+	var waitGroup sync.WaitGroup
+
+	// Cancel outstanding polls (best-effort)
 	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
-		wh.cancelOutstandingWorkerPolls(ctx, namespaceId.String(), request)
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
+		}()
 	}
 
-	// route heartbeat to the matching service
+	// Record final heartbeat (best-effort)
 	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-			NamespaceId: namespaceId.String(),
-			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace:       request.Namespace,
-				Identity:        request.Identity,
-				WorkerHeartbeat: heartbeats,
+		waitGroup.Add(1)
+		go func() {
+			defer waitGroup.Done()
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat},
+				},
+			})
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat during shutdown.",
+					tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+					tag.Error(err))
+			}
+		}()
+	}
+
+	// Unload sticky task queue (required - error fails shutdown)
+	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
+	var unloadErr atomic.Pointer[error]
+	waitGroup.Add(1)
+	go func() {
+		defer waitGroup.Done()
+		_, err := wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+			NamespaceId: namespaceID.String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     request.GetStickyTaskQueue(),
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
 			},
 		})
 		if err != nil {
-			wh.logger.Error("Failed to record worker heartbeat during shutdown.",
-				tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
-				tag.Error(err))
+			unloadErr.Store(&err)
 		}
-	}
+	}()
 
-	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
-	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
-		NamespaceId: namespaceId.String(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     request.GetStickyTaskQueue(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
-		},
-	})
-	if err != nil {
-		return nil, err
+	waitGroup.Wait()
+
+	if errPtr := unloadErr.Load(); errPtr != nil {
+		return nil, *errPtr
 	}
 
 	return &workflowservice.ShutdownWorkerResponse{}, nil
