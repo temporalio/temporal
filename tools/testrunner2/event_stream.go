@@ -145,41 +145,60 @@ func (s *testEventStream) checkStuck() ([]string, time.Duration) {
 	if len(s.stuckNames) > 0 {
 		return nil, 0 // already detected
 	}
-	now := time.Now()
 
 	// Per-test stuck check: any individual test running longer than threshold
-	if s.threshold > 0 {
-		for name, started := range s.running {
-			dur := now.Sub(started)
-			if dur > s.threshold {
-				if s.hasRunningChildren(name) {
-					continue
-				}
-				s.stuckNames = []string{name}
-				s.stuckDur = dur
-				return s.stuckNames, dur
-			}
-		}
+	if names, dur := s.checkPerTestStuck(); len(names) > 0 {
+		return names, dur
 	}
 
 	// All-stuck check: no new test started for > allStuckThreshold
-	if s.allStuckThreshold > 0 && !s.lastTestStarted.IsZero() {
-		dur := now.Sub(s.lastTestStarted)
-		if dur > s.allStuckThreshold && len(s.running) > 0 {
-			var names []string
-			for name := range s.running {
-				if !s.hasRunningChildren(name) {
-					names = append(names, name)
-				}
-			}
-			if len(names) > 0 {
-				s.stuckNames = names
-				s.stuckDur = dur
-				return names, dur
-			}
-		}
+	if names, dur := s.checkAllStuck(); len(names) > 0 {
+		return names, dur
 	}
 
+	return nil, 0
+}
+
+// checkPerTestStuck checks if any individual test has been running longer than
+// the per-test threshold. Must be called with s.mu held.
+func (s *testEventStream) checkPerTestStuck() ([]string, time.Duration) {
+	if s.threshold == 0 {
+		return nil, 0
+	}
+	now := time.Now()
+	for name, started := range s.running {
+		dur := now.Sub(started)
+		if dur > s.threshold && !s.hasRunningChildren(name) {
+			s.stuckNames = []string{name}
+			s.stuckDur = dur
+			return s.stuckNames, dur
+		}
+	}
+	return nil, 0
+}
+
+// checkAllStuck checks if no new test has started within the allStuckThreshold.
+// When this fires, all remaining running tests are considered stuck.
+// Must be called with s.mu held.
+func (s *testEventStream) checkAllStuck() ([]string, time.Duration) {
+	if s.allStuckThreshold == 0 || s.lastTestStarted.IsZero() || len(s.running) == 0 {
+		return nil, 0
+	}
+	dur := time.Since(s.lastTestStarted)
+	if dur <= s.allStuckThreshold {
+		return nil, 0
+	}
+	var names []string
+	for name := range s.running {
+		if !s.hasRunningChildren(name) {
+			names = append(names, name)
+		}
+	}
+	if len(names) > 0 {
+		s.stuckNames = names
+		s.stuckDur = dur
+		return names, dur
+	}
 	return nil, 0
 }
 
