@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -12,7 +13,9 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -44,7 +47,7 @@ type (
 	// this struct is more like a union and only one of [ query, event, forwarded ] is
 	// non-nil for any given task
 	// TODO(pri): after deprecating classic matcher, we can consolidate backlogCountHint, recycleToken,
-	// and removeFromMatcher into a single *physicalTaskQueueManager field.
+	// dispatchMetricsHandler, and removeFromMatcher into a single *physicalTaskQueueManager field.
 	internalTask struct {
 		event            *genericTaskInfo // non-nil for activity or workflow task that's locally generated
 		query            *queryTaskInfo   // non-nil for a query task that's locally sync matched
@@ -63,9 +66,10 @@ type (
 		redirectInfo *taskqueuespb.BuildIdRedirectInfo
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
-		pollerScalingDecision *taskqueuepb.PollerScalingDecision
-		recycleToken          func(*internalTask)
-		removeFromMatcher     atomic.Pointer[func()]
+		pollerScalingDecision  *taskqueuepb.PollerScalingDecision
+		recycleToken           func(*internalTask)
+		dispatchMetricsHandler metrics.Handler // set by matcher, used to emit dispatch latency in matchingEngine
+		removeFromMatcher      atomic.Pointer[func()]
 		// taskDispatchRevisionNumber represents the revision number used by the task and is
 		// max(taskDirectiveRevisionNumber, routingConfigRevisionNumber) for the task.
 		taskDispatchRevisionNumber    int64
@@ -343,4 +347,23 @@ func (task *internalTask) finishInternal(res taskResponse, wasValid bool) {
 		// TODO: this probably should not be done synchronously in PollWorkflow/ActivityTaskQueue
 		task.event.completionFunc(task, res)
 	}
+}
+
+// emitDispatchLatency emits the dispatch latency metric for this task.
+// Should be called from matchingEngine right before returning the task to the client.
+func (task *internalTask) emitDispatchLatency() {
+	if task.dispatchMetricsHandler == nil {
+		return // not set (test or special case)
+	}
+	// Only workflow/activity tasks have event.Data.CreateTime.
+	// Query and Nexus tasks are sync-match only and don't track dispatch latency.
+	if task.event == nil || task.event.Data.GetCreateTime() == nil {
+		return
+	}
+	metrics.TaskDispatchLatencyPerTaskQueue.With(task.dispatchMetricsHandler).Record(
+		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
+		metrics.StringTag("source", task.source.String()),
+		metrics.StringTag("forwarded", strconv.FormatBool(task.isForwarded())),
+		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
+	)
 }

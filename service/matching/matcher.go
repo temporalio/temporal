@@ -106,6 +106,8 @@ func (tm *TaskMatcher) recycleToken(*internalTask) {
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
+	task.dispatchMetricsHandler = tm.metricsHandler
+
 	if !tm.isBacklogNegligible() {
 		// To ensure better dispatch ordering, we block sync match when a significant backlog is present.
 		// Note that this check does not make a noticeable difference for history tasks, as they do not wait for a
@@ -133,10 +135,6 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			// if there is a response channel, block until resp is received
 			// and return error if the response contains error
 			err := <-task.responseC
-
-			if err.startErr == nil && !task.isForwarded() {
-				tm.emitDispatchLatency(task, false)
-			}
 			return true, err.startErr
 		}
 		return false, nil
@@ -148,10 +146,6 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
 				// task was remotely sync matched on the parent partition
 				token.release()
-				if !task.isForwarded() {
-					// if there are multiple forwarding hops, only the initial source partition emits this metric
-					tm.emitDispatchLatency(task, true)
-				}
 				return true, nil
 			}
 			token.release()
@@ -268,6 +262,8 @@ func (tm *TaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (
 // Note that calling MustOffer is the only way that matcher knows there are spooled tasks in the
 // backlog, in absence of a pending MustOffer call, the forwarding logic assumes that backlog is empty.
 func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interruptCh <-chan struct{}) error {
+	task.dispatchMetricsHandler = tm.metricsHandler
+
 	tm.registerBacklogTask(task)
 	defer tm.unregisterBacklogTask(task)
 
@@ -285,7 +281,6 @@ func (tm *TaskMatcher) MustOffer(ctx context.Context, task *internalTask, interr
 	// doesn't succeed, try both local match and remote match
 	select {
 	case tm.taskC <- task:
-		tm.emitDispatchLatency(task, false)
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
@@ -327,7 +322,6 @@ forLoop:
 
 		select {
 		case tm.taskC <- task:
-			tm.emitDispatchLatency(task, false)
 			return nil
 		case token := <-fwdTokenC:
 			childCtx, cancel := context.WithTimeout(ctx, time.Second*2)
@@ -342,7 +336,6 @@ forLoop:
 				select {
 				case tm.taskC <- task:
 					cancel()
-					tm.emitDispatchLatency(task, false)
 					return nil
 				case <-childCtx.Done():
 				case <-ctx.Done():
@@ -360,7 +353,6 @@ forLoop:
 			// in turn dispatched the task to a poller, because there was no error.
 			// Make sure we delete the task from the database.
 			task.finish(nil, true)
-			tm.emitDispatchLatency(task, true)
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -370,19 +362,6 @@ forLoop:
 			return errInterrupted
 		}
 	}
-}
-
-func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
-	if task.event.Data.CreateTime == nil {
-		return // should not happen but for safety
-	}
-
-	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
-		metrics.StringTag("source", task.source.String()),
-		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
-		metrics.StringTag(metrics.TaskPriorityTagName, ""),
-	)
 }
 
 // Poll blocks until a task is found or context deadline is exceeded
