@@ -141,3 +141,59 @@ func TestSlackMessageStructure(t *testing.T) {
 	infoBlock := msg.Blocks[1]
 	assert.Len(t, infoBlock.Fields, 4)
 }
+
+func TestFilterCompleted(t *testing.T) {
+	tests := []struct {
+		name     string
+		runs     []WorkflowRunSummary
+		expected int
+	}{
+		{
+			name:     "empty slice",
+			runs:     []WorkflowRunSummary{},
+			expected: 0,
+		},
+		{
+			name: "all completed",
+			runs: []WorkflowRunSummary{
+				{Conclusion: "success"},
+				{Conclusion: "failure"},
+			},
+			expected: 2,
+		},
+		{
+			name: "mixed with in-progress",
+			runs: []WorkflowRunSummary{
+				{Conclusion: "success"},
+				{Conclusion: ""}, // in-progress
+				{Conclusion: "failure"},
+			},
+			expected: 2,
+		},
+		{
+			name: "with cancelled and skipped",
+			runs: []WorkflowRunSummary{
+				{Conclusion: "success"},
+				{Conclusion: "cancelled"},
+				{Conclusion: "skipped"},
+				{Conclusion: "failure"},
+			},
+			expected: 2,
+		},
+		{
+			name: "only in-progress",
+			runs: []WorkflowRunSummary{
+				{Conclusion: ""},
+				{Conclusion: ""},
+			},
+			expected: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterCompleted(tt.runs)
+			assert.Len(t, result, tt.expected)
+		})
+	}
+}

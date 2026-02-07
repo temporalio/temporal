@@ -40,3 +40,35 @@ type FailureReport struct {
 	FailedJobs []Job
 	TotalJobs  int
 }
+
+// WorkflowRunSummary represents a workflow run for success reporting
+type WorkflowRunSummary struct {
+	Name         string        `json:"name"`
+	Conclusion   string        `json:"conclusion"`
+	Event        string        `json:"event"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	StartedAt    time.Time     `json:"startedAt"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+	Duration     time.Duration `json:"-"`
+	HeadSHA      string        `json:"headSha"`
+	DisplayTitle string        `json:"displayTitle"`
+	URL          string        `json:"url"`
+}
+
+// SuccessReport aggregates success metrics for a time period
+type SuccessReport struct {
+	Branch                string
+	WorkflowName          string
+	StartDate             time.Time
+	EndDate               time.Time
+	TotalRuns             int
+	SuccessfulRuns        int
+	FailedRuns            int
+	SuccessRate           float64
+	AverageDuration       time.Duration
+	MedianDuration        time.Duration
+	Under20MinutesPercent float64
+	Under25MinutesPercent float64
+	Under30MinutesPercent float64
+	Runs                  []WorkflowRunSummary
+}
