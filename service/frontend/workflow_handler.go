@@ -2907,7 +2907,13 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	// TODO: Optimize by grouping partitions by host and making one RPC per host instead of per partition.
 	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
 	// TODO: Consider retrying on transient failures.
-	tqFamily := tqid.UnsafeTaskQueueFamily(namespaceId, taskQueueName)
+	tqFamily, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	if err != nil {
+		wh.logger.Warn("Invalid task queue name for poll cancellation.",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
 
 	var waitGroup sync.WaitGroup
 	var totalCancelled atomic.Int32
@@ -2920,37 +2926,37 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 
 		tq := tqFamily.TaskQueue(taskType)
-		for partitionId := 0; partitionId < numPartitions; partitionId++ {
-			partition := tq.NormalPartition(partitionId)
+		for partitionID := range numPartitions {
+			partition := tq.NormalPartition(partitionID)
 			waitGroup.Add(1)
-			go func(p *tqid.NormalPartition, tt enumspb.TaskQueueType) {
+			go func() {
 				defer waitGroup.Done()
 				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
 					NamespaceId: namespaceId,
 					TaskQueue: &taskqueuepb.TaskQueue{
-						Name: p.RpcName(),
+						Name: partition.RpcName(),
 						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 					},
-					TaskQueueType:     tt,
+					TaskQueueType:     taskType,
 					WorkerInstanceKey: workerInstanceKey,
 				})
 				if err != nil {
 					failedPartitions.Add(1)
 					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-						tag.WorkflowTaskQueueName(p.RpcName()),
-						tag.NewStringTag("worker-instance-key", workerInstanceKey),
+						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.String("worker-instance-key", workerInstanceKey),
 						tag.Error(err))
 				} else {
 					totalCancelled.Add(resp.CancelledCount)
 				}
-			}(partition, taskType)
+			}()
 		}
 	}
 	waitGroup.Wait()
 
 	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
 		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
-			tag.NewStringTag("worker-instance-key", workerInstanceKey),
+			tag.String("worker-instance-key", workerInstanceKey),
 			tag.NewInt32("cancelled-count", totalCancelled.Load()),
 			tag.NewInt32("failed-partitions", failedPartitions.Load()))
 	}
