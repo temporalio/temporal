@@ -410,6 +410,40 @@ func TestBuildRetryPlans_MixedDepthSkip(t *testing.T) {
 	})
 }
 
+func TestMergeUnique(t *testing.T) {
+	t.Parallel()
+
+	t.Run("both nil", func(t *testing.T) {
+		result := mergeUnique(nil, nil)
+		require.Nil(t, result)
+	})
+
+	t.Run("first nil", func(t *testing.T) {
+		result := mergeUnique(nil, []string{"a", "b"})
+		require.Equal(t, []string{"a", "b"}, result)
+	})
+
+	t.Run("second nil", func(t *testing.T) {
+		result := mergeUnique([]string{"a", "b"}, nil)
+		require.Equal(t, []string{"a", "b"}, result)
+	})
+
+	t.Run("no overlap", func(t *testing.T) {
+		result := mergeUnique([]string{"a", "b"}, []string{"c", "d"})
+		require.Equal(t, []string{"a", "b", "c", "d"}, result)
+	})
+
+	t.Run("with overlap", func(t *testing.T) {
+		result := mergeUnique([]string{"a", "b", "c"}, []string{"b", "c", "d"})
+		require.Equal(t, []string{"a", "b", "c", "d"}, result)
+	})
+
+	t.Run("identical", func(t *testing.T) {
+		result := mergeUnique([]string{"a", "b"}, []string{"a", "b"})
+		require.Equal(t, []string{"a", "b"}, result)
+	})
+}
+
 func TestFilterParentFailures(t *testing.T) {
 	t.Parallel()
 
