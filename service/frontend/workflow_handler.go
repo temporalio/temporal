@@ -2925,9 +2925,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 	}
 
-	// TODO: Optimize by grouping partitions by host and making one RPC per host instead of per partition.
 	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
-	// TODO: Consider retrying on transient failures.
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
