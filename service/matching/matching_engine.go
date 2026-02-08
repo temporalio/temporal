@@ -2769,7 +2769,16 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	// We also want to jitter the timeout a bit to ease stampeding hurd issues when the pollers all timeout
+	// together. However take caution to only do this for non forwarded tasks.
+	var buffer time.Duration
+	deadline, hasDeadline := ctx.Deadline()
+	if pollMetadata.forwardedFrom == "" || (hasDeadline && time.Until(deadline) > 50*time.Second) {
+		buffer = returnEmptyTaskTimeBudget
+	} else {
+		buffer = 10 * time.Second * time.Duration(rand.Float64())
+	}
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), buffer)
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
