@@ -110,6 +110,16 @@ type (
 		lock                          sync.Mutex
 	}
 
+	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
+	// during worker shutdown. Thread-safe via internal mutex.
+	// The inner map key is partition:pollerID (not just pollerID) because when a poll is
+	// forwarded to a parent partition, the same pollerID is used. Without the partition prefix,
+	// the parent's cancel func would overwrite the child's, leaving the child's poll uncancelled.
+	workerPollerTracker struct {
+		lock    sync.Mutex
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> partition:pollerID -> cancel
+	}
+
 	// Implements matching.Engine
 	matchingEngineImpl struct {
 		status                        int32
@@ -155,6 +165,8 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
+		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
+		workerInstancePollers workerPollerTracker
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -167,6 +179,42 @@ type (
 		rateLimiter TaskDispatchRateLimiter
 	}
 )
+
+// Add registers a poller for a worker instance. Thread-safe.
+func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	pollerCancels := t.pollers[workerKey]
+	if pollerCancels == nil {
+		pollerCancels = make(map[string]context.CancelFunc)
+		t.pollers[workerKey] = pollerCancels
+	}
+	pollerCancels[pollerID] = cancel
+}
+
+// Remove unregisters a poller. Cleans up empty worker entries to prevent memory leak. Thread-safe.
+func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	if pollerCancels, ok := t.pollers[workerKey]; ok {
+		delete(pollerCancels, pollerID)
+		if len(pollerCancels) == 0 {
+			delete(t.pollers, workerKey)
+		}
+	}
+}
+
+// CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
+func (t *workerPollerTracker) CancelAll(workerKey string) int32 {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	pollerCancels := t.pollers[workerKey]
+	delete(t.pollers, workerKey)
+	for _, cancel := range pollerCancels {
+		cancel()
+	}
+	return int32(len(pollerCancels))
+}
 
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
@@ -254,6 +302,7 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
+		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -1167,6 +1216,14 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 		cancel()
 	}
 	return nil
+}
+
+func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
+	_ context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueue(
@@ -2774,7 +2831,23 @@ func (e *matchingEngineImpl) pollTask(
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-		defer e.outstandingPollers.Delete(pollerID)
+
+		// Also track by worker instance key for bulk cancellation during shutdown.
+		// We use partition:pollerID as the key because when a poll is forwarded to a parent
+		// partition, the same pollerID is reused. Without the partition prefix, the parent's
+		// cancel func would overwrite the child's entry.
+		workerInstanceKey := pollMetadata.workerInstanceKey
+		partitionPollerKey := partition.RpcName() + ":" + pollerID
+		if workerInstanceKey != "" {
+			e.workerInstancePollers.Add(workerInstanceKey, partitionPollerKey, cancel)
+		}
+
+		defer func() {
+			e.outstandingPollers.Delete(pollerID)
+			if workerInstanceKey != "" {
+				e.workerInstancePollers.Remove(workerInstanceKey, partitionPollerKey)
+			}
+		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
