@@ -88,3 +88,4 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 14. Skip passed subtests in top-level quarantine plans
 15. Fix direct-mode retry file name collision (directRetrySeq) + regression test
 16. Exclude quarantined tests from JUnit merge validation + regression tests
+17. Refactor: remove dead code, split testrunner.go into retry/compiled/direct/console, extract effectiveTimeout, add test count summary
