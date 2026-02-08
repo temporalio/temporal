@@ -405,6 +405,9 @@ type Config struct {
 	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VersionMembershipCacheTTL            dynamicconfig.DurationPropertyFn
 	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
+	ReactivationSignalCacheTTL           dynamicconfig.DurationPropertyFn
+	ReactivationSignalCacheMaxSize       dynamicconfig.IntPropertyFn
+	EnableVersionReactivationSignals     dynamicconfig.BoolPropertyFn
 	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
 	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
 }
@@ -772,6 +775,9 @@ func NewConfig(
 		EnableSuggestCaNOnNewTargetVersion:   dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
 		VersionMembershipCacheTTL:            dynamicconfig.VersionMembershipCacheTTL.Get(dc),
 		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
+		ReactivationSignalCacheTTL:           dynamicconfig.ReactivationSignalCacheTTL.Get(dc),
+		ReactivationSignalCacheMaxSize:       dynamicconfig.ReactivationSignalCacheMaxSize.Get(dc),
+		EnableVersionReactivationSignals:     dynamicconfig.EnableVersionReactivationSignals.Get(dc),
 		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 	}
