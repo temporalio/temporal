@@ -150,7 +150,7 @@ func (j *junitReport) collectTestCaseFailures() []string {
 }
 
 //nolint:revive // cognitive-complexity: merging reports requires nested loops
-func mergeReports(reports []*junitReport) (*junitReport, error) {
+func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport, error) {
 	if len(reports) == 0 {
 		return nil, errors.New("no reports to merge")
 	}
@@ -219,7 +219,15 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		}
 	}
 
-	// Validate that all failures from attempt N were retried in attempt N+1
+	// Validate that all failures from attempt N were retried in attempt N+1.
+	// Quarantined tests (stuck/timed-out) are excluded: Go's -test.skip uses
+	// per-level cross-product matching, so some stuck permutations can't be
+	// individually retried and are handled best-effort by the quarantine system.
+	var quarantinedNames []string
+	for _, q := range quarantined {
+		quarantinedNames = append(quarantinedNames, q...)
+	}
+
 	var reportingErrs []error
 	byAttempt := make(map[int][]*junitReport)
 	for _, r := range reports {
@@ -248,7 +256,7 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		}
 		var missing []string
 		for f := range prevFailures {
-			if !nextCases[f] {
+			if !nextCases[f] && !isQuarantined(f, quarantinedNames) {
 				missing = append(missing, f)
 			}
 		}
@@ -263,6 +271,19 @@ func mergeReports(reports []*junitReport) (*junitReport, error) {
 		Testsuites:    combined,
 		reportingErrs: reportingErrs,
 	}, nil
+}
+
+// isQuarantined checks if testName is a quarantined test or a subtest of one.
+func isQuarantined(testName string, quarantinedNames []string) bool {
+	for _, q := range quarantinedNames {
+		if testName == q ||
+			strings.HasPrefix(testName, q+"/") ||
+			strings.Contains(testName, "/"+q+"/") ||
+			strings.HasSuffix(testName, "/"+q) {
+			return true
+		}
+	}
+	return false
 }
 
 // testFailure holds information about a failed test.
