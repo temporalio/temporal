@@ -24,7 +24,7 @@ type (
 		config         *taskQueueConfig
 		db             *taskQueueDB
 		logger         log.Logger
-		counterFactory func() counter.Counter
+		counterFactory func(subqueueIndex) counter.Counter
 		appendCh       chan *writeTaskRequest
 
 		// state:
@@ -36,7 +36,7 @@ type (
 
 func newFairTaskWriter(
 	backlogMgr *fairBacklogManagerImpl,
-	counterFactory func() counter.Counter,
+	counterFactory func(subqueueIndex) counter.Counter,
 ) *fairTaskWriter {
 	return &fairTaskWriter{
 		backlogMgr:     backlogMgr,
@@ -124,7 +124,7 @@ func (w *fairTaskWriter) pickPasses(tasks []*writeTaskRequest, bases []fairLevel
 		base := bases[task.subqueue].pass
 		cntr := w.counters[task.subqueue]
 		if cntr == nil {
-			cntr = w.counterFactory()
+			cntr = w.counterFactory(task.subqueue)
 			w.counters[task.subqueue] = cntr
 		}
 		pass := cntr.GetPass(key, base, inc)
@@ -149,6 +149,10 @@ func (w *fairTaskWriter) taskWriterLoop() {
 	if w.initState() != nil {
 		return
 	}
+
+	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
+	// can we align them better?
+	persistFairnessKeys := time.NewTicker(w.config.UpdateAckInterval()).C
 
 	var reqs []*writeTaskRequest
 	for {
@@ -175,6 +179,15 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		for _, req := range reqs {
 			req.responseCh <- err
+		}
+
+		// maybe persist fairness key counts if it's time
+		select {
+		case <-persistFairnessKeys:
+			for subqueue, cntr := range w.counters {
+				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
+			}
+		default:
 		}
 	}
 }
