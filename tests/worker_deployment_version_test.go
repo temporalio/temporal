@@ -25,6 +25,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -57,17 +58,14 @@ var (
 	testRandomMetadataValue = []byte("random metadata value")
 )
 
-func TestDeploymentVersionSuite(t *testing.T) {
+func TestDeploymentVersionSuiteV0(t *testing.T) {
 	t.Parallel()
-	t.Run("sync_workflows", func(t *testing.T) {
-		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion})
-	})
-	t.Run("async_workflows", func(t *testing.T) {
-		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	})
-	t.Run("v2", func(t *testing.T) {
-		suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
-	})
+	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.InitialVersion, useV32: true})
+}
+
+func TestDeploymentVersionSuiteV2(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &DeploymentVersionSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber, useV32: true})
 }
 
 func (s *DeploymentVersionSuite) SetupSuite() {
@@ -225,6 +223,75 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 		a.NotNil(resp.GetWorkerDeploymentVersionInfo().GetCurrentSinceTime())
 		a.Nil(resp.GetWorkerDeploymentVersionInfo().GetDrainageInfo())
 		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.GetWorkerDeploymentVersionInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+
+	// Create a modified state with metadata to verify override works
+	overrideState := &deploymentspb.VersionLocalState{
+		Version:    tv.DeploymentVersion(),
+		CreateTime: timestamppb.New(time.Now()),
+		Status:     enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		Metadata: &deploymentpb.VersionMetadata{
+			Entries: map[string]*commonpb.Payload{
+				"override-key": {Data: []byte("override-value")},
+			},
+		},
+		TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+			tv.TaskQueue().GetName(): {
+				TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
+				},
+			},
+		},
+	}
+
+	// Create signal args with the override state
+	signalArgs := &deploymentspb.ForceCANVersionSignalArgs{
+		OverrideState: overrideState,
+	}
+	marshaledData, err := proto.Marshal(signalArgs)
+	s.NoError(err)
+	signalPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("binary/protobuf"),
+				},
+				Data: marshaledData,
+			},
+		},
+	}
+
+	// Send ForceCAN signal with override state
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: versionWorkflowID,
+	}
+
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, tv.ClientIdentity())
+	s.NoError(err)
+
+	// Verify that the override state is used after CAN (metadata should be present)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := assert.New(t)
+
+		resp, err := s.describeVersion(tv)
+		if !a.NoError(err) {
+			return
+		}
+
+		// Verify the metadata from override state is present
+		entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
+		a.Len(entries, 1)
+		a.Equal([]byte("override-value"), entries["override-key"].Data)
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -424,7 +491,7 @@ func (s *DeploymentVersionSuite) TestDrainageStatus_SetCurrentVersion_YesOpenWFs
 	s.GreaterOrEqual(checked4, changed4)
 }
 
-func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
+func (s *DeploymentVersionSuite) startVersionedWorkflow(ctx context.Context, tv *testvars.TestVars, behavior workflow.VersioningBehavior) sdkclient.WorkflowRun {
 	started := make(chan struct{}, 1)
 	wf := func(ctx workflow.Context) (string, error) {
 		started <- struct{}{}
@@ -442,13 +509,21 @@ func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *te
 		},
 		Identity: wId,
 	})
-	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{VersioningBehavior: workflow.VersioningBehaviorPinned})
+	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{VersioningBehavior: behavior})
 	s.NoError(w.Start())
 	defer w.Stop()
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
 	s.NoError(err)
 	s.WaitForChannel(ctx, started)
 	return run
+}
+
+func (s *DeploymentVersionSuite) startPinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
+	return s.startVersionedWorkflow(ctx, tv, workflow.VersioningBehaviorPinned)
+}
+
+func (s *DeploymentVersionSuite) startUnpinnedWorkflow(ctx context.Context, tv *testvars.TestVars) sdkclient.WorkflowRun {
+	return s.startVersionedWorkflow(ctx, tv, workflow.VersioningBehaviorAutoUpgrade)
 }
 
 func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRamping() {
@@ -1193,9 +1268,12 @@ func (s *DeploymentVersionSuite) checkDescribeWorkflowAfterOverride(
 		if s.useV32 {
 			// v0.32 override
 			a.Equal(expectedOverride.GetAutoUpgrade(), actualOverride.GetAutoUpgrade())
-			a.Equal(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
-			a.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName())
-			a.Equal(expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior())
+			a.Equalf(expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId(),
+				"expected pinned version build id %v, got %v", expectedOverride.GetPinned().GetVersion().GetBuildId(), actualOverride.GetPinned().GetVersion().GetBuildId())
+			a.Equalf(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName(),
+				"expected pinned version deployment name %v, got %v", expectedOverride.GetPinned().GetVersion().GetDeploymentName(), actualOverride.GetPinned().GetVersion().GetDeploymentName())
+			a.Equalf(expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior(),
+				"expected pinned override behavior %v, got %v", expectedOverride.GetPinned().GetBehavior(), actualOverride.GetPinned().GetBehavior())
 			if worker_versioning.OverrideIsPinned(expectedOverride) {
 				a.Equal(expectedOverride.GetPinned().GetVersion().GetDeploymentName(), resp.GetWorkflowExecutionInfo().GetWorkerDeploymentName())
 			}
@@ -1372,18 +1450,23 @@ func (s *DeploymentVersionSuite) tryDeleteVersion(
 }
 
 func (s *DeploymentVersionSuite) setAndCheckOverride(ctx context.Context, tv *testvars.TestVars, override *workflowpb.VersioningOverride) {
-	opts := &workflowpb.WorkflowExecutionOptions{VersioningOverride: override}
-	// 1. Set unpinned override --> describe workflow shows the override
+	s.setAndCheckOverrideWithExpectedOutput(ctx, tv, override, override)
+}
+
+func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(ctx context.Context, tv *testvars.TestVars, inputOverride, expectedOutputOverride *workflowpb.VersioningOverride) {
+	optsIn := &workflowpb.WorkflowExecutionOptions{VersioningOverride: inputOverride}
+	optsOut := &workflowpb.WorkflowExecutionOptions{VersioningOverride: expectedOutputOverride}
+	// Set input override --> describe workflow shows the expected output override
 	updateResp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 		Namespace:                s.Namespace().String(),
 		WorkflowExecution:        tv.WorkflowExecution(),
-		WorkflowExecutionOptions: opts,
+		WorkflowExecutionOptions: optsIn,
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
 		Identity:                 tv.ClientIdentity(),
 	})
 	s.NoError(err)
-	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), opts))
-	s.checkDescribeWorkflowAfterOverride(ctx, tv.WorkflowExecution(), override)
+	s.True(proto.Equal(updateResp.GetWorkflowExecutionOptions(), optsOut))
+	s.checkDescribeWorkflowAfterOverride(ctx, tv.WorkflowExecution(), expectedOutputOverride)
 	s.checkWorkflowUpdateOptionsEventIdentity(ctx, tv.WorkflowExecution(), tv.ClientIdentity())
 }
 
@@ -1519,6 +1602,82 @@ func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinnedSet
 
 	// 3. Set pinned override 2 --> describe workflow shows the override
 	s.setAndCheckOverride(ctx, tv, s.makePinnedOverride(tv2))
+}
+
+func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPinnedSuccess() {
+	if !s.useV32 {
+		s.T().Skip("Implied pinned overrides are only supported in v3.2+")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start a versioned poller which shall create the two versions; the versions must be present before they can be set as overrides.
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Set tv1 to current, so that the test workflow will be naturally pinned to tv1.
+	err := s.setCurrent(tv1, true)
+	s.NoError(err)
+
+	// Start a workflow pinned to tv1.
+	run := s.startPinnedWorkflow(ctx, tv1)
+
+	noVersionPinnedOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+		},
+	}}
+
+	yesVersionPinnedOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+			Version:  tv1.ExternalDeploymentVersion(),
+		},
+	}}
+
+	// 1. Set pinned override without a version --> describe workflow shows the override with pinned override version set to tv1.
+	s.setAndCheckOverrideWithExpectedOutput(ctx, tv1.WithWorkflowID(run.GetID()), noVersionPinnedOverride, yesVersionPinnedOverride)
+}
+
+func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetImpliedPinnedError() {
+	if !s.useV32 {
+		s.T().Skip("Implied pinned overrides are only supported in v3.2+")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start a versioned poller which shall create the two versions; the versions must be present before they can be set as overrides.
+	s.startVersionWorkflow(ctx, tv1)
+
+	// Set tv1 to current, so that the test workflow will run on v1.
+	err := s.setCurrent(tv1, true)
+	s.NoError(err)
+
+	// Start an auto-upgrade workflow.
+	run := s.startUnpinnedWorkflow(ctx, tv1)
+
+	noVersionPinnedOverride := &workflowpb.VersioningOverride{Override: &workflowpb.VersioningOverride_Pinned{
+		Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+			Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+		},
+	}}
+
+	// 1. Set pinned override without a version --> errors because workflow is not already pinned to a version
+	optsIn := &workflowpb.WorkflowExecutionOptions{VersioningOverride: noVersionPinnedOverride}
+	// Set input override --> describe workflow shows the expected output override
+	_, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace().String(),
+		WorkflowExecution:        tv1.WithWorkflowID(run.GetID()).WorkflowExecution(),
+		WorkflowExecutionOptions: optsIn,
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+		Identity:                 tv1.ClientIdentity(),
+	})
+	s.Error(err)
+	s.Contains(err.Error(),
+		fmt.Sprintf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
+			run.GetID(), enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE.String()),
+	)
 }
 
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetUnpinnedSetUnpinned() {

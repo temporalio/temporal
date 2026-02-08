@@ -34,32 +34,31 @@ type ActivityExecutionStatus int32
 
 const (
 	ACTIVITY_EXECUTION_STATUS_UNSPECIFIED ActivityExecutionStatus = 0
-	// The activity is not in a terminal status. This does not necessarily mean that there is a currently running
-	// attempt. The activity may be backing off between attempts or waiting for a worker to pick it up.
-	ACTIVITY_EXECUTION_STATUS_SCHEDULED        ActivityExecutionStatus = 1
-	ACTIVITY_EXECUTION_STATUS_STARTED          ActivityExecutionStatus = 2
+	// The activity has been scheduled, but a worker has not accepted the task for the current
+	// attempt. The activity may be backing off between attempts or waiting for a worker to pick it
+	// up.
+	ACTIVITY_EXECUTION_STATUS_SCHEDULED ActivityExecutionStatus = 1
+	// A worker has accepted a task for the current attempt.
+	ACTIVITY_EXECUTION_STATUS_STARTED ActivityExecutionStatus = 2
+	// A caller has requested cancellation of the activity.
 	ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED ActivityExecutionStatus = 3
-	// Left as placeholders for when we add pause.
-	// // PAUSED means activity is paused on the server, and is not running in the worker
-	// ACTIVITY_EXECUTION_STATUS_PAUSED = 4;
-	// // PAUSE_REQUESTED means activity is currently running on the worker, but paused on the server
-	// ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED = 5;
 	// The activity completed successfully.
 	ACTIVITY_EXECUTION_STATUS_COMPLETED ActivityExecutionStatus = 4
 	// The activity completed with failure.
 	ACTIVITY_EXECUTION_STATUS_FAILED ActivityExecutionStatus = 5
 	// The activity completed as canceled.
-	// Requesting to cancel an activity does not automatically transition the activity to canceled status. If the
-	// activity has a currently running attempt, the activity will only transition to canceled status if the current
-	// attempt is unsuccessful.
-	// TODO: Clarify what happens if there are no more allowed retries after the current attempt.
+	// Requesting to cancel an activity does not automatically transition the activity to canceled status. If the worker
+	// responds to cancel the activity after requesting cancellation, the status will transition to cancelled. If the
+	// activity completes, fails, times out or terminates after cancel is requested and before the worker responds with
+	// cancelled. The activity will be stay in the terminal non-cancelled status.
 	ACTIVITY_EXECUTION_STATUS_CANCELED ActivityExecutionStatus = 6
 	// The activity was terminated. Termination does not reach the worker and the activity code cannot react to it.
 	// A terminated activity may have a running attempt and will be requested to be canceled by the server when it
 	// heartbeats.
 	ACTIVITY_EXECUTION_STATUS_TERMINATED ActivityExecutionStatus = 7
-	// The activity has timed out by reaching the specified shedule-to-start or schedule-to-close timeouts.
-	// TODO: Clarify if there are other conditions where the activity can end up in timed out status.
+	// The activity has timed out by reaching the specified schedule-to-start or schedule-to-close timeouts.
+	// Additionally, after all retries are exhausted for start-to-close or heartbeat timeouts, the activity will also
+	// transition to timed out status.
 	ACTIVITY_EXECUTION_STATUS_TIMED_OUT ActivityExecutionStatus = 8
 )
 
@@ -417,8 +416,8 @@ func (x *ActivityTerminateState) GetRequestId() string {
 type ActivityAttemptState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The attempt this activity is currently on.
-	// Incremented each time a new attempt is started.
-	// TODO: Confirm if this is on scheduled or started.
+	// Incremented each time a new attempt is scheduled. A newly created activity will immediately be scheduled, and
+	// the count is set to 1.
 	Count int32 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
 	// Time from the last attempt failure to the next activity retry.
 	// If the activity is currently running, this represents the next retry interval in case the attempt fails.
@@ -435,12 +434,20 @@ type ActivityAttemptState struct {
 	// including start-to-close timeout. Activity success, termination, schedule-to-start and schedule-to-close timeouts
 	// will not reset it.
 	LastFailureDetails *ActivityAttemptState_LastFailureDetails `protobuf:"bytes,5,opt,name=last_failure_details,json=lastFailureDetails,proto3" json:"last_failure_details,omitempty"`
-	LastWorkerIdentity string                                   `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
+	// An incremental version number used to validate tasks.
+	// Initially this only verifies that a task belong to the current attempt.
+	// Later on this stamp will be used to also invalidate tasks when the activity is paused, reset, or has its options
+	// updated.
+	Stamp              int32  `protobuf:"varint,6,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
 	// The Worker Deployment Version this activity was dispatched to most recently.
 	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
 	LastDeploymentVersion *v12.WorkerDeploymentVersion `protobuf:"bytes,8,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// The request ID that came from matching's RecordActivityTaskStarted API call. Used to make this API idempotent in
+	// case of implicit retries.
+	StartRequestId string `protobuf:"bytes,9,opt,name=start_request_id,json=startRequestId,proto3" json:"start_request_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -508,6 +515,13 @@ func (x *ActivityAttemptState) GetLastFailureDetails() *ActivityAttemptState_Las
 	return nil
 }
 
+func (x *ActivityAttemptState) GetStamp() int32 {
+	if x != nil {
+		return x.Stamp
+	}
+	return 0
+}
+
 func (x *ActivityAttemptState) GetLastWorkerIdentity() string {
 	if x != nil {
 		return x.LastWorkerIdentity
@@ -520,6 +534,13 @@ func (x *ActivityAttemptState) GetLastDeploymentVersion() *v12.WorkerDeploymentV
 		return x.LastDeploymentVersion
 	}
 	return nil
+}
+
+func (x *ActivityAttemptState) GetStartRequestId() string {
+	if x != nil {
+		return x.StartRequestId
+	}
+	return ""
 }
 
 type ActivityHeartbeatState struct {
@@ -892,15 +913,17 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x06reason\x18\x04 \x01(\tR\x06reason\"7\n" +
 	"\x16ActivityTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\"\xa8\x05\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\xe8\x05\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
 	"\fstarted_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12?\n" +
 	"\rcomplete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\fcompleteTime\x12\x86\x01\n" +
-	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x120\n" +
+	"\x14last_failure_details\x18\x05 \x01(\v2T.temporal.server.chasm.lib.activity.proto.v1.ActivityAttemptState.LastFailureDetailsR\x12lastFailureDetails\x12\x14\n" +
+	"\x05stamp\x18\x06 \x01(\x05R\x05stamp\x120\n" +
 	"\x14last_worker_identity\x18\a \x01(\tR\x12lastWorkerIdentity\x12k\n" +
-	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x1a\x80\x01\n" +
+	"\x17last_deployment_version\x18\b \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x15lastDeploymentVersion\x12(\n" +
+	"\x10start_request_id\x18\t \x01(\tR\x0estartRequestId\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\x95\x01\n" +

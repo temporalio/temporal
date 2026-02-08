@@ -113,7 +113,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.namespaceEntry = tests.GlobalStandbyNamespaceEntry
 	s.namespaceID = s.namespaceEntry.ID()
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 	s.localVerificationDuration = time.Minute * 10
@@ -847,9 +847,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, errors.New("some random error"))
+	randomErr := errors.New("some random error")
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
+	s.Equal(randomErr, verificationErr.Unwrap())
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
@@ -1209,9 +1211,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
+	randomErr := errors.New("some random error")
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
+	s.ErrorAs(resp.ExecutionErr, &verificationErr)
+	s.Equal(randomErr, verificationErr.Unwrap())
 
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))

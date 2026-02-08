@@ -32,6 +32,11 @@ type (
 	updateError struct{ error }
 )
 
+// Unwrap returns the wrapped error to support errors.As() and errors.Is()
+func (e updateError) Unwrap() error {
+	return e.error
+}
+
 type (
 	updateWithStart struct {
 		shardContext       historyi.ShardContext
@@ -404,6 +409,12 @@ func makeResponse(
 }
 
 func newMultiOpError(startErr, updateErr error) error {
+	// Unwrap updateError wrapper if present to allow downstream error inspection
+	var ue updateError
+	if errors.As(updateErr, &ue) && ue.error != nil {
+		updateErr = ue.error
+	}
+
 	var message string
 	switch {
 	case startErr != nil && !errors.Is(startErr, multiOpAbortedErr):

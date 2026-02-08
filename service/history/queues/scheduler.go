@@ -54,6 +54,7 @@ type (
 	}
 
 	RateLimitedSchedulerOptions struct {
+		Enabled          dynamicconfig.BoolPropertyFn
 		EnableShadowMode dynamicconfig.BoolPropertyFn
 		StartupDelay     dynamicconfig.DurationPropertyFn
 	}
@@ -114,8 +115,8 @@ func NewScheduler(
 		if !ok || weight <= 0 {
 			logger.Warn("Task priority weight not specified or is invalid, using default weight",
 				tag.TaskPriority(key.Priority.String()),
-				tag.NewInt("priority-weight", weight),
-				tag.NewInt("default-weight", configs.DefaultPriorityWeight),
+				tag.Int("priority-weight", weight),
+				tag.Int("default-weight", configs.DefaultPriorityWeight),
 			)
 			weight = configs.DefaultPriorityWeight
 		}
@@ -222,7 +223,6 @@ func NewRateLimitedScheduler(
 		if err != nil {
 			namespaceName = namespace.EmptyName
 		}
-
 		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
@@ -239,7 +239,8 @@ func NewRateLimitedScheduler(
 		taskQuotaRequestFn,
 		taskMetricsTagsFn,
 		tasks.RateLimitedSchedulerOptions{
-			EnableShadowMode: options.EnableShadowMode(),
+			Enabled:          options.Enabled,
+			EnableShadowMode: options.EnableShadowMode,
 		},
 		logger,
 		metricsHandler,

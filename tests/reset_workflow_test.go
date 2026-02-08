@@ -23,9 +23,11 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/api/resetworkflow"
 	"go.temporal.io/server/tests/testcore"
@@ -34,7 +36,7 @@ import (
 )
 
 type ResetWorkflowTestSuite struct {
-	WorkflowUpdateBaseSuite
+	testcore.FunctionalTestBase
 }
 
 func TestResetWorkflowTestSuite(t *testing.T) {
@@ -430,7 +432,7 @@ func (t *resetTest) sendSignalAndProcessWFT(poller *testcore.TaskPoller) {
 
 //nolint:staticcheck // SA1019 TaskPoller replacement needs to be done holistically.
 func (t *resetTest) sendUpdateAndProcessWFT(tv *testvars.TestVars, poller *testcore.TaskPoller) {
-	t.ResetWorkflowTestSuite.sendUpdateNoErrorWaitPolicyAccepted(tv)
+	sendUpdateNoErrorWaitPolicyAccepted(t, tv)
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -441,18 +443,13 @@ func (t *resetTest) sendStartWorkflowRequestWithOptions(
 	tv *testvars.TestVars,
 	optsFn ...func(request *workflowservice.StartWorkflowExecutionRequest),
 ) *workflowservice.StartWorkflowExecutionResponse {
-	request := t.startWorkflowRequest(tv)
+	request := startWorkflowRequest(t, tv)
 	for _, fn := range optsFn {
 		fn(request)
 	}
 	resp, err := t.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	t.NoError(err)
 	return resp
-}
-
-func (s *ResetWorkflowTestSuite) sendUpdateNoErrorWaitPolicyAccepted(tv *testvars.TestVars) <-chan *workflowservice.UpdateWorkflowExecutionResponse {
-	s.T().Helper()
-	return s.sendUpdateNoErrorInternal(tv, &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED})
 }
 
 func (t *resetTest) messageHandler(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*protocolpb.Message, error) {
@@ -529,7 +526,7 @@ func (t *resetTest) reset(eventId int64) string {
 func (t *resetTest) run() {
 	t.totalSignals = 2
 	t.totalUpdates = 2
-	runID := t.WorkflowUpdateBaseSuite.startWorkflow(t.tv)
+	runID := mustStartWorkflow(t, t.tv)
 
 	poller := &testcore.TaskPoller{
 		Client:              t.FrontendClient(),
@@ -721,7 +718,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 		- depending on the reapply type, the buffered signal is applied post-reset or not
 	*/
 
-	runID := s.startWorkflow(tv)
+	runID := mustStartWorkflow(s, tv)
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(runID))
 
 	var resetRunID string
@@ -989,4 +986,169 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
+}
+
+func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
+	s.OverrideDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true)
+
+	// This test verifies that ExternalPayloadSize and ExternalPayloadCount are correctly
+	// tracked when a workflow is reset. It resets to a point before the activity completes,
+	// so only the workflow input external payload should be counted.
+	workflowID := "functional-reset-workflow-external-payload-test"
+	workflowType := "functional-reset-workflow-external-payload-test-type"
+	taskQueue := "functional-reset-workflow-external-payload-test-taskqueue"
+	identity := "worker1"
+
+	// External payload in workflow input
+	workflowExternalPayloadSize := int64(1024)
+	workflowInputPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+					{SizeBytes: workflowExternalPayloadSize},
+				},
+			},
+		},
+	}
+
+	activityExternalPayloadSize := int64(2048)
+	activityInputPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+					{SizeBytes: activityExternalPayloadSize},
+				},
+			},
+		},
+	}
+
+	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:               workflowInputPayload,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+		Identity:            identity,
+	})
+	s.NoError(err0)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// Workflow handler - schedules activity on first task, completes on second task
+	isFirstTaskProcessed := false
+	workflowComplete := false
+	wtHandler := func(_ *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
+		if !isFirstTaskProcessed {
+			isFirstTaskProcessed = true
+			// Schedule an activity
+			return []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             "activity1",
+						ActivityType:           &commonpb.ActivityType{Name: "TestActivity"},
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						Input:                  activityInputPayload,
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(100 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(5 * time.Second),
+					},
+				},
+			}}, nil
+		}
+		workflowComplete = true
+		// Complete workflow after activity
+		return []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("Done"),
+				},
+			},
+		}}, nil
+	}
+
+	tv := testvars.New(s.T()).WithTaskQueue(taskQueue)
+	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// Process first workflow task to schedule activities
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandler(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	s.NoError(err)
+
+	// Process one activity task which also creates second workflow task
+	_, err = poller.PollAndHandleActivityTask(tv, func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+		return &workflowservice.RespondActivityTaskCompletedRequest{Result: payloads.EncodeString("Activity Result")}, nil
+	})
+	s.Logger.Info("Poll and process first activity", tag.Error(err))
+	s.NoError(err)
+
+	// Process second workflow task which checks activity completion
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		cmds, err := wtHandler(task)
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: cmds}, err
+	})
+	s.Logger.Info("Poll and process second workflow task", tag.Error(err))
+	s.NoError(err)
+
+	s.True(workflowComplete)
+
+	descResp, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      we.GetRunId(),
+		},
+	})
+	s.NoError(descErr)
+	s.Equal(int64(2), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize+activityExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
+
+	// Get history to find reset point (first completed workflow task)
+	events := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      we.GetRunId(),
+	})
+
+	var resetToEventID int64
+	for _, event := range events {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			resetToEventID = event.GetEventId()
+			break
+		}
+	}
+	s.Positive(resetToEventID, "Should have found first completed workflow task")
+
+	resetResp, err := s.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      we.RunId,
+		},
+		Reason:                    "reset execution from test",
+		WorkflowTaskFinishEventId: resetToEventID,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Logger.Info("Workflow reset complete", tag.WorkflowRunID(resetResp.GetRunId()), tag.Int64("ResetToEventID", resetToEventID))
+
+	descResp, descErr = s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      resetResp.GetRunId(),
+		},
+	})
+	s.NoError(descErr)
+
+	// Verify external payload stats after reset
+	s.NotNil(descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(int64(1), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
+	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }

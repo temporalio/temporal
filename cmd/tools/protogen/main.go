@@ -319,12 +319,26 @@ func (g *generator) modifyHistoryServiceFile() error {
 		return fmt.Errorf("error modifying GetWorkflowExecutionHistory: %w", err)
 	}
 
-	// Replace RecordWorkflowTaskStarted method signature
+	// Replace RecordWorkflowTaskStarted method signature to return WithRawHistory response
 	err = replaceInFile(historyServiceFile,
 		`RecordWorkflowTaskStarted\(context\.Context, \*RecordWorkflowTaskStartedRequest\) \(\*RecordWorkflowTaskStartedResponse, error\)`,
 		`RecordWorkflowTaskStarted(context.Context, *RecordWorkflowTaskStartedRequest) (*RecordWorkflowTaskStartedResponseWithRawHistory, error)`)
 	if err != nil {
 		return fmt.Errorf("error modifying RecordWorkflowTaskStarted: %w", err)
+	}
+
+	return nil
+}
+
+func (g *generator) modifyMatchingServiceFile() error {
+	matchingServiceFile := filepath.Join(g.tempOut, "temporal", "server", "api", "matchingservice", "v1", "service_grpc.pb.go")
+
+	// Replace PollWorkflowTaskQueue method signature to return WithRawHistory response
+	err := replaceInFile(matchingServiceFile,
+		`PollWorkflowTaskQueue\(context\.Context, \*PollWorkflowTaskQueueRequest\) \(\*PollWorkflowTaskQueueResponse, error\)`,
+		`PollWorkflowTaskQueue(context.Context, *PollWorkflowTaskQueueRequest) (*PollWorkflowTaskQueueResponseWithRawHistory, error)`)
+	if err != nil {
+		return fmt.Errorf("error modifying PollWorkflowTaskQueue: %w", err)
 	}
 
 	return nil
@@ -446,6 +460,10 @@ func generate(ctx context.Context, gen *generator) error {
 	info("Modifying history service server interface...")
 	if err := gen.modifyHistoryServiceFile(); err != nil {
 		return fmt.Errorf("error modifying history service file: %w", err)
+	}
+	info("Modifying matching service server interface...")
+	if err := gen.modifyMatchingServiceFile(); err != nil {
+		return fmt.Errorf("error modifying matching service file: %w", err)
 	}
 	info("Moving proto files into place...")
 	if err := gen.moveProtoFiles(); err != nil {

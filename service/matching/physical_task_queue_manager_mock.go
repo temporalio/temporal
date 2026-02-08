@@ -60,9 +60,11 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(task any) *go
 }
 
 // AddSpooledTaskToMatcher mocks base method.
-func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) {
+func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret := m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // AddSpooledTaskToMatcher indicates an expected call of AddSpooledTaskToMatcher.
@@ -115,6 +117,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchSpooledTask(ctx, tas
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchSpooledTask), ctx, task, userDataChanged)
 }
 
+// FinishedDraining mocks base method.
+func (m *MockphysicalTaskQueueManager) FinishedDraining() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "FinishedDraining")
+}
+
+// FinishedDraining indicates an expected call of FinishedDraining.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) FinishedDraining() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishedDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).FinishedDraining))
+}
+
 // GetAllPollerInfo mocks base method.
 func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*taskqueue.PollerInfo {
 	m.ctrl.T.Helper()
@@ -158,17 +172,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetInternalTaskQueueStatus()
 }
 
 // GetStatsByPriority mocks base method.
-func (m *MockphysicalTaskQueueManager) GetStatsByPriority() map[int32]*taskqueue.TaskQueueStats {
+func (m *MockphysicalTaskQueueManager) GetStatsByPriority(includeRates bool) map[int32]*taskqueue.TaskQueueStats {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStatsByPriority")
+	ret := m.ctrl.Call(m, "GetStatsByPriority", includeRates)
 	ret0, _ := ret[0].(map[int32]*taskqueue.TaskQueueStats)
 	return ret0
 }
 
 // GetStatsByPriority indicates an expected call of GetStatsByPriority.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) GetStatsByPriority() *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetStatsByPriority(includeRates any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatsByPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetStatsByPriority))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatsByPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetStatsByPriority), includeRates)
 }
 
 // HasPollerAfter mocks base method.
@@ -200,17 +214,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) LegacyDescribeTaskQueue(incl
 }
 
 // MakePollerScalingDecision mocks base method.
-func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(pollStartTime time.Time) *taskqueue.PollerScalingDecision {
+func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time) *taskqueue.PollerScalingDecision {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MakePollerScalingDecision", pollStartTime)
+	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime)
 	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
 	return ret0
 }
 
 // MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(pollStartTime any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(ctx, pollStartTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), pollStartTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), ctx, pollStartTime)
 }
 
 // MarkAlive mocks base method.
@@ -266,6 +280,18 @@ func (m *MockphysicalTaskQueueManager) QueueKey() *PhysicalTaskQueueKey {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
+}
+
+// ReprocessRedirectedTasksAfterStop mocks base method.
+func (m *MockphysicalTaskQueueManager) ReprocessRedirectedTasksAfterStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReprocessRedirectedTasksAfterStop")
+}
+
+// ReprocessRedirectedTasksAfterStop indicates an expected call of ReprocessRedirectedTasksAfterStop.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) ReprocessRedirectedTasksAfterStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReprocessRedirectedTasksAfterStop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ReprocessRedirectedTasksAfterStop))
 }
 
 // SetupDraining mocks base method.
@@ -355,6 +381,18 @@ func (m *MockphysicalTaskQueueManager) UpdatePollerInfo(arg0 pollerIdentity, arg
 func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdatePollerInfo(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePollerInfo", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdatePollerInfo), arg0, arg1)
+}
+
+// UpdateRemotePriorityBacklogs mocks base method.
+func (m *MockphysicalTaskQueueManager) UpdateRemotePriorityBacklogs(arg0 remotePriorityBacklogSet) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateRemotePriorityBacklogs", arg0)
+}
+
+// UpdateRemotePriorityBacklogs indicates an expected call of UpdateRemotePriorityBacklogs.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdateRemotePriorityBacklogs(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemotePriorityBacklogs", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdateRemotePriorityBacklogs), arg0)
 }
 
 // UserDataChanged mocks base method.

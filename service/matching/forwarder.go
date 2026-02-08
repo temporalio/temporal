@@ -248,8 +248,10 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -270,8 +272,10 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
@@ -291,9 +295,11 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)

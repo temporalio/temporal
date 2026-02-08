@@ -14,6 +14,8 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_LOG_FORMAT`: Controls the output format for test logs. Available options: `json` or `console`
 - `TEMPORAL_TEST_LOG_LEVEL`:  Sets the verbosity level for test logging. Available levels: `debug`, `info`, `warn`, `error`, `fatal`
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
+- `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Each can be used by multiple tests simultaneously.
+- `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
 
 ### Debugging via IDE
 
@@ -115,6 +117,22 @@ It is *not* a substitute for regular error handling, validation, or control flow
 
 In functional tests, a failed soft assertion will not stop the test execution immediately, but it
 will ultimately fail the test.
+
+### Test Cluster
+
+Use `testcore.NewEnv(t)` to create a test environment with access to a Temporal cluster for end-to-end testing.
+
+```go
+func TestMyFeatureSuite(t *testing.T) {
+    t.Run("scenario one", func(t *testing.T) {
+        s := testcore.NewEnv(t)
+        // ...
+    })}
+```
+
+Note that each test has its own namespace (`s.Namespace()`) for isolation.
+
+> **Note:** The legacy `FunctionalTestBase` (using testify's `suite`) has been deprecated for new tests.
 
 ## OpenTelemetry (OTEL)
 

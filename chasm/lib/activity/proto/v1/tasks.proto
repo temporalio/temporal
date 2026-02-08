@@ -5,25 +5,25 @@ package temporal.server.chasm.lib.activity.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
 
 message ActivityDispatchTask {
-    // The current attempt number for this activity execution. Used for task validation.
-    int32 attempt = 1;
+    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+    int32 stamp = 1;
 }
 
 message ScheduleToStartTimeoutTask {
-    // The current attempt number for this activity execution. Used for task validation.
-    int32 attempt = 1;
+    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+    int32 stamp = 1;
 }
 
 message ScheduleToCloseTimeoutTask {
 }
 
 message StartToCloseTimeoutTask {
-    // The current attempt number for this activity execution. Used for task validation.
-    int32 attempt = 1;
+    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+    int32 stamp = 1;
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
 message HeartbeatTimeoutTask {
-    // The current attempt number for this activity execution. Used for task validation.
-    int32 attempt = 1;
+    // The current stamp for this activity execution. Used for task validation. See also [ActivityAttemptState].
+    int32 stamp = 1;
 }

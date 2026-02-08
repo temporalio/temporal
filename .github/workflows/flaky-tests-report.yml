@@ -23,7 +23,7 @@ permissions:
 
 jobs:
   flaky-tests-report:
-    runs-on: ubuntu-latest    
+    runs-on: ubuntu-latest
     steps:
       - name: Generate token
         id: generate_token
@@ -36,6 +36,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token }}
           fetch-depth: 0
 
       - name: Set up Python
@@ -64,16 +66,16 @@ jobs:
           DAYS_PARAM: ${{ github.event.inputs.days || '7' }}
         run: |
           set -euo pipefail
-          
+
           # Create output directory
           mkdir -p tools/flakes/out
-          
+
           tringa --json --since-days "$DAYS_PARAM" repo sql \
             'select classname, name, artifact from test where passed = false and skipped = false order by classname, name, artifact desc' \
             --branch main \
             --workflow-id 80591745 \
             https://github.com/temporalio/temporal > tools/flakes/out/out.json
-          
+
           echo "✅ Tringa command completed"
           echo "📊 Output file size: $(wc -c < tools/flakes/out/out.json) bytes"
           echo "📄 Full output file:"

@@ -24,8 +24,8 @@ func TestNewDefaultReplicationResolverFactory(t *testing.T) {
 
 	resolver := factory(detail)
 	require.NotNil(t, resolver)
-	assert.Equal(t, "active-cluster", resolver.ActiveClusterName())
-	assert.Equal(t, []string{"cluster1", "cluster2", "cluster3"}, resolver.ClusterNames())
+	assert.Equal(t, "active-cluster", resolver.ActiveClusterName(namespace.EmptyBusinessID))
+	assert.Equal(t, []string{"cluster1", "cluster2", "cluster3"}, resolver.ClusterNames(namespace.EmptyBusinessID))
 	assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())
 }
 
@@ -66,7 +66,7 @@ func TestDefaultReplicationResolver_ActiveClusterName(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ActiveClusterName()
+			got := resolver.ActiveClusterName(namespace.EmptyBusinessID)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -117,13 +117,13 @@ func TestDefaultReplicationResolver_ClusterNames(t *testing.T) {
 			}
 			resolver := factory(detail)
 
-			got := resolver.ClusterNames()
+			got := resolver.ClusterNames(namespace.EmptyBusinessID)
 			assert.Equal(t, tt.want, got)
 
 			// Verify immutability - modifying returned slice shouldn't affect subsequent calls
 			if len(got) > 0 {
 				got[0] = "modified"
-				got2 := resolver.ClusterNames()
+				got2 := resolver.ClusterNames(namespace.EmptyBusinessID)
 				if len(tt.want) > 0 {
 					assert.Equal(t, tt.want[0], got2[0], "ClusterNames should return a copy to preserve immutability")
 				}
@@ -191,8 +191,8 @@ func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
 
 	// Call multiple times and verify consistency
 	for i := 0; i < 5; i++ {
-		assert.Equal(t, "primary", resolver.ActiveClusterName())
-		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames())
+		assert.Equal(t, "primary", resolver.ActiveClusterName(namespace.EmptyBusinessID))
+		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames(namespace.EmptyBusinessID))
 		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())
 	}
 }
@@ -273,7 +273,7 @@ func TestDefaultReplicationResolver_FailoverVersion(t *testing.T) {
 				FailoverVersion: tt.failoverVersion,
 			}
 			resolver := factory(detail)
-			assert.Equal(t, tt.want, resolver.FailoverVersion())
+			assert.Equal(t, tt.want, resolver.FailoverVersion(namespace.EmptyBusinessID))
 		})
 	}
 }
@@ -309,6 +309,74 @@ func TestDefaultReplicationResolver_FailoverNotificationVersion(t *testing.T) {
 	}
 }
 
+func TestDefaultReplicationResolver_ActiveInCluster(t *testing.T) {
+	factory := namespace.NewDefaultReplicationResolverFactory()
+
+	tests := []struct {
+		name        string
+		detail      *persistencespb.NamespaceDetail
+		clusterName string
+		want        bool
+	}{
+		{
+			name: "local namespace returns true for any cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a"},
+				},
+				FailoverVersion: 0, // local namespace
+			},
+			clusterName: "cluster-b",
+			want:        true,
+		},
+		{
+			name: "local namespace returns true for active cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a"},
+				},
+				FailoverVersion: 0, // local namespace
+			},
+			clusterName: "cluster-a",
+			want:        true,
+		},
+		{
+			name: "global namespace returns true for active cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a", "cluster-b"},
+				},
+				FailoverVersion: 1, // global namespace
+			},
+			clusterName: "cluster-a",
+			want:        true,
+		},
+		{
+			name: "global namespace returns false for non-active cluster",
+			detail: &persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "cluster-a",
+					Clusters:          []string{"cluster-a", "cluster-b"},
+				},
+				FailoverVersion: 1, // global namespace
+			},
+			clusterName: "cluster-b",
+			want:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolver := factory(tt.detail)
+			got := resolver.ActiveInCluster(tt.clusterName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	factory := namespace.NewDefaultReplicationResolverFactory()
 
@@ -329,22 +397,22 @@ func TestDefaultReplicationResolver_Clone(t *testing.T) {
 	cloned := resolver.Clone()
 
 	// Verify the cloned resolver has the same values
-	assert.Equal(t, resolver.ActiveClusterName(), cloned.ActiveClusterName())
-	assert.Equal(t, resolver.ClusterNames(), cloned.ClusterNames())
+	assert.Equal(t, resolver.ActiveClusterName(namespace.EmptyBusinessID), cloned.ActiveClusterName(namespace.EmptyBusinessID))
+	assert.Equal(t, resolver.ClusterNames(namespace.EmptyBusinessID), cloned.ClusterNames(namespace.EmptyBusinessID))
 	assert.Equal(t, resolver.IsGlobalNamespace(), cloned.IsGlobalNamespace())
-	assert.Equal(t, resolver.FailoverVersion(), cloned.FailoverVersion())
+	assert.Equal(t, resolver.FailoverVersion(namespace.EmptyBusinessID), cloned.FailoverVersion(namespace.EmptyBusinessID))
 	assert.Equal(t, resolver.FailoverNotificationVersion(), cloned.FailoverNotificationVersion())
 	assert.Equal(t, resolver.ReplicationState(), cloned.ReplicationState())
 
 	// Verify that modifying the cloned resolver doesn't affect the original
 	cloned.SetActiveCluster("cluster-tertiary")
-	assert.Equal(t, "cluster-primary", resolver.ActiveClusterName())
-	assert.Equal(t, "cluster-tertiary", cloned.ActiveClusterName())
+	assert.Equal(t, "cluster-primary", resolver.ActiveClusterName(namespace.EmptyBusinessID))
+	assert.Equal(t, "cluster-tertiary", cloned.ActiveClusterName(namespace.EmptyBusinessID))
 
 	// Verify deep copy of clusters slice
-	clonedClusters := cloned.ClusterNames()
+	clonedClusters := cloned.ClusterNames(namespace.EmptyBusinessID)
 	if len(clonedClusters) > 0 {
 		clonedClusters[0] = "modified"
-		assert.Equal(t, "cluster-primary", cloned.ClusterNames()[0], "Modifying returned slice should not affect resolver")
+		assert.Equal(t, "cluster-primary", cloned.ClusterNames(namespace.EmptyBusinessID)[0], "Modifying returned slice should not affect resolver")
 	}
 }

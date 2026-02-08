@@ -128,7 +128,7 @@ func (s *executableTaskSuite) SetupTest() {
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
-		EventSerializer:         s.serializer,
+		Serializer:              s.serializer,
 		RemoteHistoryFetcher:    s.remoteHistoryFetcher,
 	}
 

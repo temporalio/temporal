@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -68,12 +69,14 @@ func TestBuildQueryParams(t *testing.T) {
 				r.NoError(err)
 
 				qp, err := buildQueryParams(
-					testNamespaceName,
 					testNamespaceID,
+					testNamespaceName,
 					tc.query,
 					sqlQC,
 					searchattribute.TestNameTypeMap(),
 					&searchattribute.TestMapper{},
+					nil,
+					chasm.UnspecifiedArchetypeID,
 				)
 				if tc.err != "" {
 					r.Error(err)

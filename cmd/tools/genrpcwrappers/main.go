@@ -264,8 +264,21 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(%s, taskToken.GetWorkflowId())
-`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = %s
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
 	}
 	if routingOptions.ChasmComponentRef != "" {
 		verifyFieldExists(t, routingOptions.ChasmComponentRef)
@@ -321,6 +334,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ApplyTaskQueueUserDataReplicationEventRequest",
 		"GetWorkerVersioningRulesRequest",
 		"UpdateWorkerVersioningRulesRequest",
+		"UpdateFairnessStateRequest",
 		"UpdateTaskQueueConfigRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}

@@ -186,13 +186,13 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName(businessID string) string {
-	return ns.replicationResolver.ActiveClusterName()
+	return ns.replicationResolver.ActiveClusterName(businessID)
 }
 
 // ClusterNames observes the names of the clusters to which this namespace is
 // replicated.
 func (ns *Namespace) ClusterNames(businessID string) []string {
-	return ns.replicationResolver.ClusterNames()
+	return ns.replicationResolver.ClusterNames(businessID)
 }
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
@@ -211,8 +211,9 @@ func (ns *Namespace) ConfigVersion() int64 {
 }
 
 // FailoverVersion return the namespace failover version
-func (ns *Namespace) FailoverVersion() int64 {
-	return ns.replicationResolver.FailoverVersion()
+func (ns *Namespace) FailoverVersion(businessID string) int64 {
+	return ns.replicationResolver.FailoverVersion(businessID)
+
 }
 
 // IsGlobalNamespace returns whether the namespace is a global namespace.
@@ -232,15 +233,13 @@ func (ns *Namespace) NotificationVersion() int64 {
 	return ns.notificationVersion
 }
 
-// ActiveInCluster returns whether the namespace is active, i.e. non global
-// namespace or global namespace which active cluster is the provided cluster
+// ActiveInCluster returns whether the namespace is active in the given cluster.
+// A namespace is considered active if it is either a local namespace or a global
+// namespace whose active cluster matches the provided cluster.
+// Note: Do not use this to determine if a workflow is active in the cluster.
+// Use ActiveClusterName(businessID) instead.
 func (ns *Namespace) ActiveInCluster(clusterName string) bool {
-	if !ns.replicationResolver.IsGlobalNamespace() {
-		// namespace is not a global namespace, meaning namespace is always
-		// "active" within each cluster
-		return true
-	}
-	return clusterName == ns.ActiveClusterName(EmptyBusinessID)
+	return ns.replicationResolver.ActiveInCluster(clusterName)
 }
 
 // ReplicationPolicy return the derived workflow replication policy
@@ -252,6 +251,11 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 		return ReplicationPolicyMultiCluster
 	}
 	return ReplicationPolicyOneCluster
+}
+
+// GetReplicationResolver return the replication resolover
+func (ns *Namespace) GetReplicationResolver() ReplicationResolver {
+	return ns.replicationResolver
 }
 
 func (ns *Namespace) GetCustomData(key string) string {

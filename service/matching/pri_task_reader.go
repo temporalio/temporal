@@ -317,7 +317,9 @@ func (tr *priTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	// - versioning wants to re-spool the task on a different queue and that failed
 	// - versioning says StickyWorkerUnavailable
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
-		return false, false
+		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
+		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
+		return false, true
 	}
 	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
 	if errors.As(err, &stickyUnavailable) {
@@ -417,6 +419,17 @@ func (tr *priTaskReader) getLoadedTasks() int {
 	return tr.loadedTasks
 }
 
+// isDrained returns true if this subqueue has been fully drained:
+// - We've read to the end of the queue (readLevel >= maxReadLevel)
+// - No tasks are outstanding (in flight)
+// Note: outstandingTasks.Empty() implies loadedTasks == 0
+func (tr *priTaskReader) isDrained() bool {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	maxReadLevel := tr.backlogMgr.db.GetMaxReadLevel(tr.subqueue)
+	return tr.readLevel >= maxReadLevel && tr.outstandingTasks.Empty()
+}
+
 func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 	wasAlreadyAcked, found := tr.outstandingTasks.Get(taskId)
 	if !softassert.That(tr.logger, found, "completed task not found in oustandingTasks") {
@@ -489,12 +502,7 @@ func (tr *priTaskReader) shouldGCLocked() bool {
 
 // called in new goroutine
 func (tr *priTaskReader) doGC(ackLevel int64) {
-	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
-
-	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
-	defer cancel()
-
-	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+	wasComplete, err := tr.doGCAt(ackLevel)
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -503,12 +511,37 @@ func (tr *priTaskReader) doGC(ackLevel int64) {
 	if err != nil {
 		return
 	}
+	if wasComplete {
+		tr.gcAckLevel = ackLevel
+	}
+}
+
+func (tr *priTaskReader) doGCAt(ackLevel int64) (bool, error) {
+	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
+
+	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+
+	n, err := tr.backlogMgr.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize, tr.subqueue)
+	if err != nil {
+		tr.logger.Warn("failed to gc tasks", tag.Error(err))
+		return false, err
+	}
+
 	// implementation behavior for CompleteTasksLessThan:
 	// - unit test, cassandra: always return UnknownNumRowsAffected (in this case means "all")
 	// - sql: return number of rows affected (should be <= batchSize)
 	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
 	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
-	if n == persistence.UnknownNumRowsAffected || n < batchSize {
-		tr.gcAckLevel = ackLevel
-	}
+	wasComplete := n == persistence.UnknownNumRowsAffected || n < batchSize
+	return wasComplete, err
+}
+
+// finalGC does a single synchronous gc.
+// Used when unloading a draining queue that won't be reloaded.
+func (tr *priTaskReader) finalGC() {
+	tr.lock.Lock()
+	ackLevel := tr.ackLevel
+	tr.lock.Unlock()
+	_, _ = tr.doGCAt(ackLevel)
 }

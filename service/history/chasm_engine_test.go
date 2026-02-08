@@ -157,8 +157,9 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -173,8 +174,9 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
@@ -199,7 +201,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		),
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -212,8 +214,9 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
@@ -249,8 +252,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -266,8 +270,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
@@ -303,8 +308,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
 	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -320,8 +326,9 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       runID,
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
+	s.True(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
@@ -346,7 +353,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -356,6 +363,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 		),
 	)
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
@@ -380,7 +388,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -390,6 +398,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 		),
 	)
 	s.ErrorAs(err, new(*chasm.ExecutionAlreadyStartedError))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
@@ -416,7 +425,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	executionKey, serializedRef, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -432,8 +441,9 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 		BusinessID:  tv.WorkflowID(),
 		RunID:       tv.RunID(),
 	}
-	s.Equal(expectedExecutionKey, executionKey)
-	s.validateNewExecutionResponseRef(serializedRef, expectedExecutionKey)
+	s.Equal(expectedExecutionKey, result.ExecutionKey)
+	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
@@ -460,7 +470,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		currentRunConditionFailedErr,
 	).Times(1)
 
-	_, _, err := s.engine.NewExecution(
+	result, err := s.engine.StartExecution(
 		context.Background(),
 		ref,
 		s.newTestExecutionFn(newActivityID),
@@ -470,6 +480,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 		),
 	)
 	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) newTestExecutionFn(
@@ -541,7 +552,7 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 		RunID:            tv.RunID(),
 		State:            state,
 		Status:           status,
-		LastWriteVersion: s.namespaceEntry.FailoverVersion() - 1,
+		LastWriteVersion: s.namespaceEntry.FailoverVersion(tv.WorkflowID()) - 1,
 	}
 }
 
@@ -865,7 +876,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 		RunId:       executionKey.RunID,
 		ArchetypeId: uint32(testComponentTypeID),
 		ExecutionVersionedTransition: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion() + 1, // ahead of persisted state
+			NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(executionKey.BusinessID) + 1, // ahead of persisted state
 			TransitionCount:          testTransitionCount,
 		},
 	}
@@ -885,7 +896,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	s.Error(err)
 	var unavailable *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailable)
-	s.Equal("please retry", unavailable.Message)
+	s.Equal("stale state, please retry", unavailable.Message)
 }
 
 func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
@@ -932,6 +943,82 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 	s.NoError(err)
 }
 
+func (s *chasmEngineSuite) TestStateTransitionCount() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	initialCount := int64(5)
+	state := s.buildPersistenceMutableState(
+		ref.ExecutionKey,
+		&persistencespb.ActivityInfo{ActivityId: ""},
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		nil,
+	)
+	state.ExecutionInfo.StateTransitionCount = initialCount
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: state}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(tests.UpdateWorkflowExecutionResponse, nil).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.MutableContext, component chasm.Component) error {
+			tc, ok := component.(*testComponent)
+			s.True(ok)
+			tc.ActivityInfo.ActivityId = tv.ActivityID()
+			return nil
+		},
+	)
+	s.NoError(err)
+
+	err = s.engine.ReadComponent(
+		context.Background(),
+		ref,
+		func(ctx chasm.Context, component chasm.Component) error {
+			s.Equal(initialCount+1, ctx.StateTransitionCount())
+			return nil
+		},
+	)
+	s.NoError(err)
+}
+
+// TestReadComponent_NotFound tests that ReadComponent returns an appropriate NotFound error message.
+func (s *chasmEngineSuite) TestReadComponent_NotFound() {
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("this error message will not be returned by ReadComponent")).Times(1)
+
+	err := s.engine.ReadComponent(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](
+			chasm.ExecutionKey{
+				NamespaceID: string(tests.NamespaceID),
+				BusinessID:  "non-existent-execution",
+				RunID:       "11111111-2222-3333-4444-555555555555",
+			},
+		),
+		func(ctx chasm.Context, component chasm.Component) error {
+			s.Fail("readFn should not be called")
+			return nil
+		},
+	)
+	s.Error(err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	s.Equal("test_component not found for ID: non-existent-execution", notFound.Message)
+}
+
 func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.ExecutionKey,
 	componentState proto.Message,
@@ -954,7 +1041,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			},
 			TransitionHistory: []*persistencespb.VersionedTransition{
 				{
-					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+					NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 					TransitionCount:          testTransitionCount,
 				},
 			},
@@ -971,11 +1058,11 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          1,
 					},
 					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(),
+						NamespaceFailoverVersion: s.namespaceEntry.FailoverVersion(key.BusinessID),
 						TransitionCount:          testTransitionCount,
 					},
 					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
@@ -999,9 +1086,8 @@ func (s *chasmEngineSuite) serializeComponentState(
 }
 
 const (
-	testComponentPausedSAName   = "PausedSA"
-	testComponentPausedMemoName = "PausedMemo"
-	testTransitionCount         = 10
+	testComponentPausedSAName = "PausedSA"
+	testTransitionCount       = 10
 )
 
 var (

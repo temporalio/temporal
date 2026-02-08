@@ -188,7 +188,7 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 
 		c.logger.Warn("Potential ID conflict across different archetypes",
 			tag.Archetype(contextArchetype),
-			tag.NewStringTag("mutable-state-archetype", mutableStateArchetype),
+			tag.String("mutable-state-archetype", mutableStateArchetype),
 		)
 		return nil, serviceerror.NewNotFoundf(
 			"CHASM Archetype missmatch for %v, expected: %s, actual: %s",
@@ -278,7 +278,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
+	NotifyOnExecutionSnapshot(engine, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	return nil

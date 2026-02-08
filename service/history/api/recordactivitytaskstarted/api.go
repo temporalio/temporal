@@ -12,8 +12,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -43,22 +41,8 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
-	if activityRefProto := request.GetComponentRef(); len(activityRefProto) > 0 {
-		response, _, err := chasm.UpdateComponent(
-			ctx,
-			activityRefProto,
-			(*activity.Activity).HandleStarted,
-			request,
-		)
-
-		if err != nil {
-			return nil, err
-		}
-
-		return response, nil
-	}
-
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	var rejectCode rejectCode
@@ -78,7 +62,7 @@ func Invoke(
 			}
 
 			response, rejectCode, err = recordActivityTaskStarted(
-				ctx, shardContext, mutableState, request, matchingClient,
+				ctx, shardContext, mutableState, request, matchingClient, routingInfoCache,
 			)
 			if err != nil {
 				return nil, err
@@ -123,6 +107,7 @@ func recordActivityTaskStarted(
 	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
 	if err != nil {
@@ -219,6 +204,7 @@ func recordActivityTaskStarted(
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			matchingClient,
+			routingInfoCache,
 			mutableState.GetWorkflowKey().WorkflowID,
 		)
 		if err != nil {
@@ -294,32 +280,43 @@ func recordActivityTaskStarted(
 }
 
 // TODO (Shahab): move this method to a better place
-// TODO: cache this result (especially if the answer is true)
 func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	workflowId string,
 ) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
-	resp, err := matchingClient.GetTaskQueueUserData(ctx,
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   namespaceID,
-			TaskQueue:     taskQueueName,
-			TaskQueueType: taskQueueType,
-		})
-	if err != nil {
-		return nil, 0, err
-	}
-	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+	// Check cache first for task queue routing info (independent of workflow ID)
+	routingInfo, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
+
 	if !ok {
-		// The TQ is unversioned
-		return nil, 0, nil
+		// Cache miss, fetch from matching
+		resp, err := matchingClient.GetTaskQueueUserData(ctx,
+			&matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   namespaceID,
+				TaskQueue:     taskQueueName,
+				TaskQueueType: taskQueueType,
+			})
+		if err != nil {
+			return nil, 0, err
+		}
+		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+		if ok {
+			// Calculate the routing info for versioned task queue
+			routingInfo.Current, routingInfo.CurrentRevisionNumber, _, routingInfo.Ramping, _, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+		}
+		// else: routingInfo fields are all zero/nil (unversioned)
+
+		// Store routing info in cache (without workflow ID) - even for unversioned task queues
+		routingInfoCache.Put(namespaceID, taskQueueName, taskQueueType, routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber)
 	}
 
-	current, currentRevisionNumber, _, ramping, _, rampingPercentage, rampingRevisionNumber, _ := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current, currentRevisionNumber, ramping, rampingPercentage, rampingRevisionNumber, workflowId)
+	// Apply workflow-specific routing logic
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId)
+
 	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 

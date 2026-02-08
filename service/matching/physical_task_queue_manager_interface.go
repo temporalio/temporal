@@ -18,6 +18,11 @@ type (
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		SetupDraining()
+		// FinishedDraining is called by a draining backlog manager when it has fully drained.
+		FinishedDraining()
+		// ReprocessRedirectedTasksAfterStop sends tasks in the matcher that came from other
+		// physical queues back to be reprocessed. Note this is called after Stop.
+		ReprocessRedirectedTasksAfterStop()
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
@@ -35,7 +40,7 @@ type (
 		// TODO(pri): old matcher cleanup
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
 		AddSpooledTask(task *internalTask) error
-		AddSpooledTaskToMatcher(task *internalTask)
+		AddSpooledTaskToMatcher(task *internalTask) error
 		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.
@@ -48,14 +53,15 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
+		GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats
 		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		QueueKey() *PhysicalTaskQueueKey
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
-		MakePollerScalingDecision(pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
+		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
+		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
 	}
 )

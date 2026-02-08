@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -65,6 +66,7 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
+	fx.Provide(MetadataContextInterceptorProvider),
 	fx.Provide(chasm.ChasmEngineInterceptorProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
@@ -83,6 +85,7 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
+	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
@@ -216,12 +219,18 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
+func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
+	return interceptor.NewMetadataContextInterceptor()
+}
+
 func HistoryAdditionalInterceptorsProvider(
 	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
+	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
 	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
 	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
 	return []grpc.UnaryServerInterceptor{
+		metadataContextInterceptor.Intercept,
 		healthCheckInterceptor.UnaryIntercept,
 		chasmRequestEngineInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
@@ -303,6 +312,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -325,6 +335,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 }
 
@@ -377,4 +388,21 @@ func VersionMembershipCacheProvider(
 		},
 	})
 	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
+}
+
+func RoutingInfoCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.RoutingInfoCache {
+	c := commoncache.New(serviceConfig.RoutingInfoCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.RoutingInfoCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewRoutingInfoCache(c, metricsHandler)
 }

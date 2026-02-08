@@ -130,11 +130,12 @@ type (
 		persistenceVisibilityMgr   manager.VisibilityManager
 		searchAttributesValidator  *searchattribute.Validator
 		workflowDeleteManager      deletemanager.DeleteManager
-		eventSerializer            serialization.Serializer
+		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionMembershipCache     worker_versioning.VersionMembershipCache
+		routingInfoCache           worker_versioning.RoutingInfoCache
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
@@ -155,10 +156,11 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
 	replicationProgressCache replication.ProgressCache,
-	eventSerializer serialization.Serializer,
+	serializer serialization.Serializer,
 	queueProcessorFactories []QueueFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
@@ -212,7 +214,7 @@ func NewEngineWithShardContext(
 		rawMatchingClient:          rawMatchingClient,
 		persistenceVisibilityMgr:   persistenceVisibilityMgr,
 		workflowDeleteManager:      workflowDeleteManager,
-		eventSerializer:            eventSerializer,
+		serializer:                 serializer,
 		workflowConsistencyChecker: workflowConsistencyChecker,
 		versionChecker:             headers.NewDefaultVersionChecker(),
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
@@ -225,6 +227,7 @@ func NewEngineWithShardContext(
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionMembershipCache:     versionMembershipCache,
+		routingInfoCache:           routingInfoCache,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Queue)
@@ -249,7 +252,7 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			eventSerializer,
+			serializer,
 			logger,
 		)
 		historyEngImpl.nDCHistoryImporter = ndc.NewHistoryImporter(
@@ -266,7 +269,7 @@ func NewEngineWithShardContext(
 			shard,
 			workflowCache,
 			historyEngImpl.eventsReapplier,
-			eventSerializer,
+			serializer,
 			persistenceRateLimiter,
 			logger,
 		)
@@ -315,7 +318,7 @@ func NewEngineWithShardContext(
 		workflowCache,
 		workflowDeleteManager,
 		clientBean,
-		eventSerializer,
+		serializer,
 		replicationTaskFetcherFactory,
 		replicationTaskExecutorProvider,
 		dlqWriter,
@@ -522,7 +525,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	ctx context.Context,
 	request *historyservice.RecordActivityTaskStartedRequest,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient)
+	return recordactivitytaskstarted.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.routingInfoCache)
 }
 
 // ScheduleWorkflowTask schedules a workflow task if no outstanding workflow task found
@@ -790,7 +793,7 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.ImportWorkflowExecutionRequest,
 ) (*historyservice.ImportWorkflowExecutionResponse, error) {
-	historyEvents, err := ndc.DeserializeBlobs(e.eventSerializer, request.HistoryBatches)
+	historyEvents, err := ndc.DeserializeBlobs(e.serializer, request.HistoryBatches)
 	if err != nil {
 		return nil, err
 	}
@@ -1047,7 +1050,7 @@ func (e *historyEngineImpl) AddTasks(
 	return addtasks.Invoke(
 		ctx,
 		e.shardContext,
-		e.eventSerializer,
+		e.serializer,
 		int(e.config.NumberOfShards),
 		request,
 		e.taskCategoryRegistry,

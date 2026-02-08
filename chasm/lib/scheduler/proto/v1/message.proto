@@ -13,7 +13,7 @@ import "google/protobuf/timestamp.proto";
 
 // CHASM scheduler top-level state.
 message SchedulerState {
-    // Scheduler request parameters and metadata. 
+    // Scheduler request parameters and metadata.
     temporal.api.schedule.v1.Schedule schedule = 2;
     temporal.api.schedule.v1.ScheduleInfo info = 3;
 
@@ -58,11 +58,7 @@ message InvokerState {
     // present time).
     google.protobuf.Timestamp last_processed_time = 5;
 
-    // A map keyed by the request ID, mapping to the workflow ID started as part
-    // of that request. Used to map received Nexus callbacks back to workflows.
-    // Invoker adds to this mapwhen buffered starts are enqueued, and removed
-    // when Invoker processes a completion.
-    map<string, string> request_id_to_workflow_id = 6;
+    reserved 6;
 }
 
 // CHASM scheduler's Backfiller internal state. Backfill requests are 1:1
@@ -92,4 +88,18 @@ message BackfillerState {
 message LastCompletionResult {
     temporal.api.common.v1.Payload success = 1;
     temporal.api.failure.v1.Failure failure = 2;
+}
+
+// SchedulerMigrationState is a stack-agnostic interchange format for migrating
+// scheduler state between V1 (workflow-backed) and V2 (CHASM) implementations.
+message SchedulerMigrationState {
+    SchedulerState scheduler_state = 1;
+    GeneratorState generator_state = 2;
+    InvokerState invoker_state = 3;
+    map<string, BackfillerState> backfillers = 4;
+    LastCompletionResult last_completion_result = 5;
+
+    // Visibility data.
+    map<string, temporal.api.common.v1.Payload> search_attributes = 6;
+    map<string, temporal.api.common.v1.Payload> memo = 7;
 }

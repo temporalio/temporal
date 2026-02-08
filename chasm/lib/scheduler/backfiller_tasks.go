@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -48,7 +49,10 @@ func (b *BackfillerTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	_ *schedulerpb.BackfillerTask,
 ) (bool, error) {
-	return validateTaskHighWaterMark(backfiller.GetLastProcessedTime(), attrs.ScheduledTime)
+	return validateTaskHighWaterMark(
+		backfiller.GetLastProcessedTime(),
+		attrs.ScheduledTime,
+	)
 }
 
 func (b *BackfillerTaskExecutor) Execute(
@@ -72,7 +76,10 @@ func (b *BackfillerTaskExecutor) Execute(
 		return err
 	}
 	if limit <= 0 {
-		// Fire a timer task to retry after backoff.
+		// Buffer is full, back off and retry later. Unlike the generator, the
+		// backfiller doesn't drop actions - it will retry after backoff.
+		logger.Debug("Buffer full, backing off backfill",
+			tag.String("backfill-id", backfiller.GetBackfillId()))
 		b.rescheduleBackfill(ctx, backfiller)
 		return nil
 	}
@@ -100,7 +107,7 @@ func (b *BackfillerTaskExecutor) Execute(
 	// any more tasks.
 	if result.Complete {
 		logger.Debug("backfill complete, deleting Backfiller",
-			tag.NewStringTag("backfill-id", backfiller.GetBackfillId()))
+			tag.String("backfill-id", backfiller.GetBackfillId()))
 		delete(scheduler.Backfillers, backfiller.GetBackfillId())
 		return nil
 	}
@@ -114,9 +121,7 @@ func (b *BackfillerTaskExecutor) Execute(
 
 func (b *BackfillerTaskExecutor) rescheduleBackfill(ctx chasm.MutableContext, backfiller *Backfiller) {
 	backoffTime := ctx.Now(backfiller).Add(b.backoffDelay(backfiller))
-	ctx.AddTask(backfiller, chasm.TaskAttributes{
-		ScheduledTime: backoffTime,
-	}, &schedulerpb.BackfillerTask{})
+	backfiller.scheduleTask(ctx, backoffTime)
 }
 
 // processBackfill processes a Backfiller's BackfillRequest.
@@ -190,6 +195,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 	nowpb := backfiller.GetLastProcessedTime()
 	now := nowpb.AsTime()
 	requestID := generateRequestID(scheduler, backfiller.GetBackfillId(), now, now)
+	workflowID := schedulescommon.GenerateWorkflowID(scheduler.WorkflowID(), now)
 	result.BufferedStarts = []*schedulespb.BufferedStart{
 		{
 			NominalTime:   nowpb,
@@ -198,6 +204,7 @@ func (b *BackfillerTaskExecutor) processTrigger(
 			OverlapPolicy: overlapPolicy,
 			Manual:        true,
 			RequestId:     requestID,
+			WorkflowId:    workflowID,
 		},
 	}
 	result.Complete = true
@@ -227,6 +234,7 @@ func (b *BackfillerTaskExecutor) allowedBufferedStarts(
 	// Prevents a division by 0.
 	backfillerCount = max(1, backfillerCount)
 
-	// Give half the available buffer to backfillers, distributed evenly.
-	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())), nil
+	// Give half the available buffer to backfillers, distributed evenly, minus
+	// Generator reserve space.
+	return max(0, ((tweakables.MaxBufferSize/2)/backfillerCount)-len(invoker.GetBufferedStarts())-tweakables.GeneratorBufferReserveSize), nil
 }

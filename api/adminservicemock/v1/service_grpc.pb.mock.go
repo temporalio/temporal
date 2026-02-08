@@ -683,6 +683,26 @@ func (mr *MockAdminServiceClientMockRecorder) MergeDLQTasks(ctx, in any, opts ..
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).MergeDLQTasks), varargs...)
 }
 
+// MigrateSchedule mocks base method.
+func (m *MockAdminServiceClient) MigrateSchedule(ctx context.Context, in *adminservice.MigrateScheduleRequest, opts ...grpc.CallOption) (*adminservice.MigrateScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "MigrateSchedule", varargs...)
+	ret0, _ := ret[0].(*adminservice.MigrateScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrateSchedule indicates an expected call of MigrateSchedule.
+func (mr *MockAdminServiceClientMockRecorder) MigrateSchedule(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateSchedule", reflect.TypeOf((*MockAdminServiceClient)(nil).MigrateSchedule), varargs...)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockAdminServiceClient) PurgeDLQMessages(ctx context.Context, in *adminservice.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -861,6 +881,26 @@ func (mr *MockAdminServiceClientMockRecorder) ResendReplicationTasks(ctx, in any
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ResendReplicationTasks), varargs...)
+}
+
+// StartAdminBatchOperation mocks base method.
+func (m *MockAdminServiceClient) StartAdminBatchOperation(ctx context.Context, in *adminservice.StartAdminBatchOperationRequest, opts ...grpc.CallOption) (*adminservice.StartAdminBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartAdminBatchOperation", varargs...)
+	ret0, _ := ret[0].(*adminservice.StartAdminBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartAdminBatchOperation indicates an expected call of StartAdminBatchOperation.
+func (mr *MockAdminServiceClientMockRecorder) StartAdminBatchOperation(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartAdminBatchOperation", reflect.TypeOf((*MockAdminServiceClient)(nil).StartAdminBatchOperation), varargs...)
 }
 
 // StreamWorkflowReplicationMessages mocks base method.
@@ -1545,6 +1585,21 @@ func (mr *MockAdminServiceServerMockRecorder) MergeDLQTasks(arg0, arg1 any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDLQTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).MergeDLQTasks), arg0, arg1)
 }
 
+// MigrateSchedule mocks base method.
+func (m *MockAdminServiceServer) MigrateSchedule(arg0 context.Context, arg1 *adminservice.MigrateScheduleRequest) (*adminservice.MigrateScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MigrateSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.MigrateScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MigrateSchedule indicates an expected call of MigrateSchedule.
+func (mr *MockAdminServiceServerMockRecorder) MigrateSchedule(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MigrateSchedule", reflect.TypeOf((*MockAdminServiceServer)(nil).MigrateSchedule), arg0, arg1)
+}
+
 // PurgeDLQMessages mocks base method.
 func (m *MockAdminServiceServer) PurgeDLQMessages(arg0 context.Context, arg1 *adminservice.PurgeDLQMessagesRequest) (*adminservice.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -1678,6 +1733,21 @@ func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) ResendReplicationTasks(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ResendReplicationTasks), arg0, arg1)
+}
+
+// StartAdminBatchOperation mocks base method.
+func (m *MockAdminServiceServer) StartAdminBatchOperation(arg0 context.Context, arg1 *adminservice.StartAdminBatchOperationRequest) (*adminservice.StartAdminBatchOperationResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartAdminBatchOperation", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.StartAdminBatchOperationResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartAdminBatchOperation indicates an expected call of StartAdminBatchOperation.
+func (mr *MockAdminServiceServerMockRecorder) StartAdminBatchOperation(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartAdminBatchOperation", reflect.TypeOf((*MockAdminServiceServer)(nil).StartAdminBatchOperation), arg0, arg1)
 }
 
 // StreamWorkflowReplicationMessages mocks base method.

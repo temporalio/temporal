@@ -19,6 +19,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -36,17 +39,14 @@ type (
 	}
 )
 
-func TestWorkerDeploymentSuite(t *testing.T) {
+func TestWorkerDeploymentSuiteV0(t *testing.T) {
 	t.Parallel()
-	t.Run("sync", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
-	})
-	t.Run("async", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.AsyncSetCurrentAndRamping})
-	})
-	t.Run("version_rev_no", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
-	})
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.InitialVersion})
+}
+
+func TestWorkerDeploymentSuiteV2(t *testing.T) {
+	t.Parallel()
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: workerdeployment.VersionDataRevisionNumber})
 }
 
 func (s *WorkerDeploymentSuite) SetupSuite() {
@@ -71,7 +71,6 @@ func (s *WorkerDeploymentSuite) SetupSuite() {
 
 		dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Key(): 1000,
 		dynamicconfig.VisibilityPersistenceSlowQueryThreshold.Key():  60 * time.Second,
-		dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Key():      1000,
 	}))
 }
 
@@ -212,6 +211,70 @@ func (s *WorkerDeploymentSuite) TestForceCAN_NoOpenWFS() {
 		})
 		a.NoError(err)
 		a.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion())
+	}, time.Second*10, time.Millisecond*1000)
+}
+
+func (s *WorkerDeploymentSuite) TestForceCAN_WithOverrideState() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	tv := testvars.New(s)
+
+	// Start a version workflow
+	s.startVersionWorkflow(ctx, tv)
+	s.ensureCreateVersionInDeployment(tv)
+
+	// Set the version as current
+	_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		Version:        tv.DeploymentVersionString(),
+	})
+	s.NoError(err)
+
+	// Create a modified state with a different manager identity
+	overrideState := &deploymentspb.WorkerDeploymentLocalState{
+		CreateTime:           timestamppb.New(time.Now()),
+		RoutingConfig:        &deploymentpb.RoutingConfig{CurrentVersion: tv.DeploymentVersionString()},
+		Versions:             map[string]*deploymentspb.WorkerDeploymentVersionSummary{tv.DeploymentVersionString(): {Version: tv.DeploymentVersionString(), CreateTime: timestamppb.New(time.Now())}},
+		LastModifierIdentity: "override-test-identity",
+		ManagerIdentity:      "override-manager-identity",
+	}
+
+	// Create signal args with the override state
+	signalArgs := &deploymentspb.ForceCANDeploymentSignalArgs{
+		OverrideState: overrideState,
+	}
+	marshaledData, err := proto.Marshal(signalArgs)
+	s.NoError(err)
+	signalPayload := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{
+			{
+				Metadata: map[string][]byte{
+					"encoding": []byte("binary/protobuf"),
+				},
+				Data: marshaledData,
+			},
+		},
+	}
+
+	// Send ForceCAN signal with override state
+	workflowID := workerdeployment.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+	}
+
+	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.ForceCANSignalName, signalPayload, tv.ClientIdentity())
+	s.NoError(err)
+
+	// Verify that the override state is used after CAN
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		a.Equal("override-manager-identity", resp.GetWorkerDeploymentInfo().GetManagerIdentity())
 	}, time.Second*10, time.Millisecond*1000)
 }
 
@@ -1518,26 +1581,28 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 	secondVersion := tv.WithBuildIDNumber(2)
 
 	version1CreateTime := timestamppb.Now()
-	go s.pollFromDeployment(ctx, firstVersion)
+	// Start poller with cancellable context for deterministic control
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	defer pollerCancel()
+	go s.pollFromDeployment(pollerCtx, firstVersion)
 
-	// No current deployment version set.
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	// Wait for version to be created deterministically
+	s.ensureCreateVersionInDeployment(firstVersion)
 
-		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
-			Namespace:      s.Namespace().String(),
-			DeploymentName: tv.DeploymentSeries(),
-		})
-		a.NoError(err)
-		a.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
-		a.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
-	}, time.Second*10, time.Millisecond*1000)
+	// Verify no current deployment version is set initially
+	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetCurrentDeploymentVersion())
 
 	// Set first version as current version
 	firstVersionCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, firstVersion, true, "")
 
-	resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+	resp, err = s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
@@ -1570,7 +1635,10 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_SetCurrentVersion()
 
 	// Set a new second version and set it as the current version
 	version2CreateTime := timestamppb.Now()
-	go s.pollFromDeployment(ctx, secondVersion)
+	// Start second poller with cancellable context
+	poller2Ctx, poller2Cancel := context.WithCancel(ctx)
+	defer poller2Cancel()
+	go s.pollFromDeployment(poller2Ctx, secondVersion)
 	secondVersionCurrentUpdateTime := timestamppb.Now()
 	s.setCurrentVersion(ctx, secondVersion, true, "")
 
@@ -2002,8 +2070,8 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	// start 10 different pollers each polling on a different task queue but belonging to the same version
 	tv := testvars.New(s)
 
-	versions := 10
-	for i := 0; i < versions; i++ {
+	tqs := 10
+	for i := 0; i < tqs; i++ {
 		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
 	}
 
@@ -2011,7 +2079,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	s.setCurrentVersion(ctx, tv, false, "")
 
 	// verify that the task queues, eventually, have this version as the current version in their versioning info
-	for i := 0; i < versions; i++ {
+	for i := 0; i < tqs; i++ {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}
 }
@@ -2115,6 +2183,166 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 	})
 	s.NoError(err)
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
+}
+
+// TODO: this test reliably produces a rare error seemingly about speculative tasks. use it for debugging the error
+// ex: "history_events: premature end of stream, expectedLastEventID=13 but no more events after eventID=11"
+// (error does not seems to be related to versioning)
+func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutingUpdates_RevisionConsistency() {
+	s.T().Skip("Skipping until we can figure out why this test is flaky in sqlite")
+
+	// This test should work for InitialVersion, but it takes much longer (4m vs 1m15s vs 55s, in order, for 50 TQs).
+	// Also skipping for AsyncSetCurrentAndRampingVersion, to reduce flake chance.
+	s.skipBeforeVersion(workerdeployment.VersionDataRevisionNumber)
+
+	// Start pollers on many task queues across 3 versions
+	numTaskQueues := 50
+	numVersions := 3
+	syncBatchSize := 2 // reducing batch size to cause more delay
+	numOperations := 20
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, numTaskQueues)
+	s.InjectHook(testhooks.TaskQueuesInDeploymentSyncBatchSize, syncBatchSize)
+	s.InjectHook(testhooks.MatchingDeploymentRegisterErrorBackoff, time.Millisecond*500)
+
+	// Need to increase max pending activities because it is set only to 10 for functional tests. it's 2000 by default.
+	s.OverrideDynamicConfig(dynamicconfig.NumPendingActivitiesLimitError, numOperations)
+
+	tv := testvars.New(s)
+	dn := tv.DeploymentVersion().GetDeploymentName()
+	start := time.Now()
+
+	// For each version send pollers regularly until all TQs are registered from DescribeVersion POV
+	for i := 0; i < numVersions; i++ {
+		pollCtx, cancelPollers := context.WithTimeout(context.Background(), 5*time.Minute)
+
+		sendPollers := func() {
+			for j := 0; j < numTaskQueues; j++ {
+				go s.pollFromDeployment(pollCtx, tv.WithBuildIDNumber(i).WithTaskQueueNumber(j))
+			}
+		}
+
+		sendPollers()
+
+		// Send new pollers regularly, this is needed because the registration might take more time than initial pollers
+		t := time.NewTicker(10 * time.Second)
+		go func() {
+			for {
+				select {
+				case <-t.C:
+					sendPollers()
+				case <-pollCtx.Done():
+					return
+				}
+			}
+		}()
+
+		// Wait for all task queues to be added to versions
+
+		// Wait for the versions to be created
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeployment(pollCtx, &workflowservice.DescribeWorkerDeploymentRequest{
+				Namespace:      s.Namespace().String(),
+				DeploymentName: dn,
+			})
+			a.NoError(err)
+			a.NotNil(resp.GetWorkerDeploymentInfo())
+			a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), i+1)
+		}, 3*time.Minute, 500*time.Millisecond)
+
+		fmt.Printf(">>> Time taken version %d added: %v\n", i, time.Since(start))
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(pollCtx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace:         s.Namespace().String(),
+				DeploymentVersion: tv.WithBuildIDNumber(i).ExternalDeploymentVersion(),
+			})
+			a.NoError(err)
+			a.Len(resp.GetVersionTaskQueues(), numTaskQueues)
+		}, 5*time.Minute, 1000*time.Millisecond)
+
+		t.Stop()
+		cancelPollers()
+
+		fmt.Printf(">>> Time taken registration for version %d: %v\n", i, time.Since(start))
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// Rapidly perform 20 setCurrent and setRamping operations, each targeting one of the 3 versions
+	for i := 0; i < numOperations; i++ {
+		// Alternate between setCurrent and setRamping
+		targetVersion := i % numVersions
+		versionTV := tv.WithBuildIDNumber(targetVersion)
+		for {
+			var err error
+			if i%2 == 0 {
+				// setCurrent operation
+				_, err = s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
+					Namespace:               s.Namespace().String(),
+					DeploymentName:          dn,
+					BuildId:                 versionTV.DeploymentVersion().GetBuildId(),
+					IgnoreMissingTaskQueues: true,
+					Identity:                tv.ClientIdentity(),
+				})
+			} else {
+				// setRamping operation
+				_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
+					Namespace:               s.Namespace().String(),
+					DeploymentName:          dn,
+					BuildId:                 versionTV.DeploymentVersion().GetBuildId(),
+					IgnoreMissingTaskQueues: true,
+					Identity:                tv.ClientIdentity(),
+					Percentage:              float32(50 + (i % 50)),
+				})
+			}
+			if common.IsResourceExhausted(err) {
+				fmt.Printf("ResourceExhausted error, retrying operation %d\n", i)
+				time.Sleep(100 * time.Millisecond) //nolint:forbidigo // throttling requests
+				continue
+			}
+			s.NoError(err)
+			break
+		}
+		fmt.Printf(">>> Time taken operation %d: %v\n", i, time.Since(start))
+	}
+
+	fmt.Printf(">>> Time taken operations: %v\n", time.Since(start))
+
+	// Wait for the routing update status to be completed
+	var latestRoutingConfig *deploymentpb.RoutingConfig
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: dn,
+		})
+		a.NoError(err)
+		a.NotNil(resp.GetWorkerDeploymentInfo())
+		a.Equal(enumspb.ROUTING_CONFIG_UPDATE_STATE_COMPLETED, resp.GetWorkerDeploymentInfo().GetRoutingConfigUpdateState())
+		latestRoutingConfig = resp.GetWorkerDeploymentInfo().GetRoutingConfig()
+	}, 120*time.Second, 1*time.Second)
+
+	fmt.Printf(">>> Time taken propagation: %v\n", time.Since(start))
+
+	// Verify that the routing info revision number in each of the task queues matches the latest revision number
+	// Note: The public API doesn't expose revision numbers at the task queue level, so we verify that the
+	// versioning info has been propagated correctly by checking the current/ramping versions
+	for j := 0; j < numTaskQueues; j++ {
+		tqTV := tv.WithTaskQueueNumber(j)
+		tqUD, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   s.NamespaceID().String(),
+			TaskQueueType: tqTypeWf,
+			TaskQueue:     tqTV.TaskQueue().GetName(),
+		})
+		s.NoError(err)
+		s.Len(tqUD.GetUserData().GetData().GetPerType(), 1)
+		s.Len(tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData(), 1)
+		s.ProtoEqual(latestRoutingConfig, tqUD.GetUserData().GetData().GetPerType()[int32(tqTypeWf)].GetDeploymentData().GetDeploymentsData()[dn].GetRoutingConfig())
+	}
 }
 
 func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_ReadableMessage() {
@@ -2980,7 +3208,10 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
 
 	// Start deployment workflow 1 and wait for the deployment version to exist
-	s.startVersionWorkflow(ctx, tv1)
+	// Use a cancellable context so we can stop the poller before checking pollers disappeared
+	pollerCtx, pollerCancel := context.WithCancel(ctx)
+	defer pollerCancel()
+	s.startVersionWorkflow(pollerCtx, tv1)
 
 	// Signal the first version to be drained. Only do this in tests.
 	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
@@ -3007,6 +3238,9 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 
 	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
 	s.Nil(err)
+
+	// Stop the poller so it doesn't keep polling
+	pollerCancel()
 
 	// Wait for pollers going away
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -3535,4 +3769,16 @@ func (s *WorkerDeploymentSuite) Name() string {
 		farm.Fingerprint32([]byte(fullName)),
 	)
 	return strings.Replace(short, ".", "|", -1)
+}
+
+func (s *WorkerDeploymentSuite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.workflowVersion < version {
+		s.T().Skipf("test supports version %v and newer", version)
+	}
+}
+
+func (s *WorkerDeploymentSuite) skipFromVersion(version workerdeployment.DeploymentWorkflowVersion) {
+	if s.workflowVersion >= version {
+		s.T().Skipf("test supports version older than %v", version)
+	}
 }

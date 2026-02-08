@@ -3,21 +3,16 @@ package activity
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	errordetailspb "go.temporal.io/api/errordetails/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var (
@@ -58,35 +53,32 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	reusePolicy, ok := businessIDReusePolicyMap[frontendReq.GetIdReusePolicy()]
 	if !ok {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("unsupported ID reuse policy: %v", frontendReq.GetIdReusePolicy()))
+		return nil, serviceerror.NewInvalidArgumentf("unsupported ID reuse policy: %v", frontendReq.GetIdReusePolicy())
 	}
 
 	conflictPolicy, ok := businessIDConflictPolicyMap[frontendReq.GetIdConflictPolicy()]
 	if !ok {
-		return nil, serviceerror.NewFailedPrecondition(fmt.Sprintf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy()))
+		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
-	response, key, _, err := chasm.NewExecution(
+	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.GetNamespaceId(),
 			BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		},
-		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, *workflowservice.StartActivityExecutionResponse, error) {
+		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 
-			return newActivity, &workflowservice.StartActivityExecutionResponse{
-				Started: true, // TODO for ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING, we need a know from chasm the execution is existing and to set false
-				// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
-			}, nil
+			return newActivity, nil
 		},
 		req.GetFrontendRequest(),
 		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
@@ -96,30 +88,18 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	if err != nil {
 		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 		if errors.As(err, &alreadyStartedErr) {
-			details := &errordetailspb.ActivityExecutionAlreadyStartedFailure{
-				StartRequestId: alreadyStartedErr.CurrentRequestID,
-				RunId:          alreadyStartedErr.CurrentRunID,
-			}
-
-			errStatus := status.New(codes.AlreadyExists, "activity execution already started")
-
-			errStatusWithDetails, errDetail := status.New(codes.AlreadyExists, "activity execution already started").WithDetails(details)
-			if errDetail != nil {
-				h.logger.Error("Failed to add error details to ActivityExecutionAlreadyStartedFailure",
-					tag.Error(errDetail), tag.ActivityID(frontendReq.GetActivityId()))
-				return nil, errStatus.Err()
-			}
-
-			return nil, errStatusWithDetails.Err()
+			return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
 		}
 
 		return nil, err
 	}
 
-	response.RunId = key.RunID
-
 	return &activitypb.StartActivityExecutionResponse{
-		FrontendResponse: response,
+		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
+			RunId:   result.ExecutionKey.RunID,
+			Started: result.Created,
+			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
+		},
 	}, nil
 }
 
@@ -138,12 +118,6 @@ func (h *handler) DescribeActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
@@ -206,12 +180,6 @@ func (h *handler) PollActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see

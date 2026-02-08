@@ -1130,8 +1130,8 @@ func (s *nodeSuite) TestApplyMutation_OutOfOrder() {
 	s.NoError(err)
 
 	// Test the case where child node is applied before parent node.
-	err = root.ApplySnapshot(NodesSnapshot{
-		Nodes: map[string]*persistencespb.ChasmNode{
+	err = root.ApplyMutation(NodesMutation{
+		UpdatedNodes: map[string]*persistencespb.ChasmNode{
 			"SubComponent1/SubComponent11": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
 					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -1464,14 +1464,29 @@ func (s *nodeSuite) TestValidateAccess() {
 		setup func(*Node, Context) error
 	}{
 		{
-			name:            "access check applies only to ancestors",
+			name:            "access check applies only to ancestors (terminated)",
 			valid:           true,
 			intent:          OperationIntentProgress,
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			terminated:      false,
-			setup: func(target *Node, _ Context) error {
+			setup: func(target *Node, ctx Context) error {
 				// Set the terminated flag on the target node instead of an ancestor
 				target.terminated = true
+				return nil
+			},
+		},
+		{
+			name:            "access check applies only to ancestors (closed)",
+			valid:           true,
+			intent:          OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			terminated:      false,
+			setup: func(target *Node, ctx Context) error {
+				if err := target.prepareComponentValue(ctx); err != nil {
+					return err
+				}
+				targetComponent, _ := target.value.(*TestSubComponent11)
+				targetComponent.SubComponent11Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 				return nil
 			},
 		},
@@ -1502,6 +1517,20 @@ func (s *nodeSuite) TestValidateAccess() {
 			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			terminated:      true,
 			valid:           false,
+		},
+		{
+			name:            "detached node skips parent validation",
+			valid:           true,
+			intent:          OperationIntentProgress,
+			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, // root is closed
+			terminated:      false,
+			setup: func(target *Node, _ Context) error {
+				// Set the parent node (SubComponent1) as detached.
+				// When validateParentAccess is called on a detached node, it skips
+				// ancestor validation entirely.
+				target.parent.serializedNode.GetMetadata().GetComponentAttributes().Detached = true
+				return nil
+			},
 		},
 	}
 
@@ -1534,10 +1563,8 @@ func (s *nodeSuite) TestValidateAccess() {
 				s.NoError(tc.setup(node, ctx))
 			}
 
-			// Validation always begins on the target node's parent.
-			parent := node.parent
-			s.NotNil(parent)
-			err = parent.validateAccess(ctx)
+			// Validation begins on the target node, checking ancestors only.
+			err = node.validateAccess(ctx)
 			if tc.valid {
 				s.NoError(err)
 			} else {
@@ -1547,6 +1574,70 @@ func (s *nodeSuite) TestValidateAccess() {
 		})
 	}
 
+}
+
+func (s *nodeSuite) TestGetComponent_DetachedNodeBypassesParentValidation() {
+	// Test that a detached node can be accessed even when its parent is closed.
+	root, err := s.newTestTree(testComponentSerializedNodes())
+	s.NoError(err)
+
+	targetPath := []string{"SubComponent1", "SubComponent11"}
+	targetNode, ok := root.findNode(targetPath)
+	s.True(ok)
+
+	// Mark the target node as detached.
+	targetNode.serializedNode.GetMetadata().GetComponentAttributes().Detached = true
+
+	// Close the root node (set lifecycle to COMPLETED).
+	ctx := NewMutableContext(
+		newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+		root,
+	)
+	err = root.prepareComponentValue(ctx)
+	s.NoError(err)
+	rootComponent, ok := root.value.(*TestComponent)
+	s.True(ok)
+	rootComponent.ComponentData.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+
+	// GetComponent on the detached node should succeed despite root being closed.
+	ref := ComponentRef{
+		componentPath: targetPath,
+	}
+	component, err := root.Component(ctx, ref)
+	s.NoError(err)
+	s.NotNil(component)
+}
+
+func (s *nodeSuite) TestGetComponent_ClosedTargetSucceeds() {
+	// Test that a closed target component can still be accessed via Component()
+	// because we only check ancestor lifecycle, not the target's lifecycle.
+	root, err := s.newTestTree(testComponentSerializedNodes())
+	s.NoError(err)
+
+	targetPath := []string{"SubComponent1", "SubComponent11"}
+	targetNode, ok := root.findNode(targetPath)
+	s.True(ok)
+
+	ctx := NewMutableContext(
+		newContextWithOperationIntent(context.Background(), OperationIntentProgress),
+		root,
+	)
+
+	// Close the target node's lifecycle (set to COMPLETED).
+	err = targetNode.prepareComponentValue(ctx)
+	s.NoError(err)
+	targetComponent, ok := targetNode.value.(*TestSubComponent11)
+	s.True(ok)
+	targetComponent.SubComponent11Data.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	s.True(targetComponent.LifecycleState(ctx).IsClosed())
+
+	// GetComponent on the closed target should succeed because we only check ancestors.
+	ref := ComponentRef{
+		componentPath: targetPath,
+	}
+	component, err := root.Component(ctx, ref)
+	s.NoError(err)
+	s.NotNil(component)
 }
 
 func (s *nodeSuite) TestGetComponent() {
@@ -2073,41 +2164,73 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 				},
 			},
 		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testSideEffectTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 4,
+								Data:                      taskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							},
+						},
+						PureTasks: []*persistencespb.ChasmComponentAttributes_Task{
+							{
+								TypeId:                    testPureTaskTypeID,
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 5,
+								Data:                      taskBlob,
+								PhysicalTaskStatus:        physicalTaskStatusNone,
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 
+	nextTransitionCount := int64(2)
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return nextTransitionCount }
+
 	// The idea is to mark the node as dirty by accessing it with a mutable context.
-	// Otherwise, CloseTransaction logic will skip validating tasks for this node.
-	// This is a no-op change right now, since we are manually setting the LastUpdateVersionedTransition
-	// for the node below.
-	// Once CloseTransaction is fully implemented, this will be mark the node as dirty,
-	// and CloseTransaction logic will take care of updating LastUpdateVersionedTransition.
 	mutableContext := NewMutableContext(context.Background(), root)
 	_, err = root.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 
-	// TODO: remove this when CloseTransaction is fully implemented.
-	root.serializedNode.Metadata.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
-		TransitionCount: 2,
-	}
-
 	s.testLibrary.mockSideEffectTaskValidator.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 	s.testLibrary.mockOutboundSideEffectTaskValidator.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	s.testLibrary.mockPureTaskValidator.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
-	err = root.closeTransactionUpdateComponentTasks(&persistencespb.VersionedTransition{TransitionCount: 2})
+	mutation, err := root.CloseTransaction()
 	s.NoError(err)
 
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+
+	s.Len(mutation.UpdatedNodes, 2)
+	for _, updatedNode := range mutation.UpdatedNodes {
+		s.Equal(nextTransitionCount, updatedNode.GetMetadata().GetLastUpdateVersionedTransition().TransitionCount)
+	}
+	s.Empty(mutation.DeletedNodes)
 
 	componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
 	s.Empty(componentAttr.PureTasks)
 	s.Len(componentAttr.SideEffectTasks, 1)
 	s.Equal(testOutboundSideEffectTaskTypeID, componentAttr.SideEffectTasks[0].GetTypeId())
+
+	componentAttr = root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
+	s.Empty(componentAttr.PureTasks)
+	s.Empty(componentAttr.SideEffectTasks)
 }
 
 func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
@@ -2705,13 +2828,25 @@ func (s *nodeSuite) TestEachPureTask() {
 							},
 							{
 								TypeId: testPureTaskTypeID,
-								// Expired
+								// Expired, but when processing this task, delete the SubComponent11 itself.
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
 								VersionedTransitionOffset: 4,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
 									Data: []byte("some-random-data-sc11-2"),
+								}),
+							},
+							{
+								TypeId: testPureTaskTypeID,
+								// Expired, but should not be executed because previous task deletes SubComponent1
+								// (this node's parent).
+								ScheduledTime:             timestamppb.New(now),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 5,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+								Data: mustEncode(&commonpb.Payload{
+									Data: []byte("some-random-data-sc11-3"),
 								}),
 							},
 						},
@@ -2732,7 +2867,7 @@ func (s *nodeSuite) TestEachPureTask() {
 								// when processing the pure task from the root component.
 								ScheduledTime:             timestamppb.New(now),
 								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
-								VersionedTransitionOffset: 5,
+								VersionedTransitionOffset: 6,
 								PhysicalTaskStatus:        physicalTaskStatusCreated,
 								Data: mustEncode(&commonpb.Payload{
 									Data: []byte("some-random-data-sc2"),
@@ -2749,7 +2884,7 @@ func (s *nodeSuite) TestEachPureTask() {
 	s.NoError(err)
 	s.NotNil(root)
 
-	actualTaskCount := 0
+	processedTaskData := [][]byte{}
 	err = root.EachPureTask(now.Add(time.Minute), func(executor NodePureTask, taskAttributes TaskAttributes, task any) (bool, error) {
 		s.NotNil(executor)
 		s.NotNil(taskAttributes)
@@ -2757,8 +2892,9 @@ func (s *nodeSuite) TestEachPureTask() {
 		testPureTask, ok := task.(*TestPureTask)
 		s.True(ok)
 
-		actualTaskCount += 1
+		processedTaskData = append(processedTaskData, testPureTask.Payload.Data)
 
+		// When processing root component task, delete SubComponent2 to verify its task is not executed.
 		if slices.Equal(
 			testPureTask.Payload.Data,
 			[]byte("some-random-data-root"),
@@ -2767,15 +2903,30 @@ func (s *nodeSuite) TestEachPureTask() {
 			rootComponent, err := root.Component(mutableContext, ComponentRef{})
 			s.NoError(err)
 
-			// delete
-			rootComponent.(*TestComponent).SubComponent2 = Field[*TestSubComponent2]{}
+			rootComponent.(*TestComponent).SubComponent2 = NewEmptyField[*TestSubComponent2]()
+		}
+
+		// When processing task for SubComponent11, delete its parent SubComponent1 so that the remaining task is not executed.
+		if slices.Equal(
+			testPureTask.Payload.Data,
+			[]byte("some-random-data-sc11-2"),
+		) {
+			mutableContext := NewMutableContext(context.Background(), root)
+			rootComponent, err := root.Component(mutableContext, ComponentRef{})
+			s.NoError(err)
+
+			rootComponent.(*TestComponent).SubComponent1 = NewEmptyField[*TestSubComponent1]()
 		}
 
 		return true, nil
 	})
 	s.NoError(err)
-	s.Equal(3, actualTaskCount)
-	s.Len(root.taskValueCache, actualTaskCount)
+	s.Equal([][]byte{
+		[]byte("some-random-data-root"),
+		[]byte("some-random-data-sc11-1"),
+		[]byte("some-random-data-sc11-2"),
+	}, processedTaskData)
+	s.Len(root.taskValueCache, 1) // only one task from root component
 }
 
 func (s *nodeSuite) TestExecutePureTask() {
@@ -2852,6 +3003,62 @@ func (s *nodeSuite) TestExecutePureTask() {
 	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
+}
+
+func (s *nodeSuite) TestValidatePureTask() {
+	taskAttributes := TaskAttributes{}
+	pureTask := &TestPureTask{
+		Payload: &commonpb.Payload{
+			Data: []byte("some-random-data"),
+		},
+	}
+
+	root := s.testComponentTree()
+	_, err := root.CloseTransaction()
+	s.NoError(err)
+
+	ctx := context.Background()
+	expectValidate := func(retValue bool, errValue error) {
+		s.testLibrary.mockPureTaskValidator.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Eq(taskAttributes), gomock.Any()).Return(retValue, errValue).Times(1)
+	}
+
+	// Succeed task validation (happy case).
+	expectValidate(true, nil)
+	valid, err := root.ValidatePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.True(valid)
+	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
+
+	// Invalid task (validation returns false).
+	expectValidate(false, nil)
+	valid, err = root.ValidatePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.False(valid)
+	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
+
+	// Error during task validation (no execution occurs).
+	expectedErr := errors.New("dummy")
+	expectValidate(false, expectedErr)
+	_, err = root.ValidatePureTask(ctx, taskAttributes, pureTask)
+	s.ErrorIs(expectedErr, err)
+	s.Equal(valueStateSynced, root.valueState) // node is always clean for task validation
+
+	// Close the root component.
+	mutableCtx := NewMutableContext(ctx, root)
+	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
+	s.NoError(err)
+	rootComponent.(*TestComponent).Complete(mutableCtx)
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	// Invalid task for sub-component due to access rule.
+	subComponent1, ok := root.children["SubComponent1"]
+	s.True(ok)
+	valid, err = subComponent1.ValidatePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.False(valid)
+	s.Equal(valueStateSynced, subComponent1.valueState) // node is always clean for task validation
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
@@ -3069,6 +3276,18 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	expectValidate((*TestSubComponent1)(nil), true, nil)
 	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
 	s.True(isValid)
+	s.NoError(err)
+	s.True(childChasmTask.DeserializedTask.IsValid())
+
+	// Succeed validation as invalid since parent is closed.
+	mutableCtx := NewMutableContext(ctx, root)
+	rootComponent, err := root.ComponentByPath(mutableCtx, rootPath)
+	s.NoError(err)
+	rootComponent.(*TestComponent).Complete(mutableCtx)
+	// Note there's also no mock for task validator here in this case.
+	// Access rule is checked first.
+	isValid, err = root.ValidateSideEffectTask(ctx, childChasmTask)
+	s.False(isValid)
 	s.NoError(err)
 	s.True(childChasmTask.DeserializedTask.IsValid())
 }

@@ -35,7 +35,7 @@ type (
 		RawMatchingClient               resource.MatchingRawClient
 		WorkflowCache                   wcache.Cache
 		ReplicationProgressCache        replication.ProgressCache
-		EventSerializer                 serialization.Serializer
+		Serializer                      serialization.Serializer
 		QueueFactories                  []QueueFactory `group:"queueFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
@@ -50,6 +50,7 @@ type (
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipCache
+		RoutingInfoCache                worker_versioning.RoutingInfoCache
 	}
 
 	historyEngineFactory struct {
@@ -68,10 +69,11 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.VersionMembershipCache,
+		f.RoutingInfoCache,
 		f.RawMatchingClient,
 		f.WorkflowCache,
 		f.ReplicationProgressCache,
-		f.EventSerializer,
+		f.Serializer,
 		f.QueueFactories,
 		f.ReplicationTaskFetcherFactory,
 		f.ReplicationTaskExecutorProvider,

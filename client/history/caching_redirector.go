@@ -205,8 +205,8 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 	if len(solErrNewOwner) != 0 && solErrNewOwner != opEntry.address {
 		r.logger.Info("historyClient: updating cache from shard ownership lost error",
 			tag.ShardID(opEntry.shardID),
-			tag.NewAnyTag("oldAddress", opEntry.address),
-			tag.NewAnyTag("newAddress", solErrNewOwner))
+			tag.Any("oldAddress", opEntry.address),
+			tag.Any("newAddress", solErrNewOwner))
 		return r.cacheAddLocked(opEntry.shardID, solErrNewOwner), true
 	}
 

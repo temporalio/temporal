@@ -584,6 +584,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				nil,
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				nil,
 			)
 			if err != nil {
 				return nil, err
@@ -708,6 +709,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			nil,
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
+			nil,
 		)
 		if err != nil {
 			return nil, err
@@ -772,7 +774,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	ctx context.Context,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
-	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory,
 	branchToken []byte,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
@@ -954,7 +956,7 @@ func (handler *WorkflowTaskCompletedHandler) handleBufferedQueries(
 			runID,
 			scope,
 			handler.throttledLogger,
-			tag.BlobSizeViolationOperation("ConsistentQuery"),
+			"ConsistentQuery",
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
 				tag.WorkflowNamespace(namespaceName.String()),
