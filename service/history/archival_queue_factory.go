@@ -73,9 +73,15 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 			ActiveNamespaceWeights:         dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
 			StandbyNamespaceWeights:        dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
 			InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+			WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
+				EnableWorkflowQueueScheduler:      params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
+				WorkflowQueueSchedulerQueueSize:   params.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
+							},
 		},
 		params.NamespaceRegistry,
 		params.Logger,
+		params.MetricsHandler,
+		params.TimeSource,
 	)
 }
 
