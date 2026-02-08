@@ -123,10 +123,10 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 				)
 			})
 		},
-		label:            desc,
-		attempt:          attempt,
-		logPath:          filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
-		junitPath:        filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
+		label:         desc,
+		attempt:       attempt,
+		logPath:       filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
+		junitPath:     filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
 		streamRetries: true,
 		retry:         retry,
 	}
