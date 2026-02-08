@@ -112,9 +112,12 @@ type (
 
 	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
 	// during worker shutdown. Thread-safe via internal mutex.
+	// The inner map key is partition:pollerID (not just pollerID) because when a poll is
+	// forwarded to a parent partition, the same pollerID is used. Without the partition prefix,
+	// the parent's cancel func would overwrite the child's, leaving the child's poll uncancelled.
 	workerPollerTracker struct {
 		lock    sync.Mutex
-		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> pollerID -> cancel
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> partition:pollerID -> cancel
 	}
 
 	// Implements matching.Engine
@@ -2829,16 +2832,20 @@ func (e *matchingEngineImpl) pollTask(
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
 
-		// Also track by worker instance key for bulk cancellation during shutdown
+		// Also track by worker instance key for bulk cancellation during shutdown.
+		// We use partition:pollerID as the key because when a poll is forwarded to a parent
+		// partition, the same pollerID is reused. Without the partition prefix, the parent's
+		// cancel func would overwrite the child's entry.
 		workerInstanceKey := pollMetadata.workerInstanceKey
+		partitionPollerKey := partition.RpcName() + ":" + pollerID
 		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, pollerID, cancel)
+			e.workerInstancePollers.Add(workerInstanceKey, partitionPollerKey, cancel)
 		}
 
 		defer func() {
 			e.outstandingPollers.Delete(pollerID)
 			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, pollerID)
+				e.workerInstancePollers.Remove(workerInstanceKey, partitionPollerKey)
 			}
 		}()
 	}

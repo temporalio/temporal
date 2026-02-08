@@ -5758,4 +5758,31 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.True(t, worker1Cancelled)
 		require.False(t, worker2Cancelled)
 	})
+
+	t.Run("cancels forwarded polls with same pollerID on different partitions", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		workerKey := "test-worker"
+		pollerID := "same-poller-id"
+		childCancelled := false
+		parentCancelled := false
+
+		// Simulate forwarding: same pollerID registered on child and parent partitions.
+		// The key includes partition name to prevent parent from overwriting child.
+		engine.workerInstancePollers.Add(workerKey, "/_sys/test-queue/1:"+pollerID, func() { childCancelled = true })
+		engine.workerInstancePollers.Add(workerKey, "test-queue:"+pollerID, func() { parentCancelled = true })
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp.CancelledCount)
+		require.True(t, childCancelled, "child partition poll should be cancelled")
+		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
 }
