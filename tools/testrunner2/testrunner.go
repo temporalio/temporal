@@ -86,9 +86,10 @@ func (c *resultCollector) addError(err error) {
 
 type runner struct {
 	config
-	console   *consoleWriter
-	collector *resultCollector
-	progress  *progressTracker
+	console        *consoleWriter
+	collector      *resultCollector
+	progress       *progressTracker
+	directRetrySeq atomic.Int64 // unique suffix for direct-mode retry file names
 }
 
 func newRunner() *runner {
@@ -813,6 +814,17 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, runFilter, skipFilter string) execConfig {
 	desc := "all"
 
+	// When there's a run filter, this is a retry for specific tests. Multiple
+	// retries at the same attempt number (from stream retries) need unique file
+	// names to avoid overwriting each other's log and JUnit files.
+	// When there's a run filter, this is a retry for specific tests. Multiple
+	// retries at the same attempt number (from stream retries) need unique file
+	// names to avoid overwriting each other's log and JUnit files.
+	fileSuffix := ""
+	if runFilter != "" || skipFilter != "" {
+		fileSuffix = fmt.Sprintf("_%d", r.directRetrySeq.Add(1))
+	}
+
 	retryForFailures, retryForCrash, retryForUnknown := r.buildRetryHooks(
 		func(plan retryPlan, attempt int) *queueItem {
 			runF := buildTestFilterPattern(plan.tests)
@@ -852,8 +864,8 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 		},
 		label:            desc,
 		attempt:          attempt,
-		logPath:          filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d.log", attempt)),
-		junitPath:        filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d.xml", attempt)),
+		logPath:          filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
+		junitPath:        filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
 		streamRetries:    true,
 		retryForFailures: retryForFailures,
 		retryForCrash:    retryForCrash,
