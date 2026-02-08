@@ -523,6 +523,32 @@ func TestIntegration(t *testing.T) {
 			)
 		})
 	})
+
+	t.Run("direct mode: multiple failures retried without file collision", func(t *testing.T) {
+		t.Parallel()
+
+		// In direct mode (group-by=none), multiple tests failing on the same
+		// attempt each produce a separate stream retry. Before the fix, all
+		// retries shared the same log/JUnit file name (all_mode_attempt_N),
+		// causing concurrent retries to corrupt each other's output. Use
+		// parallelism=2 so retries can overlap (the default test parallelism
+		// of 1 serializes retries, masking the collision).
+		res := runIntegTest(t, []string{
+			"./testpkg/flaky",   // TestFlaky fails on attempt 1
+			"./testpkg/subfail", // TestSuite/FailChild fails on attempt 1
+		}, "--group-by=none", "--max-attempts=2", "--parallelism=2")
+		require.NoError(t, res.err)
+
+		assertJUnit(t, res,
+			passed("TestStable"),
+			passed("TestFlaky (retry 1)"),
+			passed("TestOK"),
+			passed("TestSuite/FailChild (retry 1)"),
+			passed("TestSuite/PassChild"),
+			failed("TestFlaky"),
+			failed("TestSuite/FailChild"),
+		)
+	})
 }
 
 // ---- test helpers ----
