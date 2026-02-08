@@ -312,13 +312,10 @@ type execConfig struct {
 	// Whether to emit retries mid-stream (direct mode = true, compiled mode = false).
 	streamRetries bool
 
-	// Factory functions for building retry queueItems.
-	retryForFailures func(failedNames []string, attempt int) []*queueItem
-	retryForCrash    func(passedNames, quarantinedNames []string, attempt int) []*queueItem
-	retryForUnknown  func(passedNames []string, attempt int) []*queueItem
+	// Retry callbacks for failures, crashes, and unknown exits.
+	retry retryHandler
 }
 
-//nolint:revive // cyclomatic
 func (r *runner) newExecItem(cfg execConfig) *queueItem {
 	return &queueItem{
 		run: func(ctx context.Context, emit func(...*queueItem)) {
@@ -339,39 +336,14 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 				}
 			}
 
-			// 2. Set up event stream
+			// 2. Set up event stream with mid-stream retry handler
 			testCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			// Track mid-stream retries to avoid duplicates in post-exit logic
 			emittedRetries := make(map[string]bool)
-			children := make(map[string]bool) // tracks which tests have subtests
+			children := make(map[string]bool)
 
-			handler := func(ev testEvent) {
-				// Track parent/child relationships
-				if strings.Contains(ev.Test, "/") {
-					children[parentTestName(ev.Test)] = true
-				}
-
-				if !cfg.streamRetries || ev.Action != "fail" {
-					return
-				}
-				// Mid-stream retry: only for leaf, top-level or childless tests
-				if children[ev.Test] {
-					return // parent test, children handle retries
-				}
-				if emittedRetries[ev.Test] {
-					return // already emitted
-				}
-				if cfg.attempt >= r.maxAttempts {
-					return // out of retries
-				}
-				emittedRetries[ev.Test] = true
-				if items := cfg.retryForFailures([]string{ev.Test}, cfg.attempt); len(items) > 0 {
-					emit(items...)
-				}
-			}
-
+			handler := r.midStreamRetryHandler(cfg, emittedRetries, children, emit)
 			stream := newTestEventStream(testEventStreamConfig{
 				Writer:            lc,
 				Handler:           handler,
@@ -382,10 +354,8 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			})
 			defer stream.Close()
 
-			// 3. Start process
+			// 3. Start process and collect results
 			result := cfg.startProcess(testCtx, stream)
-
-			// 4. Get output, generate JUnit, parse alerts
 			outputStr, err := lc.GetOutput()
 			if err != nil {
 				r.log("warning: failed to get test output: %v", err)
@@ -393,87 +363,123 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 			_ = lc.Close()
 
 			results := newJUnitReport(outputStr, cfg.junitPath)
-			passedTestNames := results.passes
+			detectedAlerts := r.collectAlerts(outputStr, stream)
 
-			detectedAlerts := parseAlerts(outputStr)
+			// 4. Read JUnit report and classify outcome
+			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, result, detectedAlerts)
 
-			// Check stuck tests (per-test or all-stuck detection)
-			if stuckNames, stuckDur := stream.StuckTests(); len(stuckNames) > 0 {
-				detectedAlerts = append(detectedAlerts, alert{
-					Kind:    failureKindTimeout,
-					Summary: fmt.Sprintf("test stuck (no progress for %v)", stuckDur.Round(time.Second)),
-					Tests:   stuckNames,
-				})
-			}
-
-			r.collector.addAlerts(detectedAlerts)
-			failureKind := classifyAlerts(detectedAlerts)
-
-			// 5. JUnit report
-			var numTests, numFailedTests int
-			jr := &junitReport{path: cfg.junitPath, attempt: cfg.attempt}
-			if err := jr.read(); err == nil {
-				r.collector.addReport(jr)
-				numTests = jr.Tests
-				numFailedTests = jr.Failures
-				if numTests == 0 && failureKind == "" {
-					failureKind = "no tests"
-					r.collector.addAlerts([]alert{{
-						Kind:    failureKindCrash,
-						Summary: "No tests were executed (possible parsing error or test filter mismatch)",
-					}})
-				}
-			} else {
-				failureKind = "crash"
-				r.collector.addAlerts([]alert{{
-					Kind:    failureKindCrash,
-					Summary: fmt.Sprintf("Process exited without junit report (exit code: %d)", result.exitCode),
-				}})
-			}
-
-			// 6. Console output
+			// 5. Console output
 			writeConsoleResult(r, cfg, result, numTests, numFailedTests,
 				failureKind, detectedAlerts, results, start)
 
 			failed := result.exitCode != 0 || numFailedTests > 0 || numTests == 0
-
-			// Delete log file if test passed
 			if !failed {
 				_ = os.Remove(cfg.logPath)
 			}
 
-			// 7. Post-exit retry logic
-			if !failed && numTests > 0 {
-				if cfg.streamRetries {
-					r.log("all tests passed on attempt %d", cfg.attempt)
-				}
-				return // success
-			}
-			if cfg.attempt >= r.maxAttempts {
-				r.collector.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
-				return
-			}
-
-			if failureKind == "timeout" || failureKind == "crash" {
-				quarantined := quarantinedTestNames(detectedAlerts)
-				if items := cfg.retryForCrash(passedTestNames, quarantined, cfg.attempt); len(items) > 0 {
-					emit(items...)
-				}
-			} else if unemitted := filterEmitted(results.failures, emittedRetries); len(unemitted) > 0 {
-				failures := filterParentFailures(unemitted)
-				var failedNames []string
-				for _, f := range failures {
-					failedNames = append(failedNames, f.Name)
-				}
-				if items := cfg.retryForFailures(failedNames, cfg.attempt); len(items) > 0 {
-					emit(items...)
-				}
-			} else if len(emittedRetries) == 0 {
-				if items := cfg.retryForUnknown(passedTestNames, cfg.attempt); len(items) > 0 {
-					emit(items...)
-				}
-			}
+			// 6. Post-exit retry logic
+			r.emitPostExitRetries(cfg, failed, numTests, failureKind,
+				results, detectedAlerts, emittedRetries, emit)
 		},
+	}
+}
+
+// midStreamRetryHandler returns a testEvent handler that emits retries for
+// leaf test failures as they happen (direct mode only).
+func (r *runner) midStreamRetryHandler(cfg execConfig, emittedRetries, children map[string]bool, emit func(...*queueItem)) func(testEvent) {
+	return func(ev testEvent) {
+		if strings.Contains(ev.Test, "/") {
+			children[parentTestName(ev.Test)] = true
+		}
+		if !cfg.streamRetries || ev.Action != actionFail {
+			return
+		}
+		if children[ev.Test] || emittedRetries[ev.Test] || cfg.attempt >= r.maxAttempts {
+			return
+		}
+		emittedRetries[ev.Test] = true
+		if items := cfg.retry.forFailures([]string{ev.Test}, cfg.attempt); len(items) > 0 {
+			emit(items...)
+		}
+	}
+}
+
+// collectAlerts parses alerts from test output and appends stuck test alerts.
+func (r *runner) collectAlerts(outputStr string, stream *testEventStream) alerts {
+	detectedAlerts := parseAlerts(outputStr)
+	if stuckNames, stuckDur := stream.StuckTests(); len(stuckNames) > 0 {
+		detectedAlerts = append(detectedAlerts, alert{
+			Kind:    failureKindTimeout,
+			Summary: fmt.Sprintf("test stuck (no progress for %v)", stuckDur.Round(time.Second)),
+			Tests:   stuckNames,
+		})
+	}
+	r.collector.addAlerts(detectedAlerts)
+	return detectedAlerts
+}
+
+// collectJUnitResult reads the JUnit report file and classifies the test outcome.
+func (r *runner) collectJUnitResult(cfg execConfig, result commandResult, detectedAlerts alerts) (numTests, numFailed int, failureKind string) {
+	failureKind = classifyAlerts(detectedAlerts)
+
+	jr := &junitReport{path: cfg.junitPath, attempt: cfg.attempt}
+	if err := jr.read(); err == nil {
+		r.collector.addReport(jr)
+		numTests = jr.Tests
+		numFailed = jr.Failures
+		if numTests == 0 && failureKind == "" {
+			failureKind = "no tests"
+			r.collector.addAlerts([]alert{{
+				Kind:    failureKindCrash,
+				Summary: "No tests were executed (possible parsing error or test filter mismatch)",
+			}})
+		}
+	} else {
+		failureKind = "crash"
+		r.collector.addAlerts([]alert{{
+			Kind:    failureKindCrash,
+			Summary: fmt.Sprintf("Process exited without junit report (exit code: %d)", result.exitCode),
+		}})
+	}
+	return
+}
+
+// emitPostExitRetries decides which retry strategy to use after a test process exits.
+func (r *runner) emitPostExitRetries(cfg execConfig, failed bool, numTests int,
+	failureKind string, results testResults, detectedAlerts alerts,
+	emittedRetries map[string]bool, emit func(...*queueItem)) {
+
+	if !failed && numTests > 0 {
+		if cfg.streamRetries {
+			r.log("all tests passed on attempt %d", cfg.attempt)
+		}
+		return
+	}
+	if cfg.attempt >= r.maxAttempts {
+		r.collector.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
+		return
+	}
+
+	switch {
+	case failureKind == "timeout" || failureKind == "crash":
+		quarantined := quarantinedTestNames(detectedAlerts)
+		if items := cfg.retry.forCrash(results.passes, quarantined, cfg.attempt); len(items) > 0 {
+			emit(items...)
+		}
+	case len(filterEmitted(results.failures, emittedRetries)) > 0:
+		unemitted := filterEmitted(results.failures, emittedRetries)
+		failures := filterParentFailures(unemitted)
+		var failedNames []string
+		for _, f := range failures {
+			failedNames = append(failedNames, f.Name)
+		}
+		if items := cfg.retry.forFailures(failedNames, cfg.attempt); len(items) > 0 {
+			emit(items...)
+		}
+	case len(emittedRetries) == 0:
+		if items := cfg.retry.forUnknown(results.passes, cfg.attempt); len(items) > 0 {
+			emit(items...)
+		}
 	}
 }
 

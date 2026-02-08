@@ -4,16 +4,16 @@
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| testrunner.go | 500 | Core orchestration (runner, Main, newExecItem) |
-| retry.go | 270 | Retry logic (plans, quarantine, helpers) |
+| testrunner.go | 530 | Core orchestration (runner, Main, newExecItem, retry dispatch) |
+| retry.go | 330 | Retry logic (retryHandler, plans, quarantine, helpers) |
 | compiled.go | 190 | Compiled mode (compiledExecConfig, compile items) |
 | direct.go | 130 | Direct mode (runDirectMode, directExecConfig) |
 | console.go | 110 | Console output formatting |
 | package.go | 380 | Test discovery, filter patterns |
-| junit.go | 400 | JUnit report generation and merging |
-| log_parse.go | 381 | Alert parsing (race, panic, timeout) |
+| junit.go | 420 | JUnit report generation, merging, validation |
+| log_parse.go | 380 | Alert parsing (race, panic, timeout) |
 | log_capture.go | 268 | Output capture and filtering |
-| event_stream.go | 227 | Test event streaming, stuck detection |
+| event_stream.go | 235 | Test event streaming, stuck detection |
 | args.go | 213 | CLI argument parsing |
 | exec.go | 198 | Process execution |
 | scheduler.go | 103 | Work queue |
@@ -41,16 +41,48 @@ testrunner.go reduced from 1300 → 500 lines.
 Deduplicated identical timeout calculation in `compiledExecConfig` and
 `directExecConfig` into `(r *runner) effectiveTimeout() time.Duration`.
 
+### 4. Remove `alert.Details` field ✓
+Removed write-only field from `alert` struct. Never read in production;
+only populated by tryParse* functions and written to JUnit Data field
+(which was already constructed from `alert.Tests` instead).
+
+### 5. Unify `tryParsePanic`/`tryParseFatal` ✓
+Extracted shared logic into `tryParsePrefixedAlert(lines, i, line, prefix, kind)`
+helper. Both callers now delegate after their prefix check.
+
+### 6. Add `testEventAction` type constants ✓
+Replaced magic strings `"run"`, `"pass"`, `"fail"`, `"skip"` with typed constants
+`actionRun`, `actionPass`, `actionFail`, `actionSkip`.
+
+### 7. Fix swallowed error in `logCapture.Close()` ✓
+Previously, when `Sync()` failed, `Close()` error was silently discarded.
+Now both errors are captured and the sync error takes precedence.
+
+### 8. Rename `buildRetryUnit` → `buildRetryUnitFromFailures` ✓
+Clarifies that this function builds a work unit from failed test cases.
+
+### 9. Unify retry callbacks into `retryHandler` struct ✓
+Replaced three separate function fields (`retryForFailures`, `retryForCrash`,
+`retryForUnknown`) in `execConfig` with a single `retryHandler` struct.
+Renamed `buildRetryHooks` → `buildRetryHandler`.
+
+### 10. Extract merge validation from `mergeReports()` ✓
+Moved retry validation logic into `validateRetries()` function.
+`mergeReports()` no longer needs `nolint:revive` annotation.
+
+### 11. Split `newExecItem` into smaller functions ✓
+Extracted from the 155-line closure:
+- `midStreamRetryHandler()` — event handler for direct-mode stream retries
+- `collectAlerts()` — parse output alerts + stuck test alerts
+- `collectJUnitResult()` — read JUnit report + classify outcome
+- `emitPostExitRetries()` — post-exit retry decision logic
+
+### 12. Remove `goto` in `extractErrorTrace` ✓
+Extracted `isTestifySection()` helper to eliminate goto/label pattern.
+
 ---
 
 ## Remaining (lower priority)
-
-### Simplify `newExecItem` (medium risk)
-This 155-line closure handles 7 distinct phases. Consider extracting:
-1. `runTestProcess(cfg) → (testResults, alerts, commandResult)` — phases 1-4
-2. `handleTestResult(cfg, results, alerts) → retryItems` — phases 5-7
-
-This also makes the retry logic independently testable.
 
 ### Unify JUnit parsing (medium risk)
 `newJUnitReport` parses the output once for JUnit XML, then
@@ -66,10 +98,6 @@ nil-check + call pattern.
 
 ### Replace string-key deduplication (log_parse.go)
 Use a struct key instead of fragile string concatenation for alert dedup.
-
-### `alert.Details` field (log_parse.go)
-Populated but only written to JUnit `Data` field. Check if useful;
-if not, remove.
 
 ### Naming improvements
 - `groupByMode` → `unitsByMode` (package.go)

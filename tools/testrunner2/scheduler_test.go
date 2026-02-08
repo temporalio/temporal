@@ -128,7 +128,7 @@ func TestBuildRetryUnit(t *testing.T) {
 			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
 			label: "a_test.go",
 		}
-		retryUnit := buildRetryUnit(unit, []testCase{{name: "TestA", attempts: 1}})
+		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestA", attempts: 1}})
 		require.NotNil(t, retryUnit)
 		require.Equal(t, "./pkg", retryUnit.pkg)
 		require.Len(t, retryUnit.files, 1)
@@ -148,7 +148,7 @@ func TestBuildRetryUnit(t *testing.T) {
 			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
 			label: "./pkg",
 		}
-		retryUnit := buildRetryUnit(unit, []testCase{{name: "TestB", attempts: 1}})
+		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestB", attempts: 1}})
 		require.NotNil(t, retryUnit)
 		require.Len(t, retryUnit.files, 1)
 		require.Equal(t, "b_test.go", retryUnit.files[0].path)
@@ -162,7 +162,7 @@ func TestBuildRetryUnit(t *testing.T) {
 			},
 			tests: []testCase{{name: "TestA"}},
 		}
-		retryUnit := buildRetryUnit(unit, []testCase{{name: "TestB"}})
+		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestB"}})
 		require.Nil(t, retryUnit)
 	})
 }
