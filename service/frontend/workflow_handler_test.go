@@ -3872,6 +3872,35 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	}
 }
 
+func (s *WorkflowHandlerSuite) TestCancelOutstandingPollFansOutToAllPartitions() {
+	config := s.newConfig()
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(3) // 3 partitions
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	// Expect CancelOutstandingPoll to be called for each partition (3 times)
+	s.mockMatchingClient.EXPECT().CancelOutstandingPoll(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingPollResponse{}, nil).
+		Times(3)
+
+	// Create a cancelled context to trigger the cancel path
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	// Call the internal method directly since it's not exported via RPC
+	result := wh.cancelOutstandingPoll(
+		ctx,
+		s.testNamespaceID,
+		s.testNamespace.String(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		&taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		"test-poller-id",
+	)
+
+	s.True(result, "cancelOutstandingPoll should return true when context is cancelled")
+}
+
 func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime() {
 	config := s.newConfig()
 	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
