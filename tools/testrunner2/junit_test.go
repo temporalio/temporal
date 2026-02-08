@@ -104,6 +104,59 @@ func TestMergeReports_MissingRetry(t *testing.T) {
 		"expected rerun of all failures from attempt 1, missing in attempt 2: [TestFooSuite/TestFoo_InvalidArgument]")
 }
 
+func TestMergeReports_QuarantinedNotMissing(t *testing.T) {
+	t.Parallel()
+
+	// Same setup as TestMergeReports_MissingRetry: attempt 1 has a failure
+	// (TestFooSuite/TestFoo_InvalidArgument) that's missing from attempt 2.
+	// Without quarantine, this is a validation error.
+	// With the failed test quarantined, mergeReports should NOT report it.
+	j1 := &junitReport{path: "testdata/attempt1.junit.xml", attempt: 1}
+	require.NoError(t, j1.read())
+	j2 := &junitReport{path: "testdata/empty.junit.xml", attempt: 2}
+	require.NoError(t, j2.read())
+
+	// Quarantine the exact test name.
+	report, err := mergeReports([]*junitReport{j1, j2}, []string{"TestFoo_InvalidArgument"})
+	require.NoError(t, err)
+	require.Empty(t, report.reportingErrs, "quarantined test should not be reported as missing")
+
+	// Also verify subtest matching: quarantining the parent should cover subtests.
+	j1b := &junitReport{path: "testdata/attempt1.junit.xml", attempt: 1}
+	require.NoError(t, j1b.read())
+	j2b := &junitReport{path: "testdata/empty.junit.xml", attempt: 2}
+	require.NoError(t, j2b.read())
+	report2, err := mergeReports([]*junitReport{j1b, j2b}, []string{"TestFooSuite"})
+	require.NoError(t, err)
+	require.Empty(t, report2.reportingErrs, "subtests of quarantined parent should not be reported as missing")
+}
+
+func TestIsQuarantined(t *testing.T) {
+	t.Parallel()
+
+	quarantined := []string{"TestStuckSuite", "TestPanicker"}
+
+	tests := []struct {
+		name     string
+		expected bool
+	}{
+		{"TestStuckSuite", true},                  // exact match
+		{"TestStuckSuite/SubTest1", true},         // subtest of quarantined
+		{"TestParent/TestStuckSuite/Perm1", true}, // nested subtest
+		{"TestPanicker", true},                    // exact match
+		{"TestPanicker/SubTest", true},            // subtest
+		{"TestHealthy", false},                    // unrelated
+		{"TestHealthy/SubTest", false},            // unrelated subtest
+		{"TestStuckSuiteExtra", false},            // not a subtest, just prefix match
+		{"TestNotStuckSuite", false},              // not a subtest, just suffix match
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, isQuarantined(tt.name, quarantined))
+		})
+	}
+}
+
 func TestAppendAlertsSuite(t *testing.T) {
 	t.Parallel()
 

@@ -817,9 +817,6 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 	// When there's a run filter, this is a retry for specific tests. Multiple
 	// retries at the same attempt number (from stream retries) need unique file
 	// names to avoid overwriting each other's log and JUnit files.
-	// When there's a run filter, this is a retry for specific tests. Multiple
-	// retries at the same attempt number (from stream retries) need unique file
-	// names to avoid overwriting each other's log and JUnit files.
 	fileSuffix := ""
 	if runFilter != "" || skipFilter != "" {
 		fileSuffix = fmt.Sprintf("_%d", r.directRetrySeq.Add(1))
@@ -1288,7 +1285,7 @@ func unitFileSize(u workUnit) int64 {
 }
 
 func (r *runner) finalizeReport(reports []*junitReport) error {
-	mergedReport, err := mergeReports(reports)
+	mergedReport, err := mergeReports(reports, quarantinedTestNames(r.collector.alerts))
 	if err != nil {
 		return err
 	}
