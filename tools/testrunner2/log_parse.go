@@ -19,7 +19,6 @@ const (
 type alert struct {
 	Kind    failureKind
 	Summary string
-	Details string
 	Tests   []string
 }
 
@@ -223,7 +222,6 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 	return alert{
 		Kind:    failureKindDataRace,
 		Summary: "Data race detected",
-		Details: block,
 		Tests:   extractTestNames(block),
 	}, end, true
 }
@@ -233,13 +231,7 @@ func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
 	if !strings.HasPrefix(line, "panic: ") || strings.HasPrefix(line, "panic: test timed out after") {
 		return alert{}, i, false
 	}
-	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
-	return alert{
-		Kind:    failureKindPanic,
-		Summary: strings.TrimSpace(strings.TrimPrefix(line, "panic: ")),
-		Details: block,
-		Tests:   extractTestNames(block),
-	}, end, true
+	return tryParsePrefixedAlert(lines, i, line, "panic: ", failureKindPanic)
 }
 
 // tryParseFatal parses a runtime fatal error alert at position i if present.
@@ -247,11 +239,15 @@ func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
 	if !strings.HasPrefix(line, "fatal error: ") {
 		return alert{}, i, false
 	}
+	return tryParsePrefixedAlert(lines, i, line, "fatal error: ", failureKindFatal)
+}
+
+// tryParsePrefixedAlert parses a block alert that starts with a known prefix.
+func tryParsePrefixedAlert(lines []string, i int, line, prefix string, kind failureKind) (alert, int, bool) {
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
 	return alert{
-		Kind:    failureKindFatal,
-		Summary: strings.TrimSpace(strings.TrimPrefix(line, "fatal error: ")),
-		Details: block,
+		Kind:    kind,
+		Summary: strings.TrimSpace(strings.TrimPrefix(line, prefix)),
 		Tests:   extractTestNames(block),
 	}, end, true
 }
@@ -283,7 +279,6 @@ func tryParseTimeout(lines []string, i int, line string) ([]alert, int, bool) {
 		out = append(out, alert{
 			Kind:    failureKindTimeout,
 			Summary: summary,
-			Details: block,
 			Tests:   []string{t},
 		})
 	}
@@ -349,33 +344,35 @@ func extractErrorTrace(output []string) string {
 		}
 
 		// Check for testify section headers
-		for _, section := range testifyErrorSections {
-			if strings.HasPrefix(trimmed, section) {
-				inErrorSection = true
-				result = append(result, line)
-				goto nextLine
-			}
+		if isTestifySection(trimmed) {
+			inErrorSection = true
+			result = append(result, line)
+			continue
 		}
 
 		// If we're in an error section, keep continuation lines (indented lines)
 		if inErrorSection {
-			// Continuation lines are indented more than the section header
 			if strings.HasPrefix(line, "\t\t") || strings.HasPrefix(line, "        ") {
 				result = append(result, line)
 				continue
 			}
-			// Non-indented line ends the error section (unless it's another section header)
 			if trimmed != "" && !strings.HasPrefix(line, "\t") && !strings.HasPrefix(line, "    ") {
 				inErrorSection = false
 			} else if trimmed != "" {
-				// Still indented, keep it
 				result = append(result, line)
 				continue
 			}
 		}
-
-	nextLine:
 	}
 
 	return strings.Join(result, "\n")
+}
+
+func isTestifySection(trimmed string) bool {
+	for _, section := range testifyErrorSections {
+		if strings.HasPrefix(trimmed, section) {
+			return true
+		}
+	}
+	return false
 }

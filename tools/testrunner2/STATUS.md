@@ -89,3 +89,4 @@ succeed (or we give up after all attempts). Never silently ignore a test.
 15. Fix direct-mode retry file name collision (directRetrySeq) + regression test
 16. Exclude quarantined tests from JUnit merge validation + regression tests
 17. Refactor: remove dead code, split testrunner.go into retry/compiled/direct/console, extract effectiveTimeout, add test count summary
+18. Refactor: remove alert.Details, unify tryParse helpers, add testEventAction type, fix logCapture.Close error handling, rename buildRetryUnit, unify retry callbacks into retryHandler struct, extract validateRetries and newExecItem helpers, remove goto

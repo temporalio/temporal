@@ -162,8 +162,8 @@ func TestAppendAlertsSuite(t *testing.T) {
 
 	j := &junitReport{}
 	a := alerts{
-		{Kind: failureKindDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"fakepkg1.TestFoo1"}},
-		{Kind: failureKindPanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"fakepkg1.TestFoo2"}},
+		{Kind: failureKindDataRace, Summary: "Data race detected", Tests: []string{"fakepkg1.TestFoo1"}},
+		{Kind: failureKindPanic, Summary: "This is a panic", Tests: []string{"fakepkg1.TestFoo2"}},
 	}
 	j.appendAlerts(a)
 

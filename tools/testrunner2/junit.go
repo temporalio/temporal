@@ -149,7 +149,6 @@ func (j *junitReport) collectTestCaseFailures() []string {
 	return filterParentNames(failures)
 }
 
-//nolint:revive // cognitive-complexity: merging reports requires nested loops
 func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport, error) {
 	if len(reports) == 0 {
 		return nil, errors.New("no reports to merge")
@@ -219,16 +218,21 @@ func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport
 		}
 	}
 
-	// Validate that all failures from attempt N were retried in attempt N+1.
-	// Quarantined tests (stuck/timed-out) are excluded: Go's -test.skip uses
-	// per-level cross-product matching, so some stuck permutations can't be
-	// individually retried and are handled best-effort by the quarantine system.
 	var quarantinedNames []string
 	for _, q := range quarantined {
 		quarantinedNames = append(quarantinedNames, q...)
 	}
 
-	var reportingErrs []error
+	return &junitReport{
+		Testsuites:    combined,
+		reportingErrs: validateRetries(reports, quarantinedNames),
+	}, nil
+}
+
+// validateRetries checks that all failures from attempt N were retried in attempt N+1.
+// Quarantined tests are excluded: Go's -test.skip uses per-level cross-product matching,
+// so some stuck permutations can't be individually retried.
+func validateRetries(reports []*junitReport, quarantinedNames []string) []error {
 	byAttempt := make(map[int][]*junitReport)
 	for _, r := range reports {
 		byAttempt[r.attempt] = append(byAttempt[r.attempt], r)
@@ -240,6 +244,8 @@ func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport
 		}
 	}
 	slices.Sort(attempts)
+
+	var errs []error
 	for i := 0; i < len(attempts)-1; i++ {
 		currAttempt, nextAttempt := attempts[i], attempts[i+1]
 		prevFailures := make(map[string]bool)
@@ -261,16 +267,12 @@ func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport
 			}
 		}
 		if len(missing) > 0 {
-			reportingErrs = append(reportingErrs, fmt.Errorf(
+			errs = append(errs, fmt.Errorf(
 				"expected rerun of all failures from attempt %d, missing in attempt %d: %v",
 				currAttempt, nextAttempt, missing))
 		}
 	}
-
-	return &junitReport{
-		Testsuites:    combined,
-		reportingErrs: reportingErrs,
-	}, nil
+	return errs
 }
 
 // isQuarantined checks if testName is a quarantined test or a subtest of one.

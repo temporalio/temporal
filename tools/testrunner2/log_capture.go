@@ -202,12 +202,12 @@ func (lc *logCapture) Close() error {
 		return nil
 	}
 
-	if err := lc.diskFile.Sync(); err != nil {
-		_ = lc.diskFile.Close()
-		return fmt.Errorf("failed to sync log file: %w", err)
+	syncErr := lc.diskFile.Sync()
+	closeErr := lc.diskFile.Close()
+	if syncErr != nil {
+		return fmt.Errorf("failed to sync log file: %w", syncErr)
 	}
-
-	return lc.diskFile.Close()
+	return closeErr
 }
 
 // buildLogFilename constructs a unique log file path for a test batch.
