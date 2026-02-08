@@ -220,15 +220,6 @@ func getShardForKey(key string, totalShards int) int {
 	return int(h.Sum32() % uint32(totalShards))
 }
 
-// testCasesFromFiles returns all test cases from the given test files.
-func testCasesFromFiles(files []testFile) []testCase {
-	var tests []testCase
-	for _, tf := range files {
-		tests = append(tests, tf.tests...)
-	}
-	return tests
-}
-
 // filterParentNames removes parent names from a sorted list.
 // Given [A, A/B, C], returns [A/B, C] because A is a parent of A/B.
 // The input must be sorted lexicographically.
