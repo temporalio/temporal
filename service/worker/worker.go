@@ -56,6 +56,9 @@ func (wm *workerManager) Start() {
 		Identity: "temporal-system@" + wm.hostInfo.Identity(),
 		// TODO: add dynamic config for worker options
 		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh),
+		OnFatalError: func(err error) {
+			wm.logger.Error("Encounter fatal error on system worker.", tag.Error(err), tag.WorkerComponent(wm.hostInfo.Identity()))
+		},
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
 	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, primitives.DefaultWorkerTaskQueue, defaultWorkerOptions)
