@@ -270,6 +270,14 @@ operator API calls (highest priority). Should be >0.0 and <= 1.0 (defaults to 20
 		`EnableDataLossMetrics determines whether dataloss metrics are emitted when dataloss errors are encountered`,
 	)
 
+	EnableCurrentRecordMissingMetric = NewGlobalBoolSetting(
+		"system.enableCurrentRecordMissingMetric",
+		false,
+		`EnableCurrentRecordMissingMetric determines whether the workflow_current_record_missing_errors metric is emitted `+
+			`when a missing current execution record is detected during workflow updates. `+
+			`This is a high cardinality metric with workflow_id and run_id tags. Only enable if your metrics backend can handle the cardinality.`,
+	)
+
 	// deadlock detector
 
 	DeadlockDumpGoroutines = NewGlobalBoolSetting(

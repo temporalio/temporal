@@ -231,6 +231,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 		s.PersistenceHealthSignals,
 		func() bool { return false },
 		func() bool { return false },
+		func() bool { return false },
 	)
 
 	s.TaskMgr, err = factory.NewTaskManager()

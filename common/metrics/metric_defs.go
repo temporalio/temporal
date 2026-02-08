@@ -1069,6 +1069,13 @@ var (
 		WithDescription("Total number of data loss errors encountered. This is a high cardinality metrics that has namespace, workflowID and runID tags."+
 			"It is only emitted when system.enableDataLossMetrics is enabled. Only enable this if metrics system can handle it's cardinality"),
 	)
+	CurrentRecordMissingCounter = NewCounterDef(
+		"workflow_current_record_missing_errors",
+		WithDescription("Total number of missing current execution record errors detected during workflow updates. "+
+			"This indicates database-level corruption where the current_executions row is gone. "+
+			"This is a high cardinality metric with namespace, workflow_id, and run_id tags. "+
+			"Only emitted when system.enableCurrentRecordMissingMetric is enabled."),
+	)
 	ReadNamespaceErrors                     = NewCounterDef("read_namespace_errors")
 	RateLimitedTaskRunnableWaitTime         = NewTimerDef("rate_limited_task_runnable_wait_time")
 	CircuitBreakerExecutableBlocked         = NewCounterDef("circuit_breaker_executable_blocked")
