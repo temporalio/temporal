@@ -922,7 +922,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		PollRequest: request,
 	})
 	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
+		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, request.GetNamespace(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
@@ -1176,7 +1176,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 		PollRequest: request,
 	})
 	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
+		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, request.GetNamespace(), enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			// It doesn't matter what to return here, client has already gone. But (nil,nil) is invalid gogo return pair.
@@ -5621,7 +5621,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		Request:     request,
 	})
 	if err != nil {
-		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, enumspb.TASK_QUEUE_TYPE_NEXUS, request.TaskQueue, pollerID)
+		contextWasCanceled := wh.cancelOutstandingPoll(childCtx, namespaceID, request.GetNamespace(), enumspb.TASK_QUEUE_TYPE_NEXUS, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
 			return &workflowservice.PollNexusTaskQueueResponse{}, nil
@@ -6140,9 +6140,11 @@ func (wh *WorkflowHandler) getArchivedHistory(
 }
 
 // cancelOutstandingPoll cancel outstanding poll if context was canceled and returns true. Otherwise returns false.
+// Fans out to all partitions because the poll could be on any partition and may have been forwarded.
 func (wh *WorkflowHandler) cancelOutstandingPoll(
 	ctx context.Context,
 	namespaceID namespace.ID,
+	namespaceName string,
 	taskQueueType enumspb.TaskQueueType,
 	taskQueue *taskqueuepb.TaskQueue,
 	pollerID string,
@@ -6151,22 +6153,43 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(
 	if !errors.Is(ctx.Err(), context.Canceled) {
 		return false
 	}
-	// Our rpc stack does not propagates context cancellation to the other service.  Lets make an explicit
-	// call to matching to notify this poller is gone to prevent any tasks being dispatched to zombie pollers.
-	// TODO: specify a reasonable timeout for CancelOutstandingPoll.
-	_, err := wh.matchingClient.CancelOutstandingPoll(
-		rpc.CopyContextValues(context.TODO(), ctx),
-		&matchingservice.CancelOutstandingPollRequest{
-			NamespaceId:   namespaceID.String(),
-			TaskQueueType: taskQueueType,
-			TaskQueue:     taskQueue,
-			PollerId:      pollerID,
-		},
-	)
-	// We can not do much if this call fails.  Just log the error and move on.
+
+	taskQueueName := taskQueue.GetName()
+	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID.String(), taskQueueName)
 	if err != nil {
-		wh.logger.Warn("Failed to cancel outstanding poller.",
-			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
+		wh.logger.Warn("Invalid task queue name for poll cancellation.",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return true
+	}
+
+	// Fan out to all partitions because the poll could be on any partition and may have been forwarded.
+	numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskQueueType)
+	if numPartitions < 1 {
+		numPartitions = 1
+	}
+
+	tq := tqFamily.TaskQueue(taskQueueType)
+	cancelCtx := rpc.CopyContextValues(context.TODO(), ctx)
+
+	for partitionID := range numPartitions {
+		partition := tq.NormalPartition(partitionID)
+		_, err := wh.matchingClient.CancelOutstandingPoll(
+			cancelCtx,
+			&matchingservice.CancelOutstandingPollRequest{
+				NamespaceId:   namespaceID.String(),
+				TaskQueueType: taskQueueType,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: partition.RpcName(),
+					Kind: taskQueue.GetKind(),
+				},
+				PollerId: pollerID,
+			},
+		)
+		if err != nil {
+			wh.logger.Warn("Failed to cancel outstanding poller.",
+				tag.WorkflowTaskQueueName(partition.RpcName()), tag.Error(err))
+		}
 	}
 
 	return true

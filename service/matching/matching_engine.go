@@ -1208,7 +1208,10 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	_ context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
-	cancel, ok := e.outstandingPollers.Pop(request.PollerId)
+	// Use partition:pollerID as key to match how pollers are registered.
+	// Frontend fans out to all partitions when cancelling.
+	partitionPollerKey := request.TaskQueue.GetName() + ":" + request.PollerId
+	cancel, ok := e.outstandingPollers.Pop(partitionPollerKey)
 	if ok {
 		cancel()
 	}
@@ -2827,18 +2830,22 @@ func (e *matchingEngineImpl) pollTask(
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
-		e.outstandingPollers.Set(pollerID, cancel)
+		// Use partition:pollerID as key because when a poll is forwarded to a parent partition,
+		// the same pollerID is used. Without the partition prefix, the parent's cancel func would
+		// overwrite the child's, leaving the child's poll uncancelled.
+		partitionPollerKey := partition.RpcName() + ":" + pollerID
+		e.outstandingPollers.Set(partitionPollerKey, cancel)
 
 		// Also track by worker instance key for bulk cancellation during shutdown
 		workerInstanceKey := pollMetadata.workerInstanceKey
 		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, pollerID, cancel)
+			e.workerInstancePollers.Add(workerInstanceKey, partitionPollerKey, cancel)
 		}
 
 		defer func() {
-			e.outstandingPollers.Delete(pollerID)
+			e.outstandingPollers.Delete(partitionPollerKey)
 			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, pollerID)
+				e.workerInstancePollers.Remove(workerInstanceKey, partitionPollerKey)
 			}
 		}()
 	}
