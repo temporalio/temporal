@@ -1,0 +1,9 @@
+---
+description: Code review guidelines - apply when reviewing code or suggesting changes
+globs: "**/*.go"
+alwaysApply: false
+---
+
+# Code Review Guidelines
+
+@.github/copilot-instructions.md
