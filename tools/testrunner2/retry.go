@@ -47,13 +47,19 @@ func filterEmitted(failures []testFailure, emitted map[string]bool) []testFailur
 // retryItemFunc converts a retryPlan into a queueItem for a given attempt.
 type retryItemFunc func(plan retryPlan, attempt int) *queueItem
 
-// buildRetryHooks wires up the three retry callbacks using a shared retryItemFunc.
-func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
-	retryForFailures func([]string, int) []*queueItem,
-	retryForCrash func([]string, []string, int) []*queueItem,
-	retryForUnknown func([]string, int) []*queueItem,
-) {
-	retryForFailures = func(failedNames []string, attempt int) []*queueItem {
+// retryHandler encapsulates the three retry strategies (failures, crash, unknown)
+// built from a shared retryItemFunc.
+type retryHandler struct {
+	forFailures func([]string, int) []*queueItem
+	forCrash    func([]string, []string, int) []*queueItem
+	forUnknown  func([]string, int) []*queueItem
+}
+
+// buildRetryHandler wires up the three retry callbacks using a shared retryItemFunc.
+func (r *runner) buildRetryHandler(makeItem retryItemFunc) retryHandler {
+	h := retryHandler{}
+
+	h.forFailures = func(failedNames []string, attempt int) []*queueItem {
 		plan := retryPlan{tests: failedNames}
 		r.log("🔄 scheduling retry: -run %s", buildTestFilterPattern(failedNames))
 		if item := makeItem(plan, attempt+1); item != nil {
@@ -62,7 +68,7 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 		return nil
 	}
 
-	retryForCrash = func(passedNames, quarantinedNames []string, attempt int) []*queueItem {
+	h.forCrash = func(passedNames, quarantinedNames []string, attempt int) []*queueItem {
 		plans := buildRetryPlans(passedNames, quarantinedNames)
 		var items []*queueItem
 		for _, p := range plans {
@@ -84,11 +90,11 @@ func (r *runner) buildRetryHooks(makeItem retryItemFunc) (
 		return items
 	}
 
-	retryForUnknown = func(passedNames []string, attempt int) []*queueItem {
-		return retryForCrash(passedNames, nil, attempt)
+	h.forUnknown = func(passedNames []string, attempt int) []*queueItem {
+		return h.forCrash(passedNames, nil, attempt)
 	}
 
-	return
+	return h
 }
 
 // retryPlan describes a single retry invocation in terms of -run/-skip test names.
@@ -97,7 +103,7 @@ type retryPlan struct {
 	skipTests []string // tests to -skip
 }
 
-func buildRetryUnit(unit workUnit, failedTests []testCase) *workUnit {
+func buildRetryUnitFromFailures(unit workUnit, failedTests []testCase) *workUnit {
 	retryFiles := buildRetryFiles(unit.files, failedTests)
 	if len(retryFiles) == 0 {
 		return nil
