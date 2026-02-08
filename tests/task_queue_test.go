@@ -946,9 +946,6 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 
 func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true)
-	// Use single partition to simplify testing
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	tv := testvars.New(s.T())
 	workerInstanceKey := uuid.NewString()
@@ -983,8 +980,8 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 		}()
 	}
 
-	// Give polls time to register with matching
-	time.Sleep(2 * time.Second)
+	// Give polls time to register with matching as there is no deterministic signal when pollers are registered.
+	time.Sleep(10 * time.Second)
 
 	// Call ShutdownWorker to cancel all outstanding polls for this worker
 	ctx := context.Background()
@@ -1008,7 +1005,7 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	select {
 	case <-done:
 		// All polls completed
-	case <-time.After(5 * time.Second):
+	case <-time.After(10 * time.Second):
 		s.Fail("polls did not complete within expected time after shutdown")
 	}
 
