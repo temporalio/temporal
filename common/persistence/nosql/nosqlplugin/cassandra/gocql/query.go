@@ -26,40 +26,30 @@ func newQuery(
 }
 
 func (q *query) Exec() (retError error) {
-	defer func() { q.session.handleError(retError) }()
-
 	return q.gocqlQuery.Exec()
 }
 
 func (q *query) Scan(
 	dest ...interface{},
 ) (retError error) {
-	defer func() { q.session.handleError(retError) }()
-
 	return q.gocqlQuery.Scan(dest...)
 }
 
 func (q *query) ScanCAS(
 	dest ...interface{},
 ) (_ bool, retError error) {
-	defer func() { q.session.handleError(retError) }()
-
 	return q.gocqlQuery.ScanCAS(dest...)
 }
 
 func (q *query) MapScan(
 	m map[string]interface{},
 ) (retError error) {
-	defer func() { q.session.handleError(retError) }()
-
 	return q.gocqlQuery.MapScan(m)
 }
 
 func (q *query) MapScanCAS(
 	dest map[string]interface{},
 ) (_ bool, retError error) {
-	defer func() { q.session.handleError(retError) }()
-
 	return q.gocqlQuery.MapScanCAS(dest)
 }
 
