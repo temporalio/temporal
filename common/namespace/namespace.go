@@ -184,7 +184,7 @@ func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
-// for this namspace.
+// for this namespace.
 func (ns *Namespace) ActiveClusterName(businessID string) string {
 	return ns.replicationResolver.ActiveClusterName(businessID)
 }

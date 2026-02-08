@@ -121,11 +121,11 @@ func Test_UnaliasFields(t *testing.T) {
 	}
 	sb, err := UnaliasFields(mapperProvider, sa, "error-namespace")
 	require.NoError(t, err)
-	require.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
+	require.Equal(t, sa, sb, "when there is nothing to unalias should return received attributes")
 
 	sb, err = UnaliasFields(mapperProvider, sa, "unknown-namespace")
 	require.NoError(t, err)
-	require.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
+	require.Equal(t, sa, sb, "when there is nothing to unalias should return received attributes")
 
 	// Pass through aliases are not substituted.
 	sa = &commonpb.SearchAttributes{
@@ -135,5 +135,5 @@ func Test_UnaliasFields(t *testing.T) {
 	}
 	sb, err = UnaliasFields(mapperProvider, sa, "test-namespace")
 	require.NoError(t, err)
-	require.Equal(t, sa, sb, "when there is nothin to unalias should return received attributes")
+	require.Equal(t, sa, sb, "when there is nothing to unalias should return received attributes")
 }

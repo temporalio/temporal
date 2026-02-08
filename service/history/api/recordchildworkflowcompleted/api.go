@@ -42,7 +42,7 @@ func Invoke(
 		resetRunID, err := recordChildWorkflowCompleted(ctx, request, shardContext, workflowConsistencyChecker)
 		if errors.Is(err, consts.ErrWorkflowCompleted) {
 			// if the parent was reset, forward the request to the new run pointed by resetRunID
-			// Note: An alternative solution is to load the current run here ane compare the originalRunIDs of the current run and the closed parent.
+			// Note: An alternative solution is to load the current run here and compare the originalRunIDs of the current run and the closed parent.
 			// If they match, then deliver it to the current run. We should consider this optimization if we notice that reset chain is longer than 1-2 hops.
 			if resetRunID != "" {
 				if redirectCount >= maxResetRedirectCount {

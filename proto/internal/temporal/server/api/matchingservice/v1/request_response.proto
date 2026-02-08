@@ -439,7 +439,7 @@ message SyncDeploymentUserDataResponse {
     // New task queue user data version. Can be used to wait for propagation.
     int64 version = 1;
     // If the routing config changed after applying this operation. Compared base on revision number.
-    // Deprecated. using this is not totaly safe in case of retries.
+    // Deprecated. using this is not totally safe in case of retries.
     bool routing_config_changed = 2 [deprecated = true];
 }
 
@@ -641,7 +641,7 @@ message ListNexusEndpointsRequest {
     bytes next_page_token = 1;
     int32 page_size = 2;
     // The nexus_endpoints table has a monotonically increasing version number that is incremented on every change to
-    // the table. This field can be used to provide the last known table version in conjuction with the `wait` field to
+    // the table. This field can be used to provide the last known table version in conjunction with the `wait` field to
     // long poll on changes to the table.
     // If next_page_token is not empty and the current table version does not match this field, this request will fail
     // with a failed precondition error.

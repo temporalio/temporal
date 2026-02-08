@@ -334,7 +334,7 @@ func (g *EventGenerator) pickRandomVertex(
 	return endVertex.DeepCopy()
 }
 
-// NewHistoryEventEdge initials a new edge between two HistoryEventVertexes
+// NewHistoryEventEdge initials a new edge between two HistoryEventVertices
 func NewHistoryEventEdge(
 	start Vertex,
 	end Vertex,

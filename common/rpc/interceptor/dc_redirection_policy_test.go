@@ -163,7 +163,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_NamespaceNotWhiltelisted() {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_NamespaceNotWhitelisted() {
 	s.setupGlobalNamespaceWithTwoReplicationCluster(false, true)
 
 	apiName := "any random API name"
@@ -183,7 +183,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhiltelisted() {
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhitelisted() {
 	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
 
 	callCount := 0

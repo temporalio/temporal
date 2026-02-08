@@ -30,11 +30,11 @@ func isArchivalConfigValid(
 	clusterStatus string,
 	enableRead bool,
 	namespaceDefaultStatus string,
-	domianDefaultURI string,
+	domainDefaultURI string,
 	specifiedProvider bool,
 ) bool {
 	archivalEnabled := clusterStatus == ArchivalEnabled
-	URISet := len(domianDefaultURI) != 0
+	URISet := len(domainDefaultURI) != 0
 
 	validEnable := archivalEnabled && URISet && specifiedProvider
 	validDisabled := !archivalEnabled && !enableRead && namespaceDefaultStatus != ArchivalEnabled && !URISet && !specifiedProvider

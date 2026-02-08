@@ -85,7 +85,7 @@ func (s *NexusStateReplicationSuite) TearDownSuite() {
 }
 
 // TestNexusOperationEventsReplicated tests that nexus related operation events and state updates are replicated
-// across clusters and that the operation machinary functions as expected when failover happens.
+// across clusters and that the operation machinery functions as expected when failover happens.
 // General outline:
 // 1. Start two clusters, cluster1 set to active, cluster2 set to standby.
 // 2. Start a workflow on cluster1.

@@ -9,7 +9,7 @@ const (
 	ArchiveNonRetryableErrorMsg = "Archive method encountered an non-retryable error."
 	// ArchiveTransientErrorMsg is the log message when the Archive() method encounters a transient error
 	ArchiveTransientErrorMsg = "Archive method encountered a transient error."
-	// ArchiveSkippedInfoMsg is the log messsage when the Archive() method encounter an not found error
+	// ArchiveSkippedInfoMsg is the log message when the Archive() method encounter an not found error
 	ArchiveSkippedInfoMsg = "Archive method encountered not found error and skipped the archival"
 
 	// ErrReasonInvalidURI is the error reason for invalid URI
@@ -32,7 +32,7 @@ var (
 	// ErrInvalidGetHistoryRequest is the error for invalid GetHistory request
 	ErrInvalidGetHistoryRequest = errors.New("get archived history request is invalid")
 	// ErrInvalidQueryVisibilityRequest is the error for invalid Query Visibility request
-	ErrInvalidQueryVisibilityRequest = errors.New("query visiblity request is invalid")
+	ErrInvalidQueryVisibilityRequest = errors.New("query visibility request is invalid")
 	// ErrNextPageTokenCorrupted is the error for corrupted GetHistory token
 	ErrNextPageTokenCorrupted = errors.New("next page token is corrupted")
 	// ErrHistoryNotExist is the error for non-exist history

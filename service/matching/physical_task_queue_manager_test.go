@@ -551,7 +551,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	cancel()
 	require.NoError(t, err)
 
-	// grab referencs to these to peek inside
+	// grab references to these to peek inside
 	priQueueData := priTm.getQueueDataByKey(physicalTaskQueueKey)
 	fairQueueData := fairTm.getQueueDataByKey(physicalTaskQueueKey)
 

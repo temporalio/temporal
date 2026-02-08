@@ -182,7 +182,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		{EventId: LastCompletedWorkflowTaskStartedEventId, Version: lastWorkflowTaskStartedVersion},
 	})
 	histories := versionhistory.NewVersionHistories(versionHistory)
-	histroySize := rand.Int63()
+	historySize := rand.Int63()
 
 	releaseCalled := false
 
@@ -213,7 +213,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 	}).AnyTimes()
 	mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
 	mutableState.EXPECT().GetLastCompletedWorkflowTaskStartedEventId().Return(LastCompletedWorkflowTaskStartedEventId)
-	mutableState.EXPECT().AddHistorySize(histroySize)
+	mutableState.EXPECT().AddHistorySize(historySize)
 
 	s.mockWorkflowResetter.EXPECT().ResetWorkflow(
 		ctx,
@@ -243,7 +243,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		ArchetypeID: chasm.WorkflowArchetypeID,
 	}).Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil)
 
-	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(histroySize, nil)
+	weContext.EXPECT().PersistWorkflowEvents(gomock.Any(), s.mockShard, workflowEvents).Return(historySize, nil)
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(), s.mockShard, persistence.UpdateWorkflowModeBypassCurrent, nil, nil, historyi.TransactionPolicyPassive, (*historyi.TransactionPolicy)(nil),
 	).Return(nil)

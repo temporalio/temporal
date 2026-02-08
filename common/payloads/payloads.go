@@ -13,19 +13,19 @@ var (
 )
 
 func EncodeString(str string) *commonpb.Payloads {
-	// Error can be safely ignored here becase string always can be converted.
+	// Error can be safely ignored here because string always can be converted.
 	ps, _ := defaultDataConverter.ToPayloads(str)
 	return ps
 }
 
 func EncodeInt(i int) *commonpb.Payloads {
-	// Error can be safely ignored here becase int always can be converted.
+	// Error can be safely ignored here because int always can be converted.
 	ps, _ := defaultDataConverter.ToPayloads(i)
 	return ps
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payloads {
-	// Error can be safely ignored here becase []byte always can be raw encoded.
+	// Error can be safely ignored here because []byte always can be raw encoded.
 	ps, _ := defaultDataConverter.ToPayloads(bytes)
 	return ps
 }

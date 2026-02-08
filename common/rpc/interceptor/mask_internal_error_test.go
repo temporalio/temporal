@@ -28,7 +28,7 @@ func TestMaskUnknownOrInternalErrors(t *testing.T) {
 	testMaskUnknownOrInternalErrors(t, statusInternal, true)
 }
 
-func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelpace bool) {
+func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectReplace bool) {
 	controller := gomock.NewController(t)
 	mockRegistry := namespace.NewMockRegistry(controller)
 	mockLogger := log.NewMockLogger(controller)
@@ -37,11 +37,11 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
 	err := serviceerror.FromStatus(st)
-	if expectRelpace {
+	if expectReplace {
 		mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
 	}
 	errorMessage := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
-	if expectRelpace {
+	if expectReplace {
 		errorHash := common.ErrorHash(err)
 		expectedMessage := fmt.Sprintf("rpc error: code = %s desc = %s (%s)", st.Message(), errorFrontendMasked, errorHash)
 

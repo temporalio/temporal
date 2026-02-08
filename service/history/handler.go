@@ -314,7 +314,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 		return response, h.convertError(err)
 	}
 
-	// Handle worklow activity (mutable state backed implementation).
+	// Handle workflow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -353,7 +353,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		return response, nil
 	}
 
-	// Handle worklow activity (mutable state backed implementation).
+	// Handle workflow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -456,7 +456,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 		return response, nil
 	}
 
-	// Handle worklow activity (mutable state backed implementation).
+	// Handle workflow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -517,7 +517,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 		return response, nil
 	}
 
-	// Handle worklow activity (mutable state backed implementation).
+	// Handle workflow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -578,7 +578,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 		return response, nil
 	}
 
-	// Handle worklow activity (mutable state backed implementation).
+	// Handle workflow activity (mutable state backed implementation).
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)

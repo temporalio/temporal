@@ -71,7 +71,7 @@ func (a *taskKeyGenerator) setTaskKeys(
 				if isScheduledTask {
 					// Persistence might loss precision when saving to DB.
 					// Make the task scheduled time to have the same precision as DB here,
-					// so that if the comparsion in the next step passes, it's guaranteed
+					// so that if the comparison in the next step passes, it's guaranteed
 					// the task can be retrieved from DB by queue processor.
 					taskScheduledTime = task.GetVisibilityTime().
 						Add(common.ScheduledTaskMinPrecision).
@@ -88,7 +88,7 @@ func (a *taskKeyGenerator) setTaskKeys(
 							tag.CursorTimestamp(a.taskMinScheduledTime),
 							tag.ValueShardAllocateTimerBeforeRead,
 						)
-						// Theoritically we don't need to add the extra 1ms.
+						// Theoretically we don't need to add the extra 1ms.
 						// Guess it's just to be extra safe here.
 						taskScheduledTime = a.taskMinScheduledTime.Add(common.ScheduledTaskMinPrecision)
 					}

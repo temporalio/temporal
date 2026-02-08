@@ -923,11 +923,11 @@ func generateSubStateMachineTask(
 	transitionCount int64,
 	task hsm.Task,
 ) error {
-	ser, ok := stateMachineRegistry.TaskSerializer(task.Type())
+	set, ok := stateMachineRegistry.TaskSerializer(task.Type())
 	if !ok {
 		return serviceerror.NewInternalf("no task serializer for %v", task.Type())
 	}
-	data, err := ser.Serialize(task)
+	data, err := set.Serialize(task)
 	if err != nil {
 		return err
 	}

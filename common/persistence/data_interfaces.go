@@ -252,7 +252,7 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
-		// workflow to be resetted
+		// workflow to be reset
 		ResetWorkflowSnapshot WorkflowSnapshot
 		ResetWorkflowEvents   []*WorkflowEvents
 

@@ -505,7 +505,7 @@ sequenceDiagram
 Worker->>Frontend: RespondActivityFailed
 Frontend->>History: RespondActivityFailed
 History->>Persistence: UpdateWorkflowExecution
-note over Persistence: Append History Events: ActivityTaskFailed, ActivityTaskScheduled<br>update MutableState & add Timer Task (activity timout)
+note over Persistence: Append History Events: ActivityTaskFailed, ActivityTaskScheduled<br>update MutableState & add Timer Task (activity timeout)
 Persistence->>History: Update Succeed
 History->>Frontend: Respond Succeed
 Frontend->>Worker: Respond Succeed

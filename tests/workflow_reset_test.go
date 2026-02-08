@@ -160,7 +160,7 @@ func (s *WorkflowResetSuite) TestDifferentBaseCurrentClosed() {
 	s.assertMutableStateStatus(ctx, workflowID, currentRunID, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 }
 
-// Base is reset multuple times. Assert that each time it point to the new run.
+// Base is reset multiple times. Assert that each time it point to the new run.
 func (s *WorkflowResetSuite) TestRepeatedResets() {
 	workflowID := "test-reset" + uuid.NewString()
 	ctx := testcore.NewContext()

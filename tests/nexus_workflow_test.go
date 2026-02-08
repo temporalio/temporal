@@ -77,7 +77,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			if !firstCancelSeen {
 				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
 				firstCancelSeen = true
-				return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "intentional non-retyrable cancel error for test")
+				return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "intentional non-retryable cancel error for test")
 			}
 			return nil
 		},

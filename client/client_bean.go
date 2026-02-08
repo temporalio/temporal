@@ -138,7 +138,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.Admi
 	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 	if !clusterFound {
 		// We intentionally return internal error here.
-		// This error could only happen with internal mis-configuration.
+		// This error could only happen with internal misconfiguration.
 		// This can happen when a namespace is config for multiple clusters. But those clusters are not connected.
 		// We also have logic in task processing to drop tasks when namespace cluster exclude a local cluster.
 		return nil, &serviceerror.Internal{
@@ -177,7 +177,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(clusterName string) (grpc.Clien
 	clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[clusterName]
 	if !clusterFound {
 		// We intentionally return internal error here.
-		// This error could only happen with internal mis-configuration.
+		// This error could only happen with internal misconfiguration.
 		// This can happen when a namespace is config for multiple clusters. But those clusters are not connected.
 		// We also have logic in task processing to drop tasks when namespace cluster exclude a local cluster.
 		return nil, nil, &serviceerror.Internal{

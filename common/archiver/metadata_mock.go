@@ -22,8 +22,8 @@ type MetadataMock interface {
 func NewMetadataMock(controller *gomock.Controller) MetadataMock {
 	m := &metadataMock{
 		MockArchivalMetadata:    NewMockArchivalMetadata(controller),
-		defaultHistoryConfig:    NewDisabledArchvialConfig(),
-		defaultVisibilityConfig: NewDisabledArchvialConfig(),
+		defaultHistoryConfig:    NewDisabledArchivalConfig(),
+		defaultVisibilityConfig: NewDisabledArchivalConfig(),
 	}
 	return m
 }

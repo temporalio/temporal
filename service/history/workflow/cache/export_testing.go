@@ -11,7 +11,7 @@ func GetMutableState(cache Cache, key Key) historyi.MutableState {
 	return getWorkflowContext(cache, key).(*workflow.ContextImpl).MutableState
 }
 
-// PutContextIfNotExist puts the given workflow Context into the cache, if it doens't already exist.
+// PutContextIfNotExist puts the given workflow Context into the cache, if it doesn't already exist.
 // Exported for testing purposes.
 func PutContextIfNotExist(cache Cache, key Key, value historyi.WorkflowContext) error {
 	_, err := cache.(*cacheImpl).PutIfNotExist(key, &cacheItem{wfContext: value})

@@ -41,9 +41,9 @@ type (
 	}
 )
 
-// NewClient return a Temporal gcloudstorage.Client based on default google service account creadentials (ScopeFullControl required).
+// NewClient return a Temporal gcloudstorage.Client based on default google service account credentials (ScopeFullControl required).
 // Bucket must be created by Iaas scripts, in other words, this library doesn't create the required Bucket.
-// Optionaly you can set your credential path throught "GOOGLE_APPLICATION_CREDENTIALS" environment variable or through temporal config file.
+// Optionally you can set your credential path through "GOOGLE_APPLICATION_CREDENTIALS" environment variable or through temporal config file.
 // You can find more info about "Google Setting Up Authentication for Server to Server Production Applications" under the following link
 // https://cloud.google.com/docs/authentication/production
 func NewClient(ctx context.Context, config *config.GstorageArchiver) (Client, error) {
@@ -113,7 +113,7 @@ func (s *storageWrapper) Get(ctx context.Context, URI archiver.URI, fileName str
 	return io.ReadAll(reader)
 }
 
-// Query, retieves file names by provided storage query
+// Query, retrieves file names by provided storage query
 func (s *storageWrapper) Query(ctx context.Context, URI archiver.URI, fileNamePrefix string) (fileNames []string, err error) {
 	fileNames = make([]string, 0)
 	bucket := s.client.Bucket(URI.Hostname())
@@ -132,7 +132,7 @@ func (s *storageWrapper) Query(ctx context.Context, URI archiver.URI, fileNamePr
 
 }
 
-// QueryWithFilters, retieves filenames that match filter parameters. PageSize is optional, 0 means all records.
+// QueryWithFilters, retrieves filenames that match filter parameters. PageSize is optional, 0 means all records.
 func (s *storageWrapper) QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error) {
 	var err error
 	currentPos := offset

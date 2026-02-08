@@ -28,15 +28,15 @@ func TestCRC32OverProto(t *testing.T) {
 		HistoryLength: 550,
 	}
 
-	parallism := 10
+	parallelism := 10
 	loopCount := 100
 	successCount := int64(0)
 
 	startC := make(chan struct{})
 	doneWG := sync.WaitGroup{}
-	doneWG.Add(parallism)
+	doneWG.Add(parallelism)
 
-	for i := 0; i < parallism; i++ {
+	for i := 0; i < parallelism; i++ {
 		go func() {
 			defer doneWG.Done()
 			<-startC
@@ -56,5 +56,5 @@ func TestCRC32OverProto(t *testing.T) {
 	close(startC)
 	success := common.AwaitWaitGroup(&doneWG, time.Second)
 	assert.True(t, success, "timed out waiting for goroutines to finish")
-	assert.Equal(t, int64(parallism*loopCount), successCount)
+	assert.Equal(t, int64(parallelism*loopCount), successCount)
 }

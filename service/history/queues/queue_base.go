@@ -37,7 +37,7 @@ const (
 	// so that the last slice in the default reader won't grow
 	// infinitely.
 	// The benefit of forcing new slice is:
-	// 1. As long as the last slice won't grow infinitly, task loading
+	// 1. As long as the last slice won't grow infinitely, task loading
 	// for that slice will complete and it's scope (both range and
 	// predicate) is able to shrink
 	// 2. Current task loading implementation can only unload the entire

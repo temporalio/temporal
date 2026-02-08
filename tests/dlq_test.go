@@ -314,8 +314,8 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 	}
 
 	// Re-enqueue the workflow tasks from the DLQ, but don't fail its WFTs this time.
-	nonExistantID := "some-workflow-id-that-wont-exist"
-	s.failingWorkflowIDPrefix.Store(&nonExistantID)
+	nonExistentID := "some-workflow-id-that-wont-exist"
+	s.failingWorkflowIDPrefix.Store(&nonExistentID)
 	token := s.mergeMessages(ctx, dlqMessageID)
 
 	// Verify that the workflow task was deleted from the DLQ after merging.

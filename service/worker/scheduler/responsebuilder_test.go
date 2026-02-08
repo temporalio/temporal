@@ -258,7 +258,7 @@ func TestResponseBuilder(t *testing.T) {
 
 		response, err := rb.Build(&event)
 
-		assertError(t, err, errUnkownWorkflowStatus)
+		assertError(t, err, errUnknownWorkflowStatus)
 		assertResponseIsNil(t, response)
 	})
 }

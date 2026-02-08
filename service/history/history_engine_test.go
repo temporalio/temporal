@@ -2128,7 +2128,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotT
 	s.Nil(err)
 }
 
-func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotTimeout_ZeroOrignalScheduledTime() {
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatNotTimeout_ZeroOriginalScheduledTime() {
 	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
@@ -3573,14 +3573,14 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_NoTimer() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	detais := payloads.EncodeString("details")
+	details := payloads.EncodeString("details")
 
 	_, err := s.historyEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
-			Details:   detais,
+			Details:   details,
 		},
 	})
 	s.Nil(err)
@@ -3622,14 +3622,14 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatSuccess_TimerRunning() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	detais := payloads.EncodeString("details")
+	details := payloads.EncodeString("details")
 
 	_, err := s.historyEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
-			Details:   detais,
+			Details:   details,
 		},
 	})
 	s.Nil(err)
@@ -3676,14 +3676,14 @@ func (s *engineSuite) TestRecordActivityTaskHeartBeatByIDSuccess() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 
-	detais := payloads.EncodeString("details")
+	details := payloads.EncodeString("details")
 
 	_, err := s.historyEngine.RecordActivityTaskHeartbeat(context.Background(), &historyservice.RecordActivityTaskHeartbeatRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
 			TaskToken: taskToken,
 			Identity:  identity,
-			Details:   detais,
+			Details:   details,
 		},
 	})
 	s.Nil(err)

@@ -1435,7 +1435,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
-	archtypeID chasm.ArchetypeID,
+	archetypeID chasm.ArchetypeID,
 	wfCtx historyi.WorkflowContext,
 	releaseFn historyi.ReleaseWorkflowContextFunc,
 	sourceMutableState *persistencespb.WorkflowMutableState,
@@ -1495,7 +1495,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 			ctx,
 			namespaceID,
 			workflowID,
-			archtypeID,
+			archetypeID,
 			newRunInfo,
 			mutableState,
 			isStateBased,
@@ -1512,7 +1512,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	}
 	return r.transactionMgr.CreateWorkflow(
 		ctx,
-		archtypeID,
+		archetypeID,
 		NewWorkflow(
 			r.clusterMetadata,
 			wfCtx,
@@ -1747,7 +1747,7 @@ BackfillLoop:
 		}
 
 		if isStateBased {
-			// If backfill suceeds but later event reapply fails, during task's next retry,
+			// If backfill succeeds but later event reapply fails, during task's next retry,
 			// we still need to reapply events that have been stored in local DB.
 			events, err := r.historySerializer.DeserializeEvents(historyBlob.rawHistory)
 			if err != nil {

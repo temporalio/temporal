@@ -72,7 +72,7 @@ s3://<bucket-name>/<namespace-id>/
                 closeTimeout/2020-01-21T16:16:11Z/<run-id>
 ```
 
-Enable AWS SDK Logging with config parameter `logLevel`. For example enable debug logging with `logLevel: 4096`. Possbile Values:
+Enable AWS SDK Logging with config parameter `logLevel`. For example enable debug logging with `logLevel: 4096`. Possible Values:
 * LogOff = 0 = 0x0
 * LogDebug = 4096 = 0x1000
 * LogDebugWithSigning = 4097 = 0x1001

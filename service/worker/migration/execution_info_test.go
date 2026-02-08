@@ -35,7 +35,7 @@ func TestExecutionInfo_Marshal_OSS(t *testing.T) {
 
 	// ExecutionInfo is not directly used as activity input/output,
 	// instead, it's used as a field in another struct.
-	// Test that case and do encoding/decoding with an actual SDK data coverter.
+	// Test that case and do encoding/decoding with an actual SDK data converter.
 	listResponse := listWorkflowsResponse{
 		Executions: []*ExecutionInfo{
 			executionInfo,
@@ -88,7 +88,7 @@ func TestExecutionInfo_Marshal_Cloud(t *testing.T) {
 
 	// ExecutionInfo is not directly used as activity input/output,
 	// instead, it's used as a field in another struct.
-	// Test that case and do encoding/decoding with an actual SDK data coverter.
+	// Test that case and do encoding/decoding with an actual SDK data converter.
 	listResponse := &listWorkflowsResponse{
 		Executions: []*ExecutionInfo{
 			executionInfo,
@@ -140,7 +140,7 @@ func TestExecutionInfo_Unmarshal_OSS(t *testing.T) {
 
 	// ExecutionInfo is not directly used as activity input/output,
 	// instead, it's used as a field in another struct.
-	// Test that case and do encoding/decoding with an actual SDK data coverter.
+	// Test that case and do encoding/decoding with an actual SDK data converter.
 	listResponseLegacy := struct {
 		Executions    []*executionInfoLegacyJSON
 		NextPageToken []byte
@@ -192,7 +192,7 @@ func TestExecutionInfo_Unmarshal_Cloud(t *testing.T) {
 
 	// ExecutionInfo is not directly used as activity input/output,
 	// instead, it's used as a field in another struct.
-	// Test that case and do encoding/decoding with an actual SDK data coverter.
+	// Test that case and do encoding/decoding with an actual SDK data converter.
 	listResponseLegacy := struct {
 		Executions    []*replicationspb.MigrationExecutionInfo
 		NextPageToken []byte

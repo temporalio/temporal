@@ -528,7 +528,7 @@ func NewMutableStateFromDB(
 
 	if len(dbRecord.Checksum.GetValue()) > 0 {
 		switch {
-		case mutableState.shouldInvalidateCheckum():
+		case mutableState.shouldInvalidateChecksum():
 			mutableState.checksum = nil
 			metrics.MutableStateChecksumInvalidated.With(mutableState.metricsHandler).Record(1)
 		case mutableState.shouldVerifyChecksum():
@@ -1148,7 +1148,7 @@ func (ms *MutableStateImpl) GetCloseVersion() (int64, error) {
 		return common.EmptyVersion, serviceerror.NewInternalf("workflow still running, current state: %v", ms.executionState.State.String())
 	}
 
-	// if workflow is closing in the current transation,
+	// if workflow is closing in the current transaction,
 	// then the last event is closed event and the event version is the close version
 	if lastEventVersion, ok := ms.hBuilder.LastEventVersion(); ok {
 		return lastEventVersion, nil
@@ -2931,7 +2931,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 		// TODO: [cleanup-old-wv]
 		limit := ms.config.SearchAttributesSizeOfValueLimit(string(ms.namespaceEntry.Name()))
-		// Passing nil for usedVersion because starting with pinned override does not add the version to used versions SA until the version is actaully used.
+		// Passing nil for usedVersion because starting with pinned override does not add the version to used versions SA until the version is actually used.
 		//nolint:staticcheck // SA1019
 		if _, err := ms.addBuildIDAndDeploymentInfoToSearchAttributesWithNoVisibilityTask(event.SourceVersionStamp, nil, limit); err != nil {
 			return err
@@ -3354,7 +3354,7 @@ func (ms *MutableStateImpl) validateBuildIdRedirectInfo(
 
 	if assignedBuildId == "" && !ms.HasCompletedAnyWorkflowTask() {
 		// If build ID is being set for the first time, and no progress is made by unversioned workers we don't
-		// increment redirect counter. This is to keep the redirect counter zero for verisoned WFs that
+		// increment redirect counter. This is to keep the redirect counter zero for versioned WFs that
 		// do not experience any redirects, but only initial build ID assignment.
 		return redirectCounter, nil
 	}
@@ -3444,7 +3444,7 @@ func (ms *MutableStateImpl) UpdateBuildIdAssignment(buildId string) error {
 // effective version of the workflow (aka, the override version if override is set).
 //
 // If deprecated Deployment-based APIs are in use and the workflow is pinned, `pinned:<deployment_series_name>:<deployment_build_id>`
-// will be appended to the BuilIds list if it is not already present. The deployment will be
+// will be appended to the BuildIds list if it is not already present. The deployment will be
 // the effective deployment of the workflow (aka the override deployment_series and build_id if set).
 //
 // For all other workflows (ms.GetEffectiveVersioningBehavior() != PINNED), this will append a tag  to BuildIds
@@ -7522,7 +7522,7 @@ func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
 		return nil
 	}
 
-	// Generate retention timer for chasm executions if it's currentely completed
+	// Generate retention timer for chasm executions if it's currently completed
 	// but state in DB is not completed, i.e. completing in this transaction.
 
 	if transactionPolicy == historyi.TransactionPolicyActive {
@@ -7964,7 +7964,7 @@ func (ms *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
 			tag.WorkflowID(ms.executionInfo.WorkflowId),
 			tag.WorkflowRunID(ms.executionState.RunId),
 		)
-		return consts.ErrEventsAterWorkflowFinish
+		return consts.ErrEventsAfterWorkflowFinish
 	}
 }
 
@@ -8293,7 +8293,7 @@ func (ms *MutableStateImpl) shouldVerifyChecksum() bool {
 	return rand.Intn(100) < ms.config.MutableStateChecksumVerifyProbability(ms.namespaceEntry.Name().String())
 }
 
-func (ms *MutableStateImpl) shouldInvalidateCheckum() bool {
+func (ms *MutableStateImpl) shouldInvalidateChecksum() bool {
 	invalidateBeforeEpochSecs := int64(ms.config.MutableStateChecksumInvalidateBefore())
 	if invalidateBeforeEpochSecs > 0 {
 		invalidateBefore := time.Unix(invalidateBeforeEpochSecs, 0).UTC()
@@ -9062,7 +9062,7 @@ func (ms *MutableStateImpl) reschedulePendingActivities(wftScheduleToClose time.
 			// backlog but because of an ongoing transition. See ActivityStartDuringTransition error usage.
 
 			info.ScheduledTime = timestamppb.New(info.ScheduledTime.AsTime().Add(wftScheduleToClose))
-			// This ensures the schedule to start timer task is regenerate so we don't miss the timout.
+			// This ensures the schedule to start timer task is regenerate so we don't miss the timeout.
 			info.TimerTaskStatus &^= TimerTaskStatusCreatedScheduleToStart
 			return nil
 		})

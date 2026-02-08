@@ -47,14 +47,14 @@ func TestLRU(t *testing.T) {
 	capture = metricsHandler.StartCapture()
 	cache.Put("B", "Bar")
 	cache.Put("C", "Cid")
-	cache.Put("D", "Delt")
+	cache.Put("D", "Dealt")
 	assert.Equal(t, 4, cache.Size())
 	snapshot = capture.Snapshot()
 	assert.Equal(t, float64(4), snapshot[metrics.CacheUsage.Name()][2].Value)
 
 	assert.Equal(t, "Bar", cache.Get("B"))
 	assert.Equal(t, "Cid", cache.Get("C"))
-	assert.Equal(t, "Delt", cache.Get("D"))
+	assert.Equal(t, "Dealt", cache.Get("D"))
 
 	cache.Put("A", "Foo2")
 	assert.Equal(t, "Foo2", cache.Get("A"))

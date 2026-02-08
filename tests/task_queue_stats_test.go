@@ -236,14 +236,14 @@ func (s *TaskQueueStatsSuite) currentVersionAbsorbsUnversionedBacklogNoRamping(n
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// The backlog count for the activity task queue should be equal to the number of activities scheduled since the activity task queue is part of the current version.
-	activitesToSchedule := 10 * numPartitions
-	s.completeWorkflowTasksAndScheduleActivities(tqName, deploymentName, currentBuildID, activitesToSchedule)
+	activitiesToSchedule := 10 * numPartitions
+	s.completeWorkflowTasksAndScheduleActivities(tqName, deploymentName, currentBuildID, activitiesToSchedule)
 
 	// Verify activity add rate
 	s.validateRates(tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY, true, false)
 
 	activityStatsExpectation := TaskQueueExpectations{
-		BacklogCount:  activitesToSchedule,
+		BacklogCount:  activitiesToSchedule,
 		MaxExtraTasks: 0,
 	}
 
@@ -1331,7 +1331,7 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 									TaskQueue:             &taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 									StartToCloseTimeout:   durationpb.New(time.Minute),
 									RequestEagerExecution: false,
-									// Priority is inherted from the workflow
+									// Priority is inherited from the workflow
 								},
 							},
 						},

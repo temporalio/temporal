@@ -478,7 +478,7 @@ func (s *ForceReplicationWorkflowTestSuite) TestVerifyReplicationTaskNonRetryabl
 	})
 
 	var errMsg = "mock verify replication tasks error"
-	// GenerateReplicationTasks and VerifyReplicationTasks runs in paralle. GenerateReplicationTasks may not start before VerifyReplicationTasks failed.
+	// GenerateReplicationTasks and VerifyReplicationTasks runs in parallel. GenerateReplicationTasks may not start before VerifyReplicationTasks failed.
 	env.OnActivity(a.GenerateReplicationTasks, mock.Anything, mock.Anything).Return(nil).Maybe()
 	env.OnActivity(a.VerifyReplicationTasks, mock.Anything, mock.Anything).Return(
 		verifyReplicationTasksResponse{},

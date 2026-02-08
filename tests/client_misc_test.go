@@ -656,7 +656,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 	s.Worker().RegisterWorkflow(childWorkflowFn)
 	s.Worker().RegisterActivity(activityFn)
 
-	id := "functional-test-finish-workflow-with-deffered-commands"
+	id := "functional-test-finish-workflow-with-deferred-commands"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 id,
 		TaskQueue:          s.TaskQueue(),
@@ -1289,7 +1289,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 	// wait until we see three calls to badact
 	s.Eventually(func() bool { return badcount.Load() >= 3 }, 10*time.Second, 200*time.Millisecond)
 
-	// at this point act2 should have been invokved once also
+	// at this point act2 should have been invoked once also
 	s.Equal(int32(1), act2count.Load())
 
 	w2.Stop()

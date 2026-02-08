@@ -23,7 +23,7 @@ the response from the `RecordWorkflowTaskStarted` API. The worker does not know 
 transient, though. If the Workflow Task keeps failing, the attempt counter is increased in the
 mutable state, and transient Workflow Task events are created again - but no new failure event is
 written into the history again. When the Workflow Task finally completes, the `WorkflowTaskScheduled`
-and `WorkflowTaskStarted` events are written to the history, followed by the `WorklfowTaskCompleted`
+and `WorkflowTaskStarted` events are written to the history, followed by the `WorkflowTaskCompleted`
 event.
 
 > #### TODO
@@ -61,7 +61,7 @@ Speculative Workflow Task was introduced to make it possible for Workflow Update
 for when it is rejected. This is why it doesn't persist any events or the mutable state.
 
 > #### TODO
-> The task processig for Queries could be replaced by using speculative Workflow Tasks under the hood.
+> The task processing for Queries could be replaced by using speculative Workflow Tasks under the hood.
 
 ## Scheduling of Speculative Workflow Task
 As of today, speculative Workflow Tasks are only used for Workflow Update, i.e. in the 
@@ -81,7 +81,7 @@ the speculative Workflow Task is converted to a normal one and creates a transfe
 eventually reach matching and the worker.
 
 The timeout timer task is is created for a `SCHEDULE_TO_START` timeout for every speculative
-Workflow Task - even if it is on a *normal* task queue. In comparision, for a normal Workflow Task, the
+Workflow Task - even if it is on a *normal* task queue. In comparison, for a normal Workflow Task, the
 `SCHEDULE_TO_START` timeout timer is only created for *sticky* task queues.
 
 ## Start of Speculative Workflow Task
@@ -145,7 +145,7 @@ events and create a new Workflow Task as normal.
 > new events would be added to the history - but heartbeats would not be visible anymore.
 
 ## Conversion to Normal Workflow Task
-If during the exection of a speculative Workflow Task, a mutable state write is required
+If during the execution of a speculative Workflow Task, a mutable state write is required
 (i.e., a new events comes in), then it is converted to a normal one, and written to the database.
 This means the `Type` field value is changed to `WORKFLOW_TASK_TYPE_NORMAL`, an in-memory timer is
 replaced with a persisted timer, and the corresponding speculative Workflow Task `WorkflowTaskScheduled`

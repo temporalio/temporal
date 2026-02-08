@@ -867,7 +867,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  execution.GetWorkflowId(),
 		ArchetypeID: chasm.WorkflowArchetypeID,
-	}).Return(nil, serviceerror.NewNotFound("current worflow not found")).Times(1)
+	}).Return(nil, serviceerror.NewNotFound("current workflow not found")).Times(1)
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),

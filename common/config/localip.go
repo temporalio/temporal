@@ -12,7 +12,7 @@ import (
 // Scores are calculated as:
 // -1 for any unknown IP addreseses.
 // +300 for IPv4 addresses
-// +100 for non-local addresses, extra +100 for "up" interaces.
+// +100 for non-local addresses, extra +100 for "up" interfaces.
 func scoreAddr(iface net.Interface, addr net.Addr) (int, net.IP) {
 	var ip net.IP
 	if netAddr, ok := addr.(*net.IPNet); ok {

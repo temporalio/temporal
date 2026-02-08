@@ -70,7 +70,7 @@ message TaskQueueInfo {
     // Whenever locking any metadata as the inactive one (drain-only), this should be set.
     // If the flag is true, no tasks should be written to the active table until the inactive
     // table has also been locked (and the flag set there for a potential reverse transition).
-    // After determinining that the inactive table has no more tasks left, then this
+    // After determining that the inactive table has no more tasks left, then this
     // can be cleared on the active table.
     bool other_has_tasks = 10;
 }

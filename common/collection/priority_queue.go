@@ -20,7 +20,7 @@ func NewPriorityQueue[T any](
 	}
 }
 
-// NewPriorityQueueWithItems creats a new priority queue
+// NewPriorityQueueWithItems creates a new priority queue
 // with the provided list of items.
 // PriorityQueue will take ownership of the passed in items,
 // so caller should stop modifying it.

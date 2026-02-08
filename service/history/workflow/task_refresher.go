@@ -616,7 +616,7 @@ func (r *TaskRefresherImpl) refreshTasksForSubStateMachines(
 	// NOTE: Not all callers of TaskRefresher goes through the closeTransaction process.
 	// If we were to regenerate tasks here by doing a state machine transition and return
 	// a TransitionOutput, then, we need to
-	//   1. Call taskGenerator.GenerateDirtySubStateMachineTasks explictly to make sure
+	//   1. Call taskGenerator.GenerateDirtySubStateMachineTasks explicitly to make sure
 	//      tasks are added to mutable state.
 	//   2. Make GenerateDirtySubStateMachineTasks idempotent, so that if the logic
 	//      does go through closeTransaction, no duplicate tasks are generated.

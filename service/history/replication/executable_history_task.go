@@ -100,7 +100,7 @@ func (e *ExecutableHistoryTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
-	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+	callerInfo := getReplicationCallerInfo(e.GetPriority())
 	namespaceName, apply, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
 		callerInfo,
@@ -156,7 +156,7 @@ func (e *ExecutableHistoryTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.RetryReplication:
-		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
+		callerInfo := getReplicationCallerInfo(e.GetPriority())
 		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
 			context.Background(),
 			callerInfo,

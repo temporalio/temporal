@@ -59,7 +59,7 @@ func Test_ValidateNexusEndpointsActivity(t *testing.T) {
 		nexusEndpointListDefaultPageSize:          func() int { return 100 },
 	}
 
-	// The "fake" namespace ID is associated with a Nexus endoint.
+	// The "fake" namespace ID is associated with a Nexus endpoint.
 	nexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
 		Entries: []*persistencespb.NexusEndpointEntry{
 			{

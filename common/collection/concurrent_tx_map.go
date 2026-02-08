@@ -43,7 +43,7 @@ type (
 // NewShardedConcurrentTxMap returns an instance of ShardedConcurrentMap
 //
 // ShardedConcurrentMap is a thread safe map that maintains upto nShards
-// number of maps internally to allow nShards writers to be acive at the
+// number of maps internally to allow nShards writers to be active at the
 // same time. This map *does not* use re-entrant locks, so access to the
 // map during iterator can cause a dead lock.
 //

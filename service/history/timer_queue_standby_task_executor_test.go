@@ -1364,7 +1364,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowExecutionTimeout
 	timerTask := &tasks.WorkflowExecutionTimeoutTask{
 		NamespaceID:         s.namespaceID.String(),
 		WorkflowID:          execution.GetWorkflowId(),
-		FirstRunID:          uuid.NewString(), // does not match the firsrt runID of the execution
+		FirstRunID:          uuid.NewString(), // does not match the first runID of the execution
 		VisibilityTimestamp: s.now,
 		TaskID:              s.mustGenerateTaskID(),
 	}

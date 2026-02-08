@@ -17,7 +17,7 @@ type (
 
 	AlertAttributesQueuePendingTaskCount struct {
 		CurrentPendingTaskCount   int
-		CiriticalPendingTaskCount int
+		CriticalPendingTaskCount int
 	}
 
 	AlertAttributesReaderStuck struct {

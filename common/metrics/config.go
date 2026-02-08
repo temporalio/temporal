@@ -373,7 +373,7 @@ func buildTallyTimerHistogramBuckets(
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 	buckets := maps.Clone(defaultPerUnitHistogramBoundaries)
 
-	// In config, when overwrite default buckets, we use [dimensionless / miliseconds / bytes] as keys.
+	// In config, when overwrite default buckets, we use [dimensionless / milliseconds / bytes] as keys.
 	// But in code, we use [1 / ms / By] as key (to align with otel unit definition). So we do conversion here.
 	if bucket, ok := clientConfig.PerUnitHistogramBoundaries[UnitNameDimensionless]; ok {
 		buckets[Dimensionless] = bucket

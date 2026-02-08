@@ -45,7 +45,7 @@ type (
 		Stop()
 	}
 
-	rescheduledExecuable struct {
+	rescheduledExecutable struct {
 		executable     Executable
 		rescheduleTime time.Time
 	}
@@ -64,7 +64,7 @@ type (
 		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
+		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecutable]
 		numExecutables int
 	}
 )
@@ -87,7 +87,7 @@ func NewRescheduler(
 		timerGate:        timer.NewLocalGate(timeSource),
 		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
+		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecutable]),
 	}
 }
 
@@ -123,7 +123,7 @@ func (r *reschedulerImpl) Add(
 ) {
 	r.Lock()
 	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
-	pq.Add(rescheduledExecuable{
+	pq.Add(rescheduledExecutable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
 	})
@@ -151,7 +151,7 @@ func (r *reschedulerImpl) Reschedule(
 
 		updatedRescheduleTime = true
 		// set reschedule time for all tasks in this pq to be now
-		items := make([]rescheduledExecuable, 0, pq.Len())
+		items := make([]rescheduledExecutable, 0, pq.Len())
 		for !pq.IsEmpty() {
 			rescheduled := pq.Remove()
 			// scheduled queue pre-fetches tasks,
@@ -271,7 +271,7 @@ func (r *reschedulerImpl) isStopped() bool {
 
 func (r *reschedulerImpl) getOrCreatePQLocked(
 	key TaskChannelKey,
-) collection.Queue[rescheduledExecuable] {
+) collection.Queue[rescheduledExecutable] {
 	if pq, ok := r.pqMap[key]; ok {
 		return pq
 	}
@@ -282,18 +282,18 @@ func (r *reschedulerImpl) getOrCreatePQLocked(
 }
 
 func (r *reschedulerImpl) newPriorityQueue(
-	items []rescheduledExecuable,
-) collection.Queue[rescheduledExecuable] {
+	items []rescheduledExecutable,
+) collection.Queue[rescheduledExecutable] {
 	if items == nil {
-		return collection.NewPriorityQueue(r.rescheduledExecuableCompareLess)
+		return collection.NewPriorityQueue(r.rescheduledExecutableCompareLess)
 	}
 
-	return collection.NewPriorityQueueWithItems(r.rescheduledExecuableCompareLess, items)
+	return collection.NewPriorityQueueWithItems(r.rescheduledExecutableCompareLess, items)
 }
 
-func (r *reschedulerImpl) rescheduledExecuableCompareLess(
-	this rescheduledExecuable,
-	that rescheduledExecuable,
+func (r *reschedulerImpl) rescheduledExecutableCompareLess(
+	this rescheduledExecutable,
+	that rescheduledExecutable,
 ) bool {
 	return this.rescheduleTime.Before(that.rescheduleTime)
 }
