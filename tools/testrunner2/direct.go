@@ -95,13 +95,11 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 		fileSuffix = fmt.Sprintf("_%d", r.directRetrySeq.Add(1))
 	}
 
-	retryForFailures, retryForCrash, retryForUnknown := r.buildRetryHooks(
-		func(plan retryPlan, attempt int) *queueItem {
-			runF := buildTestFilterPattern(plan.tests)
-			skipF := buildTestFilterPattern(plan.skipTests)
-			return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF, skipF))
-		},
-	)
+	retry := r.buildRetryHandler(func(plan retryPlan, attempt int) *queueItem {
+		runF := buildTestFilterPattern(plan.tests)
+		skipF := buildTestFilterPattern(plan.skipTests)
+		return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF, skipF))
+	})
 
 	timeout := r.effectiveTimeout()
 
@@ -129,9 +127,7 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 		attempt:          attempt,
 		logPath:          filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
 		junitPath:        filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
-		streamRetries:    true,
-		retryForFailures: retryForFailures,
-		retryForCrash:    retryForCrash,
-		retryForUnknown:  retryForUnknown,
+		streamRetries: true,
+		retry:         retry,
 	}
 }

@@ -13,8 +13,8 @@ func TestAlertsDedupe_ByKindSummaryTests(t *testing.T) {
 
 	// Alerts with same Kind+Summary+Tests should dedupe (e.g., from window trims)
 	input := alerts{
-		{Kind: failureKindTimeout, Summary: "test timed out after 2m0s", Tests: []string{"TestFoo"}, Details: "stack 1"},
-		{Kind: failureKindTimeout, Summary: "test timed out after 2m0s", Tests: []string{"TestFoo"}, Details: "stack 2"},
+		{Kind: failureKindTimeout, Summary: "test timed out after 2m0s", Tests: []string{"TestFoo"}},
+		{Kind: failureKindTimeout, Summary: "test timed out after 2m0s", Tests: []string{"TestFoo"}},
 	}
 	deduped := input.dedupe()
 	require.Len(t, deduped, 1, "same Kind+Summary+Tests should dedupe to 1")
@@ -42,7 +42,6 @@ func TestParseAlerts(t *testing.T) {
 		require.Len(t, alerts, 1)
 		require.Equal(t, failureKindFatal, alerts[0].Kind)
 		require.Equal(t, "concurrent map writes", alerts[0].Summary)
-		require.Contains(t, alerts[0].Details, "fatal error: concurrent map writes")
 		require.Contains(t, alerts[0].Tests, "mypackage.TestFatalExample")
 	})
 

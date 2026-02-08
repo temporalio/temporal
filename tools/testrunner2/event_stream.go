@@ -9,8 +9,17 @@ import (
 	"time"
 )
 
+type testEventAction string
+
+const (
+	actionRun  testEventAction = "run"
+	actionPass testEventAction = "pass"
+	actionFail testEventAction = "fail"
+	actionSkip testEventAction = "skip"
+)
+
 type testEvent struct {
-	Action string // "run", "pass", "fail", "skip"
+	Action testEventAction
 	Test   string // "TestFoo" or "TestFoo/Sub1"
 }
 
@@ -96,18 +105,18 @@ func (s *testEventStream) parseLine(line []byte) {
 	var ev testEvent
 	switch {
 	case fields[0] == "===" && fields[1] == "RUN":
-		ev = testEvent{Action: "run", Test: fields[2]}
+		ev = testEvent{Action: actionRun, Test: fields[2]}
 		now := time.Now()
 		s.running[ev.Test] = now
 		s.lastTestStarted = now
 	case fields[0] == "---" && fields[1] == "PASS:":
-		ev = testEvent{Action: "pass", Test: fields[2]}
+		ev = testEvent{Action: actionPass, Test: fields[2]}
 		delete(s.running, ev.Test)
 	case fields[0] == "---" && fields[1] == "FAIL:":
-		ev = testEvent{Action: "fail", Test: fields[2]}
+		ev = testEvent{Action: actionFail, Test: fields[2]}
 		delete(s.running, ev.Test)
 	case fields[0] == "---" && fields[1] == "SKIP:":
-		ev = testEvent{Action: "skip", Test: fields[2]}
+		ev = testEvent{Action: actionSkip, Test: fields[2]}
 		delete(s.running, ev.Test)
 	default:
 		return

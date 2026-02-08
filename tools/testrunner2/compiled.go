@@ -34,7 +34,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 		fileNames[i] = filepath.Base(tf.path)
 	}
 
-	retryForFailures, retryForCrash, retryForUnknown := r.buildRetryHooks(
+	retry := r.buildRetryHandler(
 		func(plan retryPlan, attempt int) *queueItem {
 			var wu workUnit
 			if plan.tests != nil && plan.skipTests == nil {
@@ -43,7 +43,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				for _, name := range plan.tests {
 					failedTests = append(failedTests, testCase{name: name, attempts: attempt})
 				}
-				retryUnit := buildRetryUnit(unit, failedTests)
+				retryUnit := buildRetryUnitFromFailures(unit, failedTests)
 				if retryUnit == nil {
 					return nil
 				}
@@ -106,10 +106,8 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 			Started:   time.Now(),
 			Command:   binaryPath,
 		},
-		streamRetries:    false, // one test per process
-		retryForFailures: retryForFailures,
-		retryForCrash:    retryForCrash,
-		retryForUnknown:  retryForUnknown,
+		streamRetries: false, // one test per process
+		retry:         retry,
 	}
 }
 
