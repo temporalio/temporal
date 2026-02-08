@@ -66,11 +66,10 @@ succeed (or we give up after all attempts). Never silently ignore a test.
   - Added `isQuarantined()` helper that checks exact match, prefix (parent), suffix, and nested containment.
   - Regression tests: `TestMergeReports_QuarantinedNotMissing`, `TestIsQuarantined`.
 
-## Current CI Status — targeting 3 consecutive passes
-- Run 1 (commit 9bc23d4, run 21791629370): **ALL PASS**
-- Run 2 (commit 487681a, run 21793069795): **ALL PASS**
-- Run 3 (commit 883185b, run 21794488685): **FAILED** — cass_os3 shard 2 quarantine cross-product → fixed above
-- Run 4: pending (this commit)
+## Current CI Status — 3 consecutive passes achieved!
+- Run 1 (commit 84a932b, run 21801598574): **ALL PASS** (22/22 jobs)
+- Run 2 (commit 1cb5dc6, run 21801993887): **ALL PASS** (22/22 jobs)
+- Run 3 (commit f0fdc60, run 21802434337): **ALL PASS** (22/22 jobs)
 
 ## Commits
 1. Lint fixes + filterEmitted parent handling + collapseForSkip
