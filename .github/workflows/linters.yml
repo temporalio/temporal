@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   lint-actions:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -13,7 +13,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: lint actions
@@ -24,7 +24,7 @@ jobs:
         shell: bash
 
   lint-protos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
@@ -44,7 +44,7 @@ jobs:
           make lint-protos
 
   lint-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
@@ -62,10 +62,9 @@ jobs:
       - name: lint protobuf API definitions
         run: |
           make lint-api
-          
 
   lint-workflows:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -73,7 +72,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - uses: arduino/setup-protoc@v3
@@ -84,7 +83,7 @@ jobs:
         run: make workflowcheck
 
   fmt-imports:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -92,7 +91,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: format golang import statements
@@ -108,8 +107,8 @@ jobs:
             exit 1
           fi
 
-  golangci:
-    runs-on: ubuntu-latest
+  lint-yaml:
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -117,7 +116,22 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
+          check-latest: true
+
+      - name: check yaml formatting
+        run: make lint-yaml
+
+  golangci:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
           check-latest: true
 
       - name: lint code
@@ -140,8 +154,9 @@ jobs:
       - lint-protos
       - lint-actions
       - fmt-imports
+      - lint-yaml
       - golangci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: always()
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}

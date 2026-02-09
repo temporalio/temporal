@@ -176,51 +176,93 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	t.Run("FailsIfExists", func(t *testing.T) {
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-		startResponse := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-
-		// By default, unspecified conflict policy should be set to ACTIVITY_ID_CONFLICT_POLICY_FAIL, so no need to set explicitly
-		_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			ActivityId:   activityID,
-			ActivityType: s.tv.ActivityType(),
-			Identity:     s.tv.WorkerIdentity(),
-			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-		})
-
-		var alreadyStartedErr *serviceerror.ActivityExecutionAlreadyStarted
-		require.ErrorAs(t, err, &alreadyStartedErr)
-		require.Equal(t, s.tv.RequestID(), alreadyStartedErr.StartRequestId)
-		require.Equal(t, startResponse.GetRunId(), alreadyStartedErr.RunId)
-	})
-
-	t.Run("UseExistingNoError", func(t *testing.T) {
+	t.Run("Fail", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
 
-		secondStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:    s.Namespace().String(),
-			ActivityId:   activityID,
-			ActivityType: s.tv.ActivityType(),
-			Identity:     s.tv.WorkerIdentity(),
-			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: taskQueue,
-			},
-			StartToCloseTimeout: durationpb.New(1 * time.Minute),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			RequestId:           s.tv.RequestID(),
+		startWithFail := func(requestID string) (*workflowservice.StartActivityExecutionResponse, error) {
+			return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   activityID,
+				ActivityType: s.tv.ActivityType(),
+				Identity:     s.tv.WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueue,
+				},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+				RequestId:           requestID,
+			})
+		}
+
+		t.Run("SecondStartFails", func(t *testing.T) {
+			_, err := startWithFail("different-request-id")
+			var alreadyStartedErr *serviceerror.ActivityExecutionAlreadyStarted
+			require.ErrorAs(t, err, &alreadyStartedErr)
+			require.Equal(t, s.tv.RequestID(), alreadyStartedErr.StartRequestId)
+			require.Equal(t, firstStartResp.GetRunId(), alreadyStartedErr.RunId)
 		})
-		require.NoError(t, err)
-		require.Equal(t, firstStartResp.RunId, secondStartResp.RunId)
-		require.False(t, secondStartResp.GetStarted()) // indicates activity was not started anew
+
+		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
+			resp, err := startWithFail(s.tv.RequestID())
+			require.NoError(t, err)
+			require.Equal(t, firstStartResp.RunId, resp.RunId)
+			require.False(t, resp.GetStarted())
+		})
+	})
+
+	t.Run("UseExisting", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		firstStartResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+
+		startWithUseExisting := func(requestID string) (*workflowservice.StartActivityExecutionResponse, error) {
+			return s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   activityID,
+				ActivityType: s.tv.ActivityType(),
+				Identity:     s.tv.WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: taskQueue,
+				},
+				StartToCloseTimeout: durationpb.New(1 * time.Minute),
+				IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+				RequestId:           requestID,
+			})
+		}
+
+		t.Run("SecondStartReturnsExistingRun", func(t *testing.T) {
+			resp, err := startWithUseExisting("different-request-id")
+			require.NoError(t, err)
+			require.Equal(t, firstStartResp.RunId, resp.RunId)
+			require.False(t, resp.GetStarted())
+		})
+		t.Run("SecondStartWithSameRequestIdReturnsExistingRun", func(t *testing.T) {
+			resp, err := startWithUseExisting(s.tv.RequestID())
+			require.NoError(t, err)
+			require.Equal(t, firstStartResp.RunId, resp.RunId)
+			require.False(t, resp.GetStarted())
+		})
+
+		t.Run("DoesNotApplyToCompletedActivity", func(t *testing.T) {
+			pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, firstStartResp.RunId)
+			_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+				Namespace: s.Namespace().String(),
+				TaskToken: pollTaskResp.TaskToken,
+				Result:    defaultResult,
+				Identity:  defaultIdentity,
+			})
+			require.NoError(t, err)
+
+			// USE_EXISTING only applies to running activities; completed activities
+			// are governed by reuse policy (default ALLOW_DUPLICATE creates new)
+			resp, err := startWithUseExisting("different-request-id")
+			require.NoError(t, err)
+			require.NotEqual(t, firstStartResp.RunId, resp.RunId)
+			require.True(t, resp.GetStarted())
+		})
 	})
 }
 
@@ -283,7 +325,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NotNil(t, pollTaskResp.TaskToken)
 }
 
-func (s *standaloneActivityTestSuite) TestCompleted() {
+func (s *standaloneActivityTestSuite) TestComplete() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -555,7 +597,7 @@ func (s *standaloneActivityTestSuite) TestCompleted() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestFailed() {
+func (s *standaloneActivityTestSuite) TestFail() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -853,7 +895,7 @@ func (s *standaloneActivityTestSuite) TestFailed() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestCancellation() {
+func (s *standaloneActivityTestSuite) TestRequestCancel() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1543,9 +1585,24 @@ func (s *standaloneActivityTestSuite) TestCancellation() {
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Equal(t, "token does not match namespace", invalidArgErr.Message)
 	})
+
+	t.Run("NonExistent", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Reason:     "Test Cancellation",
+			Identity:   "canceller",
+		})
+
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
+	})
 }
 
-func (s *standaloneActivityTestSuite) TestTerminated() {
+func (s *standaloneActivityTestSuite) TestTerminate() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -1685,6 +1742,21 @@ func (s *standaloneActivityTestSuite) TestTerminated() {
 		})
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
+	})
+
+	t.Run("NonExistent", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			Reason:     "Test Termination",
+			Identity:   "terminator",
+		})
+
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
 	})
 }
 
@@ -2499,7 +2571,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 				RunId:      existingRunID,
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: "activity not found for ID: non-existent-activity",
 		},
 		{
 			name: "NonExistentRunID",
@@ -2509,7 +2581,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: fmt.Sprintf("activity not found for ID: %s", existingActivityID),
 		},
 	}
 
@@ -3069,7 +3141,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 				RunId:      existingRunID,
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: "activity not found for ID: non-existent-activity",
 		},
 		{
 			name: "NonExistentRunID",
@@ -3079,7 +3151,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 				RunId:      "11111111-2222-3333-4444-555555555555",
 			},
 			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity execution not found",
+			expectedErrMsg: fmt.Sprintf("activity not found for ID: %s", existingActivityID),
 		},
 	}
 
@@ -3109,7 +3181,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 		})
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
-		require.Equal(t, "activity execution not found", notFoundErr.Message)
+		require.Equal(t, "activity not found for ID: non-existent-activity", notFoundErr.Message)
 	})
 }
 
