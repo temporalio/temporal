@@ -224,7 +224,7 @@ func BuildSuccessReportMessage(report *SuccessReport) *SlackMessage {
 	if report.FailedRuns > 0 {
 		var recentFailures []WorkflowRunSummary
 		for _, run := range report.Runs {
-			if run.Conclusion == "failure" {
+			if run.Conclusion == ConclusionFailure {
 				recentFailures = append(recentFailures, run)
 				if len(recentFailures) >= 3 {
 					break
@@ -280,7 +280,7 @@ func FormatReportForDebug(report *SuccessReport) string {
 		sb.WriteString("\nRecent Failures:\n")
 		count := 0
 		for _, run := range report.Runs {
-			if run.Conclusion == "failure" {
+			if run.Conclusion == ConclusionFailure {
 				sb.WriteString(fmt.Sprintf("  • %s\n    %s\n", run.DisplayTitle, run.URL))
 				count++
 				if count >= 3 {

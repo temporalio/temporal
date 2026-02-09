@@ -2,27 +2,35 @@ package cinotify
 
 import "time"
 
+// Conclusion represents the conclusion status of a workflow run or job
+type Conclusion string
+
+const (
+	ConclusionSuccess Conclusion = "success"
+	ConclusionFailure Conclusion = "failure"
+)
+
 // WorkflowRun represents the GitHub workflow run information
 type WorkflowRun struct {
-	Name         string    `json:"name"`
-	Conclusion   string    `json:"conclusion"`
-	HeadBranch   string    `json:"headBranch"`
-	HeadSHA      string    `json:"headSha"`
-	URL          string    `json:"url"`
-	DisplayTitle string    `json:"displayTitle"`
-	Event        string    `json:"event"`
-	CreatedAt    time.Time `json:"createdAt"`
-	Jobs         []Job     `json:"jobs"`
+	Name         string     `json:"name"`
+	Conclusion   Conclusion `json:"conclusion"`
+	HeadBranch   string     `json:"headBranch"`
+	HeadSHA      string     `json:"headSha"`
+	URL          string     `json:"url"`
+	DisplayTitle string     `json:"displayTitle"`
+	Event        string     `json:"event"`
+	CreatedAt    time.Time  `json:"createdAt"`
+	Jobs         []Job      `json:"jobs"`
 }
 
 // Job represents a single job in the workflow
 type Job struct {
-	Name        string `json:"name"`
-	Conclusion  string `json:"conclusion"`
-	Status      string `json:"status"`
-	StartedAt   string `json:"startedAt"`
-	CompletedAt string `json:"completedAt"`
-	URL         string `json:"url"`
+	Name        string     `json:"name"`
+	Conclusion  Conclusion `json:"conclusion"`
+	Status      string     `json:"status"`
+	StartedAt   string     `json:"startedAt"`
+	CompletedAt string     `json:"completedAt"`
+	URL         string     `json:"url"`
 }
 
 // CommitInfo represents commit metadata
@@ -44,7 +52,7 @@ type FailureReport struct {
 // WorkflowRunSummary represents a workflow run for success reporting
 type WorkflowRunSummary struct {
 	Name         string        `json:"name"`
-	Conclusion   string        `json:"conclusion"`
+	Conclusion   Conclusion    `json:"conclusion"`
 	Event        string        `json:"event"`
 	CreatedAt    time.Time     `json:"createdAt"`
 	StartedAt    time.Time     `json:"startedAt"`

@@ -79,7 +79,7 @@ func BuildFailureReport(runID string) (*FailureReport, error) {
 	// Identify failed jobs
 	var failedJobs []Job
 	for _, job := range run.Jobs {
-		if job.Conclusion == "failure" {
+		if job.Conclusion == ConclusionFailure {
 			failedJobs = append(failedJobs, job)
 		}
 	}
@@ -97,7 +97,7 @@ func filterCompleted(runs []WorkflowRunSummary) []WorkflowRunSummary {
 	var completed []WorkflowRunSummary
 	for _, run := range runs {
 		// Only include runs with a conclusion (success or failure)
-		if run.Conclusion == "success" || run.Conclusion == "failure" {
+		if run.Conclusion == ConclusionSuccess || run.Conclusion == ConclusionFailure {
 			completed = append(completed, run)
 		}
 	}
@@ -219,9 +219,9 @@ func BuildSuccessReport(branch, workflowName string, days int) (*SuccessReport, 
 
 	for _, run := range completedRuns {
 		switch run.Conclusion {
-		case "success":
+		case ConclusionSuccess:
 			successCount++
-		case "failure":
+		default:
 			failureCount++
 		}
 
