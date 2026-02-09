@@ -63,8 +63,8 @@ type WorkflowRunSummary struct {
 	URL          string        `json:"url"`
 }
 
-// SuccessReport aggregates success metrics for a time period
-type SuccessReport struct {
+// DigestReport aggregates success metrics for a time period
+type DigestReport struct {
 	Branch                string
 	WorkflowName          string
 	StartDate             time.Time

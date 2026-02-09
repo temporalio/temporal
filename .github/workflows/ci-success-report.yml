@@ -63,7 +63,7 @@ jobs:
           echo "Workflow: $WORKFLOW_PARAM"
           echo "Days: $DAYS_PARAM"
 
-          go run ./cmd/tools/ci-notify/main.go report \
+          go run ./cmd/tools/ci-notify/main.go digest \
             --branch "$BRANCH_PARAM" \
             --workflow "$WORKFLOW_PARAM" \
             --days "$DAYS_PARAM" \

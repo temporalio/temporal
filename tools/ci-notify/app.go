@@ -28,19 +28,14 @@ func NewCliApp() *cli.App {
 
 	app.Commands = []*cli.Command{
 		{
-			Name:  "failure",
-			Usage: "Send Slack notifications for CI failures",
+			Name:  "alert",
+			Usage: "Send alert notifications for CI failures",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     FlagRunID,
 					Usage:    "GitHub Actions run ID",
 					Required: true,
 					EnvVars:  []string{"GITHUB_RUN_ID"},
-				},
-				&cli.StringFlag{
-					Name:     FlagBranch,
-					Usage:    "Branch to report failures for",
-					Required: true,
 				},
 				&cli.StringFlag{
 					Name:     FlagSlackWebhook,
@@ -54,16 +49,17 @@ func NewCliApp() *cli.App {
 					Value: false,
 				},
 			},
-			Action: runFailureCommand,
+			Action: runAlertCommand,
 		},
 		{
-			Name:  "report",
-			Usage: "Generate report for CI runs",
+			Name:  "digest",
+			Usage: "Generate digest report for CI runs",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:     FlagBranch,
-					Usage:    "Branch to generate report for",
-					Required: true,
+					Name:        FlagBranch,
+					Usage:       "Branch to generate report for",
+					DefaultText: "main",
+					Required:    false,
 				},
 				&cli.IntFlag{
 					Name:  FlagDays,
@@ -86,14 +82,14 @@ func NewCliApp() *cli.App {
 					Value: false,
 				},
 			},
-			Action: runReportCommand,
+			Action: runDigestCommand,
 		},
 	}
 
 	return app
 }
 
-func runFailureCommand(c *cli.Context) error {
+func runAlertCommand(c *cli.Context) error {
 	// Set up logger
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -103,13 +99,11 @@ func runFailureCommand(c *cli.Context) error {
 	defer func() { _ = logger.Sync() }()
 
 	runID := c.String(FlagRunID)
-	branch := c.String(FlagBranch)
 	slackWebhook := c.String(FlagSlackWebhook)
 	dryRun := c.Bool(FlagDryRun)
 
-	logger.Info("Starting ci-notify failure",
+	logger.Info("Starting `ci-notify alert`",
 		zap.String("run_id", runID),
-		zap.String("branch", branch),
 		zap.Bool("dry_run", dryRun),
 	)
 
@@ -165,7 +159,7 @@ func runFailureCommand(c *cli.Context) error {
 	return nil
 }
 
-func runReportCommand(c *cli.Context) error {
+func runDigestCommand(c *cli.Context) error {
 	// Set up logger
 	logger, err := zap.NewProduction()
 	if err != nil {
@@ -180,7 +174,7 @@ func runReportCommand(c *cli.Context) error {
 	slackWebhook := c.String(FlagSlackWebhook)
 	dryRun := c.Bool(FlagDryRun)
 
-	logger.Info("Starting ci-notify report",
+	logger.Info("Starting `ci-notify digest`",
 		zap.String("branch", branch),
 		zap.Int("days", days),
 		zap.String("workflow", workflow),
@@ -188,7 +182,7 @@ func runReportCommand(c *cli.Context) error {
 	)
 
 	// Build success report
-	report, err := BuildSuccessReport(branch, workflow, days)
+	report, err := BuildDigest(branch, workflow, days)
 	if err != nil {
 		logger.Error("Failed to build success report", zap.Error(err))
 		// Don't fail CI if reporting fails

@@ -781,7 +781,6 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          go run ./cmd/tools/ci-notify failure \
+          go run ./cmd/tools/ci-notify alert \
             --run-id "${{ github.run_id }}" \
-            --branch main \
             --slack-webhook "$SLACK_WEBHOOK"

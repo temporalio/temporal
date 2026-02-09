@@ -188,18 +188,18 @@ func GetWorkflowRuns(branch, workflowName string, since time.Time) ([]WorkflowRu
 		return nil, fmt.Errorf("failed to parse workflow runs: %w", err)
 	}
 
-	// Calculate duration for each run
+	// Calculate duration for each run (actual execution time, not including queue time)
 	for i := range runs {
-		if !runs[i].CreatedAt.IsZero() && !runs[i].UpdatedAt.IsZero() {
-			runs[i].Duration = runs[i].UpdatedAt.Sub(runs[i].CreatedAt)
+		if !runs[i].StartedAt.IsZero() && !runs[i].UpdatedAt.IsZero() {
+			runs[i].Duration = runs[i].UpdatedAt.Sub(runs[i].StartedAt)
 		}
 	}
 
 	return runs, nil
 }
 
-// BuildSuccessReport builds a success report for the specified time range
-func BuildSuccessReport(branch, workflowName string, days int) (*SuccessReport, error) {
+// BuildDigest builds a digest report for the specified time range
+func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 	// Calculate the start date
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -days)
@@ -241,7 +241,7 @@ func BuildSuccessReport(branch, workflowName string, days int) (*SuccessReport, 
 	under25 := calculatePercentUnder(durations, 25*time.Minute)
 	under30 := calculatePercentUnder(durations, 30*time.Minute)
 
-	return &SuccessReport{
+	return &DigestReport{
 		Branch:                branch,
 		WorkflowName:          workflowName,
 		StartDate:             startDate,

@@ -113,16 +113,16 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 // FormatMessageForDebug formats the message for console output
 func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
-	sb.WriteString("🚨 CI Failed on Main Branch 🚨\n\n")
-	sb.WriteString(fmt.Sprintf("Workflow: %s\n", report.Workflow.Name))
-	sb.WriteString(fmt.Sprintf("Branch: %s\n", report.Workflow.HeadBranch))
-	sb.WriteString(fmt.Sprintf("Commit: %s (%s)\n", report.Commit.ShortSHA, report.Commit.Author))
-	sb.WriteString(fmt.Sprintf("Failed Jobs: %d of %d total jobs\n\n", len(report.FailedJobs), report.TotalJobs))
-	sb.WriteString("Failed Jobs:\n")
+	fmt.Fprintf(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
+	fmt.Fprintf(&sb, "Workflow: %s\n", report.Workflow.Name)
+	fmt.Fprintf(&sb, "Branch: %s\n", report.Workflow.HeadBranch)
+	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Commit.ShortSHA, report.Commit.Author)
+	fmt.Fprintf(&sb, "Failed Jobs: %d of %d total jobs\n\n", len(report.FailedJobs), report.TotalJobs)
+	fmt.Fprintf(&sb, "Failed Jobs:\n")
 	for _, job := range report.FailedJobs {
-		sb.WriteString(fmt.Sprintf("  • %s\n    %s\n", job.Name, job.URL))
+		fmt.Fprintf(&sb, "  • %s\n    %s\n", job.Name, job.URL)
 	}
-	sb.WriteString(fmt.Sprintf("\nView Full Workflow Run: %s\n", report.Workflow.URL))
+	fmt.Fprintf(&sb, "\nView Full Workflow Run: %s\n", report.Workflow.URL)
 	return sb.String()
 }
 
@@ -151,7 +151,7 @@ func SendSlackMessage(webhookURL string, message *SlackMessage) error {
 }
 
 // BuildSuccessReportMessage creates a Slack message for success report
-func BuildSuccessReportMessage(report *SuccessReport) *SlackMessage {
+func BuildSuccessReportMessage(report *DigestReport) *SlackMessage {
 	// Header
 	headerBlock := SlackBlock{
 		Type: "section",
@@ -257,38 +257,24 @@ func BuildSuccessReportMessage(report *SuccessReport) *SlackMessage {
 }
 
 // FormatReportForDebug formats the success report for console output
-func FormatReportForDebug(report *SuccessReport) string {
+func FormatReportForDebug(report *DigestReport) string {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("📊 Weekly CI Report - %s Branch\n\n", report.Branch))
-	sb.WriteString(fmt.Sprintf("Report Period: %s to %s\n\n",
+	fmt.Fprintf(&sb, "📊 Weekly CI Report - %s Branch\n\n", report.Branch)
+	fmt.Fprintf(&sb, "Report Period: %s to %s\n\n",
 		report.StartDate.Format("Jan 2, 2006"),
-		report.EndDate.Format("Jan 2, 2006")))
-	sb.WriteString("Metrics:\n")
-	sb.WriteString(fmt.Sprintf("  Success Rate: %.1f%%\n", report.SuccessRate))
-	sb.WriteString(fmt.Sprintf("  Total Runs: %d\n", report.TotalRuns))
-	sb.WriteString(fmt.Sprintf("  Successful Runs: %d\n", report.SuccessfulRuns))
-	sb.WriteString(fmt.Sprintf("  Failed Runs: %d\n", report.FailedRuns))
-	sb.WriteString(fmt.Sprintf("  Average Duration: %s\n", formatDuration(report.AverageDuration)))
-	sb.WriteString(fmt.Sprintf("  Median Duration: %s\n", formatDuration(report.MedianDuration)))
+		report.EndDate.Format("Jan 2, 2006"))
+	fmt.Fprintf(&sb, "Metrics:\n")
+	fmt.Fprintf(&sb, "  Success Rate: %.1f%%\n", report.SuccessRate)
+	fmt.Fprintf(&sb, "  Total Runs: %d\n", report.TotalRuns)
+	fmt.Fprintf(&sb, "  Successful Runs: %d\n", report.SuccessfulRuns)
+	fmt.Fprintf(&sb, "  Failed Runs: %d\n", report.FailedRuns)
+	fmt.Fprintf(&sb, "  Average Duration: %s\n", formatDuration(report.AverageDuration))
+	fmt.Fprintf(&sb, "  Median Duration: %s\n", formatDuration(report.MedianDuration))
 
-	sb.WriteString("\nRun Duration Distribution:\n")
-	sb.WriteString(fmt.Sprintf("  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent))
-	sb.WriteString(fmt.Sprintf("  Under 25 minutes: %.1f%%\n", report.Under25MinutesPercent))
-	sb.WriteString(fmt.Sprintf("  Under 30 minutes: %.1f%%\n", report.Under30MinutesPercent))
-
-	if report.FailedRuns > 0 {
-		sb.WriteString("\nRecent Failures:\n")
-		count := 0
-		for _, run := range report.Runs {
-			if run.Conclusion == ConclusionFailure {
-				sb.WriteString(fmt.Sprintf("  • %s\n    %s\n", run.DisplayTitle, run.URL))
-				count++
-				if count >= 3 {
-					break
-				}
-			}
-		}
-	}
+	fmt.Fprintf(&sb, "\nRun Duration Distribution:\n")
+	fmt.Fprintf(&sb, "  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent)
+	fmt.Fprintf(&sb, "  Under 25 minutes: %.1f%%\n", report.Under25MinutesPercent)
+	fmt.Fprintf(&sb, "  Under 30 minutes: %.1f%%\n", report.Under30MinutesPercent)
 
 	return sb.String()
 }
