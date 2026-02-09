@@ -48,12 +48,12 @@ func TestServiceErrorInterceptorUnknown(t *testing.T) {
 	assert.Equal(t, codes.Unknown, status.Code(err))
 }
 
-func TestServiceErrorInterceptorSet(t *testing.T) {
-	setErrors := []error{
+func TestServiceErrorInterceptorSerialization(t *testing.T) {
+	serializationErrors := []error{
 		serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
 		serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
 	}
-	for _, inErr := range setErrors {
+	for _, inErr := range serializationErrors {
 		_, err := ServiceErrorInterceptor(context.Background(), nil, nil,
 			func(_ context.Context, _ any) (any, error) {
 				return nil, inErr
