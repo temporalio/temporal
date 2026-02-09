@@ -46,13 +46,13 @@ func TestDefaultConfig(t *testing.T) {
 	})
 }
 
-func TestParseConfig(t *testing.T) {
+func TestParseArgs(t *testing.T) {
 	t.Parallel()
 
 	t.Run("strips known flags and passes through the rest", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		args, err := parseConfig(testCommand, []string{
+		args, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--log-dir=/tmp/logs",
 			"--group-by=test",
@@ -83,7 +83,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("rejects zero max attempts", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--log-dir=/tmp/logs",
 			"-foo",
@@ -99,7 +99,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("rejects non-numeric max attempts", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--log-dir=/tmp/logs",
 			"-foo",
@@ -115,7 +115,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("requires junitfile", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			// missing: "--junitfile=test.xml"
 			"--log-dir=/tmp/logs",
 			"-foo",
@@ -131,7 +131,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("requires coverprofile", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--log-dir=/tmp/logs",
 			"-foo",
@@ -147,7 +147,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("requires log dir", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"-coverprofile=test.cover.out",
 			// missing: "--log-dir=/tmp/logs"
@@ -159,7 +159,7 @@ func TestParseConfig(t *testing.T) {
 		for _, mode := range []string{"test", "none"} {
 			cfg := defaultConfig()
 			cfg.log = func(string, ...any) {}
-			_, err := parseConfig(testCommand, []string{
+			_, err := parseArgs(testCommand, []string{
 				"--junitfile=test.xml",
 				"--log-dir=/tmp/logs",
 				"-coverprofile=test.cover.out",
@@ -173,7 +173,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("rejects invalid group-by mode", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--log-dir=/tmp/logs",
 			"-coverprofile=test.cover.out",
@@ -185,7 +185,7 @@ func TestParseConfig(t *testing.T) {
 	t.Run("requires group-by", func(t *testing.T) {
 		cfg := defaultConfig()
 		cfg.log = func(string, ...any) {}
-		_, err := parseConfig(testCommand, []string{
+		_, err := parseArgs(testCommand, []string{
 			"--junitfile=test.xml",
 			"--log-dir=/tmp/logs",
 			"-coverprofile=test.cover.out",
