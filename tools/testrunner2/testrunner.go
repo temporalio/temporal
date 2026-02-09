@@ -250,16 +250,24 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 	}
 	defer func() { _ = os.RemoveAll(binDir) }()
 
-	// Create result collector and progress tracker
-	r.collector = &resultCollector{}
-	r.progress = &progressTracker{}
-
 	// Create compile items for each package
 	items := r.createCompileItems(pkgs, binDir, baseArgs)
 
-	// Run via scheduler
 	r.log("starting scheduler with parallelism=%d", r.parallelism)
-	sched := newScheduler(r.parallelism)
+	return r.runWithScheduler(ctx, r.parallelism, items, 0)
+}
+
+// runWithScheduler runs queue items through the scheduler and finalizes the report.
+// initialTotal pre-seeds the progress tracker (direct mode passes 1; compiled mode
+// passes 0 because compile items dynamically add totals).
+func (r *runner) runWithScheduler(ctx context.Context, parallelism int, items []*queueItem, initialTotal int64) error {
+	r.collector = &resultCollector{}
+	r.progress = &progressTracker{}
+	if initialTotal > 0 {
+		r.progress.addTotal(initialTotal)
+	}
+
+	sched := newScheduler(parallelism)
 	sched.run(ctx, items)
 
 	// Convert alerts to a junit report
@@ -269,12 +277,9 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 		r.collector.junitReports = append(r.collector.junitReports, alertsReport)
 	}
 
-	// Finalize report
 	if err := r.finalizeReport(r.collector.junitReports); err != nil {
 		return err
 	}
-
-	// Print summary
 	if len(r.collector.errors) > 0 {
 		return errors.Join(r.collector.errors...)
 	}
@@ -553,14 +558,13 @@ func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
 		failureInfo = fmt.Sprintf(", failure=%s", cmp.Or(failureKind, "failed"))
 	}
 
-	var header string
+	totalStr := fmt.Sprintf("%d", numTests)
 	if failureKind != "" {
-		header = fmt.Sprintf("%s%s %s %s (attempt=%d, passed=%d/?%s, runtime=%v)",
-			logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.attempt, passedTests, failureInfo, time.Since(start).Round(time.Second))
-	} else {
-		header = fmt.Sprintf("%s%s %s %s (attempt=%d, passed=%d/%d%s, runtime=%v)",
-			logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.attempt, passedTests, numTests, failureInfo, time.Since(start).Round(time.Second))
+		totalStr = "?"
 	}
+	header := fmt.Sprintf("%s%s %s %s (attempt=%d, passed=%d/%s%s, runtime=%v)",
+		logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.attempt,
+		passedTests, totalStr, failureInfo, time.Since(start).Round(time.Second))
 
 	var body strings.Builder
 

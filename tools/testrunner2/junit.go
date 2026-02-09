@@ -36,30 +36,6 @@ func (j *junitReport) read() error {
 	return nil
 }
 
-func generateStatic(names []string, suffix string, message string) *junitReport {
-	var testcases []junit.Testcase
-	for _, name := range names {
-		testcases = append(testcases, junit.Testcase{
-			Name:    fmt.Sprintf("%s (%s)", name, suffix),
-			Failure: &junit.Result{Message: message},
-		})
-	}
-	return &junitReport{
-		Testsuites: junit.Testsuites{
-			Tests:    len(names),
-			Failures: len(names),
-			Suites: []junit.Testsuite{
-				{
-					Name:      "suite",
-					Tests:     len(names),
-					Failures:  len(names),
-					Testcases: testcases,
-				},
-			},
-		},
-	}
-}
-
 func (j *junitReport) write() error {
 	f, err := os.Create(j.path)
 	if err != nil {
