@@ -51,14 +51,19 @@ type resultCollector struct {
 }
 
 // progressTracker tracks completion progress across all test files.
+// total is incremented dynamically as compile items discover tests.
 type progressTracker struct {
-	total     int64
+	total     atomic.Int64
 	completed atomic.Int64
+}
+
+func (p *progressTracker) addTotal(n int64) {
+	p.total.Add(n)
 }
 
 func (p *progressTracker) complete(n int) (completed, total int) {
 	c := p.completed.Add(int64(n))
-	return int(c), int(p.total)
+	return int(c), int(p.total.Load())
 }
 
 func (c *resultCollector) addReport(r *junitReport) {
@@ -216,37 +221,20 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 		return r.runDirectMode(ctx, testDirs, baseArgs)
 	}
 
-	// Discover test files (filtered by shard if sharding is enabled)
-	tp, err := newTestPackage(testPackageConfig{
-		log:         r.log,
-		buildTags:   r.buildTags,
-		totalShards: r.totalShards,
-		shardIndex:  r.shardIndex,
-		groupBy:     r.groupBy,
-		runFilter:   r.runFilter,
-	}, testDirs)
+	// Discover packages that contain test files
+	pkgs, err := findTestPackages(testDirs)
 	if err != nil {
-		return fmt.Errorf("failed to discover test files: %w", err)
+		return err
 	}
-
-	if len(tp.files) == 0 {
+	if len(pkgs) == 0 {
 		return fmt.Errorf("no test files found in directories: %v", testDirs)
 	}
 
-	// Get work units based on grouping mode
-	units := tp.groupByMode(r.groupBy)
-
 	if r.totalShards > 1 {
-		r.log("shard %d/%d: running %d work units (group-by=%s)", r.shardIndex+1, r.totalShards, len(units), r.groupBy)
+		r.log("shard %d/%d (group-by=%s)", r.shardIndex+1, r.totalShards, r.groupBy)
 	}
 
-	if len(units) == 0 {
-		return fmt.Errorf("no work units after grouping (mode=%s) in directories: %v", r.groupBy, testDirs)
-	}
-
-	// Print test files (from work units to reflect sharding)
-	r.log("test files: %s", formatWorkUnits(units, r.groupBy))
-	r.log("work units: %d (group-by=%s)", len(units), r.groupBy)
+	r.log("test packages: %v", pkgs)
 
 	// Create log directory
 	if err := os.MkdirAll(r.logDir, 0755); err != nil {
@@ -263,10 +251,10 @@ func (r *runner) runTests(ctx context.Context, args []string) error {
 
 	// Create result collector and progress tracker
 	r.collector = &resultCollector{}
-	r.progress = &progressTracker{total: int64(len(units))}
+	r.progress = &progressTracker{}
 
 	// Create compile items for each package
-	items := r.createCompileItems(tp, units, binDir, baseArgs)
+	items := r.createCompileItems(pkgs, binDir, baseArgs)
 
 	// Run via scheduler
 	r.log("starting scheduler with parallelism=%d", r.parallelism)
@@ -491,17 +479,6 @@ func (r *runner) effectiveTimeout() time.Duration {
 		return r.timeout
 	}
 	return r.runTimeout
-}
-
-// unitFileSize returns the total size of all files in the work unit.
-func unitFileSize(u workUnit) int64 {
-	var total int64
-	for _, f := range u.files {
-		if info, err := os.Stat(f.path); err == nil {
-			total += info.Size()
-		}
-	}
-	return total
 }
 
 func (r *runner) finalizeReport(reports []*junitReport) error {
