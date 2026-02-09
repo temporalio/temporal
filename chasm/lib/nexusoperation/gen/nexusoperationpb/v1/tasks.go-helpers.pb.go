@@ -42,35 +42,35 @@ func (this *InvocationTask) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type InvocationTimeoutTask to the protobuf v3 wire format
-func (val *InvocationTimeoutTask) Marshal() ([]byte, error) {
+// Marshal an object of type ScheduleToCloseTimeoutTask to the protobuf v3 wire format
+func (val *ScheduleToCloseTimeoutTask) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type InvocationTimeoutTask from the protobuf v3 wire format
-func (val *InvocationTimeoutTask) Unmarshal(buf []byte) error {
+// Unmarshal an object of type ScheduleToCloseTimeoutTask from the protobuf v3 wire format
+func (val *ScheduleToCloseTimeoutTask) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *InvocationTimeoutTask) Size() int {
+func (val *ScheduleToCloseTimeoutTask) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two InvocationTimeoutTask values are equivalent by recursively
+// Equal returns whether two ScheduleToCloseTimeoutTask values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *InvocationTimeoutTask) Equal(that interface{}) bool {
+func (this *ScheduleToCloseTimeoutTask) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *InvocationTimeoutTask
+	var that1 *ScheduleToCloseTimeoutTask
 	switch t := that.(type) {
-	case *InvocationTimeoutTask:
+	case *ScheduleToCloseTimeoutTask:
 		that1 = t
-	case InvocationTimeoutTask:
+	case ScheduleToCloseTimeoutTask:
 		that1 = &t
 	default:
 		return false

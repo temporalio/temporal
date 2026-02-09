@@ -1,9 +1,11 @@
 package nexusoperation
 
 import (
-	"go.temporal.io/api/serviceerror"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // EventScheduled is triggered when the operation is meant to be scheduled - immediately after initialization.
@@ -14,19 +16,57 @@ var transitionScheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventScheduled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Emit an invocation task to start the operation
+		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
+			Attempt: o.Attempt,
+		})
+
+		// Emit a schedule-to-close timeout task if configured
+		if o.ScheduleToCloseTimeout != nil && o.ScheduleToCloseTimeout.AsDuration() != 0 {
+			deadline := o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())
+			ctx.AddTask(o, chasm.TaskAttributes{
+				ScheduledTime: deadline,
+			}, &nexusoperationpb.ScheduleToCloseTimeoutTask{
+				Attempt: o.Attempt,
+			})
+		}
+
+		return nil
 	},
 )
 
 // EventAttemptFailed is triggered when an invocation attempt is failed with a retryable error.
 type EventAttemptFailed struct {
+	Failure     *failurepb.Failure
+	RetryPolicy backoff.RetryPolicy
 }
 
 var transitionAttemptFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_SCHEDULED},
 	nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	func(o *Operation, ctx chasm.MutableContext, event EventAttemptFailed) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		currentTime := ctx.Now(o)
+
+		// Record the attempt
+		o.Attempt++
+		o.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		o.LastAttemptFailure = event.Failure
+
+		// Compute next retry delay
+		// Use 0 for elapsed time as we don't limit the retry by time (for now)
+		// The last argument (error) is ignored
+		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(o.Attempt), nil)
+		nextAttemptScheduleTime := currentTime.Add(nextDelay)
+		o.NextAttemptScheduleTime = timestamppb.New(nextAttemptScheduleTime)
+
+		// Emit a backoff task to retry after the delay
+		ctx.AddTask(o, chasm.TaskAttributes{
+			ScheduledTime: nextAttemptScheduleTime,
+		}, &nexusoperationpb.InvocationBackoffTask{
+			Attempt: o.Attempt,
+		})
+
+		return nil
 	},
 )
 
@@ -39,13 +79,25 @@ var transitionRescheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_BACKING_OFF},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventRescheduled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Clear the next attempt schedule time
+		o.NextAttemptScheduleTime = nil
+
+		// Emit a new invocation task for the retry attempt
+		ctx.AddTask(o, chasm.TaskAttributes{}, &nexusoperationpb.InvocationTask{
+			Attempt: o.Attempt,
+		})
+
+		return nil
 	},
 )
 
 // EventStarted is triggered when an invocation attempt succeeds and the handler indicates that it started an
 // asynchronous operation.
 type EventStarted struct {
+	OperationToken string
+	// FromBackingOff indicates whether this transition is from BACKING_OFF state
+	// Used to avoid double-counting attempts
+	FromBackingOff bool
 }
 
 var transitionStarted = chasm.NewTransition(
@@ -55,7 +107,26 @@ var transitionStarted = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_STARTED,
 	func(o *Operation, ctx chasm.MutableContext, event EventStarted) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		currentTime := ctx.Now(o)
+
+		// Only increment attempt when NOT coming from BACKING_OFF state
+		// When coming from BACKING_OFF, the attempt was already incremented by transitionAttemptFailed
+		if !event.FromBackingOff {
+			o.Attempt++
+		}
+		o.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		o.LastAttemptFailure = nil
+
+		// Clear the next attempt schedule time when leaving BACKING_OFF state
+		// This field is only valid in BACKING_OFF state
+		o.NextAttemptScheduleTime = nil
+
+		// Store the operation token for async completion
+		o.OperationToken = event.OperationToken
+
+		// TODO: emit a cancellation task if a start-to-close timeout is configured
+
+		return nil
 	},
 )
 
@@ -71,7 +142,9 @@ var transitionSucceeded = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
+		return nil
 	},
 )
 
@@ -87,7 +160,10 @@ var transitionFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_FAILED,
 	func(o *Operation, ctx chasm.MutableContext, event EventFailed) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// Not recording the last attempt information here since the state machine
+		// will be deleted immediately after this transition
+		return nil
 	},
 )
 
@@ -103,7 +179,9 @@ var transitionCanceled = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
 	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
+		return nil
 	},
 )
 
@@ -119,6 +197,8 @@ var transitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		return serviceerror.NewUnimplemented("unimplemented")
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
+		return nil
 	},
 )

@@ -36,7 +36,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask[*Operation, *nexusoperationpb.InvocationTask]("invocation", l.OperationInvocationTaskExecutor, l.OperationInvocationTaskExecutor),
 		chasm.NewRegistrablePureTask[*Operation, *nexusoperationpb.InvocationBackoffTask]("invocationBackoff", l.OperationBackoffTaskExecutor, l.OperationBackoffTaskExecutor),
-		chasm.NewRegistrablePureTask[*Operation, *nexusoperationpb.InvocationTimeoutTask]("scheduleToCloseTimeout", l.OperationTimeoutTaskExecutor, l.OperationTimeoutTaskExecutor),
+		chasm.NewRegistrablePureTask[*Operation, *nexusoperationpb.ScheduleToCloseTimeoutTask]("scheduleToCloseTimeout", l.OperationTimeoutTaskExecutor, l.OperationTimeoutTaskExecutor),
 		chasm.NewRegistrableSideEffectTask[*Cancellation, *nexusoperationpb.CancellationTask]("cancellation", l.CancellationTaskExecutor, l.CancellationTaskExecutor),
 		chasm.NewRegistrablePureTask[*Cancellation, *nexusoperationpb.CancellationBackoffTask]("cancellationBackoff", l.CancellationBackoffTaskExecutor, l.CancellationBackoffTaskExecutor),
 	}
