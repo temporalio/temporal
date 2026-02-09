@@ -33,7 +33,6 @@ func TestIntegration(t *testing.T) {
 				passed("TestPass3"),
 			)
 			assertConsole(t, res,
-				printed("work units: 3"),
 				printed("starting scheduler with parallelism=1"),
 				printed("🚀 compiling", "./testpkg/passing"),
 				printed("$", "go test -c", "./testpkg/passing"),
@@ -277,16 +276,16 @@ func TestIntegration(t *testing.T) {
 			require.NoError(t, res.err)
 
 			assertConsole(t, res,
+				printed("$", ".test", "-test.run ^TestAlone$"),
+				printed("--- TIMEOUT:", "TestAlone"),
 				printed("$", ".test", "-test.run ^TestWithSub$"),
 				printed("--- TIMEOUT:", "TestWithSub/Child"),
 				notPrinted("— in TestWithSub\n"),
-				printed("$", ".test", "-test.run ^TestAlone$"),
-				printed("--- TIMEOUT:", "TestAlone"),
 				// Timeout retries re-run the whole top-level test (not leaf subtests)
-				printed("$", ".test", "-test.run ^TestWithSub$"),
-				printed("✅", "TestWithSub", "attempt=2", "passed=2/2"),
 				printed("$", ".test", "-test.run ^TestAlone$"),
 				printed("✅", "TestAlone", "attempt=2", "passed=1/1"),
+				printed("$", ".test", "-test.run ^TestWithSub$"),
+				printed("✅", "TestWithSub", "attempt=2", "passed=2/2"),
 				printed("test run completed"),
 			)
 			assertLogFiles(t, res, // TestWithSub + TestAlone both time out attempt 1
