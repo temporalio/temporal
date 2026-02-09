@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"log"
 	"os"
 	"slices"
 	"strings"
@@ -309,6 +310,7 @@ func newJUnitReport(output string, junitPath string) testResults {
 	parser := gotest.NewParser(gotest.SetSubtestMode(gotest.ExcludeParents))
 	report, err := parser.Parse(strings.NewReader(output))
 	if err != nil {
+		log.Printf("[runner] warning: failed to parse test output for JUnit report: %v", err)
 		return testResults{}
 	}
 

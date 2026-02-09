@@ -74,6 +74,25 @@ func TestIntegration(t *testing.T) {
 			)
 			assertNoLogFiles(t, res)
 		})
+
+		t.Run("group mode: none with -run filter", func(t *testing.T) {
+			t.Parallel()
+
+			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=none", "-run=TestPass1")
+			require.NoError(t, res.err)
+
+			assertJUnit(t, res,
+				passed("TestPass1"),
+			)
+			assertConsole(t, res,
+				printed("running in 'none' mode"),
+				printed("🚀", "all", "attempt 1"),
+				printed("$", "go test", "-run", "TestPass1", "./testpkg/passing"),
+				printed("✅", "all", "attempt=1"),
+				printed("test run completed"),
+			)
+			assertNoLogFiles(t, res)
+		})
 	})
 
 	t.Run("failure: always-failing test", func(t *testing.T) {
