@@ -3,7 +3,9 @@ package testrunner2
 import (
 	"cmp"
 	"fmt"
+	"io"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -77,23 +79,21 @@ func formatWorkUnits(units []workUnit, groupBy GroupMode) string {
 }
 
 func formatWorkUnitsByTest(sb *strings.Builder, units []workUnit) {
-	testsByFile := make(map[string][]string)
-	fileOrder := make([]string, 0)
+	testsByPkg := make(map[string][]string)
+	pkgOrder := make([]string, 0)
 	for _, u := range units {
-		for _, tf := range u.files {
-			if _, seen := testsByFile[tf.path]; !seen {
-				fileOrder = append(fileOrder, tf.path)
-				testsByFile[tf.path] = nil
-			}
-			for _, tc := range tf.tests {
-				testsByFile[tf.path] = append(testsByFile[tf.path], tc.name)
-			}
+		if _, seen := testsByPkg[u.pkg]; !seen {
+			pkgOrder = append(pkgOrder, u.pkg)
+			testsByPkg[u.pkg] = nil
+		}
+		for _, tc := range u.tests {
+			testsByPkg[u.pkg] = append(testsByPkg[u.pkg], tc.name)
 		}
 	}
-	for _, path := range fileOrder {
+	for _, pkg := range pkgOrder {
 		sb.WriteString("\n  ")
-		sb.WriteString(path)
-		if tests := testsByFile[path]; len(tests) > 0 {
+		sb.WriteString(pkg)
+		if tests := testsByPkg[pkg]; len(tests) > 0 {
 			sb.WriteString(" (")
 			sb.WriteString(strings.Join(tests, ", "))
 			sb.WriteString(")")
@@ -104,12 +104,36 @@ func formatWorkUnitsByTest(sb *strings.Builder, units []workUnit) {
 func formatWorkUnitsByFile(sb *strings.Builder, units []workUnit) {
 	seen := make(map[string]bool)
 	for _, u := range units {
-		for _, tf := range u.files {
-			if !seen[tf.path] {
-				seen[tf.path] = true
-				sb.WriteString("\n  ")
-				sb.WriteString(tf.path)
-			}
+		if !seen[u.pkg] {
+			seen[u.pkg] = true
+			sb.WriteString("\n  ")
+			sb.WriteString(u.pkg)
 		}
 	}
+}
+
+// consoleWriter writes grouped output to a writer.
+type consoleWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+// WriteGrouped writes output with a header line and indented body.
+func (cw *consoleWriter) WriteGrouped(header, body string) {
+	var out strings.Builder
+	out.WriteString(header)
+	out.WriteByte('\n')
+
+	// Indent body lines
+	for line := range strings.SplitSeq(body, "\n") {
+		if line != "" {
+			out.WriteString("    ")
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+
+	cw.mu.Lock()
+	_, _ = io.WriteString(cw.w, out.String())
+	cw.mu.Unlock()
 }

@@ -1,7 +1,6 @@
 package testrunner2
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -29,11 +28,6 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 	junitPath := filepath.Join(r.logDir, junitFilename)
 	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, desc))
 
-	fileNames := make([]string, len(unit.files))
-	for i, tf := range unit.files {
-		fileNames[i] = filepath.Base(tf.path)
-	}
-
 	retry := r.buildRetryHandler(
 		func(plan retryPlan, attempt int) *queueItem {
 			var wu workUnit
@@ -43,11 +37,11 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				for _, name := range plan.tests {
 					failedTests = append(failedTests, testCase{name: name, attempts: attempt})
 				}
-				retryUnit := buildRetryUnitFromFailures(unit, failedTests)
-				if retryUnit == nil {
-					return nil
+				wu = workUnit{
+					pkg:   unit.pkg,
+					tests: failedTests,
+					label: unit.label,
 				}
-				wu = *retryUnit
 			} else {
 				// Crash/quarantine retry: use the original unit with run/skip lists.
 				// Merge plan's skip list with the current unit's to accumulate
@@ -55,7 +49,6 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				// attempts don't re-run).
 				wu = workUnit{
 					pkg:       unit.pkg,
-					files:     unit.files,
 					label:     unit.label,
 					skipTests: mergeUnique(unit.skipTests, plan.skipTests),
 				}
@@ -100,11 +93,10 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 		logPath:   logPath,
 		junitPath: junitPath,
 		logHeader: &logFileHeader{
-			Package:   unit.pkg,
-			TestFiles: fileNames,
-			Attempt:   attempt,
-			Started:   time.Now(),
-			Command:   binaryPath,
+			Package: unit.pkg,
+			Attempt: attempt,
+			Started: time.Now(),
+			Command: binaryPath,
 		},
 		streamRetries: false, // one test per process
 		retry:         retry,
@@ -112,33 +104,25 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 }
 
 // createCompileItems creates compile queue items for each package.
-func (r *runner) createCompileItems(tp *testPackage, units []workUnit, binDir string, baseArgs []string) []*queueItem {
-	// Group units by package for compilation
-	unitsByPkg := make(map[string][]workUnit)
-	for _, u := range units {
-		unitsByPkg[u.pkg] = append(unitsByPkg[u.pkg], u)
-	}
-
-	// Sort units by file size (largest first) for better load balancing
-	for _, pkgUnits := range unitsByPkg {
-		slices.SortFunc(pkgUnits, func(a, b workUnit) int {
-			return cmp.Compare(unitFileSize(b), unitFileSize(a)) // descending
-		})
-	}
-
-	pkgs := slices.Sorted(maps.Keys(unitsByPkg))
-
-	items := make([]*queueItem, 0, len(pkgs))
+func (r *runner) createCompileItems(pkgs []string, binDir string, baseArgs []string) []*queueItem {
+	// Dedupe and sort packages
+	pkgSet := make(map[string]bool, len(pkgs))
 	for _, pkg := range pkgs {
+		pkgSet[pkg] = true
+	}
+	sortedPkgs := slices.Sorted(maps.Keys(pkgSet))
+
+	items := make([]*queueItem, 0, len(sortedPkgs))
+	for _, pkg := range sortedPkgs {
 		binName := strings.ReplaceAll(strings.TrimPrefix(pkg, "./"), "/", "_") + ".test"
 		binaryPath := filepath.Join(binDir, binName)
 
-		items = append(items, r.newCompileItem(pkg, unitsByPkg[pkg], binaryPath, baseArgs))
+		items = append(items, r.newCompileItem(pkg, binaryPath, baseArgs))
 	}
 	return items
 }
 
-func (r *runner) newCompileItem(pkg string, units []workUnit, binaryPath string, baseArgs []string) *queueItem {
+func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string) *queueItem {
 	var lc *logCapture
 	var compileErr error
 
@@ -188,7 +172,34 @@ func (r *runner) newCompileItem(pkg string, units []workUnit, binaryPath string,
 				return
 			}
 
-			r.log("starting test run for %s: units=%d", pkg, len(units))
+			// Discover tests from the compiled binary
+			testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
+			if err != nil {
+				compileErr = fmt.Errorf("failed to list tests from %s: %w", binaryPath, err)
+				r.collector.addError(compileErr)
+				return
+			}
+
+			// Apply run filter and sharding
+			units := buildWorkUnits(pkg, testNames, r.runFilter, r.totalShards, r.shardIndex)
+
+			if len(units) == 0 {
+				r.log("no tests matched filter/shard for %s", pkg)
+				return
+			}
+
+			r.log("discovered %d tests for %s", len(units), pkg)
+
+			// Update progress tracker total
+			r.progress.addTotal(int64(len(units)))
+
+			// Log discovered tests
+			var testList strings.Builder
+			for _, u := range units {
+				testList.WriteString("\n  ")
+				testList.WriteString(u.label)
+			}
+			r.log("tests for %s:%s", pkg, testList.String())
 
 			var items []*queueItem
 			for _, unit := range units {

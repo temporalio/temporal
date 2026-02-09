@@ -68,33 +68,6 @@ func TestScheduler_ContextCancellation(t *testing.T) {
 	// With cancelled context, should exit quickly (may process 0-2 items)
 }
 
-func TestBuildRetryFiles_Subtests(t *testing.T) {
-	t.Parallel()
-
-	testFiles := []testFile{
-		{path: "a_test.go", pkg: "./pkg", tests: []testCase{{name: "TestSuite"}}},
-	}
-
-	// Subtests failed
-	retryFiles := buildRetryFiles(testFiles, []testCase{{name: "TestSuite/SubTest1"}, {name: "TestSuite/SubTest2"}})
-	require.Len(t, retryFiles, 1)
-	require.Len(t, retryFiles[0].tests, 2)
-	require.Equal(t, "TestSuite/SubTest1", retryFiles[0].tests[0].name)
-	require.Equal(t, "TestSuite/SubTest2", retryFiles[0].tests[1].name)
-}
-
-func TestBuildRetryFiles_NoMatch(t *testing.T) {
-	t.Parallel()
-
-	testFiles := []testFile{
-		{path: "a_test.go", pkg: "./pkg", tests: []testCase{{name: "TestA"}}},
-	}
-
-	// Different test failed
-	retryFiles := buildRetryFiles(testFiles, []testCase{{name: "TestB"}})
-	require.Empty(t, retryFiles)
-}
-
 func TestResultCollector(t *testing.T) {
 	t.Parallel()
 
@@ -121,48 +94,24 @@ func TestBuildRetryUnit(t *testing.T) {
 
 	t.Run("sets tests from failed tests", func(t *testing.T) {
 		unit := workUnit{
-			pkg: "./pkg",
-			files: []testFile{
-				{path: "a_test.go", pkg: "./pkg", tests: []testCase{{name: "TestA"}, {name: "TestB"}}},
-			},
+			pkg:   "./pkg",
 			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
-			label: "a_test.go",
+			label: "TestA",
 		}
 		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestA", attempts: 1}})
 		require.NotNil(t, retryUnit)
 		require.Equal(t, "./pkg", retryUnit.pkg)
-		require.Len(t, retryUnit.files, 1)
-		// unit.tests is always set to the failed tests
 		require.Len(t, retryUnit.tests, 1)
 		require.Equal(t, "TestA", retryUnit.tests[0].name)
 		require.Equal(t, 1, retryUnit.tests[0].attempts)
 	})
 
-	t.Run("filters files to those with failed tests", func(t *testing.T) {
+	t.Run("no failed tests returns nil", func(t *testing.T) {
 		unit := workUnit{
-			pkg: "./pkg",
-			files: []testFile{
-				{path: "a_test.go", pkg: "./pkg", tests: []testCase{{name: "TestA"}}},
-				{path: "b_test.go", pkg: "./pkg", tests: []testCase{{name: "TestB"}}},
-			},
-			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
-			label: "./pkg",
-		}
-		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestB", attempts: 1}})
-		require.NotNil(t, retryUnit)
-		require.Len(t, retryUnit.files, 1)
-		require.Equal(t, "b_test.go", retryUnit.files[0].path)
-	})
-
-	t.Run("no matching tests", func(t *testing.T) {
-		unit := workUnit{
-			pkg: "./pkg",
-			files: []testFile{
-				{path: "a_test.go", pkg: "./pkg", tests: []testCase{{name: "TestA"}}},
-			},
+			pkg:   "./pkg",
 			tests: []testCase{{name: "TestA"}},
 		}
-		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestB"}})
+		retryUnit := buildRetryUnitFromFailures(unit, nil)
 		require.Nil(t, retryUnit)
 	})
 }
