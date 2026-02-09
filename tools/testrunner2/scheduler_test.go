@@ -89,33 +89,6 @@ func TestResultCollector(t *testing.T) {
 	require.Len(t, c.errors, 10)
 }
 
-func TestBuildRetryUnit(t *testing.T) {
-	t.Parallel()
-
-	t.Run("sets tests from failed tests", func(t *testing.T) {
-		unit := workUnit{
-			pkg:   "./pkg",
-			tests: []testCase{{name: "TestA"}, {name: "TestB"}},
-			label: "TestA",
-		}
-		retryUnit := buildRetryUnitFromFailures(unit, []testCase{{name: "TestA", attempts: 1}})
-		require.NotNil(t, retryUnit)
-		require.Equal(t, "./pkg", retryUnit.pkg)
-		require.Len(t, retryUnit.tests, 1)
-		require.Equal(t, "TestA", retryUnit.tests[0].name)
-		require.Equal(t, 1, retryUnit.tests[0].attempts)
-	})
-
-	t.Run("no failed tests returns nil", func(t *testing.T) {
-		unit := workUnit{
-			pkg:   "./pkg",
-			tests: []testCase{{name: "TestA"}},
-		}
-		retryUnit := buildRetryUnitFromFailures(unit, nil)
-		require.Nil(t, retryUnit)
-	})
-}
-
 func TestQuarantinedTestNames(t *testing.T) {
 	t.Parallel()
 

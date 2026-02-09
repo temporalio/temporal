@@ -2,7 +2,6 @@ package testrunner2
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -414,45 +413,30 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs []string) error {
 	r.log("running in 'none' mode - executing go test directly without precompilation")
 
-	// Create log directory
 	if err := os.MkdirAll(r.logDir, 0755); err != nil {
 		return fmt.Errorf("failed to create log directory: %w", err)
 	}
 	r.log("log directory: %s", r.logDir)
 
-	// Parse base args: extract flags the runner manages and collect go test flags.
 	race, extraArgs := filterBaseArgs(baseArgs)
+	pkgs := normalizePkgPaths(testDirs)
+	r.log("test packages: %v", pkgs)
 
-	// Normalize package paths (ensure ./ prefix)
-	pkgs := make([]string, len(testDirs))
-	for i, dir := range testDirs {
+	items := []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter, ""))}
+	return r.runWithScheduler(ctx, max(2, r.parallelism), items, 1)
+}
+
+// normalizePkgPaths ensures each directory has a "./" prefix.
+func normalizePkgPaths(dirs []string) []string {
+	pkgs := make([]string, len(dirs))
+	for i, dir := range dirs {
 		if !strings.HasPrefix(dir, "./") && !strings.HasPrefix(dir, "/") {
 			pkgs[i] = "./" + dir
 		} else {
 			pkgs[i] = dir
 		}
 	}
-	r.log("test packages: %v", pkgs)
-
-	// Create result collector and progress tracker
-	r.collector = &resultCollector{}
-	r.progress = &progressTracker{}
-	r.progress.addTotal(1)
-
-	// Run via scheduler (at least 2 workers for mid-stream retries)
-	sched := newScheduler(max(2, r.parallelism))
-	sched.run(ctx, []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter, ""))})
-
-	// Finalize report
-	if err := r.finalizeReport(r.collector.junitReports); err != nil {
-		return err
-	}
-
-	if len(r.collector.errors) > 0 {
-		return errors.Join(r.collector.errors...)
-	}
-	r.log("test run completed")
-	return nil
+	return pkgs
 }
 
 // directExecConfig creates an execConfig for running go test directly.
