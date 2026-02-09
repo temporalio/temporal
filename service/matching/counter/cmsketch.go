@@ -37,8 +37,8 @@ type (
 var _ Counter = (*cmSketch)(nil)
 
 func NewCMSketchCounter(params CMSketchParams, src rand.Source) *cmSketch {
-	params.D = max(2, params.D)
-	params.W = max(2, params.W)
+	params.D = max(1, params.D)
+	params.W = max(1, params.W)
 	params.Grow.SkipRateDecay = max(1_000, params.Grow.SkipRateDecay)
 	return &cmSketch{
 		params: params,
