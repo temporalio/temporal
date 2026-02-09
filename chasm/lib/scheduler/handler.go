@@ -140,3 +140,36 @@ func (h *handler) ListScheduleMatchingTimes(ctx context.Context, req *schedulerp
 	)
 	return resp, err
 }
+
+// MigrateSchedule creates a CHASM schedule from migrated V1 state.
+// Used during migration from workflow-backed schedules to CHASM schedules.
+func (h *handler) MigrateSchedule(ctx context.Context, req *schedulerpb.MigrateScheduleRequest) (resp *schedulerpb.MigrateScheduleResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, err = chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.NamespaceId,
+			BusinessID:  req.GetState().GetSchedulerState().GetScheduleId(),
+		},
+		CreateSchedulerFromMigration,
+		req,
+		chasm.WithBusinessIDPolicy(
+			chasm.BusinessIDReusePolicyRejectDuplicate,
+			chasm.BusinessIDConflictPolicyFail,
+		),
+	)
+	if err != nil {
+		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+		if errors.As(err, &alreadyStartedErr) {
+			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
+				"CHASM schedule already exists",
+				"",
+				"",
+			)
+		}
+		return nil, err
+	}
+
+	return &schedulerpb.MigrateScheduleResponse{}, nil
+}

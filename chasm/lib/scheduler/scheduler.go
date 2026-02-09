@@ -173,6 +173,74 @@ func CreateScheduler(
 	return sched, nil
 }
 
+// CreateSchedulerFromMigration initializes a CHASM scheduler from migrated V1 state.
+// Unlike CreateScheduler, this preserves the conflict token and other state from V1.
+//
+// The migrated state components (scheduler, generator, invoker, backfillers) are
+// directly initialized from the MigrateScheduleRequest, preserving all state including
+// the conflict token for client compatibility.
+func CreateSchedulerFromMigration(
+	ctx chasm.MutableContext,
+	req *schedulerpb.MigrateScheduleRequest,
+) (*Scheduler, error) {
+	state := req.GetState()
+	if state == nil {
+		state = &schedulerpb.SchedulerMigrationState{}
+	}
+
+	schedulerState := state.GetSchedulerState()
+	if schedulerState == nil {
+		schedulerState = &schedulerpb.SchedulerState{}
+	}
+
+	sched := &Scheduler{
+		SchedulerState:       schedulerState,
+		cacheConflictToken:   schedulerState.ConflictToken,
+		Backfillers:          make(chasm.Map[string, *Backfiller]),
+		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
+	}
+	sched.setNullableFields()
+
+	invokerState := state.GetInvokerState()
+	if invokerState == nil {
+		invokerState = &schedulerpb.InvokerState{
+			BufferedStarts: []*schedulespb.BufferedStart{},
+		}
+	}
+	invoker := &Invoker{
+		InvokerState: invokerState,
+	}
+	sched.Invoker = chasm.NewComponentField(ctx, invoker)
+	if len(invoker.BufferedStarts) > 0 {
+		invoker.addTasks(ctx)
+	}
+
+	generatorState := state.GetGeneratorState()
+	if generatorState == nil {
+		generatorState = &schedulerpb.GeneratorState{}
+	}
+	generator := &Generator{
+		GeneratorState: generatorState,
+	}
+	sched.Generator = chasm.NewComponentField(ctx, generator)
+	generator.Generate(ctx)
+
+	for backfillID, backfillerState := range state.GetBackfillers() {
+		backfiller := &Backfiller{
+			BackfillerState: backfillerState,
+		}
+		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, backfiller)
+		backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
+	}
+
+	visibility := chasm.NewVisibility(ctx)
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
+	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
+	visibility.MergeCustomMemo(ctx, state.GetMemo())
+
+	return sched, nil
+}
+
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
 		return chasm.LifecycleStateCompleted
