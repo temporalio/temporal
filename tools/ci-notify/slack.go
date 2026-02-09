@@ -113,12 +113,12 @@ func BuildFailureMessage(report *FailureReport) *SlackMessage {
 // FormatMessageForDebug formats the message for console output
 func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
-	fmt.Fprintf(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
+	fmt.Fprint(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
 	fmt.Fprintf(&sb, "Workflow: %s\n", report.Workflow.Name)
 	fmt.Fprintf(&sb, "Branch: %s\n", report.Workflow.HeadBranch)
 	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Commit.ShortSHA, report.Commit.Author)
 	fmt.Fprintf(&sb, "Failed Jobs: %d of %d total jobs\n\n", len(report.FailedJobs), report.TotalJobs)
-	fmt.Fprintf(&sb, "Failed Jobs:\n")
+	fmt.Fprintln(&sb, "Failed Jobs:")
 	for _, job := range report.FailedJobs {
 		fmt.Fprintf(&sb, "  • %s\n    %s\n", job.Name, job.URL)
 	}
