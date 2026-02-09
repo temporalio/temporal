@@ -263,7 +263,7 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 		metrics.ElasticsearchBulkProcessorQueuedRequests.Unit(),
 	).Return(queuedRequestHistogram)
 	queuedRequestHistogram.EXPECT().Record(int64(0))
-	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkRequestTookLatency.Name()).Return(metrics.NoopTimerMetricFunc)
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
 	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
@@ -313,7 +313,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 		metrics.ElasticsearchBulkProcessorQueuedRequests.Unit(),
 	).Return(queuedRequestHistogram)
 	queuedRequestHistogram.EXPECT().Record(int64(0))
-	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkRequestTookLatency.Name()).Return(metrics.NoopTimerMetricFunc)
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 	mapVal := newAckFuture()
 	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
@@ -572,7 +572,7 @@ func (s *processorSuite) Test_End2End() {
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorWaitStartLatency.Name()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.esProcessor.bulkBeforeAction(0, bulkIndexRequests)
 
-	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkRequestTookLatency.Name()).Return(metrics.NoopTimerMetricFunc)
+	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.Name()).Return(metrics.NoopTimerMetricFunc)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorRequestLatency.Name()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.mockMetricHandler.EXPECT().Timer(metrics.ElasticsearchBulkProcessorCommitLatency.Name()).Return(metrics.NoopTimerMetricFunc).Times(docsCount)
 	s.esProcessor.bulkAfterAction(0, bulkIndexRequests, bulkIndexResponse, nil)

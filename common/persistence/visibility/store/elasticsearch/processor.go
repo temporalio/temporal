@@ -232,7 +232,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	}
 
 	// Record how long the Elasticsearch took to process the bulk request.
-	metrics.ElasticsearchBulkProcessorBulkRequestTookLatency.With(p.metricsHandler).
+	metrics.ElasticsearchBulkProcessorBulkResquestTookLatency.With(p.metricsHandler).
 		Record(time.Duration(response.Took) * time.Millisecond)
 
 	responseIndex := p.buildResponseIndex(response)

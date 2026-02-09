@@ -862,8 +862,8 @@ func ArchivalRequestWorkflowID(requestWorkflowID string) ZapTag {
 	return NewStringTag("archival-request-workflow-id", requestWorkflowID)
 }
 
-// ArchivalRequestWorkflowType returns tag for RequestWorkflowType
-func ArchivalRequestWorkflowType(requestWorkflowType string) ZapTag {
+// ArchvialRequestWorkflowType returns tag for RequestWorkflowType
+func ArchvialRequestWorkflowType(requestWorkflowType string) ZapTag {
 	return NewStringTag("archival-request-workflow-type", requestWorkflowType)
 }
 

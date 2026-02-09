@@ -1275,7 +1275,7 @@ var (
 	ElasticsearchBulkProcessorWaitAddLatency          = NewTimerDef("elasticsearch_bulk_processor_wait_add_latency")
 	ElasticsearchBulkProcessorWaitStartLatency        = NewTimerDef("elasticsearch_bulk_processor_wait_start_latency")
 	ElasticsearchBulkProcessorBulkSize                = NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size")
-	ElasticsearchBulkProcessorBulkRequestTookLatency = NewTimerDef("elasticsearch_bulk_processor_bulk_request_took_latency")
+	ElasticsearchBulkProcessorBulkResquestTookLatency = NewTimerDef("elasticsearch_bulk_processor_bulk_request_took_latency")
 	ElasticsearchDocumentParseFailuresCount           = NewCounterDef("elasticsearch_document_parse_failures_counter")
 	ElasticsearchDocumentGenerateFailuresCount        = NewCounterDef("elasticsearch_document_generate_failures_counter")
 	ElasticsearchCustomOrderByClauseCount             = NewCounterDef("elasticsearch_custom_order_by_clause_counter")

@@ -125,8 +125,8 @@ func NewArchivalConfig(
 	}
 }
 
-// NewDisabledArchivalConfig returns an ArchivalConfig where archival is disabled for both the cluster and the namespace
-func NewDisabledArchivalConfig() ArchivalConfig {
+// NewDisabledArchvialConfig returns an ArchivalConfig where archival is disabled for both the cluster and the namespace
+func NewDisabledArchvialConfig() ArchivalConfig {
 	return &archivalConfig{
 		staticClusterState:    ArchivalDisabled,
 		dynamicClusterState:   nil,
