@@ -1,23 +1,21 @@
 package testrunner2
 
 import (
+	"bufio"
+	"bytes"
+	"context"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"hash/fnv"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 )
 
-// matchesRunFilter checks if a test name matches the -run filter pattern.
-// The filter is split on "/" (like Go's test framework) and only the first
-// segment is used to match top-level test names.
-func matchesRunFilter(testName, filter string) bool {
+// compileRunFilter compiles a -run filter string into a regexp that matches
+// top-level test names. Returns nil if the filter is empty (matches all).
+func compileRunFilter(filter string) *regexp.Regexp {
 	if filter == "" {
-		return true
+		return nil
 	}
 	// Go's test framework splits -run on "/" and matches each level.
 	// For suite filtering, we only need the top-level pattern.
@@ -25,9 +23,9 @@ func matchesRunFilter(testName, filter string) bool {
 	if idx := strings.Index(filter, "/"); idx >= 0 {
 		topLevel = filter[:idx]
 	}
-	matched, err := regexp.MatchString(topLevel, testName)
-	return err == nil && matched
+	return regexp.MustCompile(topLevel)
 }
+
 
 // testCase represents a single test function with its metadata.
 type testCase struct {
@@ -35,182 +33,88 @@ type testCase struct {
 	attempts int // number of times this test has been attempted
 }
 
-// testFile represents a test file and its test functions.
-type testFile struct {
-	path  string
-	pkg   string
-	tests []testCase // tests to run (all tests on first attempt, only failed tests on retry)
-}
-
 // workUnit represents a schedulable unit of test work.
 type workUnit struct {
 	pkg       string     // package path
-	files     []testFile // files containing the tests
 	tests     []testCase // specific tests to run (for test mode or retries)
 	label     string     // display label for progress output
 	skipTests []string   // tests to skip via -test.skip (for timeout retries)
 }
 
-// testPackageConfig holds configuration for package discovery.
-type testPackageConfig struct {
-	log         func(format string, v ...any)
-	buildTags   string
-	runFilter   string // -run filter pattern to select tests
-	totalShards int
-	shardIndex  int
-	groupBy     GroupMode // needed to determine sharding strategy
-}
-
-// testPackage discovers test packages.
-type testPackage struct {
-	testPackageConfig
-	files []testFile
-}
-
-// newTestPackage creates a testPackage by discovering test files in the given directories.
-func newTestPackage(cfg testPackageConfig, dirs []string) (*testPackage, error) {
-	tp := &testPackage{testPackageConfig: cfg}
-
+// findTestPackages scans directories for _test.go files and returns package
+// paths (one per directory that contains at least one test file).
+func findTestPackages(dirs []string) ([]string, error) {
+	var pkgs []string
 	for _, dir := range dirs {
-		files, err := tp.findTestFilesInDir(dir)
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			return nil, fmt.Errorf("failed to find test files in %s: %w", dir, err)
+			return nil, fmt.Errorf("reading dir %s: %w", dir, err)
 		}
-		tp.files = append(tp.files, files...)
-	}
-
-	return tp, nil
-}
-
-// groupByMode returns work units based on the specified grouping mode.
-func (p *testPackage) groupByMode(mode GroupMode) []workUnit {
-	switch mode {
-	case GroupByTest:
-		return p.groupUnitsTest()
-	default:
-		return nil
-	}
-}
-
-// groupUnitsTest returns one work unit per TestXxx function.
-// In test mode, sharding is applied at the test level rather than file level.
-func (p *testPackage) groupUnitsTest() []workUnit {
-	var units []workUnit
-	for _, f := range p.files {
-		for _, tc := range f.tests {
-			// Filter by -run pattern if set
-			if !matchesRunFilter(tc.name, p.runFilter) {
-				continue
+		hasTests := false
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), "_test.go") {
+				hasTests = true
+				break
 			}
-			// In test mode, shard on pkg/testName combination
-			if p.totalShards > 1 {
-				shardKey := f.pkg + "/" + tc.name
-				if getShardForKey(shardKey, p.totalShards) != p.shardIndex {
-					continue
-				}
-			}
-			units = append(units, workUnit{
-				pkg: f.pkg,
-				files: []testFile{{
-					path:  f.path,
-					pkg:   f.pkg,
-					tests: []testCase{tc},
-				}},
-				tests: []testCase{tc},
-				label: tc.name,
-			})
 		}
-	}
-	return units
-}
-
-// findTestFilesInDir finds all test files in a directory (non-recursive) and extracts their test function names.
-// If sharding is enabled, only files belonging to the current shard are included.
-func (p *testPackage) findTestFilesInDir(dir string) ([]testFile, error) {
-	var files []testFile
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), "_test.go") {
+		if !hasTests {
 			continue
 		}
-
-		path := filepath.Join(dir, entry.Name())
-
-		// Filter by shard early to avoid unnecessary file reads.
-		// Skip file-level sharding for test mode since it shards at the test level.
-		if p.totalShards > 1 && p.groupBy != GroupByTest && getShardForKey(path, p.totalShards) != p.shardIndex {
-			continue
-		}
-
-		// Extract test function names from the file
-		tests, err := extractTestCases(path)
-		if err != nil {
-			p.log("warning: failed to extract test names from %s: %v", path, err)
-			continue
-		}
-		if len(tests) == 0 {
-			// No test functions found in this file, skip it
-			continue
-		}
-
-		// Get the package path
 		pkg := dir
 		if !strings.HasPrefix(pkg, "./") && !strings.HasPrefix(pkg, "/") {
 			pkg = "./" + pkg
 		}
-
-		files = append(files, testFile{
-			path:  path,
-			pkg:   pkg,
-			tests: tests,
-		})
+		pkgs = append(pkgs, pkg)
 	}
-	return files, nil
+	return pkgs, nil
 }
 
-// extractTestCases extracts all test functions from a test file using Go's AST parser.
-func extractTestCases(path string) ([]testCase, error) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		return nil, err
+// listTestsFromBinary runs a compiled test binary with -test.list to discover
+// test names. Returns one test name per line, skipping summary lines.
+func listTestsFromBinary(ctx context.Context, execFn execFunc, binaryPath string) ([]string, error) {
+	var buf bytes.Buffer
+	exitCode := execFn(ctx, "", binaryPath, []string{"-test.list", ".*"}, nil, &buf)
+	if exitCode != 0 {
+		return nil, fmt.Errorf("test list failed (exit code %d): %s", exitCode, buf.String())
 	}
 
-	var tests []testCase
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv != nil {
-			continue // skip non-functions and methods
-		}
-		name := fn.Name.Name
-		if !strings.HasPrefix(name, "Test") {
+	var tests []string
+	scanner := bufio.NewScanner(&buf)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
 			continue
 		}
-		// Check signature: func TestXxx(t *testing.T)
-		if fn.Type.Params == nil || len(fn.Type.Params.List) != 1 {
+		// Skip summary lines like "ok \t pkg 0.001s" or "?\t pkg [no test files]"
+		if strings.HasPrefix(line, "ok \t") || strings.HasPrefix(line, "?\t") || strings.HasPrefix(line, "FAIL\t") {
 			continue
 		}
-		param := fn.Type.Params.List[0]
-		star, ok := param.Type.(*ast.StarExpr)
-		if !ok {
-			continue
-		}
-		sel, ok := star.X.(*ast.SelectorExpr)
-		if !ok {
-			continue
-		}
-		ident, ok := sel.X.(*ast.Ident)
-		if !ok || ident.Name != "testing" || sel.Sel.Name != "T" {
-			continue
-		}
-		tests = append(tests, testCase{name: name})
+		tests = append(tests, line)
 	}
-	return tests, nil
+	return tests, scanner.Err()
+}
+
+// buildWorkUnits creates one workUnit per test, applying run filter and sharding.
+func buildWorkUnits(pkg string, testNames []string, runFilter string, totalShards, shardIndex int) []workUnit {
+	runRe := compileRunFilter(runFilter)
+	var units []workUnit
+	for _, name := range testNames {
+		if runRe != nil && !runRe.MatchString(name) {
+			continue
+		}
+		if totalShards > 1 {
+			shardKey := pkg + "/" + name
+			if getShardForKey(shardKey, totalShards) != shardIndex {
+				continue
+			}
+		}
+		units = append(units, workUnit{
+			pkg:   pkg,
+			tests: []testCase{{name: name}},
+			label: name,
+		})
+	}
+	return units
 }
 
 // getShardForKey returns the shard index for a given key using consistent hashing.
@@ -284,14 +188,17 @@ func buildTestFilterPattern(names []string) string {
 		return buildPerLevelPattern(names)
 	}
 
-	for parent, leaves := range byParent {
-		leafPattern := regexAlternation(leaves)
-		if parent == "" {
-			return leafPattern
-		}
-		return testNameToRegex(parent) + "/" + leafPattern
+	// Exactly one parent group — extract it directly.
+	var parent string
+	var leaves []string
+	for p, l := range byParent {
+		parent, leaves = p, l
 	}
-	return "" // unreachable
+	leafPattern := regexAlternation(leaves)
+	if parent == "" {
+		return leafPattern
+	}
+	return testNameToRegex(parent) + "/" + leafPattern
 }
 
 // buildPerLevelPattern builds a regex pattern by collecting all unique values at
@@ -322,7 +229,8 @@ func buildPerLevelPattern(names []string) string {
 	}
 
 	if maxDepth <= 1 {
-		return "" // no "/" separators, caller should use regexAlternation directly
+		// No "/" separators — all names are top-level, use simple alternation.
+		return regexAlternation(names)
 	}
 
 	// Keep only names at max depth. A deeper skip pattern won't accidentally

@@ -65,7 +65,8 @@ func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs 
 
 	// Create result collector and progress tracker
 	r.collector = &resultCollector{}
-	r.progress = &progressTracker{total: 1}
+	r.progress = &progressTracker{}
+	r.progress.addTotal(1)
 
 	// Run via scheduler (at least 2 workers for mid-stream retries)
 	sched := newScheduler(max(2, r.parallelism))

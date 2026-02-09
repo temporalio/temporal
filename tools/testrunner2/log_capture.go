@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -239,30 +238,4 @@ func sanitizeFilename(s string) string {
 // buildCompileLogFilename constructs a unique log file path for a compile operation.
 func buildCompileLogFilename(logDir string) string {
 	return filepath.Join(logDir, "compile_"+uuid.New().String()+".log")
-}
-
-// consoleWriter writes grouped output to a writer.
-type consoleWriter struct {
-	mu *sync.Mutex
-	w  io.Writer
-}
-
-// WriteGrouped writes output with a header line and indented body.
-func (cw *consoleWriter) WriteGrouped(header, body string) {
-	var out strings.Builder
-	out.WriteString(header)
-	out.WriteByte('\n')
-
-	// Indent body lines
-	for line := range strings.SplitSeq(body, "\n") {
-		if line != "" {
-			out.WriteString("    ")
-			out.WriteString(line)
-			out.WriteByte('\n')
-		}
-	}
-
-	cw.mu.Lock()
-	_, _ = io.WriteString(cw.w, out.String())
-	cw.mu.Unlock()
 }
