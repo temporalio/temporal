@@ -512,7 +512,7 @@ functional-test-ndc-coverage: prepare-coverage-test
 
 report-test-logs: $(TEST_OUTPUT_ROOT)
 	@printf $(COLOR) "Print test logs..."
-	@go run ./cmd/tools/test-runner2 report-logs --log-dir=$(TEST_OUTPUT_ROOT)
+	@for f in $(TEST_OUTPUT_ROOT)/*.log; do [ -s "$$f" ] && printf '\n=== %s ===\n' "$$(basename $$f)" && cat "$$f"; done || true
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
