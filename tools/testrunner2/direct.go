@@ -69,7 +69,7 @@ func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs 
 
 	// Run via scheduler (at least 2 workers for mid-stream retries)
 	sched := newScheduler(max(2, r.parallelism))
-	sched.run(ctx, []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, "", ""))})
+	sched.run(ctx, []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter, ""))})
 
 	// Finalize report
 	if err := r.finalizeReport(r.collector.junitReports); err != nil {

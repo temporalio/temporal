@@ -25,6 +25,7 @@
 /temporal-*
 /tctl*
 /tdbg
+/test-runner
 
 # proto images
 /proto/image.bin
