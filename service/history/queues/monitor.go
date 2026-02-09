@@ -132,7 +132,7 @@ func (m *monitorImpl) SetSlicePendingTaskCount(slice Slice, count int) {
 		m.sendAlertLocked(&Alert{
 			AlertType: AlertTypeQueuePendingTaskCount,
 			AlertAttributesQueuePendingTaskCount: &AlertAttributesQueuePendingTaskCount{
-				CurrentPendingTaskCount:   m.totalPendingTaskCount,
+				CurrentPendingTaskCount:  m.totalPendingTaskCount,
 				CriticalPendingTaskCount: criticalTotalTasks,
 			},
 		})
