@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -296,10 +297,43 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
 		})
 		if err != nil {
+			// If matching is on an older version that doesn't have this RPC,
+			// fall back to fetching full user data and checking version membership based on the receieved information.
+			var unimplErr *serviceerror.Unimplemented
+			if errors.As(err, &unimplErr) {
+				return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
+			}
 			return false, err
 		}
 		return resp.GetIsMember(), nil
 	}
+}
+
+// checkVersionMembershipViaUserData is the fallback for when matching doesn't support
+// CheckTaskQueueVersionMembership (e.g. during rolling deployments). It fetches the full
+// Task Queue User Data and checks version membership based on the receieved information.
+func checkVersionMembershipViaUserData(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID string,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (bool, error) {
+	resp, err := matchingClient.GetTaskQueueUserData(ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: tqType,
+		})
+	if err != nil {
+		return false, err
+	}
+	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(tqType)]
+	if !ok {
+		return false, nil
+	}
+	return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
 }
 
 func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
@@ -580,6 +614,22 @@ func validatePinnedVersionInTaskQueue(ctx context.Context,
 		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(pinnedVersion)),
 	})
 	if err != nil {
+		// If matching is on an older version that doesn't have this RPC,
+		// fall back to fetching full user data and checking locally.
+		var unimplErr *serviceerror.Unimplemented
+		if errors.As(err, &unimplErr) {
+			isMember, fallbackErr := checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
+			if fallbackErr != nil {
+				return fallbackErr
+			}
+			versionMembershipCache.Put(namespaceID, tq, tqType, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), isMember)
+			if !isMember {
+				return serviceerror.NewFailedPrecondition(
+					FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
+				)
+			}
+			return nil
+		}
 		return err
 	}
 
