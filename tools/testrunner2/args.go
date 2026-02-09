@@ -194,9 +194,9 @@ func defaultConfig() config {
 	return cfg
 }
 
-// parseConfig parses command-line arguments and returns a config.
-// It extracts testrunner-specific flags and sanitizes remaining args for go test.
-func parseConfig(command string, args []string, cfg *config) ([]string, error) {
+// parseArgs parses command-line arguments into cfg.
+// It extracts testrunner-specific flags and returns remaining args for go test.
+func parseArgs(command string, args []string, cfg *config) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
 		if fd := lookupFlag(arg); fd != nil {
