@@ -68,25 +68,25 @@ func TestScheduler_ContextCancellation(t *testing.T) {
 	// With cancelled context, should exit quickly (may process 0-2 items)
 }
 
-func TestResultCollector(t *testing.T) {
+func TestRunnerResultCollection(t *testing.T) {
 	t.Parallel()
 
-	c := &resultCollector{}
+	r := &runner{}
 
 	// Test thread-safe operations
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
 		wg.Go(func() {
-			c.addReport(&junitReport{})
-			c.addAlerts([]alert{{Kind: failureKindCrash}})
-			c.addError(os.ErrNotExist)
+			r.addReport(&junitReport{})
+			r.addAlerts([]alert{{Kind: failureKindCrash}})
+			r.addError(os.ErrNotExist)
 		})
 	}
 	wg.Wait()
 
-	require.Len(t, c.junitReports, 10)
-	require.Len(t, c.alerts, 10)
-	require.Len(t, c.errors, 10)
+	require.Len(t, r.junitReports, 10)
+	require.Len(t, r.alerts, 10)
+	require.Len(t, r.errors, 10)
 }
 
 func TestQuarantinedTestNames(t *testing.T) {
