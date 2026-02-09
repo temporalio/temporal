@@ -104,14 +104,12 @@ type retryPlan struct {
 }
 
 func buildRetryUnitFromFailures(unit workUnit, failedTests []testCase) *workUnit {
-	retryFiles := buildRetryFiles(unit.files, failedTests)
-	if len(retryFiles) == 0 {
+	if len(failedTests) == 0 {
 		return nil
 	}
 
 	return &workUnit{
 		pkg:   unit.pkg,
-		files: retryFiles,
 		tests: failedTests,
 		label: unit.label,
 	}
@@ -246,37 +244,6 @@ func mergeUnique(a, b []string) []string {
 		}
 	}
 	return result
-}
-
-func buildRetryFiles(files []testFile, failedTests []testCase) []testFile {
-	// Build a map from top-level test name to all its failed subtests
-	failedByTopLevel := make(map[string][]testCase)
-	for _, tc := range failedTests {
-		topLevel := tc.name
-		if idx := strings.Index(tc.name, "/"); idx > 0 {
-			topLevel = tc.name[:idx]
-		}
-		failedByTopLevel[topLevel] = append(failedByTopLevel[topLevel], tc)
-	}
-
-	// For each file, check if any of its tests failed
-	var retryFiles []testFile
-	for _, tf := range files {
-		var fileFailedTests []testCase
-		for _, tc := range tf.tests {
-			if failed, ok := failedByTopLevel[tc.name]; ok {
-				fileFailedTests = append(fileFailedTests, failed...)
-			}
-		}
-		if len(fileFailedTests) > 0 {
-			retryFiles = append(retryFiles, testFile{
-				path:  tf.path,
-				pkg:   tf.pkg,
-				tests: fileFailedTests,
-			})
-		}
-	}
-	return retryFiles
 }
 
 // filterParentFailures removes parent test names from the failure list when

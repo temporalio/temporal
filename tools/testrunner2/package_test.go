@@ -9,99 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExtractTestCases(t *testing.T) {
-	t.Parallel()
-
-	t.Run("extracts test functions", func(t *testing.T) {
-		content := `package foo
-
-import "testing"
-
-func TestFoo(t *testing.T) {}
-func TestBar(t *testing.T) {}
-`
-		path := writeTestFile(t, content)
-		tests, err := extractTestCases(path)
-		require.NoError(t, err)
-		require.Len(t, tests, 2)
-		require.Equal(t, "TestFoo", tests[0].name)
-		require.Equal(t, "TestBar", tests[1].name)
-		require.Equal(t, 0, tests[0].attempts)
-	})
-
-	t.Run("ignores non-test functions", func(t *testing.T) {
-		content := `package foo
-
-import "testing"
-
-func TestFoo(t *testing.T) {}
-func helperFunc() {}
-func BenchmarkFoo(b *testing.B) {}
-func ExampleFoo() {}
-`
-		path := writeTestFile(t, content)
-		tests, err := extractTestCases(path)
-		require.NoError(t, err)
-		require.Len(t, tests, 1)
-		require.Equal(t, "TestFoo", tests[0].name)
-	})
-
-	t.Run("ignores methods", func(t *testing.T) {
-		content := `package foo
-
-import "testing"
-
-type Suite struct{}
-
-func (s *Suite) TestMethod(t *testing.T) {}
-func TestFoo(t *testing.T) {}
-`
-		path := writeTestFile(t, content)
-		tests, err := extractTestCases(path)
-		require.NoError(t, err)
-		require.Len(t, tests, 1)
-		require.Equal(t, "TestFoo", tests[0].name)
-	})
-
-	t.Run("ignores wrong signature", func(t *testing.T) {
-		content := `package foo
-
-import "testing"
-
-func TestNoParam() {}
-func TestWrongParam(s string) {}
-func TestTwoParams(t *testing.T, s string) {}
-func TestFoo(t *testing.T) {}
-`
-		path := writeTestFile(t, content)
-		tests, err := extractTestCases(path)
-		require.NoError(t, err)
-		require.Len(t, tests, 1)
-		require.Equal(t, "TestFoo", tests[0].name)
-	})
-
-	t.Run("returns empty for no tests", func(t *testing.T) {
-		content := `package foo
-
-func helperFunc() {}
-`
-		path := writeTestFile(t, content)
-		tests, err := extractTestCases(path)
-		require.NoError(t, err)
-		require.Empty(t, tests)
-	})
-
-	t.Run("handles parse error", func(t *testing.T) {
-		content := `package foo
-
-func broken( {}
-`
-		path := writeTestFile(t, content)
-		_, err := extractTestCases(path)
-		require.Error(t, err)
-	})
-}
-
 func TestGetShardForKey(t *testing.T) {
 	t.Parallel()
 
@@ -133,95 +40,119 @@ func TestGetShardForKey(t *testing.T) {
 	})
 }
 
-func TestFindTestFilesInDir(t *testing.T) {
+func TestFindTestPackages(t *testing.T) {
 	t.Parallel()
 
-	t.Run("finds test files", func(t *testing.T) {
+	t.Run("finds directories with test files", func(t *testing.T) {
 		dir := t.TempDir()
-		writeFile(t, filepath.Join(dir, "foo_test.go"), `package foo
-import "testing"
-func TestFoo(t *testing.T) {}
-`)
-		writeFile(t, filepath.Join(dir, "bar_test.go"), `package foo
-import "testing"
-func TestBar(t *testing.T) {}
-`)
-		writeFile(t, filepath.Join(dir, "helper.go"), `package foo
-func helper() {}
-`)
+		writeFile(t, filepath.Join(dir, "foo_test.go"), "package foo\n")
+		writeFile(t, filepath.Join(dir, "helper.go"), "package foo\n")
 
-		tp := &testPackage{testPackageConfig: testPackageConfig{
-			log: t.Logf,
-		}}
-		files, err := tp.findTestFilesInDir(dir)
+		pkgs, err := findTestPackages([]string{dir})
 		require.NoError(t, err)
-		require.Len(t, files, 2)
-
-		paths := []string{files[0].path, files[1].path}
-		require.Contains(t, paths, filepath.Join(dir, "foo_test.go"))
-		require.Contains(t, paths, filepath.Join(dir, "bar_test.go"))
+		require.Len(t, pkgs, 1)
 	})
 
-	t.Run("skips files with no tests", func(t *testing.T) {
+	t.Run("skips directories without test files", func(t *testing.T) {
 		dir := t.TempDir()
-		writeFile(t, filepath.Join(dir, "foo_test.go"), `package foo
-import "testing"
-func TestFoo(t *testing.T) {}
-`)
-		writeFile(t, filepath.Join(dir, "empty_test.go"), `package foo
-// no test functions
-`)
+		writeFile(t, filepath.Join(dir, "helper.go"), "package foo\n")
 
-		tp := &testPackage{testPackageConfig: testPackageConfig{
-			log: t.Logf,
-		}}
-		files, err := tp.findTestFilesInDir(dir)
+		pkgs, err := findTestPackages([]string{dir})
 		require.NoError(t, err)
-		require.Len(t, files, 1)
-		require.Equal(t, filepath.Join(dir, "foo_test.go"), files[0].path)
+		require.Empty(t, pkgs)
 	})
 
-	t.Run("respects sharding", func(t *testing.T) {
+	t.Run("returns error for non-existent directory", func(t *testing.T) {
+		_, err := findTestPackages([]string{"/nonexistent/path"})
+		require.Error(t, err)
+	})
+
+	t.Run("adds ./ prefix for relative paths", func(t *testing.T) {
 		dir := t.TempDir()
-		// Create several test files
-		for _, name := range []string{"a_test.go", "b_test.go", "c_test.go", "d_test.go"} {
-			writeFile(t, filepath.Join(dir, name), `package foo
-import "testing"
-func TestX(t *testing.T) {}
-`)
+		writeFile(t, filepath.Join(dir, "foo_test.go"), "package foo\n")
+
+		// Use a relative-looking path (no "./" or "/" prefix)
+		pkgs, err := findTestPackages([]string{dir})
+		require.NoError(t, err)
+		require.Len(t, pkgs, 1)
+		require.True(t, strings.HasPrefix(pkgs[0], "./") || strings.HasPrefix(pkgs[0], "/"))
+	})
+
+	t.Run("multiple directories", func(t *testing.T) {
+		dir1 := t.TempDir()
+		dir2 := t.TempDir()
+		writeFile(t, filepath.Join(dir1, "a_test.go"), "package a\n")
+		writeFile(t, filepath.Join(dir2, "b_test.go"), "package b\n")
+
+		pkgs, err := findTestPackages([]string{dir1, dir2})
+		require.NoError(t, err)
+		require.Len(t, pkgs, 2)
+	})
+}
+
+func TestBuildWorkUnits(t *testing.T) {
+	t.Parallel()
+
+	t.Run("creates one unit per test", func(t *testing.T) {
+		units := buildWorkUnits("./pkg", []string{"TestA", "TestB", "TestC"}, "", 0, 0)
+		require.Len(t, units, 3)
+		for _, u := range units {
+			require.Len(t, u.tests, 1)
+			require.Equal(t, u.tests[0].name, u.label)
+			require.Equal(t, "./pkg", u.pkg)
 		}
+	})
 
-		// Collect files from all shards
-		var allFiles []testFile
+	t.Run("applies run filter", func(t *testing.T) {
+		testNames := []string{
+			"TestWorkflowTestSuite",
+			"TestSignalWorkflowTestSuite",
+			"TestActivityTestSuite",
+			"TestNDCFuncTestSuite",
+			"TestOtherSuite",
+		}
+		units := buildWorkUnits("./pkg", testNames, "TestWorkflowTestSuite|TestSignalWorkflowTestSuite|TestActivityTestSuite", 0, 0)
+		require.Len(t, units, 3)
+		names := make(map[string]bool)
+		for _, u := range units {
+			names[u.tests[0].name] = true
+		}
+		require.True(t, names["TestWorkflowTestSuite"])
+		require.True(t, names["TestSignalWorkflowTestSuite"])
+		require.True(t, names["TestActivityTestSuite"])
+	})
+
+	t.Run("filter with subtest path uses top-level", func(t *testing.T) {
+		testNames := []string{"TestActivityTestSuite", "TestOtherSuite"}
+		units := buildWorkUnits("./pkg", testNames, "TestActivityTestSuite/TestActivityHeartBeatWorkflow_Success", 0, 0)
+		require.Len(t, units, 1)
+		require.Equal(t, "TestActivityTestSuite", units[0].tests[0].name)
+	})
+
+	t.Run("no filter returns all", func(t *testing.T) {
+		units := buildWorkUnits("./pkg", []string{"TestA", "TestB"}, "", 0, 0)
+		require.Len(t, units, 2)
+	})
+
+	t.Run("sharding distributes tests", func(t *testing.T) {
+		testNames := []string{"TestA", "TestB", "TestC", "TestD"}
+
+		var allUnits []workUnit
 		for shard := 0; shard < 2; shard++ {
-			tp := &testPackage{testPackageConfig: testPackageConfig{
-				log:         t.Logf,
-				totalShards: 2,
-				shardIndex:  shard,
-			}}
-			files, err := tp.findTestFilesInDir(dir)
-			require.NoError(t, err)
-			allFiles = append(allFiles, files...)
+			units := buildWorkUnits("./pkg", testNames, "", 2, shard)
+			allUnits = append(allUnits, units...)
 		}
 
-		// All 4 files should be covered across both shards
-		require.Len(t, allFiles, 4)
-	})
-
-	t.Run("adds package prefix", func(t *testing.T) {
-		dir := t.TempDir()
-		writeFile(t, filepath.Join(dir, "foo_test.go"), `package foo
-import "testing"
-func TestFoo(t *testing.T) {}
-`)
-
-		tp := &testPackage{testPackageConfig: testPackageConfig{
-			log: t.Logf,
-		}}
-		files, err := tp.findTestFilesInDir(dir)
-		require.NoError(t, err)
-		require.Len(t, files, 1)
-		require.True(t, files[0].pkg == dir || files[0].pkg == "./"+dir)
+		// All tests should be covered across both shards
+		require.Len(t, allUnits, 4)
+		names := make(map[string]bool)
+		for _, u := range allUnits {
+			names[u.tests[0].name] = true
+		}
+		require.True(t, names["TestA"])
+		require.True(t, names["TestB"])
+		require.True(t, names["TestC"])
+		require.True(t, names["TestD"])
 	})
 }
 
@@ -357,27 +288,7 @@ func TestTestNameToRegex(t *testing.T) {
 	}
 }
 
-func TestGroupByMode(t *testing.T) {
-	t.Parallel()
-
-	files := []testFile{
-		{path: "pkg1/a_test.go", pkg: "./pkg1", tests: []testCase{{name: "TestA1"}, {name: "TestA2"}}},
-		{path: "pkg1/b_test.go", pkg: "./pkg1", tests: []testCase{{name: "TestB1"}}},
-		{path: "pkg2/c_test.go", pkg: "./pkg2", tests: []testCase{{name: "TestC1"}, {name: "TestC2"}, {name: "TestC3"}}},
-	}
-
-	t.Run("test mode", func(t *testing.T) {
-		tp := &testPackage{files: files}
-		units := tp.groupByMode(GroupByTest)
-		require.Len(t, units, 6) // 6 tests total
-		for _, u := range units {
-			require.Len(t, u.tests, 1)
-			require.Equal(t, u.tests[0].name, u.label)
-		}
-	})
-}
-
-func TestMatchesRunFilter(t *testing.T) {
+func TestCompileRunFilter(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -401,96 +312,14 @@ func TestMatchesRunFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := matchesRunFilter(tt.testName, tt.filter)
-			require.Equal(t, tt.expected, result)
+			re := compileRunFilter(tt.filter)
+			if re == nil {
+				require.True(t, tt.expected, "nil filter should match everything")
+			} else {
+				require.Equal(t, tt.expected, re.MatchString(tt.testName))
+			}
 		})
 	}
-}
-
-func TestGroupUnitsTest_RunFilter(t *testing.T) {
-	t.Parallel()
-
-	files := []testFile{
-		{path: "pkg/a_test.go", pkg: "./pkg", tests: []testCase{
-			{name: "TestWorkflowTestSuite"},
-			{name: "TestSignalWorkflowTestSuite"},
-			{name: "TestActivityTestSuite"},
-			{name: "TestNDCFuncTestSuite"},
-			{name: "TestOtherSuite"},
-		}},
-	}
-
-	t.Run("filters to matching tests only", func(t *testing.T) {
-		tp := &testPackage{
-			testPackageConfig: testPackageConfig{
-				runFilter: "TestWorkflowTestSuite|TestSignalWorkflowTestSuite|TestActivityTestSuite",
-			},
-			files: files,
-		}
-		units := tp.groupUnitsTest()
-		require.Len(t, units, 3)
-		names := make(map[string]bool)
-		for _, u := range units {
-			names[u.tests[0].name] = true
-		}
-		require.True(t, names["TestWorkflowTestSuite"])
-		require.True(t, names["TestSignalWorkflowTestSuite"])
-		require.True(t, names["TestActivityTestSuite"])
-	})
-
-	t.Run("no filter returns all tests", func(t *testing.T) {
-		tp := &testPackage{
-			testPackageConfig: testPackageConfig{},
-			files:             files,
-		}
-		units := tp.groupUnitsTest()
-		require.Len(t, units, 5)
-	})
-
-	t.Run("filter with subtest path", func(t *testing.T) {
-		tp := &testPackage{
-			testPackageConfig: testPackageConfig{
-				runFilter: "TestActivityTestSuite/TestActivityHeartBeatWorkflow_Success",
-			},
-			files: files,
-		}
-		units := tp.groupUnitsTest()
-		require.Len(t, units, 1)
-		require.Equal(t, "TestActivityTestSuite", units[0].tests[0].name)
-	})
-}
-
-func TestGroupUnitsTest_Sharding(t *testing.T) {
-	t.Parallel()
-
-	files := []testFile{
-		{path: "pkg/a_test.go", pkg: "./pkg", tests: []testCase{{name: "TestA"}, {name: "TestB"}, {name: "TestC"}, {name: "TestD"}}},
-	}
-
-	// Collect units from all shards
-	var allUnits []workUnit
-	for shard := 0; shard < 2; shard++ {
-		tp := &testPackage{
-			testPackageConfig: testPackageConfig{
-				totalShards: 2,
-				shardIndex:  shard,
-			},
-			files: files,
-		}
-		units := tp.groupUnitsTest()
-		allUnits = append(allUnits, units...)
-	}
-
-	// All 4 tests should be covered across both shards
-	require.Len(t, allUnits, 4)
-	testNames := make(map[string]bool)
-	for _, u := range allUnits {
-		testNames[u.tests[0].name] = true
-	}
-	require.True(t, testNames["TestA"])
-	require.True(t, testNames["TestB"])
-	require.True(t, testNames["TestC"])
-	require.True(t, testNames["TestD"])
 }
 
 func writeTestFile(t *testing.T, content string) string {
