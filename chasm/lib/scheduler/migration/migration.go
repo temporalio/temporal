@@ -38,8 +38,8 @@ func LegacyToSchedulerMigrationState(
 	schedule *schedulepb.Schedule,
 	info *schedulepb.ScheduleInfo,
 	state *schedulespb.InternalState,
-	searchAttributes map[string]*commonpb.Payload,
-	memo map[string]*commonpb.Payload,
+	searchAttributes *commonpb.SearchAttributes,
+	memo *commonpb.Memo,
 	migrationTime time.Time,
 ) *schedulerpb.SchedulerMigrationState {
 	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
@@ -103,8 +103,8 @@ func LegacyToSchedulerMigrationState(
 		InvokerState:         invokerState,
 		Backfillers:          backfillers,
 		LastCompletionResult: lastCompletion,
-		SearchAttributes:     searchAttributes,
-		Memo:                 memo,
+		SearchAttributes:     searchAttributes.GetIndexedFields(),
+		Memo:                 memo.GetFields(),
 	}
 }
 

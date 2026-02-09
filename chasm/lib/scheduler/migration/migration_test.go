@@ -75,8 +75,8 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 			},
 		},
 	}
-	searchAttrs := map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}
-	memo := map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}
+	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
 
 	migrationState := LegacyToSchedulerMigrationState(newTestSchedule(), info, state, searchAttrs, memo, now)
 
@@ -136,8 +136,8 @@ func TestLegacyToSchedulerMigrationState(t *testing.T) {
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
 	// Search attributes and memo
-	require.Equal(t, searchAttrs, migrationState.SearchAttributes)
-	require.Equal(t, memo, migrationState.Memo)
+	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
+	require.Equal(t, memo.GetFields(), migrationState.Memo)
 }
 
 func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {

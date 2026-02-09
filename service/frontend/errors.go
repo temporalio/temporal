@@ -54,6 +54,8 @@ var (
 	errCronNotAllowed                                     = serviceerror.NewInvalidArgument("Scheduled workflow must not contain CronSchedule")
 	errIDReusePolicyNotAllowed                            = serviceerror.NewInvalidArgument("Scheduled workflow must not contain WorkflowIDReusePolicy")
 	errBatchJobIDNotSet                                   = serviceerror.NewInvalidArgument("JobId is not set on request.")
+	errScheduleIDNotSet                                   = serviceerror.NewInvalidArgument("ScheduleId is not set on request.")
+	errMigrationTargetNotSet                              = serviceerror.NewInvalidArgument("Target is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
 	errReasonNotSet                                       = serviceerror.NewInvalidArgument("Reason is not set on request.")
 	errBatchOperationNotSet                               = serviceerror.NewInvalidArgument("Batch operation is not set on request.")

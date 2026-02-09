@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
@@ -45,6 +46,7 @@ var Module = fx.Options(
 	batcher.Module,
 	workerdeployment.Module,
 	dlq.Module,
+	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
