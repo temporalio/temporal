@@ -102,14 +102,19 @@ func (b *EventFactory) CreateWorkflowTaskScheduledEvent(
 	startToCloseTimeout *durationpb.Duration,
 	attempt int32,
 	scheduleTime time.Time,
+	scheduleToStartTimeout *durationpb.Duration,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, scheduleTime)
+	attrs := &historypb.WorkflowTaskScheduledEventAttributes{
+		TaskQueue:           taskQueue,
+		StartToCloseTimeout: startToCloseTimeout,
+		Attempt:             attempt,
+	}
+	if scheduleToStartTimeout != nil {
+		attrs.ScheduleToStartTimeout = scheduleToStartTimeout
+	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
-		WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-			TaskQueue:           taskQueue,
-			StartToCloseTimeout: startToCloseTimeout,
-			Attempt:             attempt,
-		},
+		WorkflowTaskScheduledEventAttributes: attrs,
 	}
 
 	return event

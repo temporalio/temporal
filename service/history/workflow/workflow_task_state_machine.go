@@ -281,11 +281,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduleToStartTimeoutEvent(
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		// Create corresponding WorkflowTaskScheduled event for speculative WT.
+		_, scheduleToStartTimeout := m.ms.GetWorkflowTaskScheduleToStartTimeout()
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime.UTC(),
+			scheduleToStartTimeout,
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 	}
@@ -361,11 +363,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	var scheduledEventID int64
 
 	if createWorkflowTaskScheduledEvent {
+		var scheduleToStartTimeout *durationpb.Duration
+		if taskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY || workflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			_, scheduleToStartTimeout = m.ms.GetWorkflowTaskScheduleToStartTimeout()
+		}
 		scheduledEvent = m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
 			startToCloseTimeout,
 			attempt,
 			scheduleTime,
+			scheduleToStartTimeout,
 		)
 		scheduledEventID = scheduledEvent.GetEventId()
 	} else {
@@ -528,6 +535,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	if !workflowTaskScheduledEventCreated &&
 		(workflowTask.ScheduledEventID != m.ms.GetNextEventID() || workflowTask.Version != m.ms.GetCurrentVersion()) {
 
+		_, scheduleToStartTimeout := m.ms.GetWorkflowTaskScheduleToStartTimeout()
 		workflowTask.Attempt = 1
 		workflowTask.Type = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 		workflowTaskScheduledEventCreated = true
@@ -538,6 +546,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			startTime,
+			scheduleToStartTimeout,
 		)
 		scheduledEventID = scheduledEvent.GetEventId()
 	}
@@ -618,6 +627,7 @@ func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 	if m.ms.IsTransientWorkflowTask() && m.ms.GetExecutionInfo().GetWorkflowTaskBuildId() != buildId {
 		// we're retrying a workflow task and this attempt is on a different build ID, converting the transient wf task
 		// to a normal wf task by creating a scheduled event for it and setting its attempt to 1.
+		_, scheduleToStartTimeout := m.ms.GetWorkflowTaskScheduleToStartTimeout()
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
@@ -625,6 +635,7 @@ func (m *workflowTaskStateMachine) processBuildIdRedirectInfo(
 			// build ID + 1 (because it's being reset to 1 for the next build ID. See bellow.)
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime,
+			scheduleToStartTimeout,
 		)
 		newWorkflowTask = m.getWorkflowTaskInfo()
 		newWorkflowTask.ScheduledEventID = scheduledEvent.GetEventId()
@@ -731,11 +742,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 
 	if !workflowTaskScheduledStartedEventsCreated {
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for transient/speculative workflow tasks.
+		var scheduleToStartTimeout *durationpb.Duration
+		if workflowTask.TaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY || workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+			_, scheduleToStartTimeout = m.ms.GetWorkflowTaskScheduleToStartTimeout()
+		}
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime.UTC(),
+			scheduleToStartTimeout,
 		)
 
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
@@ -822,11 +838,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
+		_, scheduleToStartTimeout := m.ms.GetWorkflowTaskScheduleToStartTimeout()
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime.UTC(),
+			scheduleToStartTimeout,
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
@@ -894,11 +912,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 		m.ms.RemoveSpeculativeWorkflowTaskTimeoutTask()
 
 		// Create corresponding WorkflowTaskScheduled and WorkflowTaskStarted events for speculative WT.
+		_, scheduleToStartTimeout := m.ms.GetWorkflowTaskScheduleToStartTimeout()
 		scheduledEvent := m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			m.ms.CurrentTaskQueue(),
 			durationpb.New(workflowTask.WorkflowTaskTimeout),
 			workflowTask.Attempt,
 			workflowTask.ScheduledTime.UTC(),
+			scheduleToStartTimeout,
 		)
 		workflowTask.ScheduledEventID = scheduledEvent.GetEventId()
 		startedEvent := m.ms.hBuilder.AddWorkflowTaskStartedEvent(
@@ -1145,17 +1165,23 @@ func (m *workflowTaskStateMachine) GetTransientWorkflowTaskInfo(
 ) *historyspb.TransientWorkflowTaskInfo {
 
 	// Create scheduled and started events which are not written to the history yet.
+	attrs := &historypb.WorkflowTaskScheduledEventAttributes{
+		TaskQueue:           m.ms.CurrentTaskQueue(),
+		StartToCloseTimeout: durationpb.New(workflowTask.WorkflowTaskTimeout),
+		Attempt:             workflowTask.Attempt,
+	}
+	if workflowTask.TaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY || workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+		if _, sst := m.ms.GetWorkflowTaskScheduleToStartTimeout(); sst != nil {
+			attrs.ScheduleToStartTimeout = sst
+		}
+	}
 	scheduledEvent := &historypb.HistoryEvent{
 		EventId:   workflowTask.ScheduledEventID,
 		EventTime: timestamppb.New(workflowTask.ScheduledTime),
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 		Version:   m.ms.currentVersion,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
-			WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
-				TaskQueue:           m.ms.CurrentTaskQueue(),
-				StartToCloseTimeout: durationpb.New(workflowTask.WorkflowTaskTimeout),
-				Attempt:             workflowTask.Attempt,
-			},
+			WorkflowTaskScheduledEventAttributes: attrs,
 		},
 	}
 
@@ -1425,6 +1451,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		m.ms.workflowTaskUpdated = true
 	}
 
+	_, scheduleToStartTimeout := m.ms.GetWorkflowTaskScheduleToStartTimeout()
 	m.ms.executionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
 	metrics.SpeculativeWorkflowTaskCommits.With(m.metricsHandler).Record(1,
 		metrics.ReasonTag("close_transaction"))
@@ -1436,6 +1463,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 		durationpb.New(wt.WorkflowTaskTimeout),
 		wt.Attempt,
 		wt.ScheduledTime,
+		scheduleToStartTimeout,
 	)
 
 	if scheduledEvent.EventId != wt.ScheduledEventID {
