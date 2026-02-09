@@ -124,6 +124,10 @@ type Config struct {
 	TaskSchedulerEnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
 	// TaskSchedulerWorkflowQueueSchedulerQueueSize requires restart to take effect
 	TaskSchedulerWorkflowQueueSchedulerQueueSize dynamicconfig.IntPropertyFn
+	// TaskSchedulerWorkflowQueueSchedulerMaxQueues requires restart to take effect
+	TaskSchedulerWorkflowQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
+	// TaskSchedulerWorkflowQueueSchedulerQueueTTL requires restart to take effect
+	TaskSchedulerWorkflowQueueSchedulerQueueTTL dynamicconfig.DurationPropertyFn
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -523,6 +527,8 @@ func NewConfig(
 		TaskSchedulerInactiveChannelDeletionDelay:    dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
 		TaskSchedulerEnableWorkflowQueueScheduler:    dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Get(dc),
 		TaskSchedulerWorkflowQueueSchedulerQueueSize: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Get(dc),
+		TaskSchedulerWorkflowQueueSchedulerMaxQueues: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerMaxQueues.Get(dc),
+		TaskSchedulerWorkflowQueueSchedulerQueueTTL:  dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueTTL.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),

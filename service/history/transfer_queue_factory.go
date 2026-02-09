@@ -54,6 +54,8 @@ func NewTransferQueueFactory(
 					WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
 						EnableWorkflowQueueScheduler:    params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
 						WorkflowQueueSchedulerQueueSize: params.Config.TaskSchedulerWorkflowQueueSchedulerQueueSize,
+						WorkflowQueueSchedulerMaxQueues: params.Config.TaskSchedulerWorkflowQueueSchedulerMaxQueues,
+						WorkflowQueueSchedulerQueueTTL:  params.Config.TaskSchedulerWorkflowQueueSchedulerQueueTTL,
 					},
 				},
 				params.NamespaceRegistry,

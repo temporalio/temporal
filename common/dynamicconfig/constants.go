@@ -1791,6 +1791,18 @@ that processes tasks for contended workflows sequentially to avoid busy workflow
 		`TaskSchedulerWorkflowQueueSchedulerQueueSize is the buffer size for each workflow's task channel in the workflow queue scheduler.
 Changes to this value require a restart to take effect.`,
 	)
+	TaskSchedulerWorkflowQueueSchedulerMaxQueues = NewGlobalIntSetting(
+		"history.taskSchedulerWorkflowQueueSchedulerMaxQueues",
+		500,
+		`TaskSchedulerWorkflowQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues in the workflow queue scheduler.
+When this limit is reached, new workflows will fall back to the base FIFO scheduler. Changes to this value require a restart to take effect.`,
+	)
+	TaskSchedulerWorkflowQueueSchedulerQueueTTL = NewGlobalDurationSetting(
+		"history.taskSchedulerWorkflowQueueSchedulerQueueTTL",
+		5*time.Second,
+		`TaskSchedulerWorkflowQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.
+Changes to this value require a restart to take effect.`,
+	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",
