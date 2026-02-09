@@ -24,7 +24,7 @@ env:
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   MAX_TEST_ATTEMPTS: 3
-  SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
+  SHARD_COUNT: 3
 
 jobs:
   test-setup:
@@ -107,8 +107,7 @@ jobs:
           MATRIX=$(
             jq -c --argjson shard_count "$SHARD_COUNT" '
               # Cross-product of every db config × every job type
-              input as $jobs |
-              [ to_entries[] as $db | $jobs | to_entries[] as $job |
+              [ to_entries[] as $db | input | to_entries[] as $job |
 
                 # Base entry: merge db config + job config (without sharded flag) + name
                 ($db.value + ($job.value | del(.sharded)) + {name: $db.key}) as $base |
@@ -117,7 +116,7 @@ jobs:
                 if $job.value.sharded then
                   range($shard_count) as $i |
                   $base + {
-                    display_name: "shard\($i)",
+                    display_name: "\($job.key)\($i)",
                     shard_index: $i,
                     total_shards: $shard_count
                   }
@@ -174,7 +173,7 @@ jobs:
   misc-checks:
     name: Misc checks
     needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    runs-on: ${{ needs.test-setup.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -213,7 +212,7 @@ jobs:
   unit-test:
     name: Unit test
     needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    runs-on: ${{ needs.test-setup.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
