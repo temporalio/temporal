@@ -1,6 +1,7 @@
 package testrunner2
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -501,4 +502,90 @@ func (r *runner) finalizeReport(reports []*junitReport) error {
 		mergedReport.Skipped)
 
 	return errors.Join(mergedReport.reportingErrs...)
+}
+
+// --- console output ---
+
+// consoleWriter writes grouped output to a writer.
+type consoleWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+// WriteGrouped writes output with a header line and indented body.
+func (cw *consoleWriter) WriteGrouped(header, body string) {
+	var out strings.Builder
+	out.WriteString(header)
+	out.WriteByte('\n')
+
+	// Indent body lines
+	for line := range strings.SplitSeq(body, "\n") {
+		if line != "" {
+			out.WriteString("    ")
+			out.WriteString(line)
+			out.WriteByte('\n')
+		}
+	}
+
+	cw.mu.Lock()
+	_, _ = io.WriteString(cw.w, out.String())
+	cw.mu.Unlock()
+}
+
+// writeConsoleResult formats and prints the test result to the console.
+func writeConsoleResult(r *runner, cfg execConfig, result commandResult,
+	numTests, numFailed int, failureKind string, detectedAlerts alerts,
+	results testResults, start time.Time) {
+
+	failed := result.exitCode != 0 || numFailed > 0 || numTests == 0
+	status := "❌️"
+	if !failed {
+		if r.progress != nil {
+			completed, total := r.progress.complete(1)
+			status = fmt.Sprintf("✅ [%d/%d]", completed, total)
+		} else {
+			status = "✅"
+		}
+	}
+	passedTests := numTests - numFailed
+	failureInfo := ""
+	if failed {
+		failureInfo = fmt.Sprintf(", failure=%s", cmp.Or(failureKind, "failed"))
+	}
+
+	var header string
+	if failureKind != "" {
+		header = fmt.Sprintf("%s%s %s %s (attempt=%d, passed=%d/?%s, runtime=%v)",
+			logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.attempt, passedTests, failureInfo, time.Since(start).Round(time.Second))
+	} else {
+		header = fmt.Sprintf("%s%s %s %s (attempt=%d, passed=%d/%d%s, runtime=%v)",
+			logPrefix, time.Now().Format("15:04:05"), status, cfg.label, cfg.attempt, passedTests, numTests, failureInfo, time.Since(start).Round(time.Second))
+	}
+
+	var body strings.Builder
+
+	// Append alerts if test failed
+	if failed && len(detectedAlerts) > 0 {
+		for _, a := range detectedAlerts.dedupe() {
+			if testName := primaryTestName(a.Tests); testName != "" {
+				fmt.Fprintf(&body, "--- %s: %s — in %s\n", strings.ToUpper(string(a.Kind)), a.Summary, testName)
+			} else {
+				fmt.Fprintf(&body, "--- %s: %s\n", strings.ToUpper(string(a.Kind)), a.Summary)
+			}
+		}
+	}
+
+	// Append test failure details
+	if failed && len(results.failures) > 0 {
+		for _, f := range results.failures {
+			fmt.Fprintf(&body, "\n--- %s\n", f.Name)
+			if f.ErrorTrace != "" {
+				for line := range strings.SplitSeq(f.ErrorTrace, "\n") {
+					fmt.Fprintf(&body, "%s\n", line)
+				}
+			}
+		}
+	}
+
+	r.console.WriteGrouped(header, body.String())
 }
