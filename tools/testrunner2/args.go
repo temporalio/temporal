@@ -31,104 +31,163 @@ const (
 	GroupByNone GroupMode = "none" // run go test directly on all packages without precompilation
 )
 
-// parseConfig parses command-line arguments and returns a config.
-// It extracts testrunner-specific flags and sanitizes remaining args for go test.
-//
-//nolint:revive // cognitive-complexity
-func parseConfig(command string, args []string, cfg *config) ([]string, error) {
-	var sanitizedArgs []string
-	for _, arg := range args {
-		if after, ok := strings.CutPrefix(arg, maxAttemptsFlag); ok {
+type flagDefinition struct {
+	prefix     string
+	runnerOnly bool // If true, the flag is consumed by the runner and not passed to go test
+	handle     func(value string, cfg *config) error
+}
+
+var flagDefinitions = []flagDefinition{
+	{
+		prefix:     maxAttemptsFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			n, err := strconv.Atoi(after)
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %s: %w", maxAttemptsFlag, err)
+				return fmt.Errorf("invalid argument %s: %w", maxAttemptsFlag, err)
 			}
 			if n == 0 {
-				return nil, fmt.Errorf("invalid argument %s: must be greater than zero", maxAttemptsFlag)
+				return fmt.Errorf("invalid argument %s: must be greater than zero", maxAttemptsFlag)
 			}
 			cfg.maxAttempts = n
 			cfg.log("max attempts set to %d", cfg.maxAttempts)
-			continue // this is a `testrunner` only arg and not passed through
-		}
-
-		if after, ok := strings.CutPrefix(arg, parallelismFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     parallelismFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			n, err := strconv.Atoi(after)
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %s: %w", parallelismFlag, err)
+				return fmt.Errorf("invalid argument %s: %w", parallelismFlag, err)
 			}
 			if n <= 0 {
-				return nil, fmt.Errorf("invalid argument %s: must be greater than zero", parallelismFlag)
+				return fmt.Errorf("invalid argument %s: must be greater than zero", parallelismFlag)
 			}
 			cfg.parallelism = n
 			cfg.log("parallelism set to %d", cfg.parallelism)
-			continue // this is a `testrunner` only arg and not passed through
-		}
-
-		if after, ok := strings.CutPrefix(arg, runTimeoutFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     runTimeoutFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %s: %w", runTimeoutFlag, err)
+				return fmt.Errorf("invalid argument %s: %w", runTimeoutFlag, err)
 			}
 			cfg.runTimeout = d
 			cfg.log("run timeout set to %v", cfg.runTimeout)
-			continue // this is a `testrunner` only arg and not passed through
-		}
-
-		if after, ok := strings.CutPrefix(arg, stuckTestTimeoutFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     stuckTestTimeoutFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %s: %w", stuckTestTimeoutFlag, err)
+				return fmt.Errorf("invalid argument %s: %w", stuckTestTimeoutFlag, err)
 			}
 			cfg.stuckTestTimeout = d
 			cfg.log("stuck test timeout set to %v", cfg.stuckTestTimeout)
-			continue // this is a `testrunner` only arg and not passed through
-		}
-
-		if after, ok := strings.CutPrefix(arg, timeoutFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     timeoutFlag,
+		runnerOnly: false,
+		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
 			if err != nil {
-				return nil, fmt.Errorf("invalid argument %s: %w", timeoutFlag, err)
+				return fmt.Errorf("invalid argument %s: %w", timeoutFlag, err)
 			}
 			cfg.timeout = d
 			cfg.log("total timeout set to %v", cfg.timeout)
-			// let it pass through to `go test`
-		}
-
-		if after, ok := strings.CutPrefix(arg, runFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     runFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			cfg.runFilter = strings.Trim(after, "'\"")
 			cfg.log("run filter set to %s", cfg.runFilter)
-			continue // testrunner manages -test.run itself
-		}
-
-		if after, ok := strings.CutPrefix(arg, tagsFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     tagsFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			cfg.buildTags = after
-			continue // testrunner manages this flag explicitly
-		}
-
-		if after, ok := strings.CutPrefix(arg, logDirFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     logDirFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			cfg.logDir = after
 			cfg.log("log directory set to %s", cfg.logDir)
-			continue // this is a `testrunner` only arg and not passed through
-		}
-
-		if after, ok := strings.CutPrefix(arg, groupByFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     groupByFlag,
+		runnerOnly: true,
+		handle: func(after string, cfg *config) error {
 			switch GroupMode(after) {
 			case GroupByTest, GroupByNone:
 				cfg.groupBy = GroupMode(after)
 			default:
-				return nil, fmt.Errorf("invalid argument %s: must be 'test' or 'none'", groupByFlag)
+				return fmt.Errorf("invalid argument %s: must be 'test' or 'none'", groupByFlag)
 			}
 			cfg.log("group-by mode set to %s", cfg.groupBy)
-			continue // this is a `testrunner` only arg and not passed through
-		}
-
-		if after, ok := strings.CutPrefix(arg, coverProfileFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     coverProfileFlag,
+		runnerOnly: false,
+		handle: func(after string, cfg *config) error {
 			cfg.coverProfilePath = after
-		} else if after, ok := strings.CutPrefix(arg, junitReportFlag); ok {
+			return nil
+		},
+	},
+	{
+		prefix:     junitReportFlag,
+		runnerOnly: false,
+		handle: func(after string, cfg *config) error {
 			cfg.junitReportPath = after
-		}
+			return nil
+		},
+	},
+}
 
-		sanitizedArgs = append(sanitizedArgs, arg)
+// parseConfig parses command-line arguments and returns a config.
+// It extracts testrunner-specific flags and sanitizes remaining args for go test.
+func parseConfig(command string, args []string, cfg *config) ([]string, error) {
+	var sanitizedArgs []string
+	for _, arg := range args {
+		matched := false
+		for _, fd := range flagDefinitions {
+			if after, ok := strings.CutPrefix(arg, fd.prefix); ok {
+				if err := fd.handle(after, cfg); err != nil {
+					return nil, err
+				}
+				if !fd.runnerOnly {
+					sanitizedArgs = append(sanitizedArgs, arg)
+				}
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			sanitizedArgs = append(sanitizedArgs, arg)
+		}
 	}
 
 	// If --run-timeout wasn't set, default to the total timeout
