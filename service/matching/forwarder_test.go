@@ -300,7 +300,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(pollerID, request.GetPollerId())
