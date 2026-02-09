@@ -7,7 +7,7 @@ on:
   workflow_dispatch: # Allow manual trigger
 
 permissions:
-  actions: read
+  actions: write
 
 jobs:
   update-salts:
@@ -21,7 +21,6 @@ jobs:
           app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
           owner: temporalio
-          permission-variables: write
 
       - name: Checkout code
         uses: actions/checkout@v6
