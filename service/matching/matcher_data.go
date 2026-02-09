@@ -220,6 +220,8 @@ type matcherData struct {
 	tasks   taskPQ
 
 	lastPoller time.Time // most recent poll start time
+
+	stopped bool // if true, reject new tasks
 }
 
 func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
@@ -235,13 +237,25 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 	}
 }
 
-func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
+func (d *matcherData) Stop() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
+
+	d.stopped = true
+}
+
+func (d *matcherData) EnqueueTaskNoWait(task *internalTask) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if d.stopped {
+		return errMatcherStopped
+	}
 
 	task.initMatch(d)
 	d.tasks.Add(task)
 	d.findAndWakeMatches()
+	return nil
 }
 
 func (d *matcherData) RemoveTask(task *internalTask) {

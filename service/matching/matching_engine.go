@@ -94,6 +94,7 @@ type (
 		conditions                *matchingservice.PollConditions
 		forwardedFrom             string
 		localPollStartTime        time.Time
+		workerInstanceKey         string
 	}
 
 	userDataUpdate struct {
@@ -638,6 +639,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -942,6 +944,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -2495,6 +2498,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -2522,6 +2526,9 @@ pollLoop:
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 
 		nexusReq := task.nexus.request.GetRequest()
+		if nexusReq.Header == nil {
+			nexusReq.Header = make(map[string]string)
+		}
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
 		// Java SDK currently expects the header in this form. We should be able to remove this duplication sometime mid 2025.
 		nexusReq.Header["Request-Timeout"] = time.Until(task.nexus.deadline).String()
