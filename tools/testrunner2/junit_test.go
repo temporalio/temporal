@@ -2,13 +2,39 @@ package testrunner2
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"testing"
 
+	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/require"
 )
 
 var update = flag.Bool("update", false, "update golden files")
+
+func generateStatic(names []string, suffix string, message string) *junitReport {
+	var testcases []junit.Testcase
+	for _, name := range names {
+		testcases = append(testcases, junit.Testcase{
+			Name:    fmt.Sprintf("%s (%s)", name, suffix),
+			Failure: &junit.Result{Message: message},
+		})
+	}
+	return &junitReport{
+		Testsuites: junit.Testsuites{
+			Tests:    len(names),
+			Failures: len(names),
+			Suites: []junit.Testsuite{
+				{
+					Name:      "suite",
+					Tests:     len(names),
+					Failures:  len(names),
+					Testcases: testcases,
+				},
+			},
+		},
+	}
+}
 
 func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 	t.Parallel()
