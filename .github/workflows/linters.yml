@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   lint-actions:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -24,7 +24,7 @@ jobs:
         shell: bash
 
   lint-protos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -44,7 +44,7 @@ jobs:
           make lint-protos
 
   lint-api:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -64,7 +64,7 @@ jobs:
           make lint-api
 
   lint-workflows:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -83,7 +83,7 @@ jobs:
         run: make workflowcheck
 
   fmt-imports:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -108,7 +108,7 @@ jobs:
           fi
 
   lint-yaml:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -123,7 +123,7 @@ jobs:
         run: make lint-yaml
 
   golangci:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
         with:
@@ -156,7 +156,7 @@ jobs:
       - fmt-imports
       - lint-yaml
       - golangci
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     if: always()
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}

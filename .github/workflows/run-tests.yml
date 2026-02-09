@@ -106,7 +106,7 @@ jobs:
   misc-checks:
     name: Misc checks
     needs: [pre-build, set-up-functional-test]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -145,7 +145,7 @@ jobs:
   unit-test:
     name: Unit test
     needs: [pre-build, set-up-functional-test]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
+    runs-on: ${{ needs.set-up-functional-test.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
