@@ -119,7 +119,7 @@ func Main() {
 	command := os.Args[1]
 
 	r := newRunner()
-	args, err := parseConfig(command, os.Args[2:], &r.config)
+	args, err := parseArgs(command, os.Args[2:], &r.config)
 	if err != nil {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
