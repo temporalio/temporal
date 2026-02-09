@@ -251,20 +251,18 @@ func mergeUnique(a, b []string) []string {
 // tests as failed whenever a child fails, but these parent entries are redundant
 // for retry purposes and cause mixed-depth names that break buildTestFilterPattern.
 func filterParentFailures(failures []testFailure) []testFailure {
-	names := make(map[string]bool, len(failures))
-	for _, f := range failures {
-		names[f.Name] = true
+	names := make([]string, len(failures))
+	for i, f := range failures {
+		names[i] = f.Name
+	}
+	slices.Sort(names)
+	leafSet := make(map[string]bool, len(names))
+	for _, name := range filterParentNames(names) {
+		leafSet[name] = true
 	}
 	var filtered []testFailure
 	for _, f := range failures {
-		isParent := false
-		for other := range names {
-			if other != f.Name && strings.HasPrefix(other, f.Name+"/") {
-				isParent = true
-				break
-			}
-		}
-		if !isParent {
+		if leafSet[f.Name] {
 			filtered = append(filtered, f)
 		}
 	}

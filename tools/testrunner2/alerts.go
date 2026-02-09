@@ -76,6 +76,17 @@ func splitTestName(fullName string) (classname, name string) {
 	return classname, name
 }
 
+// alertParser attempts to parse an alert starting at line i.
+type alertParser func(lines []string, i int, line string) ([]alert, int, bool)
+
+// alertParsers is the ordered list of parsers tried for each line.
+var alertParsers = []alertParser{
+	tryParseDataRace,
+	tryParsePanic,
+	tryParseFatal,
+	tryParseTimeout,
+}
+
 // parseAlerts scans a gotestsum/go test stdout stream and extracts high-priority
 // alerts such as data races, panics, and timeouts.
 func parseAlerts(stdout string) []alert {
@@ -84,26 +95,12 @@ func parseAlerts(stdout string) []alert {
 
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
-
-		if a, next, ok := tryParseDataRace(lines, i, line); ok {
-			alerts = append(alerts, a)
-			i = next
-			continue
-		}
-		if a, next, ok := tryParsePanic(lines, i, line); ok {
-			alerts = append(alerts, a)
-			i = next
-			continue
-		}
-		if a, next, ok := tryParseFatal(lines, i, line); ok {
-			alerts = append(alerts, a)
-			i = next
-			continue
-		}
-		if timeoutAlerts, next, ok := tryParseTimeout(lines, i, line); ok {
-			alerts = append(alerts, timeoutAlerts...)
-			i = next
-			continue
+		for _, parse := range alertParsers {
+			if parsed, next, ok := parse(lines, i, line); ok {
+				alerts = append(alerts, parsed...)
+				i = next
+				break
+			}
 		}
 	}
 
@@ -191,9 +188,9 @@ func parsePlainTestName(line string) (string, bool) {
 }
 
 // tryParseDataRace parses a data race alert at position i if present.
-func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
+func tryParseDataRace(lines []string, i int, line string) ([]alert, int, bool) {
 	if !strings.HasPrefix(line, "WARNING: DATA RACE") {
-		return alert{}, i, false
+		return nil, i, false
 	}
 	start := findRaceBlockStart(lines, i)
 	// Merge contiguous race-report sections into a single alert. The Go race
@@ -219,37 +216,37 @@ func tryParseDataRace(lines []string, i int, line string) (alert, int, bool) {
 		}
 		return false
 	})
-	return alert{
+	return []alert{{
 		Kind:    failureKindDataRace,
 		Summary: "Data race detected",
 		Tests:   extractTestNames(block),
-	}, end, true
+	}}, end, true
 }
 
 // tryParsePanic parses a non-timeout panic alert at position i if present.
-func tryParsePanic(lines []string, i int, line string) (alert, int, bool) {
+func tryParsePanic(lines []string, i int, line string) ([]alert, int, bool) {
 	if !strings.HasPrefix(line, "panic: ") || strings.HasPrefix(line, "panic: test timed out after") {
-		return alert{}, i, false
+		return nil, i, false
 	}
 	return tryParsePrefixedAlert(lines, i, line, "panic: ", failureKindPanic)
 }
 
 // tryParseFatal parses a runtime fatal error alert at position i if present.
-func tryParseFatal(lines []string, i int, line string) (alert, int, bool) {
+func tryParseFatal(lines []string, i int, line string) ([]alert, int, bool) {
 	if !strings.HasPrefix(line, "fatal error: ") {
-		return alert{}, i, false
+		return nil, i, false
 	}
 	return tryParsePrefixedAlert(lines, i, line, "fatal error: ", failureKindFatal)
 }
 
 // tryParsePrefixedAlert parses a block alert that starts with a known prefix.
-func tryParsePrefixedAlert(lines []string, i int, line, prefix string, kind failureKind) (alert, int, bool) {
+func tryParsePrefixedAlert(lines []string, i int, line, prefix string, kind failureKind) ([]alert, int, bool) {
 	block, end := collectBlock(lines, i, shouldStopOnTestBoundary)
-	return alert{
+	return []alert{{
 		Kind:    kind,
 		Summary: strings.TrimSpace(strings.TrimPrefix(line, prefix)),
 		Tests:   extractTestNames(block),
-	}, end, true
+	}}, end, true
 }
 
 func tryParseTimeout(lines []string, i int, line string) ([]alert, int, bool) {
