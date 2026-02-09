@@ -249,7 +249,7 @@ type TaskQueueInfo struct {
 	// Whenever locking any metadata as the inactive one (drain-only), this should be set.
 	// If the flag is true, no tasks should be written to the active table until the inactive
 	// table has also been locked (and the flag set there for a potential reverse transition).
-	// After determinining that the inactive table has no more tasks left, then this
+	// After determining that the inactive table has no more tasks left, then this
 	// can be cleared on the active table.
 	OtherHasTasks bool `protobuf:"varint,10,opt,name=other_has_tasks,json=otherHasTasks,proto3" json:"other_has_tasks,omitempty"`
 	unknownFields protoimpl.UnknownFields

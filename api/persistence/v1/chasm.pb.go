@@ -217,7 +217,7 @@ type ChasmComponentAttributes struct {
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
 	TypeId uint32 `protobuf:"varint,1,opt,name=type_id,json=typeId,proto3" json:"type_id,omitempty"`
 	// Tasks are in their insertion order,
-	// i.e. by versioned transtion and versioned_transition_offset.
+	// i.e. by versioned transition and versioned_transition_offset.
 	SideEffectTasks []*ChasmComponentAttributes_Task `protobuf:"bytes,2,rep,name=side_effect_tasks,json=sideEffectTasks,proto3" json:"side_effect_tasks,omitempty"`
 	// Tasks are ordered by their scheduled time, breaking ties by
 	// versioned transition and versioned_transition_offset.

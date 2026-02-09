@@ -144,7 +144,7 @@ type MatchingServiceClient interface {
 	GetBuildIdTaskQueueMapping(ctx context.Context, in *GetBuildIdTaskQueueMappingRequest, opts ...grpc.CallOption) (*GetBuildIdTaskQueueMappingResponse, error)
 	// Force loading a task queue partition. Used by matching node owning root partition.
 	// When root partition is loaded this is called for all child partitions.
-	// This addresses the posibility of unloaded child partitions having backlog,
+	// This addresses the possibility of unloaded child partitions having backlog,
 	// but not being forwarded/synced to the root partition to find the polling
 	// worker which triggered the root partition being loaded in the first place.
 	ForceLoadTaskQueuePartition(ctx context.Context, in *ForceLoadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceLoadTaskQueuePartitionResponse, error)
@@ -683,7 +683,7 @@ type MatchingServiceServer interface {
 	GetBuildIdTaskQueueMapping(context.Context, *GetBuildIdTaskQueueMappingRequest) (*GetBuildIdTaskQueueMappingResponse, error)
 	// Force loading a task queue partition. Used by matching node owning root partition.
 	// When root partition is loaded this is called for all child partitions.
-	// This addresses the posibility of unloaded child partitions having backlog,
+	// This addresses the possibility of unloaded child partitions having backlog,
 	// but not being forwarded/synced to the root partition to find the polling
 	// worker which triggered the root partition being loaded in the first place.
 	ForceLoadTaskQueuePartition(context.Context, *ForceLoadTaskQueuePartitionRequest) (*ForceLoadTaskQueuePartitionResponse, error)

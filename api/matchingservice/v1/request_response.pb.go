@@ -2828,7 +2828,7 @@ type SyncDeploymentUserDataResponse struct {
 	// New task queue user data version. Can be used to wait for propagation.
 	Version int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	// If the routing config changed after applying this operation. Compared base on revision number.
-	// Deprecated. using this is not totaly safe in case of retries.
+	// Deprecated. using this is not totally safe in case of retries.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/matchingservice/v1/request_response.proto.
 	RoutingConfigChanged bool `protobuf:"varint,2,opt,name=routing_config_changed,json=routingConfigChanged,proto3" json:"routing_config_changed,omitempty"`
@@ -4502,7 +4502,7 @@ type ListNexusEndpointsRequest struct {
 	NextPageToken []byte `protobuf:"bytes,1,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	PageSize      int32  `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// The nexus_endpoints table has a monotonically increasing version number that is incremented on every change to
-	// the table. This field can be used to provide the last known table version in conjuction with the `wait` field to
+	// the table. This field can be used to provide the last known table version in conjunction with the `wait` field to
 	// long poll on changes to the table.
 	// If next_page_token is not empty and the current table version does not match this field, this request will fail
 	// with a failed precondition error.

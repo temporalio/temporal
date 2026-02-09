@@ -174,7 +174,7 @@ type HistoryServiceClient interface {
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 	// and a workflow task being created for the execution.
-	// If workflow is not running or not found, it will first try start workflow with given WorkflowIdResuePolicy,
+	// If workflow is not running or not found, it will first try start workflow with given WorkflowIdReusePolicy,
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(ctx context.Context, in *SignalWithStartWorkflowExecutionRequest, opts ...grpc.CallOption) (*SignalWithStartWorkflowExecutionResponse, error)
@@ -214,7 +214,7 @@ type HistoryServiceClient interface {
 	// scheduled first workflow task in child after recording child started in its mutable state; otherwise,
 	// during namespace failover, it's possible that none of the clusters will schedule the first workflow task.
 	// NOTE: This is an experimental API. If later we found there are more verification API and there's a clear pattern
-	// of how verification is done, we may unify them into one generic verfication API.
+	// of how verification is done, we may unify them into one generic verification API.
 	VerifyFirstWorkflowTaskScheduled(ctx context.Context, in *VerifyFirstWorkflowTaskScheduledRequest, opts ...grpc.CallOption) (*VerifyFirstWorkflowTaskScheduledResponse, error)
 	// RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
 	// This is mainly called by transfer queue processor during the processing of DeleteExecution task.
@@ -224,7 +224,7 @@ type HistoryServiceClient interface {
 	// recorded before completing the task, otherwise during namespace failover, it's possible that none of the
 	// clusters will record the child result in parent workflow.
 	// NOTE: This is an experimental API. If later we found there are more verification API and there's a clear pattern
-	// of how verification is done, we may unify them into one generic verfication API.
+	// of how verification is done, we may unify them into one generic verification API.
 	VerifyChildExecutionCompletionRecorded(ctx context.Context, in *VerifyChildExecutionCompletionRecordedRequest, opts ...grpc.CallOption) (*VerifyChildExecutionCompletionRecordedResponse, error)
 	// DescribeWorkflowExecution returns information about the specified workflow execution.
 	DescribeWorkflowExecution(ctx context.Context, in *DescribeWorkflowExecutionRequest, opts ...grpc.CallOption) (*DescribeWorkflowExecutionResponse, error)
@@ -1157,7 +1157,7 @@ type HistoryServiceServer interface {
 	// SignalWithStartWorkflowExecution is used to ensure sending a signal event to a workflow execution.
 	// If workflow is running, this results in WorkflowExecutionSignaled event recorded in the history
 	// and a workflow task being created for the execution.
-	// If workflow is not running or not found, it will first try start workflow with given WorkflowIdResuePolicy,
+	// If workflow is not running or not found, it will first try start workflow with given WorkflowIdReusePolicy,
 	// and record WorkflowExecutionStarted and WorkflowExecutionSignaled event in case of success.
 	// It will return `WorkflowExecutionAlreadyStartedError` if start workflow failed with given policy.
 	SignalWithStartWorkflowExecution(context.Context, *SignalWithStartWorkflowExecutionRequest) (*SignalWithStartWorkflowExecutionResponse, error)
@@ -1197,7 +1197,7 @@ type HistoryServiceServer interface {
 	// scheduled first workflow task in child after recording child started in its mutable state; otherwise,
 	// during namespace failover, it's possible that none of the clusters will schedule the first workflow task.
 	// NOTE: This is an experimental API. If later we found there are more verification API and there's a clear pattern
-	// of how verification is done, we may unify them into one generic verfication API.
+	// of how verification is done, we may unify them into one generic verification API.
 	VerifyFirstWorkflowTaskScheduled(context.Context, *VerifyFirstWorkflowTaskScheduledRequest) (*VerifyFirstWorkflowTaskScheduledResponse, error)
 	// RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
 	// This is mainly called by transfer queue processor during the processing of DeleteExecution task.
@@ -1207,7 +1207,7 @@ type HistoryServiceServer interface {
 	// recorded before completing the task, otherwise during namespace failover, it's possible that none of the
 	// clusters will record the child result in parent workflow.
 	// NOTE: This is an experimental API. If later we found there are more verification API and there's a clear pattern
-	// of how verification is done, we may unify them into one generic verfication API.
+	// of how verification is done, we may unify them into one generic verification API.
 	VerifyChildExecutionCompletionRecorded(context.Context, *VerifyChildExecutionCompletionRecordedRequest) (*VerifyChildExecutionCompletionRecordedResponse, error)
 	// DescribeWorkflowExecution returns information about the specified workflow execution.
 	DescribeWorkflowExecution(context.Context, *DescribeWorkflowExecutionRequest) (*DescribeWorkflowExecutionResponse, error)
