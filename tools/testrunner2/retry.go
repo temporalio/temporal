@@ -103,18 +103,6 @@ type retryPlan struct {
 	skipTests []string // tests to -skip
 }
 
-func buildRetryUnitFromFailures(unit workUnit, failedTests []testCase) *workUnit {
-	if len(failedTests) == 0 {
-		return nil
-	}
-
-	return &workUnit{
-		pkg:   unit.pkg,
-		tests: failedTests,
-		label: unit.label,
-	}
-}
-
 // buildRetryPlans computes retry plans with quarantine logic.
 //
 // When quarantinedTests is non-empty and there are passed sibling tests under
