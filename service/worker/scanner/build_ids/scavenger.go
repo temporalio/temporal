@@ -24,7 +24,9 @@ import (
 )
 
 const (
+	//nolint:staticcheck // Name matches dynamic config for consistency
 	BuildIdScavengerWorkflowName = "build-id-scavenger"
+	//nolint:staticcheck // Name matches dynamic config for consistency
 	BuildIdScavengerActivityName = "scavenge-build-ids"
 
 	BuildIdScavengerWFID          = "temporal-sys-build-id-scavenger"
@@ -41,6 +43,7 @@ var (
 )
 
 type (
+	//nolint:staticcheck // Name matches dynamic config for consistency
 	BuildIdScavengerInput struct {
 		NamespaceListPageSize int
 		TaskQueueListPageSize int
@@ -98,6 +101,8 @@ func NewActivities(
 
 // BuildIdScavengerWorkflow scans all task queue user data entries in all namespaces and cleans up unused build ids.
 // This workflow is a wrapper around the long running ScavengeBuildIds activity.
+//
+//nolint:staticcheck // Name matches dynamic config for consistency
 func BuildIdScavengerWorkflow(ctx workflow.Context, input BuildIdScavengerInput) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		// Give the activity enough time to scan the entire namespace
