@@ -610,7 +610,7 @@ func runInteg(t *testing.T, dirs []string, modifyConfig func(*config), env []str
 		mu.Unlock()
 	}
 
-	testArgs, parseErr := parseConfig("test", args, &cfg)
+	testArgs, parseErr := parseArgs("test", args, &cfg)
 	require.NoError(t, parseErr, "failed to parse args: %v", args)
 
 	if modifyConfig != nil {
