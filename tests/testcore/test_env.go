@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"strconv"
@@ -19,6 +20,12 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 )
+
+// shardSalt is used to distribute functional tests across shards.
+// This value is automatically updated by the optimize-test-sharding workflow.
+//
+//go:embed shard_salt.txt
+var shardSalt string
 
 var (
 	_                Env      = (*testEnv)(nil)
@@ -275,11 +282,7 @@ func checkTestShard(t *testing.T) {
 		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
 	}
 
-	salt := os.Getenv("TEST_SHARD_SALT")
-	if salt == "" {
-		t.Fatal("TEST_SHARD_SALT must be set when sharding is enabled")
-	}
-	nameToHash := t.Name() + salt
+	nameToHash := t.Name() + strings.TrimSpace(shardSalt)
 	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
 	if testIndex != index {
 		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)

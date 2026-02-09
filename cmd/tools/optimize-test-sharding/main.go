@@ -8,10 +8,8 @@ import (
 )
 
 func main() {
-	salt, err := optimizetestsharding.Main()
-	if err != nil {
+	if err := optimizetestsharding.Main(); err != nil {
 		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
-	fmt.Println(salt)
 }

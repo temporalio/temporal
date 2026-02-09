@@ -26,7 +26,7 @@ const (
 
 var testNameRe = regexp.MustCompile(`^(.*?)\s*\(.*\)$`)
 
-func Main() (string, error) {
+func Main() error {
 	shards := flag.Int("shards", 0, "Number of shards (required)")
 	tries := flag.Int("tries", 10000, "Number of tries")
 	workflow := flag.String("workflow", "", "GitHub Actions workflow name to fetch artifacts from (uses gh CLI)")
@@ -34,6 +34,8 @@ func Main() (string, error) {
 	runs := flag.Int("runs", 5, "Number of recent successful runs to download")
 	branch := flag.String("branch", "main", "Branch to find successful runs on")
 	event := flag.String("event", "push", "Event type to filter runs by")
+	saltFile := flag.String("file", "", "Path to the salt file to read/update (required)")
+	threshold := flag.Float64("threshold", 0, "Minimum improvement ratio (e.g. 0.05 for 5%) required to update the salt file")
 	flag.Usage = func() {
 		log.Printf("Usage: %s [options]", os.Args[0])
 		log.Print("Optimizes the salt selection for test sharding.")
@@ -44,21 +46,31 @@ func Main() (string, error) {
 	flag.Parse()
 
 	if *shards < 1 {
-		return "", errors.New("-shards is required and must be >= 1")
+		return errors.New("-shards is required and must be >= 1")
 	}
 	if *workflow == "" || *artifactPattern == "" {
-		return "", errors.New("-workflow and -artifact-pattern are required")
+		return errors.New("-workflow and -artifact-pattern are required")
 	}
+	if *saltFile == "" {
+		return errors.New("-file is required")
+	}
+
+	currentSaltBytes, err := os.ReadFile(*saltFile)
+	if err != nil {
+		return fmt.Errorf("reading salt file: %w", err)
+	}
+	currentSalt := strings.TrimSpace(string(currentSaltBytes))
+	log.Printf("Current salt: %s", currentSalt)
 
 	dir, err := downloadArtifacts(*workflow, *artifactPattern, *branch, *event, *runs)
 	if err != nil {
-		return "", fmt.Errorf("downloading artifacts: %w", err)
+		return fmt.Errorf("downloading artifacts: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 
 	tmap, err := loadTestData(dir)
 	if err != nil {
-		return "", fmt.Errorf("loading test data: %w", err)
+		return fmt.Errorf("loading test data: %w", err)
 	}
 
 	log.Printf("Loaded %d unique test names", len(tmap))
@@ -82,7 +94,20 @@ func Main() (string, error) {
 		log.Printf("  shard %d: %.1fs", i, t)
 	}
 
-	return bestSalt, nil
+	currentMax := maxShardTime(smap, *shards, currentSalt)
+	improvement := (currentMax - bestMax) / currentMax
+	log.Printf("Current salt %q max shard: %.1fs, improvement: %.1f%%", currentSalt, currentMax, improvement*100)
+
+	if improvement < *threshold {
+		log.Printf("Improvement %.1f%% is below threshold %.1f%%, keeping current salt", improvement*100, *threshold*100)
+		return nil
+	}
+
+	if err := os.WriteFile(*saltFile, []byte(bestSalt+"\n"), 0644); err != nil {
+		return fmt.Errorf("writing salt file: %w", err)
+	}
+	log.Printf("Updated salt file %s to %s", *saltFile, bestSalt)
+	return nil
 }
 
 // downloadArtifacts uses gh CLI to find the latest successful runs and download
@@ -98,6 +123,7 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 		return "", err
 	}
 
+	var downloaded int
 	for _, runID := range runIDs {
 		log.Printf("Downloading artifacts from run %s", runID)
 		cmd := exec.Command("gh", "run", "download", runID,
@@ -105,9 +131,14 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 			"--dir", filepath.Join(dir, runID))
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("gh run download %s: %w", runID, err)
+			log.Printf("Skipping run %s: %v", runID, err)
+			continue
 		}
+		downloaded++
+	}
+	if downloaded == 0 {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("no runs had artifacts matching %q", artifactPattern)
 	}
 
 	return dir, nil
