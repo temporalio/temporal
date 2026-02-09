@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
@@ -28,7 +29,7 @@ func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *ha
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	result, err := chasm.StartExecution(
+	_, err = chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
@@ -44,7 +45,11 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
 	}
 
-	return result.Output, nil
+	return &schedulerpb.CreateScheduleResponse{
+		FrontendResponse: &workflowservice.CreateScheduleResponse{
+			ConflictToken: initialSerializedConflictToken,
+		},
+	}, nil
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {

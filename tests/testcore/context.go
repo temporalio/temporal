@@ -71,14 +71,15 @@ func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) cont
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	ctx = headers.SetVersions(ctx)
 
-	var timedOut atomic.Bool
+	// Capture the error that caused context cancellation to avoid race conditions
+	// between timeout expiration and explicit cancel() in cleanup
+	var contextErr atomic.Value
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		<-ctx.Done()
-		if ctx.Err() == context.DeadlineExceeded {
-			timedOut.Store(true)
-		}
+		// Store the error immediately to capture whether it was DeadlineExceeded or Canceled
+		contextErr.Store(ctx.Err())
 	}()
 
 	// Register cleanup to cancel context and check timeout
@@ -87,7 +88,8 @@ func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) cont
 		cancel()
 		<-done
 
-		if timedOut.Load() {
+		// Check the captured error, not the current ctx.Err()
+		if err, ok := contextErr.Load().(error); ok && err == context.DeadlineExceeded {
 			t.Errorf("Test exceeded timeout of %v", timeout)
 		}
 	})
