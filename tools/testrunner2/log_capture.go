@@ -170,7 +170,7 @@ func (lc *logCapture) GetOutput() (string, error) {
 	if lc.header != nil {
 		// Header ends with separator + "\n\n"
 		headerEnd := logHeaderSeparator + "\n\n"
-		if idx := strings.LastIndex(output, headerEnd); idx >= 0 {
+		if idx := strings.Index(output, headerEnd); idx >= 0 {
 			output = output[idx+len(headerEnd):]
 		}
 	}
