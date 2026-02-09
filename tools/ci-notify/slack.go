@@ -263,7 +263,7 @@ func FormatReportForDebug(report *DigestReport) string {
 	fmt.Fprintf(&sb, "Report Period: %s to %s\n\n",
 		report.StartDate.Format("Jan 2, 2006"),
 		report.EndDate.Format("Jan 2, 2006"))
-	fmt.Fprintf(&sb, "Metrics:\n")
+	fmt.Fprintln(&sb, "Metrics:")
 	fmt.Fprintf(&sb, "  Success Rate: %.1f%%\n", report.SuccessRate)
 	fmt.Fprintf(&sb, "  Total Runs: %d\n", report.TotalRuns)
 	fmt.Fprintf(&sb, "  Successful Runs: %d\n", report.SuccessfulRuns)
@@ -271,7 +271,7 @@ func FormatReportForDebug(report *DigestReport) string {
 	fmt.Fprintf(&sb, "  Average Duration: %s\n", formatDuration(report.AverageDuration))
 	fmt.Fprintf(&sb, "  Median Duration: %s\n", formatDuration(report.MedianDuration))
 
-	fmt.Fprintf(&sb, "\nRun Duration Distribution:\n")
+	fmt.Fprintln(&sb, "\nRun Duration Distribution:")
 	fmt.Fprintf(&sb, "  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent)
 	fmt.Fprintf(&sb, "  Under 25 minutes: %.1f%%\n", report.Under25MinutesPercent)
 	fmt.Fprintf(&sb, "  Under 30 minutes: %.1f%%\n", report.Under30MinutesPercent)
