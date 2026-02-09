@@ -332,7 +332,7 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 			})
 			if err != nil {
 				compileErr = fmt.Errorf("failed to create compile log file %s: %w", logPath, err)
-				r.collector.addError(compileErr)
+				r.addError(compileErr)
 				return
 			}
 
@@ -349,7 +349,7 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 
 			if result.exitCode != 0 {
 				compileErr = fmt.Errorf("failed to compile %s (exit code %d)", pkg, result.exitCode)
-				r.collector.addError(compileErr)
+				r.addError(compileErr)
 			}
 
 			// Get output for display
@@ -372,7 +372,7 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 			testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
 			if err != nil {
 				compileErr = fmt.Errorf("failed to list tests from %s: %w", binaryPath, err)
-				r.collector.addError(compileErr)
+				r.addError(compileErr)
 				return
 			}
 
@@ -387,7 +387,7 @@ func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string
 			r.log("discovered %d tests for %s", len(units), pkg)
 
 			// Update progress tracker total
-			r.progress.addTotal(int64(len(units)))
+			r.addProgressTotal(int64(len(units)))
 
 			// Log discovered tests
 			var testList strings.Builder
