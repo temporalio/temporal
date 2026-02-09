@@ -161,6 +161,15 @@ func (r *Registry) componentOf(componentGoType reflect.Type) (*RegistrableCompon
 	return rc, ok
 }
 
+// ArchetypeDisplayName returns the human-readable name for a given archetype ID.
+func (r *Registry) ArchetypeDisplayName(id ArchetypeID) (string, bool) {
+	rc, ok := r.ComponentByID(id)
+	if !ok {
+		return "", false
+	}
+	return rc.componentType, true
+}
+
 // ArchetypeIDOf returns the ArchetypeID for the given component Go type.
 // This method should only be used by CHASM framework internal,
 // NOT CHASM library developers.
