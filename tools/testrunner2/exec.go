@@ -2,13 +2,19 @@ package testrunner2
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // execFunc executes a command and returns the exit code.
@@ -195,4 +201,300 @@ func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onC
 	exitCode := execFn(ctx, req.pkgDir, req.binary, args, req.env, req.output)
 
 	return commandResult{exitCode: exitCode}
+}
+
+// execLogger returns an onCommand callback that logs the command to the console.
+func (r *runner) execLogger(desc string, attempt int) func(string) {
+	return func(command string) {
+		r.console.WriteGrouped(
+			fmt.Sprintf("%s%s 🚀 %s (attempt %d)", logPrefix, time.Now().Format("15:04:05"), desc, attempt),
+			"$ "+command+"\n",
+		)
+	}
+}
+
+// --- compiled mode (compile + run per test) ---
+
+// compiledExecConfig creates an execConfig for running a precompiled test binary.
+func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt int) execConfig {
+	timeout := r.effectiveTimeout()
+
+	desc := unit.label
+	coverProfile := fmt.Sprintf("%s_run_%d%s",
+		strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
+		attempt,
+		codeCoverageExtension)
+	coverProfile, _ = filepath.Abs(coverProfile)
+
+	junitFilename := fmt.Sprintf("junit_%s.xml", uuid.New().String())
+	junitPath := filepath.Join(r.logDir, junitFilename)
+	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, desc))
+
+	retry := r.buildRetryHandler(
+		func(plan retryPlan, attempt int) *queueItem {
+			var wu workUnit
+			if plan.tests != nil && plan.skipTests == nil {
+				// Simple failure retry: build a retry unit from the failed test names
+				var failedTests []testCase
+				for _, name := range plan.tests {
+					failedTests = append(failedTests, testCase{name: name, attempts: attempt})
+				}
+				wu = workUnit{
+					pkg:   unit.pkg,
+					tests: failedTests,
+					label: unit.label,
+				}
+			} else {
+				// Crash/quarantine retry: use the original unit with run/skip lists.
+				// Merge plan's skip list with the current unit's to accumulate
+				// skips across attempts (so subtests that passed in earlier
+				// attempts don't re-run).
+				wu = workUnit{
+					pkg:       unit.pkg,
+					label:     unit.label,
+					skipTests: mergeUnique(unit.skipTests, plan.skipTests),
+				}
+				if plan.tests != nil {
+					wu.tests = make([]testCase, len(plan.tests))
+					for i, name := range plan.tests {
+						wu.tests[i] = testCase{name: name, attempts: attempt - 1}
+					}
+				} else {
+					wu.tests = incrementAttempts(unit.tests, attempt-1)
+				}
+			}
+			// Don't emit if skip would cover every test (vacuous plan)
+			if wouldSkipAll(wu.tests, wu.skipTests) {
+				return nil
+			}
+			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt))
+		},
+	)
+
+	return execConfig{
+		startProcess: func(ctx context.Context, output io.Writer) commandResult {
+			return executeTest(ctx, r.exec, executeTestInput{
+				binary:       binaryPath,
+				pkgDir:       unit.pkg,
+				tests:        unit.tests,
+				skipPattern:  buildTestFilterPattern(unit.skipTests),
+				timeout:      timeout,
+				coverProfile: coverProfile,
+				extraArgs:    r.testBinaryArgs,
+				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
+				output:       output,
+			}, r.execLogger(desc, attempt))
+		},
+		label:     desc,
+		attempt:   attempt,
+		logPath:   logPath,
+		junitPath: junitPath,
+		logHeader: &logFileHeader{
+			Package: unit.pkg,
+			Attempt: attempt,
+			Started: time.Now(),
+			Command: binaryPath,
+		},
+		streamRetries: false, // one test per process
+		retry:         retry,
+	}
+}
+
+// createCompileItems creates compile queue items for each package.
+func (r *runner) createCompileItems(pkgs []string, binDir string, baseArgs []string) []*queueItem {
+	// Dedupe and sort packages
+	pkgSet := make(map[string]bool, len(pkgs))
+	for _, pkg := range pkgs {
+		pkgSet[pkg] = true
+	}
+	sortedPkgs := slices.Sorted(maps.Keys(pkgSet))
+
+	items := make([]*queueItem, 0, len(sortedPkgs))
+	for _, pkg := range sortedPkgs {
+		binName := strings.ReplaceAll(strings.TrimPrefix(pkg, "./"), "/", "_") + ".test"
+		binaryPath := filepath.Join(binDir, binName)
+
+		items = append(items, r.newCompileItem(pkg, binaryPath, baseArgs))
+	}
+	return items
+}
+
+func (r *runner) newCompileItem(pkg string, binaryPath string, baseArgs []string) *queueItem {
+	var lc *logCapture
+	var compileErr error
+
+	return &queueItem{
+		run: func(ctx context.Context, emit func(...*queueItem)) {
+			// Create log capture for compile output
+			logPath := buildCompileLogFilename(r.logDir)
+			var err error
+			lc, err = newLogCapture(logCaptureConfig{
+				LogPath: logPath,
+			})
+			if err != nil {
+				compileErr = fmt.Errorf("failed to create compile log file %s: %w", logPath, err)
+				r.collector.addError(compileErr)
+				return
+			}
+
+			result := compileTest(ctx, r.exec, compileTestInput{
+				pkg:        pkg,
+				binaryPath: binaryPath,
+				buildTags:  r.buildTags,
+				baseArgs:   baseArgs,
+				env:        r.env,
+				output:     lc,
+			}, func(command string) {
+				r.console.WriteGrouped(fmt.Sprintf("%s%s 🚀 compiling %s", logPrefix, time.Now().Format("15:04:05"), pkg), "$ "+command+"\n")
+			})
+
+			if result.exitCode != 0 {
+				compileErr = fmt.Errorf("failed to compile %s (exit code %d)", pkg, result.exitCode)
+				r.collector.addError(compileErr)
+			}
+
+			// Get output for display
+			outputStr, err := lc.GetOutput()
+			if err != nil {
+				r.log("warning: failed to get compile output: %v", err)
+			}
+
+			header := fmt.Sprintf("%s%s 🔨 compiled %s", logPrefix, time.Now().Format("15:04:05"), pkg)
+			r.console.WriteGrouped(header, outputStr)
+
+			_ = lc.Close()
+
+			// Emit test items if compilation succeeded
+			if compileErr != nil {
+				return
+			}
+
+			// Discover tests from the compiled binary
+			testNames, err := listTestsFromBinary(ctx, r.exec, binaryPath)
+			if err != nil {
+				compileErr = fmt.Errorf("failed to list tests from %s: %w", binaryPath, err)
+				r.collector.addError(compileErr)
+				return
+			}
+
+			// Apply run filter and sharding
+			units := buildWorkUnits(pkg, testNames, r.runFilter, r.totalShards, r.shardIndex)
+
+			if len(units) == 0 {
+				r.log("no tests matched filter/shard for %s", pkg)
+				return
+			}
+
+			r.log("discovered %d tests for %s", len(units), pkg)
+
+			// Update progress tracker total
+			r.progress.addTotal(int64(len(units)))
+
+			// Log discovered tests
+			var testList strings.Builder
+			for _, u := range units {
+				testList.WriteString("\n  ")
+				testList.WriteString(u.label)
+			}
+			r.log("tests for %s:%s", pkg, testList.String())
+
+			var items []*queueItem
+			for _, unit := range units {
+				items = append(items, r.newExecItem(r.compiledExecConfig(unit, binaryPath, 1)))
+			}
+			emit(items...)
+		},
+	}
+}
+
+// --- direct mode (go test without precompilation) ---
+
+// runDirectMode runs all tests via `go test` without precompilation, using the
+// scheduler for retry lifecycle. This is the GroupByNone path.
+func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs []string) error {
+	r.log("running in 'none' mode - executing go test directly without precompilation")
+
+	// Create log directory
+	if err := os.MkdirAll(r.logDir, 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+	r.log("log directory: %s", r.logDir)
+
+	// Parse base args: extract flags the runner manages and collect go test flags.
+	race, extraArgs := filterBaseArgs(baseArgs)
+
+	// Normalize package paths (ensure ./ prefix)
+	pkgs := make([]string, len(testDirs))
+	for i, dir := range testDirs {
+		if !strings.HasPrefix(dir, "./") && !strings.HasPrefix(dir, "/") {
+			pkgs[i] = "./" + dir
+		} else {
+			pkgs[i] = dir
+		}
+	}
+	r.log("test packages: %v", pkgs)
+
+	// Create result collector and progress tracker
+	r.collector = &resultCollector{}
+	r.progress = &progressTracker{}
+	r.progress.addTotal(1)
+
+	// Run via scheduler (at least 2 workers for mid-stream retries)
+	sched := newScheduler(max(2, r.parallelism))
+	sched.run(ctx, []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter, ""))})
+
+	// Finalize report
+	if err := r.finalizeReport(r.collector.junitReports); err != nil {
+		return err
+	}
+
+	if len(r.collector.errors) > 0 {
+		return errors.Join(r.collector.errors...)
+	}
+	r.log("test run completed")
+	return nil
+}
+
+// directExecConfig creates an execConfig for running go test directly.
+func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, runFilter, skipFilter string) execConfig {
+	desc := "all"
+
+	// When there's a run filter, this is a retry for specific tests. Multiple
+	// retries at the same attempt number (from stream retries) need unique file
+	// names to avoid overwriting each other's log and JUnit files.
+	fileSuffix := ""
+	if runFilter != "" || skipFilter != "" {
+		fileSuffix = fmt.Sprintf("_%d", r.directRetrySeq.Add(1))
+	}
+
+	retry := r.buildRetryHandler(func(plan retryPlan, attempt int) *queueItem {
+		runF := buildTestFilterPattern(plan.tests)
+		skipF := buildTestFilterPattern(plan.skipTests)
+		return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF, skipF))
+	})
+
+	timeout := r.effectiveTimeout()
+
+	return execConfig{
+		startProcess: func(ctx context.Context, output io.Writer) commandResult {
+			return runDirectGoTest(ctx, r.exec, runDirectGoTestInput{
+				pkgs:         pkgs,
+				buildTags:    r.buildTags,
+				race:         race,
+				coverProfile: r.coverProfilePath,
+				timeout:      timeout,
+				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
+				output:       output,
+				runFilter:    runFilter,
+				skipFilter:   skipFilter,
+				extraArgs:    extraArgs,
+			}, r.execLogger(desc, attempt))
+		},
+		label:         desc,
+		attempt:       attempt,
+		logPath:       filepath.Join(r.logDir, fmt.Sprintf("all_mode_attempt_%d%s.log", attempt, fileSuffix)),
+		junitPath:     filepath.Join(r.logDir, fmt.Sprintf("junit_all_attempt_%d%s.xml", attempt, fileSuffix)),
+		streamRetries: true,
+		retry:         retry,
+	}
 }
