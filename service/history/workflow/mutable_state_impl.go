@@ -4120,7 +4120,6 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		activityInfo.RequestId = requestID
 		activityInfo.StartedTime = timestamppb.New(ms.timeSource.Now())
 		activityInfo.StartedIdentity = identity
-		activityInfo.WorkerInstanceKey = workerInstanceKey
 		return nil
 	}); err != nil {
 		return nil, err
