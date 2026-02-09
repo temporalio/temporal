@@ -10,17 +10,17 @@ import (
 )
 
 const (
-	maxAttemptsFlag      = "--max-attempts="
-	coverProfileFlag     = "-coverprofile="
-	junitReportFlag      = "--junitfile="
-	runTimeoutFlag       = "--run-timeout="
-	stuckTestTimeoutFlag = "--stuck-test-timeout="
-	parallelismFlag      = "--parallelism="
-	timeoutFlag          = "-timeout="
-	tagsFlag             = "-tags="
-	logDirFlag           = "--log-dir="
-	groupByFlag          = "--group-by="
-	runFlag              = "-run="
+	maxAttemptsFlag      = "--max-attempts"
+	coverProfileFlag     = "-coverprofile"
+	junitReportFlag      = "--junitfile"
+	runTimeoutFlag       = "--run-timeout"
+	stuckTestTimeoutFlag = "--stuck-test-timeout"
+	parallelismFlag      = "--parallelism"
+	timeoutFlag          = "-timeout"
+	tagsFlag             = "-tags"
+	logDirFlag           = "--log-dir"
+	groupByFlag          = "--group-by"
+	runFlag              = "-run"
 )
 
 // GroupMode defines how tests are grouped for execution.
@@ -32,14 +32,23 @@ const (
 )
 
 type flagDefinition struct {
-	prefix     string
 	runnerOnly bool // If true, the flag is consumed by the runner and not passed to go test
 	handle     func(value string, cfg *config) error
 }
 
-var flagDefinitions = []flagDefinition{
-	{
-		prefix:     maxAttemptsFlag,
+func init() {
+	for name := range flagDefinitions {
+		if !strings.HasPrefix(name, "-") {
+			panic(fmt.Sprintf("flag %q must start with -", name))
+		}
+		if strings.Contains(name, "=") {
+			panic(fmt.Sprintf("flag %q must not contain =; it is appended during lookup", name))
+		}
+	}
+}
+
+var flagDefinitions = map[string]flagDefinition{
+	maxAttemptsFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			n, err := strconv.Atoi(after)
@@ -54,8 +63,7 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     parallelismFlag,
+	parallelismFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			n, err := strconv.Atoi(after)
@@ -70,8 +78,7 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     runTimeoutFlag,
+	runTimeoutFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
@@ -83,8 +90,7 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     stuckTestTimeoutFlag,
+	stuckTestTimeoutFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
@@ -96,8 +102,7 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     timeoutFlag,
+	timeoutFlag: {
 		runnerOnly: false,
 		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
@@ -109,8 +114,7 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     runFlag,
+	runFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			cfg.runFilter = strings.Trim(after, "'\"")
@@ -118,16 +122,14 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     tagsFlag,
+	tagsFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			cfg.buildTags = after
 			return nil
 		},
 	},
-	{
-		prefix:     logDirFlag,
+	logDirFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			cfg.logDir = after
@@ -135,8 +137,7 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     groupByFlag,
+	groupByFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
 			switch GroupMode(after) {
@@ -149,16 +150,14 @@ var flagDefinitions = []flagDefinition{
 			return nil
 		},
 	},
-	{
-		prefix:     coverProfileFlag,
+	coverProfileFlag: {
 		runnerOnly: false,
 		handle: func(after string, cfg *config) error {
 			cfg.coverProfilePath = after
 			return nil
 		},
 	},
-	{
-		prefix:     junitReportFlag,
+	junitReportFlag: {
 		runnerOnly: false,
 		handle: func(after string, cfg *config) error {
 			cfg.junitReportPath = after
@@ -167,25 +166,49 @@ var flagDefinitions = []flagDefinition{
 	},
 }
 
+// defaultConfig returns a config with default values
+// and values from environment variables
+func defaultConfig() config {
+	cfg := config{
+		maxAttempts: 1,
+		parallelism: runtime.NumCPU(),
+		totalShards: 1,
+		shardIndex:  0,
+	}
+
+	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.totalShards = n
+		}
+	}
+	if v := os.Getenv("TEST_RUNNER_SHARD_INDEX"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			cfg.shardIndex = n
+		}
+	}
+	if v := os.Getenv("TEST_RUNNER_WORKERS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.parallelism = n
+		}
+	}
+	return cfg
+}
+
 // parseConfig parses command-line arguments and returns a config.
 // It extracts testrunner-specific flags and sanitizes remaining args for go test.
 func parseConfig(command string, args []string, cfg *config) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
-		matched := false
-		for _, fd := range flagDefinitions {
-			if after, ok := strings.CutPrefix(arg, fd.prefix); ok {
-				if err := fd.handle(after, cfg); err != nil {
-					return nil, err
-				}
-				if !fd.runnerOnly {
-					sanitizedArgs = append(sanitizedArgs, arg)
-				}
-				matched = true
-				break
+		if fd := lookupFlag(arg); fd != nil {
+			// Extract value after "key="
+			value := arg[strings.IndexByte(arg, '=')+1:]
+			if err := fd.handle(value, cfg); err != nil {
+				return nil, err
 			}
-		}
-		if !matched {
+			if !fd.runnerOnly {
+				sanitizedArgs = append(sanitizedArgs, arg)
+			}
+		} else {
 			sanitizedArgs = append(sanitizedArgs, arg)
 		}
 	}
@@ -244,29 +267,31 @@ func parseTestArgs(args []string) (testDirs []string, baseArgs []string, testBin
 	return
 }
 
-// defaultConfig returns a config with default values.
-func defaultConfig() config {
-	cfg := config{
-		maxAttempts: 1,
-		parallelism: runtime.NumCPU(),
-		totalShards: 1,
-		shardIndex:  0,
+// filterBaseArgs separates runner-managed flags from go test passthrough args.
+// It returns whether -race was present and the remaining args to pass to go test.
+func filterBaseArgs(baseArgs []string) (race bool, extraArgs []string) {
+	for _, arg := range baseArgs {
+		switch {
+		case arg == "-race":
+			race = true
+		case arg == "--":
+			// stop processing; everything after is already in testBinaryArgs
+		case lookupFlag(arg) != nil:
+			// Already managed by the runner; skip.
+		default:
+			extraArgs = append(extraArgs, arg)
+		}
 	}
+	return
+}
 
-	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.totalShards = n
+// lookupFlag returns the flagDefinition for arg, or nil if arg is not a known flag.
+// All flags use "key=value" syntax, so we split on the first "=" for a map lookup.
+func lookupFlag(arg string) *flagDefinition {
+	if argName, _, ok := strings.Cut(arg, "="); ok {
+		if fd, ok := flagDefinitions[argName]; ok {
+			return &fd
 		}
 	}
-	if v := os.Getenv("TEST_RUNNER_SHARD_INDEX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
-			cfg.shardIndex = n
-		}
-	}
-	if v := os.Getenv("TEST_RUNNER_WORKERS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			cfg.parallelism = n
-		}
-	}
-	return cfg
+	return nil
 }

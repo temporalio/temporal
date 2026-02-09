@@ -93,7 +93,7 @@ func TestParseConfig(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, &cfg)
-		require.ErrorContains(t, err, `invalid argument --max-attempts=: must be greater than zero`)
+		require.ErrorContains(t, err, `invalid argument --max-attempts: must be greater than zero`)
 	})
 
 	t.Run("rejects non-numeric max attempts", func(t *testing.T) {
@@ -109,7 +109,7 @@ func TestParseConfig(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, &cfg)
-		require.ErrorContains(t, err, `invalid argument --max-attempts=: strconv.Atoi: parsing "invalid"`)
+		require.ErrorContains(t, err, `invalid argument --max-attempts: strconv.Atoi: parsing "invalid"`)
 	})
 
 	t.Run("requires junitfile", func(t *testing.T) {
@@ -125,7 +125,7 @@ func TestParseConfig(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"baz",
 		}, &cfg)
-		require.ErrorContains(t, err, `missing required argument "--junitfile="`)
+		require.ErrorContains(t, err, `missing required argument "--junitfile"`)
 	})
 
 	t.Run("requires coverprofile", func(t *testing.T) {
@@ -141,7 +141,7 @@ func TestParseConfig(t *testing.T) {
 			// missing: "-coverprofile=test.cover.out",
 			"baz",
 		}, &cfg)
-		require.ErrorContains(t, err, `missing required argument "-coverprofile="`)
+		require.ErrorContains(t, err, `missing required argument "-coverprofile"`)
 	})
 
 	t.Run("requires log dir", func(t *testing.T) {
@@ -152,7 +152,7 @@ func TestParseConfig(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			// missing: "--log-dir=/tmp/logs"
 		}, &cfg)
-		require.ErrorContains(t, err, `missing required argument "--log-dir="`)
+		require.ErrorContains(t, err, `missing required argument "--log-dir"`)
 	})
 
 	t.Run("accepts valid group-by modes", func(t *testing.T) {
@@ -179,7 +179,7 @@ func TestParseConfig(t *testing.T) {
 			"-coverprofile=test.cover.out",
 			"--group-by=invalid",
 		}, &cfg)
-		require.ErrorContains(t, err, `invalid argument --group-by=: must be 'test' or 'none'`)
+		require.ErrorContains(t, err, `invalid argument --group-by: must be 'test' or 'none'`)
 	})
 
 	t.Run("requires group-by", func(t *testing.T) {
@@ -190,7 +190,7 @@ func TestParseConfig(t *testing.T) {
 			"--log-dir=/tmp/logs",
 			"-coverprofile=test.cover.out",
 		}, &cfg)
-		require.ErrorContains(t, err, `missing required argument "--group-by="`)
+		require.ErrorContains(t, err, `missing required argument "--group-by"`)
 	})
 }
 
