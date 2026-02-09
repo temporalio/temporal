@@ -26,7 +26,6 @@ func compileRunFilter(filter string) *regexp.Regexp {
 	return regexp.MustCompile(topLevel)
 }
 
-
 // testCase represents a single test function with its metadata.
 type testCase struct {
 	name     string
@@ -85,8 +84,10 @@ func listTestsFromBinary(ctx context.Context, execFn execFunc, binaryPath string
 		if line == "" {
 			continue
 		}
-		// Skip summary lines like "ok \t pkg 0.001s" or "?\t pkg [no test files]"
-		if strings.HasPrefix(line, "ok \t") || strings.HasPrefix(line, "?\t") || strings.HasPrefix(line, "FAIL\t") {
+		// Only accept lines that look like Go test names (must start with "Test").
+		// This filters out summary lines ("ok", "?", "FAIL"), coverage messages
+		// ("program not built with -cover"), and any other non-test output.
+		if !strings.HasPrefix(line, "Test") {
 			continue
 		}
 		tests = append(tests, line)
