@@ -548,9 +548,9 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	workflowID := s.T().Name() + "-workflow"
 	run, err := sysClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
-		TaskQueue:          build_ids.BuildIDScavengerTaskQueueName,
+		TaskQueue:          build_ids.BuildIdScavengerTaskQueueName,
 		WorkflowRunTimeout: time.Second * 30,
-	}, build_ids.BuildIDScavengerWorkflowName, build_ids.BuildIDScavengerInput{
+	}, build_ids.BuildIdScavengerWorkflowName, build_ids.BuildIdScavengerInput{
 		IgnoreRetentionTime: true,
 	})
 	s.NoError(err)

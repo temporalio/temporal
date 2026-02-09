@@ -122,10 +122,10 @@ func (t *taskPQ) Less(i int, j int) bool {
 	// TODO(pri): ready time is not task-specific yet, we only have whole-queue, so we don't
 	// need to consider this here yet.
 	// // ready time
-	// already, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
-	// if already < bready {
+	// aready, bready := max(t.now, t.readyTimeForTask(a)), max(t.now, t.readyTimeForTask(b))
+	// if aready < bready {
 	// 	return true
-	// } else if already > bready {
+	// } else if aready > bready {
 	// 	return false
 	// }
 

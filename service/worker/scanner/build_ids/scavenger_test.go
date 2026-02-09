@@ -46,7 +46,7 @@ func Test_findBuildIdsToRemove_AcceptsNilVersioningData(t *testing.T) {
 	buildIdsRemoved, err := a.findBuildIdsToRemove(
 		ctx,
 		nil,
-		BuildIDScavengerInput{},
+		BuildIdScavengerInput{},
 		heartbeatDetails{},
 		namespace.NewNamespaceForTest(nil, nil, false, nil, 0),
 		&persistence.TaskQueueUserDataEntry{
@@ -206,7 +206,7 @@ func Test_findBuildIdsToRemove_FindsAllBuildIdsToRemove(t *testing.T) {
 		return a.findBuildIdsToRemove(
 			ctx,
 			rateLimiter,
-			BuildIDScavengerInput{},
+			BuildIdScavengerInput{},
 			heartbeatDetails{},
 			ns,
 			&persistence.TaskQueueUserDataEntry{
@@ -396,7 +396,7 @@ func Test_ScavengeBuildIds_Heartbeats(t *testing.T) {
 	)
 	env.SetHeartbeatDetails(initialHeartbeat)
 	env.RegisterActivity(a)
-	_, err := env.ExecuteActivity(a.ScavengeBuildIds, BuildIDScavengerInput{})
+	_, err := env.ExecuteActivity(a.ScavengeBuildIds, BuildIdScavengerInput{})
 	require.NoError(t, err)
 	require.Equal(t, []heartbeatDetails{
 		{

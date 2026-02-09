@@ -2430,7 +2430,7 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(ctx, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 }
 
-func (s *AdvancedVisibilitySuite) TestBuildIDScavenger_DeletesUnusedBuildId() {
+func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	ctx := testcore.NewContext()
 	tq := s.T().Name()
 	buildIdv0 := s.T().Name() + "-v0"
@@ -2456,8 +2456,8 @@ func (s *AdvancedVisibilitySuite) TestBuildIDScavenger_DeletesUnusedBuildId() {
 
 	run, err := s.sysSDKClient.ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name() + "-scavenger",
-		TaskQueue: build_ids.BuildIDScavengerTaskQueueName,
-	}, build_ids.BuildIDScavengerWorkflowName, build_ids.BuildIDScavengerInput{
+		TaskQueue: build_ids.BuildIdScavengerTaskQueueName,
+	}, build_ids.BuildIdScavengerWorkflowName, build_ids.BuildIdScavengerInput{
 		IgnoreRetentionTime: true,
 	})
 	s.Require().NoError(err)
