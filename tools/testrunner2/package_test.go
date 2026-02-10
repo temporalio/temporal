@@ -138,7 +138,7 @@ func TestBuildWorkUnits(t *testing.T) {
 		testNames := []string{"TestA", "TestB", "TestC", "TestD"}
 
 		var allUnits []workUnit
-		for shard := 0; shard < 2; shard++ {
+		for shard := range 2 {
 			units := buildWorkUnits("./pkg", testNames, "", 2, shard)
 			allUnits = append(allUnits, units...)
 		}

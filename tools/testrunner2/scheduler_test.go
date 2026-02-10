@@ -75,7 +75,7 @@ func TestRunnerResultCollection(t *testing.T) {
 
 	// Test thread-safe operations
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Go(func() {
 			r.addReport(&junitReport{})
 			r.addAlerts([]alert{{Kind: failureKindCrash}})
