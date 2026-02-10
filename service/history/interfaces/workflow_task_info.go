@@ -3,6 +3,7 @@ package interfaces
 import (
 	"time"
 
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -52,6 +53,12 @@ type WorkflowTaskInfo struct {
 	HistorySizeBytes            int64
 
 	TargetWorkerDeploymentVersionChanged bool
+
+	// LastSignaledTargetDeploymentVersion is the target deployment version that was last signaled
+	// to this workflow run via targetDeploymentVersionChanged. Used to prevent re-signaling the
+	// same target across CAN runs.
+	LastSignaledTargetDeploymentVersion *deploymentpb.WorkerDeploymentVersion
+
 	// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 	// info is to make sure the right redirect counter is used in the WFT started event created later
 	// for a transient/speculative WFT.

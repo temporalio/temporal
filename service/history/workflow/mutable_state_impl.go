@@ -2582,8 +2582,9 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		SourceVersionStamp:       sourceVersionStamp,
 		RootExecutionInfo:        rootExecutionInfo,
 		InheritedBuildId:         inheritedBuildId,
-		InheritedPinnedVersion:   inheritedPinnedVersion,
-		VersioningOverride:       pinnedOverride,
+		InheritedPinnedVersion:             inheritedPinnedVersion,
+		VersioningOverride:                 pinnedOverride,
+		LastSignaledTargetDeploymentVersion: previousExecutionInfo.WorkflowTaskLastSignaledTargetDeploymentVersion,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2702,6 +2703,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	); err != nil {
 		return nil, err
 	}
+
+	// Inherit last-signaled target from previous run (for CAN loop prevention).
+	ms.executionInfo.WorkflowTaskLastSignaledTargetDeploymentVersion = startRequest.LastSignaledTargetDeploymentVersion
 
 	// TODO merge active & passive task generation
 	var err error
