@@ -223,7 +223,7 @@ func TestPollOutcome(t *testing.T) {
 		evStore := mockUpdateEventStore{}
 		require.NoError(t, upd.Admit(&reqMsg, evStore))
 		upd.Send(false, &protocolpb.Message_EventId{EventId: 2208})
-		require.NoError(t, upd.OnProtocolMessage(&rejMsg, evStore))
+		require.NoError(t, upd.OnProtocolMessage(&rejMsg, evStore, "test-namespace"))
 
 		require.NoError(t, <-errCh)
 		resp := <-respCh
