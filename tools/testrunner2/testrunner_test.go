@@ -383,6 +383,31 @@ func TestIntegration(t *testing.T) {
 		)
 	})
 
+	t.Run("failure: deep subtest timeout (3-level nesting)", func(t *testing.T) {
+		t.Parallel()
+
+		// TestDeepStuck has GroupA (passes) and GroupB (Pass passes, Slow
+		// gets stuck). Go runs subtests sequentially, so GroupA completes
+		// before GroupB/Slow gets stuck. The retry targets GroupB/Slow with
+		// a properly scoped skip for GroupB/Pass. Both groups use "Pass" as
+		// a subtest name to verify skip patterns don't cross group boundaries.
+		res := runIntegTest(t, []string{"./testpkg/timeout"}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s", "-run=TestDeepStuck")
+		require.NoError(t, res.err, "should pass on retry")
+
+		assertConsole(t, res,
+			printed("$", ".test", "-test.run ^TestDeepStuck$"),
+			printed("🔄 scheduling retry:", "^TestDeepStuck$/^GroupB$/^Slow$"),
+			printed("❌️", "TestDeepStuck", "attempt=1", "passed=3/?", "failure=timeout"),
+			printed("--- TIMEOUT:", "TestDeepStuck/GroupB/Slow"),
+			// Retry skips passed sibling within GroupB
+			printed("$", ".test",
+				"-test.run ^TestDeepStuck$/^GroupB$/^Slow$",
+				"-test.skip ^TestDeepStuck$/^GroupB$/^Pass$"),
+			printed("✅", "TestDeepStuck", "attempt=2", "passed=3/3"),
+			printed("test run completed"),
+		)
+	})
+
 	t.Run("failure: data race", func(t *testing.T) {
 		t.Parallel()
 
