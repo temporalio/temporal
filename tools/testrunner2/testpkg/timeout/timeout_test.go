@@ -28,3 +28,14 @@ func TestWithSub(t *testing.T) {
 		}
 	})
 }
+
+// TestParentStuck has subtests that all pass, but the parent hangs after
+// they complete (simulating a stuck teardown). The stuck detector should
+// report the parent, and the retry should skip passed children.
+func TestParentStuck(t *testing.T) {
+	t.Run("Child1", func(t *testing.T) { t.Log("pass") })
+	t.Run("Child2", func(t *testing.T) { t.Log("pass") })
+	if os.Getenv("TEMPORAL_TEST_ATTEMPT") == "1" {
+		time.Sleep(time.Minute) //nolint:forbidigo // intentional sleep to simulate stuck teardown
+	}
+}
