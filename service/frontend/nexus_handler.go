@@ -460,7 +460,7 @@ func (h *nexusHandler) StartOperation(
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
-		he, err := nexus.DefaultFailureConverter().FailureToError(nf)
+		he, err := nexusrpc.DefaultFailureConverter().FailureToError(nf)
 		if err != nil {
 			oc.logger.Error("error converting Nexus failure to Nexus HandlerError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -523,7 +523,7 @@ func (h *nexusHandler) StartOperation(
 				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 			}
-			cause, err := nexus.DefaultFailureConverter().FailureToError(nf)
+			cause, err := nexusrpc.DefaultFailureConverter().FailureToError(nf)
 			if err != nil {
 				oc.logger.Error("error converting Nexus failure to Nexus OperationError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -537,7 +537,7 @@ func (h *nexusHandler) StartOperation(
 				Message: "operation error",
 				Cause:   cause,
 			}
-			nf, err = nexus.DefaultFailureConverter().ErrorToFailure(opErr)
+			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
 			if err != nil {
 				oc.logger.Error("error converting OperationError to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
@@ -677,7 +677,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 		}
-		he, err := nexus.DefaultFailureConverter().FailureToError(nf)
+		he, err := nexusrpc.DefaultFailureConverter().FailureToError(nf)
 		if err != nil {
 			oc.logger.Error("error converting Nexus failure to Nexus HandlerError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")

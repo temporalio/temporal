@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
@@ -188,7 +189,7 @@ func TestRoundTrip_OnlyStackTrace(t *testing.T) {
 }
 
 func TestFromOperationFailedError(t *testing.T) {
-	nexusFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
+	nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
 		State:      nexus.OperationStateFailed,
 		Message:    "operation failed",
 		StackTrace: "stack trace",
@@ -231,7 +232,7 @@ func TestFromOperationFailedError(t *testing.T) {
 }
 
 func TestFromOperationCanceledError(t *testing.T) {
-	nexusFailure, err := nexus.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
+	nexusFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(&nexus.OperationError{
 		State:      nexus.OperationStateCanceled,
 		Message:    "operation canceled",
 		StackTrace: "stack trace",

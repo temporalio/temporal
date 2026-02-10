@@ -30,7 +30,7 @@ type HTTPClientOptions struct {
 	Serializer nexus.Serializer
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
-	FailureConverter nexus.FailureConverter
+	FailureConverter FailureConverter
 }
 
 // User-Agent header set on HTTP requests.
@@ -115,7 +115,7 @@ func NewHTTPClient(options HTTPClientOptions) (*HTTPClient, error) {
 		options.Serializer = nexus.DefaultSerializer()
 	}
 	if options.FailureConverter == nil {
-		options.FailureConverter = nexus.DefaultFailureConverter()
+		options.FailureConverter = DefaultFailureConverter()
 	}
 
 	return &HTTPClient{

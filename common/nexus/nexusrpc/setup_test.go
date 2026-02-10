@@ -19,7 +19,7 @@ const testTimeout = time.Second * 5
 const testService = "Ser/vic e"
 const getResultMaxTimeout = time.Millisecond * 300
 
-func setupCustom(t *testing.T, handler nexus.Handler, serializer nexus.Serializer, failureConverter nexus.FailureConverter) (ctx context.Context, client *nexusrpc.HTTPClient, teardown func()) {
+func setupCustom(t *testing.T, handler nexus.Handler, serializer nexus.Serializer, failureConverter nexusrpc.FailureConverter) (ctx context.Context, client *nexusrpc.HTTPClient, teardown func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 
 	httpHandler := nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
@@ -55,7 +55,7 @@ func setup(t *testing.T, handler nexus.Handler) (ctx context.Context, client *ne
 	return setupCustom(t, handler, nil, nil)
 }
 
-func setupForCompletion(t *testing.T, handler nexusrpc.CompletionHandler, serializer nexus.Serializer, failureConverter nexus.FailureConverter) (ctx context.Context, callbackURL string, teardown func()) {
+func setupForCompletion(t *testing.T, handler nexusrpc.CompletionHandler, serializer nexus.Serializer, failureConverter nexusrpc.FailureConverter) (ctx context.Context, callbackURL string, teardown func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 
 	httpHandler := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{

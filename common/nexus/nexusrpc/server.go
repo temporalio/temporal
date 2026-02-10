@@ -44,7 +44,7 @@ func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer 
 
 type baseHTTPHandler struct {
 	logger           *slog.Logger
-	failureConverter nexus.FailureConverter
+	failureConverter FailureConverter
 }
 
 type httpHandler struct {
@@ -302,7 +302,7 @@ type HandlerOptions struct {
 	Serializer nexus.Serializer
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error].
 	// Defaults to [DefaultFailureConverter].
-	FailureConverter nexus.FailureConverter
+	FailureConverter FailureConverter
 }
 
 func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Request) {
@@ -378,7 +378,7 @@ func NewHTTPHandler(options HandlerOptions) http.Handler {
 		options.Serializer = nexus.DefaultSerializer()
 	}
 	if options.FailureConverter == nil {
-		options.FailureConverter = nexus.DefaultFailureConverter()
+		options.FailureConverter = DefaultFailureConverter()
 	}
 	handler := &httpHandler{
 		baseHTTPHandler: baseHTTPHandler{

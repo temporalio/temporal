@@ -933,7 +933,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			if handlerErr.Message == "" {
 				handlerErr.Message = "handler error"
 			}
-			nf, err = nexus.DefaultFailureConverter().ErrorToFailure(handlerErr)
+			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
 			if err != nil {
 				return nil, err
 			}

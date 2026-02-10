@@ -165,10 +165,7 @@ type OperationCompletionUnsuccessful struct {
 type OperationCompletionUnsuccessfulOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
-	//
-	// NOTE: To call server versions <= 1.31.0, use a FailureConverter that unwraps the error cause if message is not
-	// present. That is is the default FailureConverter behavior, this comment applies to custom failure converters only.
-	FailureConverter nexus.FailureConverter
+	FailureConverter FailureConverter
 	// OperationID is the unique ID for this operation. Used when a completion callback is received before a started response.
 	//
 	// Deprecated: Use OperationToken instead.
@@ -187,7 +184,7 @@ type OperationCompletionUnsuccessfulOptions struct {
 // NewOperationCompletionUnsuccessful constructs an [OperationCompletionUnsuccessful] from a given error.
 func NewOperationCompletionUnsuccessful(opErr *nexus.OperationError, options OperationCompletionUnsuccessfulOptions) (*OperationCompletionUnsuccessful, error) {
 	if options.FailureConverter == nil {
-		options.FailureConverter = nexus.DefaultFailureConverter()
+		options.FailureConverter = DefaultFailureConverter()
 	}
 	failure, err := options.FailureConverter.ErrorToFailure(opErr)
 	if err != nil {
@@ -280,7 +277,7 @@ type CompletionHandlerOptions struct {
 	Serializer nexus.Serializer
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
-	FailureConverter nexus.FailureConverter
+	FailureConverter FailureConverter
 }
 
 type completionHTTPHandler struct {
@@ -380,7 +377,7 @@ func NewCompletionHTTPHandler(options CompletionHandlerOptions) http.Handler {
 		options.Serializer = nexus.DefaultSerializer()
 	}
 	if options.FailureConverter == nil {
-		options.FailureConverter = nexus.DefaultFailureConverter()
+		options.FailureConverter = DefaultFailureConverter()
 	}
 	return &completionHTTPHandler{
 		options: options,

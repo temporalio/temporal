@@ -32,7 +32,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.5.2-0.20251217172131-63a8027ef960
+	github.com/nexus-rpc/sdk-go v0.5.2-0.20260210000428-3d8ad6dc9742
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pkg/errors v0.9.1
