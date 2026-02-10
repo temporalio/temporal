@@ -510,9 +510,6 @@ functional-test-ndc-coverage: prepare-coverage-test
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
-report-test-logs: $(TEST_OUTPUT_ROOT)
-	@printf $(COLOR) "Print test logs..."
-	@for f in $(TEST_OUTPUT_ROOT)/*.log; do [ -s "$$f" ] && printf '\n=== %s ===\n' "$$(basename $$f)" && cat "$$f"; done || true
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es
