@@ -302,15 +302,9 @@ jobs:
         timeout-minutes: 20
         run: go mod download && ./develop/github/monitor_test.sh make unit-test-coverage
 
-      - name: Upload test logs
+      - name: Print test logs
         if: always()
-        uses: actions/upload-artifact@v4.4.3
-        with:
-          name: test-logs--unit-test
-          path: ./.testoutput/*.log
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 28
+        run: for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -389,15 +383,9 @@ jobs:
         timeout-minutes: 15
         run: go mod download && ./develop/github/monitor_test.sh make integration-test-coverage
 
-      - name: Upload test logs
+      - name: Print test logs
         if: always()
-        uses: actions/upload-artifact@v4.4.3
-        with:
-          name: test-logs--integration-test
-          path: ./.testoutput/*.log
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 28
+        run: for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -513,15 +501,9 @@ jobs:
         if: always()
         run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
-      - name: Upload test logs
+      - name: Print test logs
         if: always()
-        uses: actions/upload-artifact@v4.4.3
-        with:
-          name: test-logs--${{matrix.name}}--${{matrix.display_name}}
-          path: ./.testoutput/*.log
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 28
+        run: for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done
 
       - name: Generate test summary
         uses: mikepenz/action-junit-report@v5.0.0-rc01
@@ -558,57 +540,6 @@ jobs:
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
-
-  list-test-logs:
-    name: List test logs
-    if: always()
-    needs: [unit-test, integration-test, functional-test]
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.list.outputs.matrix }}
-    steps:
-      - name: Download all test log artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: test-logs--*
-          path: ./logs
-
-      - name: List log files
-        id: list
-        run: |
-          MATRIX="[]"
-          for dir in ./logs/test-logs--*/; do
-            [ -d "$dir" ] || continue
-            artifact=$(basename "$dir")
-            for f in "$dir"*.log; do
-              [ -s "$f" ] || continue
-              name=$(basename "$f")
-              MATRIX=$(jq -c \
-                '. + [{"artifact": $a, "file": $f}]' \
-                --arg a "$artifact" --arg f "$name" \
-                <<< "$MATRIX")
-            done
-          done
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "Found $(jq length <<< "$MATRIX") log files"
-
-  print-test-log:
-    name: "Log: ${{ matrix.file }}"
-    if: always() && needs.list-test-logs.outputs.matrix != '[]'
-    needs: list-test-logs
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJson(needs.list-test-logs.outputs.matrix) }}
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-
-      - name: Print log
-        run: cat "${{ matrix.file }}"
 
   test-status:
     if: always()
