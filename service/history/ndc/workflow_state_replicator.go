@@ -453,7 +453,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	}
 
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, namespace.ID(executionInfo.NamespaceId), executionInfo.WorkflowId, executionState.RunId, archetypeID, newBranchToken, retErr)
 	}()
 
 	if mutation != nil {
@@ -642,6 +642,10 @@ func (r *WorkflowStateReplicatorImpl) getFirstHistoryEventsBatch(
 
 func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
 	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	archetypeID chasm.ArchetypeID,
 	newBranchToken []byte,
 	err error,
 ) {
@@ -650,6 +654,10 @@ func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
 		metrics.ReplicationOrphanedHistoryBranch.With(r.shardContext.GetMetricsHandler()).Record(1)
 		r.logger.Warn("skipping history branch cleanup on error - branch may be orphaned",
 			tag.Error(err),
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
 			tag.ShardID(r.shardContext.GetShardID()))
 	}
 }
@@ -713,7 +721,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		false,
 	)
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, namespaceID, workflowID, runID, archetypeID, newBranchToken, retErr)
 	}()
 	if err != nil {
 		return err
@@ -884,7 +892,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 		false,
 	)
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, namespaceID, workflowID, runID, archetypeID, newBranchToken, retErr)
 	}()
 	if err != nil {
 		return err
