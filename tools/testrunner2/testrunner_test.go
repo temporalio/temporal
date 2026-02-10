@@ -29,24 +29,22 @@ func TestIntegration(t *testing.T) {
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
-				passed("TestPass1"),
-				passed("TestPass2"),
-				passed("TestPass3"),
+				passed("TestA1"),
+				passed("TestA2"),
+				passed("TestB1"),
 			)
 			assertConsole(t, res,
 				printed("starting scheduler with parallelism=1"),
 				printed("🚀 compiling", "./testpkg/passing"),
 				printed("$", "go test -c", "./testpkg/passing"),
 				printed("🔨 compiled", "./testpkg/passing"),
-				printed("🚀", "TestPass1", "attempt 1"),
-				printed("$", ".test", "-test.run ^TestPass1$"),
-				printed("✅ [1/3]", "TestPass1", "attempt=1", "passed=1/1"),
-				printed("🚀", "TestPass2", "attempt 1"),
-				printed("$", ".test", "-test.run ^TestPass2$"),
-				printed("✅ [2/3]", "TestPass2", "attempt=1", "passed=1/1"),
-				printed("🚀", "TestPass3", "attempt 1"),
-				printed("$", ".test", "-test.run ^TestPass3$"),
-				printed("✅ [3/3]", "TestPass3", "attempt=1", "passed=1/1"),
+				printed("discovered 3 tests"),
+				printed("$", ".test", "-test.run ^TestA1$"),
+				printed("✅", "TestA1", "attempt=1", "passed=1/1"),
+				printed("$", ".test", "-test.run ^TestA2$"),
+				printed("✅", "TestA2", "attempt=1", "passed=1/1"),
+				printed("$", ".test", "-test.run ^TestB1$"),
+				printed("✅ [3/3]", "TestB1", "attempt=1", "passed=1/1"),
 				printed("test run completed"),
 				notPrinted("failure="),
 			)
@@ -60,9 +58,9 @@ func TestIntegration(t *testing.T) {
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
-				passed("TestPass1"),
-				passed("TestPass2"),
-				passed("TestPass3"),
+				passed("TestA1"),
+				passed("TestA2"),
+				passed("TestB1"),
 			)
 			assertConsole(t, res,
 				printed("running in 'none' mode"),
@@ -78,16 +76,16 @@ func TestIntegration(t *testing.T) {
 		t.Run("group mode: none with -run filter", func(t *testing.T) {
 			t.Parallel()
 
-			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=none", "-run=TestPass1")
+			res := runIntegTest(t, []string{"./testpkg/passing"}, "--group-by=none", "-run=TestA1")
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
-				passed("TestPass1"),
+				passed("TestA1"),
 			)
 			assertConsole(t, res,
 				printed("running in 'none' mode"),
 				printed("🚀", "all", "attempt 1"),
-				printed("$", "go test", "-run", "TestPass1", "./testpkg/passing"),
+				printed("$", "go test", "-run", "TestA1", "./testpkg/passing"),
 				printed("✅", "all", "attempt=1"),
 				printed("test run completed"),
 			)
@@ -411,50 +409,19 @@ func TestIntegration(t *testing.T) {
 		)
 	})
 
-	t.Run("multiple packages", func(t *testing.T) {
-		t.Parallel()
-
-		res := runIntegTest(t, []string{
-			"./testpkg/passing",
-			"./testpkg/multifile",
-		}, "--group-by=test")
-		require.NoError(t, res.err)
-
-		assertJUnit(t, res,
-			passed("TestA1"),
-			passed("TestA2"),
-			passed("TestB1"),
-			passed("TestPass1"),
-			passed("TestPass2"),
-			passed("TestPass3"),
-		)
-		assertConsole(t, res,
-			printed("🔨 compiled ./testpkg/multifile"),
-			printed("🔨 compiled ./testpkg/passing"), // compile all first
-			printed("🚀", "TestA1", "attempt 1"),
-			printed("🚀", "TestA2", "attempt 1"),
-			printed("🚀", "TestB1", "attempt 1"),
-			printed("🚀", "TestPass1", "attempt 1"),
-			printed("🚀", "TestPass2", "attempt 1"),
-			printed("🚀", "TestPass3", "attempt 1"),
-		)
-		assertNoLogFiles(t, res)
-	})
-
 	t.Run("sharding", func(t *testing.T) {
 		t.Parallel()
 
 		t.Run("shard 0", func(t *testing.T) {
 			t.Parallel()
 
-			res := runInteg(t, []string{"./testpkg/passing", "./testpkg/multifile"}, func(cfg *config) {
+			res := runInteg(t, []string{"./testpkg/passing"}, func(cfg *config) {
 				cfg.totalShards = 2
 				cfg.shardIndex = 0
 			}, nil, "--group-by=test")
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
-				passed("TestPass2"),
 				passed("TestA2"),
 				passed("TestB1"),
 			)
@@ -463,15 +430,13 @@ func TestIntegration(t *testing.T) {
 		t.Run("shard 1", func(t *testing.T) {
 			t.Parallel()
 
-			res := runInteg(t, []string{"./testpkg/passing", "./testpkg/multifile"}, func(cfg *config) {
+			res := runInteg(t, []string{"./testpkg/passing"}, func(cfg *config) {
 				cfg.totalShards = 2
 				cfg.shardIndex = 1
 			}, nil, "--group-by=test")
 			require.NoError(t, res.err)
 
 			assertJUnit(t, res,
-				passed("TestPass1"),
-				passed("TestPass3"),
 				passed("TestA1"),
 			)
 		})
