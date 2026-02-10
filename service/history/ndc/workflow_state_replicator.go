@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -452,7 +453,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	}
 
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, namespace.ID(executionInfo.NamespaceId), executionInfo.WorkflowId, executionState.RunId, archetypeID, newBranchToken, retErr)
 	}()
 
 	if mutation != nil {
@@ -641,16 +642,23 @@ func (r *WorkflowStateReplicatorImpl) getFirstHistoryEventsBatch(
 
 func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
 	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	archetypeID chasm.ArchetypeID,
 	newBranchToken []byte,
 	err error,
 ) {
 	if err != nil && len(newBranchToken) > 0 {
-		if err := r.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     r.shardContext.GetShardID(),
-			BranchToken: newBranchToken,
-		}); err != nil {
-			r.logger.Error("failed to clean up workflow execution", tag.Error(err))
-		}
+		// Don't delete the branch - Workflow may created successfully even CreateWorkflow returning error
+		metrics.ReplicationOrphanedHistoryBranch.With(r.shardContext.GetMetricsHandler()).Record(1)
+		r.logger.Warn("skipping history branch cleanup on error - branch may be orphaned",
+			tag.Error(err),
+			tag.ArchetypeID(archetypeID),
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.ShardID(r.shardContext.GetShardID()))
 	}
 }
 
@@ -713,7 +721,7 @@ func (r *WorkflowStateReplicatorImpl) applyMutation(
 		false,
 	)
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, namespaceID, workflowID, runID, archetypeID, newBranchToken, retErr)
 	}()
 	if err != nil {
 		return err
@@ -884,7 +892,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowExist(
 		false,
 	)
 	defer func() {
-		r.deleteNewBranchWhenError(ctx, newBranchToken, retErr)
+		r.deleteNewBranchWhenError(ctx, namespaceID, workflowID, runID, archetypeID, newBranchToken, retErr)
 	}()
 	if err != nil {
 		return err
