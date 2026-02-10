@@ -112,6 +112,7 @@ func TestIntegration(t *testing.T) {
 			)
 			assertConsole(t, res,
 				printed("$", ".test", "-test.run ^TestAlwaysFails$"),
+				printed("🔄 scheduling retry:", "^TestAlwaysFails$"), // mid-stream retry
 				printed("❌️", "TestAlwaysFails", "attempt=1", "failure=failed"),
 				printed("--- TestAlwaysFails"), // failed test name shown in body
 				printed("always fails"),        // failure details shown in body
@@ -173,6 +174,7 @@ func TestIntegration(t *testing.T) {
 				printed("$", ".test", "-test.run ^TestStable$"),
 				printed("✅", "TestStable", "attempt=1", "passed=1/1"),
 				printed("$", ".test", "-test.run ^TestFlaky$"),
+				printed("🔄 scheduling retry:", "^TestFlaky$"), // mid-stream retry
 				printed("❌️", "TestFlaky", "failure=failed"),
 				printed("--- TestFlaky"),                     // failed test name shown in body
 				printed("intentional first-attempt failure"), // failure details shown in body
@@ -207,7 +209,8 @@ func TestIntegration(t *testing.T) {
 				printed("❌️", "all", "attempt=1", "failure=failed"),
 				printed("--- TestFlaky"),
 				printed("intentional first-attempt failure"),
-				printed("all tests passed on attempt 2"),
+				printed("✅", "all", "attempt=2"),
+				printed("test run completed"),
 				notPrinted("go test -c"), // no compile step
 			)
 		})
@@ -222,6 +225,7 @@ func TestIntegration(t *testing.T) {
 
 		assertConsole(t, res,
 			printed("$", ".test", "-test.run ^TestSuite$"),
+			printed("🔄 scheduling retry:", "^TestSuite$/^FailChild$"), // mid-stream retry for leaf
 			printed("❌️", "TestSuite", "failure=failed"),
 			printed("$", ".test", "-test.run ^TestOK$"),
 			printed("✅", "TestOK", "attempt=1", "passed=1/1"),
@@ -254,6 +258,7 @@ func TestIntegration(t *testing.T) {
 			printed("$", ".test", "-test.run ^TestCrashOnce$"),
 			printed("❌️"),
 			printed("PANIC:", "nil pointer dereference"),
+			printed("🔄 scheduling retry:", "^TestCrashOnce$"), // post-exit crash recovery
 			printed("$", ".test", "-test.run ^TestCrashOnce$"),
 			printed("✅", "TestCrashOnce", "attempt=2", "passed=1/1"),
 			printed("test run completed"),
@@ -273,110 +278,37 @@ func TestIntegration(t *testing.T) {
 		t.Run("retry subtests", func(t *testing.T) {
 			t.Parallel()
 
-			res := runIntegTest(t, []string{"./testpkg/subtimeout"}, "--group-by=test", "--max-attempts=2", "--run-timeout=3s")
+			res := runIntegTest(t, []string{"./testpkg/subtimeout"}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s")
 			require.NoError(t, res.err)
 
 			assertConsole(t, res,
 				printed("$", ".test", "-test.run ^TestAlone$"),
+				printed("🔄 scheduling retry:", "^TestAlone$"),
+				printed("❌️", "TestAlone", "failure=timeout"),
 				printed("--- TIMEOUT:", "TestAlone"),
 				printed("$", ".test", "-test.run ^TestWithSub$"),
+				printed("🔄 scheduling retry:", "^TestWithSub$/^Child$"),
+				printed("❌️", "TestWithSub", "failure=timeout"),
 				printed("--- TIMEOUT:", "TestWithSub/Child"),
 				notPrinted("— in TestWithSub\n"),
-				// Timeout retries re-run the whole top-level test (not leaf subtests)
+				// Stuck retry targets the specific stuck test
 				printed("$", ".test", "-test.run ^TestAlone$"),
 				printed("✅", "TestAlone", "attempt=2", "passed=1/1"),
-				printed("$", ".test", "-test.run ^TestWithSub$"),
-				printed("✅", "TestWithSub", "attempt=2", "passed=2/2"),
+				printed("$", ".test", "-test.run ^TestWithSub$/^Child$"),
+				printed("✅", "TestWithSub", "attempt=2"),
 				printed("test run completed"),
 			)
-			assertLogFiles(t, res, // TestWithSub + TestAlone both time out attempt 1
+			assertLogFiles(t, res, // TestWithSub + TestAlone both get stuck on attempt 1
 				file("TestWithSub",
 					"TESTRUNNER LOG",
 					"Attempt:     1",
-					"panic: test timed out",
 					"=== RUN   TestWithSub",
 				),
 				file("TestAlone",
 					"TESTRUNNER LOG",
 					"Attempt:     1",
-					"panic: test timed out",
 					"=== RUN   TestAlone",
 				),
-			)
-		})
-
-		t.Run("retry mixed-depth with quarantine", func(t *testing.T) {
-			t.Parallel()
-
-			t.Run("group mode: test", func(t *testing.T) {
-				t.Parallel()
-
-				// TestMixed has subtests at mixed depths: SimpleA/SimpleB at depth 2,
-				// Param/Var1 at depth 3. Param/Var2 times out on attempt 1.
-				// The retry should quarantine Param (run it separately, skipping Var1)
-				// and the regular retry should skip SimpleA, SimpleB, and Param.
-				res := runIntegTest(t, []string{"./testpkg/mixedtimeout"}, "--group-by=test", "--max-attempts=2", "--run-timeout=3s")
-				require.NoError(t, res.err)
-
-				assertConsole(t, res,
-					// Attempt 1: run TestMixed, times out
-					printed("$", ".test", "-test.run ^TestMixed$"),
-					printed("❌️", "TestMixed", "failure=timeout"),
-					printed("--- TIMEOUT:", "TestMixed/Param/Var2"),
-					// Attempt 2 quarantine: run only Param, skip passed Var1
-					printed("$", ".test", "-test.run ^TestMixed$/^Param$", "-test.skip ^TestMixed$/^Param$/^Var1$"),
-					printed("✅", "TestMixed", "attempt=2"),
-					// Attempt 2 regular: run TestMixed, skip SimpleA, SimpleB, and Param
-					printed("$", ".test", "-test.run ^TestMixed$", "-test.skip"),
-					printed("✅", "TestMixed", "attempt=2"),
-					printed("test run completed"),
-				)
-			})
-
-			t.Run("group mode: none", func(t *testing.T) {
-				t.Parallel()
-
-				// Same scenario in none mode: Param/Var2 times out.
-				// Unlike test mode, go test -json doesn't emit subtest pass events
-				// before the timeout panic, so we can't identify passed subtests.
-				// The retry falls back to re-running everything.
-				res := runIntegTest(t, []string{"./testpkg/mixedtimeout"}, "--group-by=none", "--max-attempts=2", "--run-timeout=3s")
-				require.NoError(t, res.err)
-
-				assertConsole(t, res,
-					printed("running in 'none' mode"),
-					printed("🚀", "all", "attempt 1"),
-					printed("$", "go test", "./testpkg/mixedtimeout"),
-					printed("❌️", "all", "attempt=1", "failure=timeout"),
-					printed("--- TIMEOUT:", "test timed out"),
-					printed("🔄 scheduling retry"),
-					printed("all tests passed on attempt 2"),
-					notPrinted("go test -c"),
-				)
-			})
-		})
-
-		t.Run("retry single-parent quarantine suppresses vacuous plan", func(t *testing.T) {
-			t.Parallel()
-
-			// TestSuite is the only top-level test. It has subtests Pass1, Pass2,
-			// and Slow (which times out on attempt 1). The quarantine isolates
-			// TestSuite (skipping Pass1 and Pass2), but the regular plan would
-			// skip TestSuite entirely — which is the only test — so it must be
-			// suppressed to avoid a "no tests" failure.
-			res := runIntegTest(t, []string{"./testpkg/singletimeout"}, "--group-by=test", "--max-attempts=2", "--run-timeout=3s")
-			require.NoError(t, res.err)
-
-			assertConsole(t, res,
-				// Attempt 1: run TestSuite, times out
-				printed("$", ".test", "-test.run ^TestSuite$"),
-				printed("❌️", "TestSuite", "failure=timeout"),
-				// Attempt 2 quarantine: run TestSuite, skip passed Pass1 and Pass2
-				printed("$", ".test", "-test.run ^TestSuite$", "-test.skip"),
-				printed("✅", "TestSuite", "attempt=2"),
-				printed("test run completed"),
-				// The vacuous regular plan (run TestSuite + skip TestSuite) must NOT appear
-				notPrinted("failure=no tests"),
 			)
 		})
 
@@ -384,9 +316,9 @@ func TestIntegration(t *testing.T) {
 			t.Parallel()
 
 			// TestSlowOnce sleeps for 1min on attempt 1. With --stuck-test-timeout=2s,
-			// the monitor detects no progress after ~2s and aborts the test process,
-			// well before the --run-timeout=60s would fire. The test passes on retry.
-			res := runIntegTest(t, []string{"./testpkg/timeout"}, "--group-by=test", "--max-attempts=2", "--run-timeout=60s", "--stuck-test-timeout=2s")
+			// the monitor detects no progress after ~2s and aborts the test process.
+			// The test passes on retry.
+			res := runIntegTest(t, []string{"./testpkg/timeout"}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s")
 			require.NoError(t, res.err, "should pass on retry")
 
 			assertJUnit(t, res,
@@ -396,6 +328,7 @@ func TestIntegration(t *testing.T) {
 			)
 			assertConsole(t, res,
 				printed("✅", "TestQuick", "attempt=1", "passed=1/1"),
+				printed("🔄 scheduling retry:", "^TestSlowOnce$"),
 				printed("❌️", "TestSlowOnce", "failure=timeout"),
 				printed("--- TIMEOUT:", "test stuck", "no progress for"),
 				printed("✅", "TestSlowOnce", "attempt=2", "passed=1/1"),
@@ -451,7 +384,7 @@ func TestIntegration(t *testing.T) {
 			"./testpkg/flaky",
 			"./testpkg/timeout",
 			"./testpkg/crashonce",
-		}, "--group-by=test", "--max-attempts=2", "--run-timeout=3s")
+		}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s")
 		require.NoError(t, res.err)
 
 		assertConsole(t, res,
@@ -470,7 +403,7 @@ func TestIntegration(t *testing.T) {
 				"intentional first-attempt failure",
 			),
 			file("TestSlowOnce",
-				"test timed out",
+				"=== RUN   TestSlowOnce",
 			),
 			file("TestCrashOnce",
 				"nil pointer dereference",

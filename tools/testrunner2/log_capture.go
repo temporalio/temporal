@@ -30,12 +30,10 @@ type logFileHeader struct {
 }
 
 // logCapture captures test output, streaming filtered lines to disk.
-// When no disk file is configured, output is kept in an in-memory buffer.
 // The disk file is owned by logCapture and will be closed when Close() is called.
 type logCapture struct {
-	diskFile      *os.File     // Complete output (owned, nil when no disk)
-	diskPath      string       // Path to disk file
-	memBuf        bytes.Buffer // In-memory fallback when no disk file
+	diskFile      *os.File // Complete output (owned, nil when no disk)
+	diskPath      string   // Path to disk file
 	header        *logFileHeader
 	headerWritten bool
 	lineBuf       bytes.Buffer // Buffer for partial lines (for filtering)
@@ -101,7 +99,7 @@ func (lc *logCapture) writeHeader() error {
 	return nil
 }
 
-// Write implements io.Writer. It writes filtered data to disk (or in-memory buffer).
+// Write implements io.Writer. It writes filtered data to disk.
 // Lines matching filteredLogPrefix are filtered out.
 func (lc *logCapture) Write(p []byte) (n int, err error) {
 	// Write header on first write
@@ -112,13 +110,9 @@ func (lc *logCapture) Write(p []byte) (n int, err error) {
 	// Filter out unwanted log lines
 	filtered := lc.filterLines(p)
 
-	if len(filtered) > 0 {
-		if lc.diskFile != nil {
-			if _, err := lc.diskFile.Write(filtered); err != nil {
-				return 0, err
-			}
-		} else {
-			lc.memBuf.Write(filtered)
+	if len(filtered) > 0 && lc.diskFile != nil {
+		if _, err := lc.diskFile.Write(filtered); err != nil {
+			return 0, err
 		}
 	}
 
@@ -146,37 +140,6 @@ func (lc *logCapture) filterLines(p []byte) []byte {
 	return result.Bytes()
 }
 
-// GetOutput returns the complete output from the disk file (or in-memory buffer).
-// This should be called after the test completes but before Close().
-func (lc *logCapture) GetOutput() (string, error) {
-	if lc.diskFile == nil {
-		return lc.memBuf.String(), nil
-	}
-
-	// Sync to ensure all data is written
-	if err := lc.diskFile.Sync(); err != nil {
-		return "", fmt.Errorf("failed to sync log file: %w", err)
-	}
-
-	// Read entire file from disk
-	content, err := os.ReadFile(lc.diskPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to read log file: %w", err)
-	}
-
-	// Skip header content for output parsing (find double newline after header)
-	output := string(content)
-	if lc.header != nil {
-		// Header ends with separator + "\n\n"
-		headerEnd := logHeaderSeparator + "\n\n"
-		if idx := strings.Index(output, headerEnd); idx >= 0 {
-			output = output[idx+len(headerEnd):]
-		}
-	}
-
-	return output, nil
-}
-
 // Path returns the disk file path, or empty string if no disk file.
 func (lc *logCapture) Path() string {
 	return lc.diskPath
@@ -190,8 +153,6 @@ func (lc *logCapture) Close() error {
 		if !bytes.HasPrefix(remaining, []byte(filteredLogPrefix)) {
 			if lc.diskFile != nil {
 				_, _ = lc.diskFile.Write(remaining)
-			} else {
-				lc.memBuf.Write(remaining)
 			}
 		}
 		lc.lineBuf.Reset()
