@@ -1,4 +1,4 @@
-package crashonce
+package crash
 
 import (
 	"os"
