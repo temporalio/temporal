@@ -242,6 +242,33 @@ func TestIntegration(t *testing.T) {
 		)
 	})
 
+	t.Run("failure: deep subtest (3-level nesting)", func(t *testing.T) {
+		t.Parallel()
+
+		// TestDeepSuite/GroupA/Fail1 fails on attempt 1. Pass1 and Pass2 under
+		// GroupA pass. The skip pattern must use per-level grouping so "|"
+		// alternation stays within a single "/" level. A naive join like
+		// "^TestDeepSuite$/^GroupA$/^Pass1$|^TestDeepSuite$/^GroupA$/^Pass2$"
+		// would be split by Go into ["...", "^Pass1$|^TestDeepSuite$", "..."],
+		// breaking the match. The correct pattern groups at level 3:
+		// "^TestDeepSuite$/^GroupA$/^(Pass1|Pass2)$".
+		res := runIntegTest(t, []string{"./testpkg/flaky"}, "--group-by=test", "--max-attempts=2", "-run=TestDeepSuite")
+		require.NoError(t, res.err, "should pass on retry")
+
+		assertConsole(t, res,
+			printed("$", ".test", "-test.run ^TestDeepSuite$"),
+			printed("🔄 scheduling retry:", "^TestDeepSuite$/^GroupA$/^Fail1$"),
+			printed("❌️", "TestDeepSuite", "attempt=1", "passed=2/5", "failure=failed"),
+			// Retry skips both passed siblings at level 3 with correct grouping
+			// (order within alternation is non-deterministic)
+			printed("$", ".test",
+				"-test.run ^TestDeepSuite$/^GroupA$/^Fail1$",
+				"-test.skip ^TestDeepSuite$/^GroupA$/^(Pass"),
+			printed("✅ [1/1]", "TestDeepSuite", "attempt=2", "passed=3/3"),
+			printed("test run completed"),
+		)
+	})
+
 	t.Run("failure: crash", func(t *testing.T) {
 		t.Parallel()
 
@@ -437,8 +464,12 @@ func TestIntegration(t *testing.T) {
 			passed("TestFlaky (retry 1)"),
 			passed("TestSuite/FailChild (retry 1)"),
 			passed("TestSuite/PassChild"),
+			passed("TestDeepSuite/GroupA/Pass1"),
+			passed("TestDeepSuite/GroupA/Pass2"),
+			passed("TestDeepSuite/GroupA/Fail1 (retry 1)"),
 			failed("TestFlaky"),
 			failed("TestSuite/FailChild"),
+			failed("TestDeepSuite/GroupA/Fail1"),
 		)
 	})
 }

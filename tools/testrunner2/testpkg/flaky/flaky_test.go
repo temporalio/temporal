@@ -26,3 +26,19 @@ func TestSuite(t *testing.T) {
 		}
 	})
 }
+
+// TestDeepSuite has 3 levels of nesting. GroupA has two passing subtests and
+// one failing. This exercises the skip pattern builder with 3 levels to ensure
+// "|" alternation stays within a single "/" level (Go's splitRegexp splits
+// -test.skip patterns by "/" before matching).
+func TestDeepSuite(t *testing.T) {
+	t.Run("GroupA", func(t *testing.T) {
+		t.Run("Pass1", func(t *testing.T) { t.Log("pass") })
+		t.Run("Pass2", func(t *testing.T) { t.Log("pass") })
+		t.Run("Fail1", func(t *testing.T) {
+			if os.Getenv("TEMPORAL_TEST_ATTEMPT") == "1" {
+				t.Fatal("intentional deep failure")
+			}
+		})
+	})
+}
