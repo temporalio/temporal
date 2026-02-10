@@ -120,6 +120,10 @@ func (s *testEventStream) parseLine(line []byte) {
 		return
 	}
 
+	// Reset ancestor timers on child activity so the stuck detector
+	// measures time since last progress, not total runtime.
+	s.resetAncestorTimers(ev.Test)
+
 	if s.handler != nil {
 		s.handler(ev)
 	}
@@ -198,6 +202,23 @@ func (s *testEventStream) allRetriedOrParent() bool {
 		}
 	}
 	return true
+}
+
+// resetAncestorTimers resets the running timer for all ancestors of the given
+// test name. This ensures the stuck detector measures time since last child
+// activity rather than total parent runtime.
+func (s *testEventStream) resetAncestorTimers(name string) {
+	now := time.Now()
+	for {
+		idx := strings.LastIndex(name, "/")
+		if idx < 0 {
+			break
+		}
+		name = name[:idx]
+		if _, ok := s.running[name]; ok {
+			s.running[name] = now
+		}
+	}
 }
 
 func (s *testEventStream) hasRunningChildren(name string) bool {
