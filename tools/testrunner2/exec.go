@@ -100,6 +100,7 @@ type executeTestInput struct {
 	binary       string
 	pkgDir       string
 	tests        []testCase
+	skipPattern  string // -test.skip pattern to skip already-passed tests on retry
 	coverProfile string
 	extraArgs    []string // args to pass after -args (e.g., -persistenceType=xxx)
 	env          []string
@@ -114,7 +115,8 @@ type runDirectGoTestInput struct {
 	coverProfile string   // coverage profile path
 	env          []string // extra environment variables
 	output       io.Writer
-	runFilter    string   // -run pattern (to target specific tests on retry)
+	runFilter    string // -run pattern (to target specific tests on retry)
+	skipFilter   string // -skip pattern (to skip passed tests on retry)
 	extraArgs    []string // extra args to pass through to go test (e.g., -shuffle)
 }
 
@@ -133,6 +135,9 @@ func runDirectGoTest(ctx context.Context, execFn execFunc, req runDirectGoTestIn
 	}
 	if req.runFilter != "" {
 		args = append(args, "-run", req.runFilter)
+	}
+	if req.skipFilter != "" {
+		args = append(args, "-skip", req.skipFilter)
 	}
 	args = append(args, req.extraArgs...)
 	args = append(args, req.pkgs...)
@@ -153,6 +158,9 @@ func executeTest(ctx context.Context, execFn execFunc, req executeTestInput, onC
 	args := []string{
 		"-test.v=test2json", // Use test2json mode to get streaming subtest pass/fail output
 		"-test.run", testCasesToRunPattern(req.tests),
+	}
+	if req.skipPattern != "" {
+		args = append(args, "-test.skip", req.skipPattern)
 	}
 	if req.coverProfile != "" {
 		args = append(args, fmt.Sprintf("-test.coverprofile=%s", req.coverProfile))
@@ -198,15 +206,16 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, desc))
 
 	retry := r.buildRetryHandler(
-		func(failedNames []string, attempt int) *queueItem {
+		func(failedNames, skipNames []string, attempt int) *queueItem {
 			var failedTests []testCase
 			for _, name := range failedNames {
 				failedTests = append(failedTests, testCase{name: name, attempts: attempt})
 			}
 			wu := workUnit{
-				pkg:   unit.pkg,
-				tests: failedTests,
-				label: unit.label,
+				pkg:       unit.pkg,
+				tests:     failedTests,
+				skipTests: skipNames,
+				label:     unit.label,
 			}
 			return r.newExecItem(r.compiledExecConfig(wu, binaryPath, attempt))
 		},
@@ -218,6 +227,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 				binary:       binaryPath,
 				pkgDir:       unit.pkg,
 				tests:        unit.tests,
+				skipPattern:  unit.skipPattern(),
 				coverProfile: coverProfile,
 				extraArgs:    r.testBinaryArgs,
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
@@ -361,7 +371,7 @@ func (r *runner) runDirectMode(ctx context.Context, testDirs []string, baseArgs 
 	pkgs := normalizePkgPaths(testDirs)
 	r.log("test packages: %v", pkgs)
 
-	items := []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter))}
+	items := []*queueItem{r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, 1, r.runFilter, ""))}
 	return r.runWithScheduler(ctx, max(2, r.parallelism), items, 1)
 }
 
@@ -379,7 +389,7 @@ func normalizePkgPaths(dirs []string) []string {
 }
 
 // directExecConfig creates an execConfig for running go test directly.
-func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, runFilter string) execConfig {
+func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, attempt int, runFilter, skipFilter string) execConfig {
 	desc := "all"
 
 	// When there's a run filter, this is a retry for specific tests. Multiple
@@ -390,9 +400,10 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 		fileSuffix = fmt.Sprintf("_%d", r.directRetrySeq.Add(1))
 	}
 
-	retry := r.buildRetryHandler(func(failedNames []string, attempt int) *queueItem {
+	retry := r.buildRetryHandler(func(failedNames, skipNames []string, attempt int) *queueItem {
 		runF := buildTestFilterPattern(failedNames)
-		return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF))
+		skipF := buildTestFilterPattern(skipNames)
+		return r.newExecItem(r.directExecConfig(pkgs, race, extraArgs, attempt, runF, skipF))
 	})
 
 	return execConfig{
@@ -405,6 +416,7 @@ func (r *runner) directExecConfig(pkgs []string, race bool, extraArgs []string, 
 				env:          append(r.env, fmt.Sprintf("TEMPORAL_TEST_ATTEMPT=%d", attempt)),
 				output:       output,
 				runFilter:    runFilter,
+				skipFilter:   skipFilter,
 				extraArgs:    extraArgs,
 			}, r.execLogger(desc, attempt))
 		},
