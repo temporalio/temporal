@@ -313,6 +313,33 @@ func TestIntegration(t *testing.T) {
 			)
 		})
 
+		t.Run("retry subtests with skip", func(t *testing.T) {
+			t.Parallel()
+
+			// TestSuite has Pass1, Pass2, Slow. Pass1 and Pass2 complete before
+			// Slow gets stuck. The retry must skip the already-passed siblings.
+			res := runIntegTest(t, []string{"./testpkg/singletimeout"}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s")
+			require.NoError(t, res.err)
+
+			assertConsole(t, res,
+				printed("$", ".test", "-test.run ^TestSuite$"),
+				printed("🔄 scheduling retry:", "^TestSuite$/^Slow$"),
+				printed("❌️", "TestSuite", "failure=timeout"),
+				printed("--- TIMEOUT:", "TestSuite/Slow"),
+				// Retry skips passed siblings (order may vary)
+				printed("$", ".test", "-test.run ^TestSuite$/^Slow$", "-test.skip ^TestSuite$/^(Pass"),
+				printed("✅", "TestSuite", "attempt=2"),
+				printed("test run completed"),
+			)
+			assertLogFiles(t, res,
+				file("TestSuite",
+					"TESTRUNNER LOG",
+					"Attempt:     1",
+					"=== RUN   TestSuite",
+				),
+			)
+		})
+
 		t.Run("stuck detection", func(t *testing.T) {
 			t.Parallel()
 
