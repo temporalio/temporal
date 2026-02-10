@@ -39,3 +39,21 @@ func TestParentStuck(t *testing.T) {
 		time.Sleep(time.Minute) //nolint:forbidigo // intentional sleep to simulate stuck teardown
 	}
 }
+
+// TestDeepStuck has 3 levels of nesting with two groups. GroupA completes
+// normally (Go runs subtests sequentially). GroupB has a "Pass" subtest that
+// completes, then "Slow" gets stuck on attempt 1. Both groups use "Pass" as
+// a subtest name to ensure the skip pattern is correctly scoped per group.
+func TestDeepStuck(t *testing.T) {
+	t.Run("GroupA", func(t *testing.T) {
+		t.Run("Pass", func(t *testing.T) { t.Log("pass") })
+	})
+	t.Run("GroupB", func(t *testing.T) {
+		t.Run("Pass", func(t *testing.T) { t.Log("pass") })
+		t.Run("Slow", func(t *testing.T) {
+			if os.Getenv("TEMPORAL_TEST_ATTEMPT") == "1" {
+				time.Sleep(time.Minute) //nolint:forbidigo // intentional sleep to test timeout handling
+			}
+		})
+	})
+}
