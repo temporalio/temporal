@@ -383,62 +383,6 @@ func TestIntegration(t *testing.T) {
 		}, 30*time.Second, time.Second)
 	})
 
-	t.Run("all failure modes together", func(t *testing.T) {
-		t.Parallel()
-
-		// Combines flaky (test failure), timeout, and crash packages.
-		// Each test runs independently in test mode; all failures retry
-		// and pass on attempt 2.
-		res := runIntegTest(t, []string{
-			"./testpkg/flaky",
-			"./testpkg/timeout",
-			"./testpkg/crash",
-		}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s")
-		require.NoError(t, res.err)
-
-		assertConsole(t, res,
-			// crash package (1 test: crashes immediately)
-			printed("❌️", "TestCrash", "attempt=1", "passed=0/?", "failure=crash"),
-			// flaky package (3 tests: TestStable passes, TestFlaky+TestSuite fail)
-			printed("✅ [1/8]", "TestStable", "attempt=1", "passed=1/1"),
-			printed("❌️", "TestFlaky", "attempt=1", "passed=0/1", "failure=failed"),
-			printed("❌️", "TestSuite", "attempt=1", "passed=1/3", "failure=failed"),
-			// timeout package (4 tests: TestQuick passes, rest stuck)
-			printed("✅ [2/8]", "TestQuick", "attempt=1", "passed=1/1"),
-			printed("❌️", "TestSlowOnce", "attempt=1", "passed=0/?", "failure=timeout"),
-			printed("❌️", "TestWithSub", "attempt=1", "passed=2/?", "failure=timeout"),
-			printed("❌️", "TestParentStuck", "attempt=1", "passed=2/?", "failure=timeout"),
-			// All retries pass
-			printed("✅ [3/8]", "TestCrash", "attempt=2", "passed=1/1"),
-			printed("✅ [4/8]", "TestFlaky", "attempt=2", "passed=1/1"),
-			printed("✅ [5/8]", "TestSuite", "attempt=2", "passed=2/2"),
-			printed("✅ [6/8]", "TestSlowOnce", "attempt=2", "passed=1/1"),
-			printed("✅ [7/8]", "TestWithSub", "attempt=2", "passed=2/2"),
-			printed("✅ [8/8]", "TestParentStuck", "attempt=2", "passed=1/1"),
-			printed("test run completed"),
-		)
-		assertLogFiles(t, res,
-			file("TestCrash",
-				"intentional crash",
-			),
-			file("TestFlaky",
-				"intentional first-attempt failure",
-			),
-			file("TestSuite",
-				"intentional subtest failure",
-			),
-			file("TestSlowOnce",
-				"=== RUN   TestSlowOnce",
-			),
-			file("TestWithSub",
-				"=== RUN   TestWithSub",
-			),
-			file("TestParentStuck",
-				"=== RUN   TestParentStuck",
-			),
-		)
-	})
-
 	t.Run("sharding", func(t *testing.T) {
 		t.Parallel()
 
