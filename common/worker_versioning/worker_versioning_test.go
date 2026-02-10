@@ -1267,7 +1267,7 @@ func TestGetIsWFTaskQueueInVersionDetector_UnimplementedFallback(t *testing.T) {
 			mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 			tt.setupMock(mockClient)
 
-			function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+			function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
 			isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
 
 			if tt.wantErr {
@@ -1295,7 +1295,7 @@ func TestGetIsWFTaskQueueInVersionDetector(t *testing.T) {
 		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
 			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: true}, nil)
 
-		function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
 		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
 		require.NoError(t, err)
 		assert.True(t, isMember)
@@ -1308,7 +1308,7 @@ func TestGetIsWFTaskQueueInVersionDetector(t *testing.T) {
 		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
 			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: false}, nil)
 
-		function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
 		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
 		require.NoError(t, err)
 		assert.False(t, isMember)
@@ -1321,7 +1321,7 @@ func TestGetIsWFTaskQueueInVersionDetector(t *testing.T) {
 		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
 			Return(nil, serviceerror.NewInternal("internal error"))
 
-		function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, newTestVersionMembershipCache())
 		_, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
 		require.Error(t, err)
 	})
