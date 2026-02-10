@@ -248,7 +248,7 @@ func TestIntegration(t *testing.T) {
 		t.Parallel()
 
 		// TestCrashOnce panics on attempt 1, passes on retry.
-		res := runIntegTest(t, []string{"./testpkg/crashonce"}, "--group-by=test", "--max-attempts=2")
+		res := runIntegTest(t, []string{"./testpkg/crash"}, "--group-by=test", "--max-attempts=2")
 
 		assertJUnit(t, res,
 			failed("TestCrashOnce", "panic"),
@@ -367,13 +367,13 @@ func TestIntegration(t *testing.T) {
 	t.Run("all failure modes together", func(t *testing.T) {
 		t.Parallel()
 
-		// Combines flaky (test failure), timeout, and crashonce packages.
+		// Combines flaky (test failure), timeout, and crash packages.
 		// Each test runs independently in test mode; all failures retry
 		// and pass on attempt 2.
 		res := runIntegTest(t, []string{
 			"./testpkg/flaky",
 			"./testpkg/timeout",
-			"./testpkg/crashonce",
+			"./testpkg/crash",
 		}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s")
 		require.NoError(t, res.err)
 
