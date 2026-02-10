@@ -115,8 +115,8 @@ type runDirectGoTestInput struct {
 	coverProfile string   // coverage profile path
 	env          []string // extra environment variables
 	output       io.Writer
-	runFilter    string // -run pattern (to target specific tests on retry)
-	skipFilter   string // -skip pattern (to skip passed tests on retry)
+	runFilter    string   // -run pattern (to target specific tests on retry)
+	skipFilter   string   // -skip pattern (to skip passed tests on retry)
 	extraArgs    []string // extra args to pass through to go test (e.g., -shuffle)
 }
 
