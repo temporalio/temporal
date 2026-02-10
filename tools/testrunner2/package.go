@@ -34,9 +34,15 @@ type testCase struct {
 
 // workUnit represents a schedulable unit of test work.
 type workUnit struct {
-	pkg   string     // package path
-	tests []testCase // specific tests to run (for test mode or retries)
-	label string     // display label for progress output
+	pkg       string     // package path
+	tests     []testCase // specific tests to run (for test mode or retries)
+	skipTests []string   // tests to skip on retry (already passed)
+	label     string     // display label for progress output
+}
+
+// skipPattern returns a -test.skip regex pattern for already-passed tests, or "" if none.
+func (wu workUnit) skipPattern() string {
+	return buildTestFilterPattern(wu.skipTests)
 }
 
 // findTestPackages scans directories for _test.go files and returns package
