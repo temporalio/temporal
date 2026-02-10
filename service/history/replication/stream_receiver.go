@@ -244,23 +244,23 @@ func (r *StreamReceiverImpl) ackMessage(
 			r.logger.Warn("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
 			return 0, nil
 		}
-		highPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH)
-		if highPriorityFlowControlCommand == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
-			r.logger.Warn(fmt.Sprintf("pausing High Priority Tasks, current size: %v, lowWatermark: %v", r.highPriorityTaskTracker.Size(), highPriorityWaterMarkInfo.Watermark))
+		highPriorityFlowControlInfo := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH)
+		if highPriorityFlowControlInfo.Command == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+			r.logger.Warn(fmt.Sprintf("pausing High Priority Tasks: %s", highPriorityFlowControlInfo.Cause))
 		}
 		highPriorityWatermark = &replicationspb.ReplicationState{
 			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
-			FlowControlCommand:        highPriorityFlowControlCommand,
+			FlowControlCommand:        highPriorityFlowControlInfo.Command,
 		}
-		lowPriorityFlowControlCommand := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-		if lowPriorityFlowControlCommand == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
-			r.logger.Warn(fmt.Sprintf("pausing Low Priority Tasks, current size: %v, lowWatermark: %v", r.lowPriorityTaskTracker.Size(), lowPriorityWaterMarkInfo.Watermark))
+		lowPriorityFlowControlInfo := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
+		if lowPriorityFlowControlInfo.Command == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+			r.logger.Warn(fmt.Sprintf("pausing Low Priority Tasks: %s", lowPriorityFlowControlInfo.Cause))
 		}
 		lowPriorityWatermark = &replicationspb.ReplicationState{
 			InclusiveLowWatermark:     lowPriorityWaterMarkInfo.Watermark,
 			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
-			FlowControlCommand:        lowPriorityFlowControlCommand,
+			FlowControlCommand:        lowPriorityFlowControlInfo.Command,
 		}
 		if highPriorityWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
 			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
