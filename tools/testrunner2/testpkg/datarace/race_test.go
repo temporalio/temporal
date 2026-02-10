@@ -1,4 +1,4 @@
-package racing
+package datarace
 
 import "testing"
 
