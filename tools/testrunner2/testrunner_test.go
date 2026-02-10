@@ -229,8 +229,9 @@ func TestIntegration(t *testing.T) {
 			printed("❌️", "TestSuite", "failure=failed"),
 			printed("$", ".test", "-test.run ^TestOK$"),
 			printed("✅", "TestOK", "attempt=1", "passed=1/1"),
-			// Retry must target only the leaf subtest, skipping PassChild
-			printed("$", ".test", "-test.run ^TestSuite$/^FailChild$", "-test.skip ^TestSuite$/^PassChild$"),
+			printed("$", ".test",
+				"-test.run ^TestSuite$/^FailChild$",   // only run flaky test
+				"-test.skip ^TestSuite$/^PassChild$"), // skip passed test
 			printed("✅", "TestSuite", "attempt=2", "passed=2/2"),
 			printed("test run completed"),
 		)
