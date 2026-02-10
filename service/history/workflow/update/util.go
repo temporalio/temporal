@@ -48,13 +48,13 @@ func (i *instrumentation) countRateLimited() {
 	i.oneOf(metrics.WorkflowExecutionUpdateRequestRateLimited.Name())
 }
 
-func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int) {
-	i.oneOf(metrics.WorkflowExecutionUpdateRegistrySizeLimited.Name())
-	// TODO: remove log once limit is enforced everywhere
+func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int, namespace string) {
 	i.log.Warn("update registry size limit reached",
 		tag.Int("registry-size", registrySize),
 		tag.Int("payload-size", payloadSize),
-		tag.Int("update-count", updateCount))
+		tag.Int("update-count", updateCount),
+		tag.String("namespace", namespace),
+	)
 }
 
 func (i *instrumentation) countTooMany() {
@@ -78,8 +78,7 @@ func (i *instrumentation) countSentAgain() {
 	i.oneOf(metrics.WorkflowExecutionUpdateSentToWorkerAgain.Name())
 }
 
-func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Message, state state) {
-	i.oneOf(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.Name())
+func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Message, state state, namespace string) {
 	softassert.Fail(
 		i.log,
 		"invalid state transition attempted",
@@ -87,6 +86,7 @@ func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Mess
 		tag.String("update-id", updateID),
 		tag.String("message", fmt.Sprintf("%T", msg)),
 		tag.Stringer("state", state),
+		tag.String("namespace", namespace),
 	)
 }
 

@@ -7,6 +7,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -16,6 +17,7 @@ type (
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool
+		GetNamespaceEntry() *namespace.Namespace
 	}
 
 	// EventStore is the interface that an Update needs to read and write events
