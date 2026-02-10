@@ -15,6 +15,7 @@ var (
 	APIToPriority = map[string]int{
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask":                        1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask":                        1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls":           1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll":                  1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls":           1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue":                      1,

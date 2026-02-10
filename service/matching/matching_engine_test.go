@@ -5786,3 +5786,77 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.True(t, parentCancelled, "parent partition poll should be cancelled")
 	})
 }
+
+func TestCancelOutstandingPoll(t *testing.T) {
+	t.Parallel()
+
+	t.Run("cancels poll by pollerID", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			outstandingPollers: collection.NewSyncMap[string, context.CancelFunc](),
+		}
+
+		pollerID := "test-poller"
+		taskQueue := "test-queue"
+		cancelled := false
+		// The key is partition:pollerID
+		engine.outstandingPollers.Set(taskQueue+":"+pollerID, func() { cancelled = true })
+
+		err := engine.CancelOutstandingPoll(context.Background(),
+			&matchingservice.CancelOutstandingPollRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+				PollerId:  pollerID,
+			})
+
+		require.NoError(t, err)
+		require.True(t, cancelled)
+	})
+
+	t.Run("unknown pollerID succeeds silently", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			outstandingPollers: collection.NewSyncMap[string, context.CancelFunc](),
+		}
+
+		err := engine.CancelOutstandingPoll(context.Background(),
+			&matchingservice.CancelOutstandingPollRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "test-queue"},
+				PollerId:  "unknown-poller",
+			})
+
+		require.NoError(t, err)
+	})
+
+	t.Run("cancels forwarded polls with same pollerID on different partitions", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			outstandingPollers: collection.NewSyncMap[string, context.CancelFunc](),
+		}
+
+		pollerID := "same-poller-id"
+		childPartition := "/_sys/test-queue/1"
+		parentPartition := "test-queue"
+		childCancelled := false
+		parentCancelled := false
+
+		// Simulate forwarding: same pollerID registered on child and parent partitions.
+		// The key includes partition name to prevent parent from overwriting child.
+		engine.outstandingPollers.Set(childPartition+":"+pollerID, func() { childCancelled = true })
+		engine.outstandingPollers.Set(parentPartition+":"+pollerID, func() { parentCancelled = true })
+
+		// Cancel both partitions - frontend fans out CancelOutstandingPoll to all partitions
+		_ = engine.CancelOutstandingPoll(context.Background(),
+			&matchingservice.CancelOutstandingPollRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: childPartition},
+				PollerId:  pollerID,
+			})
+		_ = engine.CancelOutstandingPoll(context.Background(),
+			&matchingservice.CancelOutstandingPollRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: parentPartition},
+				PollerId:  pollerID,
+			})
+
+		require.True(t, childCancelled, "child partition poll should be cancelled")
+		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
+}

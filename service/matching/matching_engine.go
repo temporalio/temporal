@@ -726,7 +726,6 @@ pollLoop:
 			isStickyEnabled := taskQueueName == mutableStateResp.StickyTaskQueue.GetName()
 
 			hist, rawHistoryBytes, nextPageToken, err := e.getHistoryForQueryTask(ctx, namespaceID, task, isStickyEnabled)
-
 			if err != nil {
 				// will notify query client that the query task failed
 				_ = e.deliverQueryResult(task.query.taskID, &queryResult{internalError: err})
@@ -1211,7 +1210,10 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	_ context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
-	cancel, ok := e.outstandingPollers.Pop(request.PollerId)
+	// Use partition:pollerID as key to match how pollers are registered.
+	// Frontend fans out to all partitions when cancelling.
+	partitionPollerKey := request.TaskQueue.GetName() + ":" + request.PollerId
+	cancel, ok := e.outstandingPollers.Pop(partitionPollerKey)
 	if ok {
 		cancel()
 	}
@@ -1642,7 +1644,6 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 		request.TaskQueue,
 		taskQueueType,
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1793,7 +1794,6 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		ret.VersioningData = versioningData
 		return ret, true, nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -2077,7 +2077,6 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 
 					} else { // set or update
 						deploymentData.UnversionedRampData = vd
-
 					}
 				} else if idx := worker_versioning.FindDeploymentVersion(deploymentData, vd.GetVersion()); idx >= 0 {
 					old := deploymentData.Versions[idx]
@@ -2417,7 +2416,6 @@ func (e *matchingEngineImpl) ReplicateTaskQueueUserData(ctx context.Context, req
 		},
 	})
 	return &matchingservice.ReplicateTaskQueueUserDataResponse{}, err
-
 }
 
 func (e *matchingEngineImpl) CheckTaskQueueUserDataPropagation(ctx context.Context, req *matchingservice.CheckTaskQueueUserDataPropagationRequest) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
@@ -2485,7 +2483,6 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	defer e.nexusResults.Delete(taskID)
 
 	resp, err := pm.DispatchNexusTask(ctx, taskID, request)
-
 	if err != nil {
 		if ctx.Err() != nil {
 			// The context deadline has expired if it reaches here; return an explicit timeout response to the caller.
@@ -2830,20 +2827,23 @@ func (e *matchingEngineImpl) pollTask(
 	defer cancel()
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
-		e.outstandingPollers.Set(pollerID, cancel)
+		// Use partition:pollerID as key because when a poll is forwarded to a parent partition,
+		// the same pollerID is used. Without the partition prefix, the parent's cancel func would
+		// overwrite the child's, leaving the child's poll uncancelled.
+		partitionPollerKey := partition.RpcName() + ":" + pollerID
+		e.outstandingPollers.Set(partitionPollerKey, cancel)
 
 		// Also track by worker instance key for bulk cancellation during shutdown.
 		// We use partition:pollerID as the key because when a poll is forwarded to a parent
 		// partition, the same pollerID is reused. Without the partition prefix, the parent's
 		// cancel func would overwrite the child's entry.
 		workerInstanceKey := pollMetadata.workerInstanceKey
-		partitionPollerKey := partition.RpcName() + ":" + pollerID
 		if workerInstanceKey != "" {
 			e.workerInstancePollers.Add(workerInstanceKey, partitionPollerKey, cancel)
 		}
 
 		defer func() {
-			e.outstandingPollers.Delete(pollerID)
+			e.outstandingPollers.Delete(partitionPollerKey)
 			if workerInstanceKey != "" {
 				e.workerInstancePollers.Remove(workerInstanceKey, partitionPollerKey)
 			}
@@ -2948,8 +2948,7 @@ func (e *matchingEngineImpl) updateTaskQueuePartitionGauge(
 	rootPartition := partition.IsRoot()
 	e.gaugeMetrics.lock.Lock()
 
-	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter :=
-		e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters], e.gaugeMetrics.loadedTaskQueueCount[taskQueueParameters],
+	loadedTaskQueueFamilyCounter, loadedTaskQueueCounter, loadedTaskQueuePartitionCounter := e.gaugeMetrics.loadedTaskQueueFamilyCount[taskQueueFamilyParameters], e.gaugeMetrics.loadedTaskQueueCount[taskQueueParameters],
 		e.gaugeMetrics.loadedTaskQueuePartitionCount[taskQueuePartitionParameters]
 
 	loadedTaskQueuePartitionCounter += delta
@@ -2993,7 +2992,6 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 	recordStartResp *historyservice.RecordWorkflowTaskStartedResponse,
 	metricsHandler metrics.Handler,
 ) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
-
 	var serializedToken []byte
 	if task.isQuery() {
 		// for a query task
@@ -3159,7 +3157,6 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	pollReq *workflowservice.PollWorkflowTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
-
 	metrics.OperationCounter.With(e.metricsHandler).Record(
 		1,
 		metrics.OperationTag("RecordWorkflowTaskStarted"),
@@ -3247,7 +3244,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	pollReq *workflowservice.PollActivityTaskQueueRequest,
 	task *internalTask,
 ) (*historyservice.RecordActivityTaskStartedResponse, error) {
-
 	metrics.OperationCounter.With(e.metricsHandler).Record(
 		1,
 		metrics.OperationTag("RecordActivityTaskStarted"),
@@ -3528,7 +3524,6 @@ func migrateOldFormatVersions(
 	deploymentName string,
 	workerDeploymentData *persistencespb.WorkerDeploymentData,
 ) {
-
 	oldVersions := deploymentData.GetVersions()
 	dst := make([]*deploymentspb.DeploymentVersionData, 0, len(oldVersions))
 	for _, dv := range oldVersions {
