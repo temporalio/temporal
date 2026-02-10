@@ -631,7 +631,7 @@ func internalStatusToRunState(status activitypb.ActivityExecutionStatus) enumspb
 	}
 }
 
-func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb.ActivityExecutionInfo, error) {
+func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.ActivityExecutionInfo {
 	// TODO(saa-preview): support pause states
 	status := InternalStatusToAPIStatus(a.GetStatus())
 	runState := internalStatusToRunState(a.GetStatus())
@@ -699,7 +699,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) (*apiactivitypb
 		UserMetadata:     requestData.GetUserMetadata(),
 	}
 
-	return info, nil
+	return info
 }
 
 func (a *Activity) buildDescribeActivityExecutionResponse(
@@ -713,10 +713,7 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 		return nil, err
 	}
 
-	info, err := a.buildActivityExecutionInfo(ctx)
-	if err != nil {
-		return nil, err
-	}
+	info := a.buildActivityExecutionInfo(ctx)
 
 	var input *commonpb.Payloads
 	if request.GetIncludeInput() {
@@ -741,13 +738,13 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 
 func (a *Activity) buildPollActivityExecutionResponse(
 	ctx chasm.Context,
-) (*activitypb.PollActivityExecutionResponse, error) {
+) *activitypb.PollActivityExecutionResponse {
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
 			RunId:   ctx.ExecutionKey().RunID,
 			Outcome: a.outcome(ctx),
 		},
-	}, nil
+	}
 }
 
 // outcome retrieves the activity outcome (result or failure) if the activity has completed.

@@ -1303,42 +1303,92 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		})
 	})
 
-	testValidationFailureCases := []struct {
-		name   string
-		reqID  string
-		reason string
-	}{
-		{
-			name:   "request ID too long",
-			reqID:  string(make([]byte, 1001)), // dynamic config default is 1000
-			reason: "",
-		},
-		{
-			name:   "reason too long",
-			reqID:  "",
-			reason: string(make([]byte, 1001)), // dynamic config default is 1000
-		},
-	}
-
-	for _, tc := range testValidationFailureCases {
-		s.Run(tc.name, func() {
-			t := s.T()
-
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
+	t.Run("RequestValidations", func(t *testing.T) {
+		t.Run("EmptyActivityID", func(t *testing.T) {
 			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: testcore.RandomizeStr(t.Name()),
-				RunId:      "run-id",
-				Identity:   "cancelling-worker",
-				RequestId:  tc.reqID,
-				Reason:     tc.reason,
+				Namespace: s.Namespace().String(),
+				Reason:    "Test Cancellation",
+				Identity:  "cancelling-worker",
 			})
+
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "activity ID is required", invalidArgErr.Message)
 		})
-	}
+
+		t.Run("ActivityIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				ActivityId: string(make([]byte, 1001)), // dynamic config default is 1000
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Cancellation",
+				Identity:   "cancelling-worker",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+		})
+
+		t.Run("RequestIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RequestId:  string(make([]byte, 1001)), // dynamic config default is 1000
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Cancellation",
+				Identity:   "cancelling-worker",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+		})
+
+		t.Run("IdentityTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Cancellation",
+				Identity:   string(make([]byte, 1001)), // dynamic config default is 1000
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+		})
+
+		t.Run("InvalidRunID", func(t *testing.T) {
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RunId:      "invalid-run-id",
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Cancellation",
+				Identity:   "cancelling-worker",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+		})
+
+		t.Run("ReasonTooLong", func(t *testing.T) {
+			blobSizeLimitError := 1000
+			s.OverrideDynamicConfig(
+				dynamicconfig.BlobSizeLimitError,
+				blobSizeLimitError,
+			)
+
+			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Namespace:  s.Namespace().String(),
+				Reason:     string(make([]byte, blobSizeLimitError+1)),
+				Identity:   "cancelling-worker",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "reason exceeds length limit", invalidArgErr.Message)
+		})
+	})
 
 	t.Run("ImmediatelyCancelled_WhenInScheduledState", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
@@ -1757,6 +1807,93 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
 		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
+	})
+
+	t.Run("RequestValidations", func(t *testing.T) {
+		t.Run("EmptyActivityID", func(t *testing.T) {
+			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Reason:    "Test Termination",
+				Identity:  "terminator",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "activity ID is required", invalidArgErr.Message)
+		})
+
+		t.Run("ActivityIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				ActivityId: string(make([]byte, 1001)), // dynamic config default is 1000
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Termination",
+				Identity:   "terminator",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+		})
+
+		t.Run("RequestIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RequestId:  string(make([]byte, 1001)), // dynamic config default is 1000
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Termination",
+				Identity:   "terminator",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+		})
+
+		t.Run("IdentityTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Termination",
+				Identity:   string(make([]byte, 1001)), // dynamic config default is 1000
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+		})
+
+		t.Run("InvalidRunID", func(t *testing.T) {
+			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RunId:      "invalid-run-id",
+				Namespace:  s.Namespace().String(),
+				Reason:     "Test Termination",
+				Identity:   "terminator",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+		})
+
+		t.Run("ReasonTooLong", func(t *testing.T) {
+			blobSizeLimitError := 1000
+			s.OverrideDynamicConfig(
+				dynamicconfig.BlobSizeLimitError,
+				blobSizeLimitError,
+			)
+
+			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				Namespace:  s.Namespace().String(),
+				Reason:     string(make([]byte, blobSizeLimitError+1)),
+				Identity:   "terminator",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "reason exceeds length limit", invalidArgErr.Message)
+		})
 	})
 }
 
