@@ -1,4 +1,4 @@
-package multifile
+package passing
 
 import "testing"
 
