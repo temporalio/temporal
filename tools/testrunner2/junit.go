@@ -387,4 +387,3 @@ func lastLines(output []string, n int) string {
 	slices.Reverse(lines)
 	return strings.Join(lines, "\n")
 }
-
