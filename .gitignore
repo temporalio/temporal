@@ -14,6 +14,7 @@
 *.test
 *.xml
 !tools/testrunner/testdata/*.xml
+!tools/testrunner2/testdata/*.xml
 *.swp
 /*.iml
 *.cov
@@ -24,6 +25,7 @@
 /temporal-*
 /tctl*
 /tdbg
+/test-runner
 
 # proto images
 /proto/image.bin

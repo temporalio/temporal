@@ -314,7 +314,6 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 // into partitions. Otherwise, the test suite will be executed multiple times
 // in each partition.
 func (s *FunctionalTestBase) SetupTest() {
-	s.checkTestShard()
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
@@ -340,11 +339,6 @@ func (s *FunctionalTestBase) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.HistoryRequire = historyrequire.New(s.T())
 	s.UpdateUtils = updateutils.New(s.T())
-}
-
-// checkTestShard supports test sharding based on environment variables.
-func (s *FunctionalTestBase) checkTestShard() {
-	checkTestShard(s.T())
 }
 
 func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
