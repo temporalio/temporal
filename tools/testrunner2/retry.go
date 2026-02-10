@@ -19,19 +19,20 @@ func classifyAlerts(detectedAlerts alerts) string {
 }
 
 // retryItemFunc converts failed test names into a queueItem for a given attempt.
-type retryItemFunc func(failedNames []string, attempt int) *queueItem
+// skipNames lists tests that already passed and should be skipped on retry.
+type retryItemFunc func(failedNames, skipNames []string, attempt int) *queueItem
 
 // retryHandler encapsulates the retry callback for test failures.
 type retryHandler struct {
-	forFailures func([]string, int) []*queueItem
+	forFailures func(failedNames, skipNames []string, attempt int) []*queueItem
 }
 
 // buildRetryHandler wires up the retry callback using a shared retryItemFunc.
 func (r *runner) buildRetryHandler(makeItem retryItemFunc) retryHandler {
 	return retryHandler{
-		forFailures: func(failedNames []string, attempt int) []*queueItem {
+		forFailures: func(failedNames, skipNames []string, attempt int) []*queueItem {
 			r.log("🔄 scheduling retry: %s", buildTestFilterPattern(failedNames))
-			if item := makeItem(failedNames, attempt+1); item != nil {
+			if item := makeItem(failedNames, skipNames, attempt+1); item != nil {
 				return []*queueItem{item}
 			}
 			return nil
