@@ -244,7 +244,6 @@ message CancelOutstandingPollResponse {
 message CancelOutstandingWorkerPollsRequest {
     string namespace_id = 1;
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
-    // If unset, both workflow and activity task queues will be cancelled.
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
     string worker_instance_key = 4;
 }

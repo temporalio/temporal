@@ -195,9 +195,11 @@ func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
 // CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
 func (t *workerPollerTracker) CancelAll(workerKey string) int32 {
 	t.lock.Lock()
-	defer t.lock.Unlock()
 	pollerCancels := t.pollers[workerKey]
 	delete(t.pollers, workerKey)
+	t.lock.Unlock()
+
+	// Cancel all pollers for the worker.
 	for _, cancel := range pollerCancels {
 		cancel()
 	}
