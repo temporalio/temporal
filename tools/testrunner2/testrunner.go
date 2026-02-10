@@ -319,7 +319,14 @@ func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map
 		if ev.Action != actionFail && ev.Action != actionStuck {
 			return
 		}
-		if children[ev.Test] || emittedRetries[ev.Test] || cfg.attempt >= r.maxAttempts {
+		// For actionFail, skip parent tests — the child failure will trigger
+		// the retry. For actionStuck, the stuck detector already filters to
+		// leaf tests (no running children), so a stuck parent means all
+		// children completed and the parent itself is hanging.
+		if ev.Action == actionFail && children[ev.Test] {
+			return
+		}
+		if emittedRetries[ev.Test] || cfg.attempt >= r.maxAttempts {
 			return
 		}
 		emittedRetries[ev.Test] = true
@@ -330,21 +337,24 @@ func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map
 	}
 }
 
-// passedSiblings returns passed tests that share the same parent as testName.
-// These can be skipped when retrying the failed test's parent.
+// passedSiblings returns passed tests that can be skipped when retrying testName.
+// For subtests (e.g., TestSuite/FailChild), it returns passed siblings under the
+// same parent. For top-level tests (e.g., TestSuite), it returns passed children.
 func passedSiblings(testName string, passed map[string]bool) []string {
 	parent := parentTestName(testName)
+	var prefix string
 	if parent == "" {
-		return nil // top-level test, no siblings to skip
+		prefix = testName + "/" // top-level: skip passed children
+	} else {
+		prefix = parent + "/" // subtest: skip passed siblings
 	}
-	prefix := parent + "/"
-	var siblings []string
+	var result []string
 	for name := range passed {
 		if strings.HasPrefix(name, prefix) {
-			siblings = append(siblings, name)
+			result = append(result, name)
 		}
 	}
-	return siblings
+	return result
 }
 
 // collectAlertsFromFile parses alerts from a log file on disk and appends stuck test alerts.
