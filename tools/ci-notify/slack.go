@@ -220,36 +220,6 @@ func BuildSuccessReportMessage(report *DigestReport) *SlackMessage {
 
 	blocks := []SlackBlock{headerBlock, periodBlock, metricsBlock, timingBlock}
 
-	// Add recent failures section if there are any
-	if report.FailedRuns > 0 {
-		var recentFailures []WorkflowRunSummary
-		for _, run := range report.Runs {
-			if run.Conclusion == ConclusionFailure {
-				recentFailures = append(recentFailures, run)
-				if len(recentFailures) >= 3 {
-					break
-				}
-			}
-		}
-
-		if len(recentFailures) > 0 {
-			var failureLines []string
-			for _, run := range recentFailures {
-				failureLines = append(failureLines,
-					fmt.Sprintf("• <%s|%s>", run.URL, run.DisplayTitle))
-			}
-
-			failuresBlock := SlackBlock{
-				Type: "section",
-				Text: &SlackText{
-					Type: "mrkdwn",
-					Text: fmt.Sprintf("*Recent Failures:*\n%s", strings.Join(failureLines, "\n")),
-				},
-			}
-			blocks = append(blocks, failuresBlock)
-		}
-	}
-
 	return &SlackMessage{
 		Text:   fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch),
 		Blocks: blocks,
