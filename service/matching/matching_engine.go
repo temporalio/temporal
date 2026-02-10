@@ -94,6 +94,7 @@ type (
 		conditions                *matchingservice.PollConditions
 		forwardedFrom             string
 		localPollStartTime        time.Time
+		workerInstanceKey         string
 	}
 
 	userDataUpdate struct {
@@ -638,6 +639,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -943,6 +945,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -2497,6 +2500,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
