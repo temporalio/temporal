@@ -127,20 +127,17 @@ func (s *WorkflowQueueScheduler[T]) Stop() {
 
 	close(s.shutdownChan)
 
-	// Close all queue channels to signal goroutines to drain and exit
-	s.mu.Lock()
-	for _, q := range s.queues {
-		close(q.taskCh)
-	}
-	s.mu.Unlock()
-
 	// Wake up any Submit() calls waiting for queue capacity (non-blocking)
 	select {
 	case s.queueRemovedCh <- struct{}{}:
 	default:
 	}
 
-	// Wait for all queue goroutines to finish
+	// Wait for all queue goroutines to finish.
+	// Note: we intentionally do NOT close queue channels here. Closing
+	// channels while Submit()/TrySubmit() may be concurrently sending
+	// causes a panic (send on closed channel). Workers detect shutdown
+	// via shutdownChan instead.
 	go func() {
 		if success := common.AwaitWaitGroup(&s.shutdownWG, time.Minute); !success {
 			s.logger.Warn("workflow queue scheduler timed out waiting for queue goroutines")
@@ -290,13 +287,7 @@ func (s *WorkflowQueueScheduler[T]) runQueueWorker(key any, q *workflowQueue[T])
 
 	for {
 		select {
-		case entry, ok := <-q.taskCh:
-			if !ok {
-				// Channel closed - drain remaining tasks and exit
-				s.drainQueue(q)
-				return
-			}
-
+		case entry := <-q.taskCh:
 			// Reset idle timer since we got a task
 			if !idleTimer.Stop() {
 				select {
@@ -317,11 +308,7 @@ func (s *WorkflowQueueScheduler[T]) runQueueWorker(key any, q *workflowQueue[T])
 			// Queue has been idle for TTL - exit
 			// But first check if there are pending tasks (race condition)
 			select {
-			case entry, ok := <-q.taskCh:
-				if !ok {
-					s.drainQueue(q)
-					return
-				}
+			case entry := <-q.taskCh:
 				// Got a task, reset timer and process it
 				idleTimer.Reset(s.options.QueueTTL)
 				queueWaitTime := s.timeSource.Now().Sub(entry.submitTime)
@@ -331,6 +318,11 @@ func (s *WorkflowQueueScheduler[T]) runQueueWorker(key any, q *workflowQueue[T])
 				// Queue is truly idle - exit
 				return
 			}
+
+		case <-s.shutdownChan:
+			// Shutdown signaled - drain buffered tasks and exit
+			s.drainQueue(q)
+			return
 		}
 	}
 }
@@ -351,15 +343,21 @@ func (s *WorkflowQueueScheduler[T]) removeQueue(key any) {
 	metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(queueCount))
 }
 
-// drainQueue aborts all remaining tasks in a queue's channel.
+// drainQueue aborts all remaining buffered tasks in a queue's channel.
+// Uses non-blocking receives since the channel is never closed.
 func (s *WorkflowQueueScheduler[T]) drainQueue(q *workflowQueue[T]) {
 	abortedCount := 0
-	for entry := range q.taskCh {
-		entry.task.Abort()
-		abortedCount++
-	}
-	if abortedCount > 0 {
-		metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(int64(abortedCount))
+	for {
+		select {
+		case entry := <-q.taskCh:
+			entry.task.Abort()
+			abortedCount++
+		default:
+			if abortedCount > 0 {
+				metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(int64(abortedCount))
+			}
+			return
+		}
 	}
 }
 
