@@ -4,11 +4,13 @@
 package matching
 
 import (
+	"strings"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/matching/counter"
@@ -434,9 +436,17 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.MaxTaskBatchSize(ns.String(), taskQueueName, taskType)
 		},
 		NumWritePartitions: func() int {
+			// Control queues are always single-partition to ensure tasks reach the correct worker.
+			if strings.HasPrefix(taskQueueName, nexus.WorkerControlQueuePrefix) {
+				return 1
+			}
 			return max(1, config.NumTaskqueueWritePartitions(ns.String(), taskQueueName, taskType))
 		},
 		NumReadPartitions: func() int {
+			// Control queues are always single-partition to ensure tasks reach the correct worker.
+			if strings.HasPrefix(taskQueueName, nexus.WorkerControlQueuePrefix) {
+				return 1
+			}
 			return max(1, config.NumTaskqueueReadPartitions(ns.String(), taskQueueName, taskType))
 		},
 		NumReadPartitionsSub: func(cb func(int)) (int, func()) {

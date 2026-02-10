@@ -11,3 +11,8 @@ const (
 	// CancelActivitiesOperation is the operation to cancel running activities.
 	CancelActivitiesOperation = "cancel-activities"
 )
+
+// WorkerControlQueuePrefix is the prefix for Nexus task queues used to deliver control commands
+// (e.g., activity cancellation) to workers.
+// Control queues are always single-partition to ensure tasks reach the correct worker.
+const WorkerControlQueuePrefix = "/temporal-sys/worker-commands"
