@@ -979,23 +979,22 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 		}()
 	}
 
-	// Give polls time to register with matching as there is no deterministic signal when pollers are registered.
-	time.Sleep(5 * time.Second)
-
-	// Call ShutdownWorker to cancel all outstanding polls for this worker
+	// Keep calling ShutdownWorker until all polls are cancelled and complete.
+	// Polls register asynchronously, so we retry until all are caught.
 	ctx := context.Background()
-	_, err := s.FrontendClient().ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
-		Namespace:         s.Namespace().String(),
-		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
-		Identity:          tv.WorkerIdentity(),
-		Reason:            "graceful shutdown test",
-		WorkerInstanceKey: workerInstanceKey,
-		TaskQueue:         tv.TaskQueue().GetName(),
-	})
-	s.NoError(err)
-
-	// Wait for all polls to complete (should be quick after cancellation)
-	s.True(common.AwaitWaitGroup(&wg, 10*time.Second), "polls did not complete within expected time after shutdown")
+	s.Eventually(func() bool {
+		_, err := s.FrontendClient().ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+			Namespace:         s.Namespace().String(),
+			StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+			Identity:          tv.WorkerIdentity(),
+			Reason:            "graceful shutdown test",
+			WorkerInstanceKey: workerInstanceKey,
+			TaskQueue:         tv.TaskQueue().GetName(),
+		})
+		s.NoError(err)
+		// Check if all polls have completed (short timeout to just check status)
+		return common.AwaitWaitGroup(&wg, 50*time.Millisecond)
+	}, 30*time.Second, 200*time.Millisecond, "polls did not complete after repeated shutdown attempts")
 
 	close(pollResults)
 
