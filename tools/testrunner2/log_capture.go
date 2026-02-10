@@ -172,12 +172,12 @@ func (lc *logCapture) Close() error {
 
 // buildLogFilename constructs a unique log file path for a test batch.
 // The name is sanitized and included in the filename for easier identification.
-func buildLogFilename(logDir, name string) string {
+func buildLogFilename(logDir, name string, attempt int) string {
 	safe := sanitizeFilename(name)
 	if safe == "" {
-		return filepath.Join(logDir, uuid.New().String()+".log")
+		return filepath.Join(logDir, fmt.Sprintf("attempt-%d_%s.log", attempt, uuid.New().String()))
 	}
-	return filepath.Join(logDir, safe+"_"+uuid.New().String()+".log")
+	return filepath.Join(logDir, fmt.Sprintf("%s_attempt-%d_%s.log", safe, attempt, uuid.New().String()))
 }
 
 // sanitizeFilename replaces characters that are unsafe in filenames.
