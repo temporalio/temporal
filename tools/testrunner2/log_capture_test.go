@@ -29,19 +29,22 @@ func TestBuildLogFilename(t *testing.T) {
 
 	logDir := "/tmp/testlogs"
 
-	result := buildLogFilename(logDir, "TestFoo")
-	require.True(t, strings.HasPrefix(result, "/tmp/testlogs/TestFoo_"))
+	result := buildLogFilename(logDir, "TestFoo", 1)
+	require.True(t, strings.HasPrefix(result, "/tmp/testlogs/TestFoo_attempt-1_"))
 	require.True(t, strings.HasSuffix(result, ".log"))
 
 	// Test that multiple calls produce unique filenames
-	result2 := buildLogFilename(logDir, "TestFoo")
+	result2 := buildLogFilename(logDir, "TestFoo", 1)
 	require.NotEqual(t, result, result2, "each call should produce a unique filename")
 
-	// Empty name falls back to UUID-only
-	result3 := buildLogFilename(logDir, "")
-	require.True(t, strings.HasPrefix(result3, "/tmp/testlogs/"))
-	require.True(t, strings.HasSuffix(result3, ".log"))
-	require.False(t, strings.HasPrefix(result3, "/tmp/testlogs/_"))
+	// Attempt number is included
+	result3 := buildLogFilename(logDir, "TestFoo", 2)
+	require.True(t, strings.HasPrefix(result3, "/tmp/testlogs/TestFoo_attempt-2_"))
+
+	// Empty name falls back to attempt + UUID only
+	result4 := buildLogFilename(logDir, "", 1)
+	require.True(t, strings.HasPrefix(result4, "/tmp/testlogs/attempt-1_"))
+	require.True(t, strings.HasSuffix(result4, ".log"))
 }
 
 func TestBuildCompileLogFilename(t *testing.T) {
