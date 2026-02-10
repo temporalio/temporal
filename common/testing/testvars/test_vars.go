@@ -400,9 +400,16 @@ func (tv *TestVars) WorkerInstanceKey() string {
 	return getOrCreate(tv, "worker_instance_key", tv.uniqueString, tv.stringNSetter)
 }
 
-// ControlQueueName returns the queue name used to deliver Nexus tasks to this worker instance.
-func (tv *TestVars) ControlQueueName(namespace string) string {
-	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", namespace, tv.WorkerInstanceKey())
+func (tv *TestVars) WorkerGroupingKey() string {
+	return getOrCreate(tv, "worker_grouping_key", tv.uniqueString, tv.stringNSetter)
+}
+
+// workerControlQueuePrefix matches the prefix defined in transfer_queue_active_task_executor.go
+const workerControlQueuePrefix = "/temporal-sys/worker-commands"
+
+// ControlQueueName returns the queue name used to deliver Nexus control tasks to this worker.
+func (tv *TestVars) ControlQueueName() string {
+	return fmt.Sprintf("%s/%s", workerControlQueuePrefix, tv.WorkerGroupingKey())
 }
 
 func (tv *TestVars) TimerID() string {
