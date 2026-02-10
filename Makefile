@@ -618,6 +618,12 @@ start-cass-es-dual: temporal-server
 start-cass-es-custom: temporal-server
 	./temporal-server --config-file config/development-cass-es-custom.yaml --allow-no-auth start
 
+start-cass-archival: temporal-server
+	./temporal-server --config-file config/development-cass-archival.yaml --allow-no-auth start
+
+start-cass-archival-azure: temporal-server
+	./temporal-server --config-file config/development-cass-archival-azure.yaml --allow-no-auth start
+
 start-es-fi: temporal-server
 	./temporal-server --config-file config/development-cass-es-fi.yaml --allow-no-auth start
 

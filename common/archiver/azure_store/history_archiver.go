@@ -63,7 +63,7 @@ func NewHistoryArchiver(
 	metricsHandler metrics.Handler,
 	config *config.AzblobArchiver,
 ) (archiver.HistoryArchiver, error) {
-	storage, err := connector.NewClient(config)
+	storage, err := connector.NewClient(config, logger)
 	if err == nil {
 		return newHistoryArchiver(executionManager, logger, metricsHandler, nil, storage), nil
 	}

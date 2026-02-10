@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	archiverspb "go.temporal.io/server/api/archiver/v1"
+	"go.temporal.io/server/common/archiver/azure_store/connector"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -96,10 +98,110 @@ func convertToExecutionInfo(record *archiverspb.VisibilityRecord, saTypeMap sear
 	}, nil
 }
 
-func constructVisibilityFilename(namespaceID, workflowTypeName, workflowID, runID, indexKey string, timestamp time.Time) string {
-	return fmt.Sprintf("%s_%s_%d_%s_%s_%s.visibility", namespaceID, indexKey, timestamp.UnixNano(), workflowTypeName, workflowID, runID)
+func constructVisibilityFilename(namespace, workflowTypeName, workflowID, runID, tag string, t time.Time) string {
+	prefix := constructVisibilityFilenamePrefix(namespace, tag)
+	return fmt.Sprintf("%s_%s_%s_%s_%s.visibility", prefix, t.Format(time.RFC3339), hash(workflowTypeName), hash(workflowID), hash(runID))
 }
 
-func constructVisibilityFilenamePrefix(namespaceID, indexKey string) string {
-	return fmt.Sprintf("%s_%s", namespaceID, indexKey)
+func constructVisibilityFilenamePrefix(namespaceID, tag string) string {
+	return fmt.Sprintf("%s/%s", namespaceID, tag)
+}
+
+func constructTimeBasedSearchKey(namespaceID, tag string, t time.Time, precision string) string {
+	var timeFormat = ""
+	switch precision {
+	case PrecisionSecond:
+		timeFormat = ":05"
+		fallthrough
+	case PrecisionMinute:
+		timeFormat = ":04" + timeFormat
+		fallthrough
+	case PrecisionHour:
+		timeFormat = "15" + timeFormat
+		fallthrough
+	case PrecisionDay:
+		timeFormat = "2006-01-02T" + timeFormat
+	}
+
+	return fmt.Sprintf("%s_%s", constructVisibilityFilenamePrefix(namespaceID, tag), t.Format(timeFormat))
+}
+
+func hash(s string) (result string) {
+	if s != "" {
+		return fmt.Sprintf("%v", farm.Fingerprint64([]byte(s)))
+	}
+	return
+}
+
+func newRunIDPrecondition(runID string) connector.Precondition {
+	return func(subject interface{}) bool {
+		if runID == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, runID) {
+			fileNameParts := strings.SplitN(fileName, "_", 5)
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[4])
+		}
+
+		return false
+	}
+}
+
+func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
+	return func(subject interface{}) bool {
+		if workflowID == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, workflowID) {
+			fileNameParts := strings.SplitN(fileName, "_", 5)
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[3])
+		}
+
+		return false
+	}
+}
+
+func newWorkflowTypeNamePrecondition(workflowTypeName string) connector.Precondition {
+	return func(subject interface{}) bool {
+		if workflowTypeName == "" {
+			return true
+		}
+
+		fileName, ok := subject.(string)
+		if !ok {
+			return false
+		}
+
+		if strings.Contains(fileName, workflowTypeName) {
+			fileNameParts := strings.SplitN(fileName, "_", 5)
+			if len(fileNameParts) != 5 {
+				return true
+			}
+			return strings.Contains(fileName, fileNameParts[2])
+		}
+
+		return false
+	}
+}
+
+func isRetryableError(err error) bool {
+	return err == errRetryable
 }

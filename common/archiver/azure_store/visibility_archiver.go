@@ -3,7 +3,9 @@ package azure_store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -33,6 +35,7 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 		azureStorage   connector.Client
+		queryParser    QueryParser
 	}
 
 	queryVisibilityToken struct {
@@ -43,6 +46,7 @@ type (
 		namespaceID   string
 		pageSize      int
 		nextPageToken []byte
+		parsedQuery   *parsedQuery
 	}
 )
 
@@ -51,12 +55,13 @@ func newVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, st
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		azureStorage:   storage,
+		queryParser:    NewQueryParser(),
 	}
 }
 
 // NewVisibilityArchiver creates a new archiver.VisibilityArchiver based on azure blob storage
 func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cfg *config.AzblobArchiver) (archiver.VisibilityArchiver, error) {
-	storage, err := connector.NewClient(cfg)
+	storage, err := connector.NewClient(cfg, logger)
 	return newVisibilityArchiver(logger, metricsHandler, storage), err
 }
 
@@ -127,11 +132,58 @@ func (v *visibilityArchiver) Query(
 		return nil, &serviceerror.InvalidArgument{Message: archiver.ErrInvalidQueryVisibilityRequest.Error()}
 	}
 
-	// For simplicity, we implement a basic query all or by prefix.
-	// Implementing a full query parser like in gcloud would be too complex for this task unless explicitly asked.
-	// We'll stick to a basic implementation.
+	if strings.TrimSpace(request.Query) == "" {
+		return v.queryAll(ctx, URI, request, saTypeMap)
+	}
 
-	return v.queryAll(ctx, URI, request, saTypeMap)
+	parsedQuery, err := v.queryParser.Parse(request.Query)
+	if err != nil {
+		return nil, &serviceerror.InvalidArgument{Message: err.Error()}
+	}
+
+	if parsedQuery.emptyResult {
+		return &archiver.QueryVisibilityResponse{}, nil
+	}
+
+	return v.query(
+		ctx,
+		URI,
+		&queryVisibilityRequest{
+			namespaceID:   request.NamespaceID,
+			pageSize:      request.PageSize,
+			nextPageToken: request.NextPageToken,
+			parsedQuery:   parsedQuery,
+		},
+		saTypeMap,
+	)
+}
+
+func (v *visibilityArchiver) query(
+	ctx context.Context,
+	uri archiver.URI,
+	request *queryVisibilityRequest,
+	saTypeMap searchattribute.NameTypeMap,
+) (*archiver.QueryVisibilityResponse, error) {
+	prefix := constructVisibilityFilenamePrefix(request.namespaceID, indexKeyCloseTimeout)
+	if !request.parsedQuery.closeTime.IsZero() {
+		prefix = constructTimeBasedSearchKey(
+			request.namespaceID,
+			indexKeyCloseTimeout,
+			request.parsedQuery.closeTime,
+			*request.parsedQuery.searchPrecision,
+		)
+	}
+
+	if !request.parsedQuery.startTime.IsZero() {
+		prefix = constructTimeBasedSearchKey(
+			request.namespaceID,
+			indexKeyStartTimeout,
+			request.parsedQuery.startTime,
+			*request.parsedQuery.searchPrecision,
+		)
+	}
+
+	return v.queryPrefix(ctx, uri, request, saTypeMap, prefix)
 }
 
 func (v *visibilityArchiver) queryAll(
@@ -140,28 +192,42 @@ func (v *visibilityArchiver) queryAll(
 	request *archiver.QueryVisibilityRequest,
 	saTypeMap searchattribute.NameTypeMap,
 ) (*archiver.QueryVisibilityResponse, error) {
-	token, err := v.parseToken(request.NextPageToken)
+
+	return v.queryPrefix(ctx, URI, &queryVisibilityRequest{
+		namespaceID:   request.NamespaceID,
+		pageSize:      request.PageSize,
+		nextPageToken: request.NextPageToken,
+		parsedQuery:   &parsedQuery{},
+	}, saTypeMap, request.NamespaceID)
+}
+
+func (v *visibilityArchiver) queryPrefix(ctx context.Context, uri archiver.URI, request *queryVisibilityRequest, saTypeMap searchattribute.NameTypeMap, prefix string) (*archiver.QueryVisibilityResponse, error) {
+	token, err := v.parseToken(request.nextPageToken)
 	if err != nil {
 		return nil, err
 	}
 
-	prefix := request.NamespaceID
-	filenames, err := v.azureStorage.Query(ctx, URI, prefix)
+	filters := make([]connector.Precondition, 0)
+	if request.parsedQuery.workflowID != nil {
+		filters = append(filters, newWorkflowIDPrecondition(hash(*request.parsedQuery.workflowID)))
+	}
+
+	if request.parsedQuery.runID != nil {
+		filters = append(filters, newWorkflowIDPrecondition(hash(*request.parsedQuery.runID)))
+	}
+
+	if request.parsedQuery.workflowType != nil {
+		filters = append(filters, newWorkflowIDPrecondition(hash(*request.parsedQuery.workflowType)))
+	}
+
+	filenames, completed, currentCursorPos, err := v.azureStorage.QueryWithFilters(ctx, uri, prefix, request.pageSize, token.Offset, filters)
 	if err != nil {
 		return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 	}
 
-	// Apply pagination
-	start := token.Offset
-	end := start + request.PageSize
-	if end > len(filenames) {
-		end = len(filenames)
-	}
-
 	response := &archiver.QueryVisibilityResponse{}
-	for i := start; i < end; i++ {
-		file := filenames[i]
-		encodedRecord, err := v.azureStorage.Get(ctx, URI, filepath.Base(file))
+	for _, file := range filenames {
+		encodedRecord, err := v.azureStorage.Get(ctx, uri, fmt.Sprintf("%s/%s", request.namespaceID, filepath.Base(file)))
 		if err != nil {
 			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
 		}
@@ -178,11 +244,14 @@ func (v *visibilityArchiver) queryAll(
 		response.Executions = append(response.Executions, executionInfo)
 	}
 
-	if end < len(filenames) {
+	if !completed {
 		newToken := &queryVisibilityToken{
-			Offset: end,
+			Offset: currentCursorPos,
 		}
-		encodedToken, _ := serializeToken(newToken)
+		encodedToken, err := serializeToken(newToken)
+		if err != nil {
+			return nil, &serviceerror.InvalidArgument{Message: err.Error()}
+		}
 		response.NextPageToken = encodedToken
 	}
 
@@ -220,8 +289,4 @@ func (v *visibilityArchiver) validateURI(URI archiver.URI) (err error) {
 		return archiver.ErrInvalidURI
 	}
 	return
-}
-
-func isRetryableError(err error) bool {
-	return err == errRetryable
 }

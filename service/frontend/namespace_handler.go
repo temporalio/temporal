@@ -997,7 +997,6 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 	if err != nil {
 		return err
 	}
-
 	a, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme())
 	if err != nil {
 		return err
@@ -1011,7 +1010,6 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 	if err != nil {
 		return err
 	}
-
 	a, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme())
 	if err != nil {
 		return err

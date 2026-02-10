@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/mock/gomock"
 )
 
@@ -50,7 +51,7 @@ func TestNewClient(t *testing.T) {
 		Endpoint:     "https://test.blob.core.windows.net",
 		UseSharedKey: true,
 	}
-	client, err := NewClient(cfg)
+	client, err := NewClient(cfg, log.NewNoopLogger())
 	assert.NoError(t, err)
 	assert.NotNil(t, client)
 }

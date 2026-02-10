@@ -86,6 +86,23 @@ func (mr *MockClientMockRecorder) Query(ctx, URI, fileNamePrefix any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockClient)(nil).Query), ctx, URI, fileNamePrefix)
 }
 
+// QueryWithFilters mocks base method.
+func (m *MockClient) QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryWithFilters", ctx, URI, fileNamePrefix, pageSize, offset, filters)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(int)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
+}
+
+// QueryWithFilters indicates an expected call of QueryWithFilters.
+func (mr *MockClientMockRecorder) QueryWithFilters(ctx, URI, fileNamePrefix, pageSize, offset, filters any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryWithFilters", reflect.TypeOf((*MockClient)(nil).QueryWithFilters), ctx, URI, fileNamePrefix, pageSize, offset, filters)
+}
+
 // Upload mocks base method.
 func (m *MockClient) Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) error {
 	m.ctrl.T.Helper()
