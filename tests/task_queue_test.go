@@ -951,7 +951,6 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	workerInstanceKey := uuid.NewString()
 
 	// Use a long poll timeout (2 minutes) to ensure we're testing cancellation, not timeout.
-	// The test should complete in ~1 second if cancellation works.
 	pollTimeout := 2 * time.Minute
 
 	// Start 2 long polls in goroutines to verify bulk cancellation
@@ -981,7 +980,7 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	}
 
 	// Give polls time to register with matching as there is no deterministic signal when pollers are registered.
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Call ShutdownWorker to cancel all outstanding polls for this worker
 	ctx := context.Background()
@@ -996,18 +995,7 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.NoError(err)
 
 	// Wait for all polls to complete (should be quick after cancellation)
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// All polls completed
-	case <-time.After(10 * time.Second):
-		s.Fail("polls did not complete within expected time after shutdown")
-	}
+	s.True(common.AwaitWaitGroup(&wg, 10*time.Second), "polls did not complete within expected time after shutdown")
 
 	close(pollResults)
 

@@ -2876,26 +2876,18 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 
 	// Unload sticky task queue (required - error fails shutdown)
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
-	var unloadErr atomic.Pointer[error]
-	waitGroup.Add(1)
-	go func() {
-		defer waitGroup.Done()
-		_, err := wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
-			NamespaceId: namespaceID.String(),
-			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-				TaskQueue:     request.GetStickyTaskQueue(),
-				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
-			},
-		})
-		if err != nil {
-			unloadErr.Store(&err)
-		}
-	}()
+	_, unloadError := wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     request.GetStickyTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
+		},
+	})
 
 	waitGroup.Wait()
 
-	if errPtr := unloadErr.Load(); errPtr != nil {
-		return nil, *errPtr
+	if unloadError != nil {
+		return nil, unloadError
 	}
 
 	return &workflowservice.ShutdownWorkerResponse{}, nil
