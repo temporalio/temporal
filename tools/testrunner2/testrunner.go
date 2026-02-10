@@ -263,14 +263,13 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 				LogPath: cfg.logPath,
 				Header:  cfg.logHeader,
 			})
+			if err != nil && cfg.logHeader == nil {
+				r.addError(fmt.Errorf("failed to create log file: %w", err))
+				return
+			}
 			if err != nil {
-				if cfg.logHeader != nil {
-					r.log("warning: failed to create log file: %v", err)
-					lc, _ = newLogCapture(logCaptureConfig{})
-				} else {
-					r.addError(fmt.Errorf("failed to create log file: %w", err))
-					return
-				}
+				r.log("warning: failed to create log file: %v", err)
+				lc, _ = newLogCapture(logCaptureConfig{})
 			}
 
 			// 2. Set up event stream with mid-stream retry handler
@@ -417,6 +416,8 @@ func (r *runner) emitPostExitRetries(cfg execConfig, failed bool, numTests int,
 		if items := cfg.retry.forUnknown(results.passes, cfg.attempt); len(items) > 0 {
 			emit(items...)
 		}
+	default:
+		// All failures were already retried mid-stream; nothing to do.
 	}
 }
 

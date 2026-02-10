@@ -56,6 +56,7 @@ type flagDefinition struct {
 	handle     func(value string, cfg *config) error
 }
 
+//nolint:forbidigo // panic is appropriate for init-time invariant checks
 func init() {
 	for name := range flagDefinitions {
 		if !strings.HasPrefix(name, "-") {
