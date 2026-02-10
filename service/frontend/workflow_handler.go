@@ -2897,7 +2897,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 // This is a best-effort operation - errors are logged but don't fail the shutdown.
 func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	ctx context.Context,
-	namespaceId string,
+	namespaceID string,
 	request *workflowservice.ShutdownWorkerRequest,
 ) {
 	workerInstanceKey := request.GetWorkerInstanceKey()
@@ -2918,7 +2918,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	}
 
 	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
-	tqFamily, err := tqid.NewTaskQueueFamily(namespaceId, taskQueueName)
+	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
 			tag.WorkflowTaskQueueName(taskQueueName),
@@ -2943,7 +2943,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 			go func() {
 				defer waitGroup.Done()
 				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
-					NamespaceId: namespaceId,
+					NamespaceId: namespaceID,
 					TaskQueue: &taskqueuepb.TaskQueue{
 						Name: partition.RpcName(),
 						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,

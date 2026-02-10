@@ -960,10 +960,8 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 		err  error
 	}, 2)
 
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 2 {
+		wg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
 			defer cancel()
 			resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -976,7 +974,7 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 				resp *workflowservice.PollWorkflowTaskQueueResponse
 				err  error
 			}{resp, err}
-		}()
+		})
 	}
 
 	// Keep calling ShutdownWorker until all polls are cancelled and complete.
