@@ -1,0 +1,82 @@
+replicaCount: 1
+
+image:
+  repository: your-repo/payment-retry-worker # Placeholder - to be configured by user
+  pullPolicy: IfNotPresent
+  tag: "latest" # Placeholder - ideally a specific version
+
+# For configuring the INJECT_FAILURE_RATE environment variable in the worker
+failureInjection:
+  rate: 0.1 # Default failure rate (10%)
+
+service:
+  type: ClusterIP
+  port: 9090 # Port for Prometheus metrics
+
+# Annotations for Prometheus scraping (e.g., if not using a ServiceMonitor)
+# These are common annotations, but might vary based on Prometheus setup.
+# User can override or extend these.
+prometheus:
+  scrape: true
+  path: /metrics
+  port: "9090"
+
+# Grafana dashboard provisioning
+grafanaDashboard:
+  enabled: true
+  # The ConfigMap will be named based on the chart release name + "-payment-dashboard"
+  # The content will be sourced from grafana/payment_dashboard.json
+
+# Service account for the worker pod
+serviceAccount:
+  create: true
+  annotations: {}
+  name: "" # If not set, a name is generated using fullname template
+
+# Pod security context
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# Container security context
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Resource requests and limits for the worker pod
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with
+  # constrained resources, such as Minikube. If you do specify resources, uncomment the
+  # following lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Annotations for the pod
+podAnnotations: {}
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Node selector, affinity, and tolerations for pod assignment
+nodeSelector: {}
+affinity: {}
+tolerations: []
+
+# Overrides for names
+nameOverride: ""
+fullnameOverride: ""
+
+# Temporal server connection details
+temporalServer:
+  hostPort: "temporal-frontend.default.svc.cluster.local:7233" # Example, adjust if your Temporal is elsewhere
+
+# Temporal namespace to use
+temporalNamespace: "default"
