@@ -434,7 +434,6 @@ jobs:
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
-          TEST_SHARD_SALT: ${{ vars.TEST_SHARD_SALT || '-salt-26' }}
 
       - name: Print memory snapshot
         if: always()
