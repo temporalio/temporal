@@ -67,7 +67,6 @@ var transitionCancellationAttemptFailed = chasm.NewTransition(
 		// Record the attempt - increments attempt, sets complete time, clears last failure
 		c.Attempt++
 		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
-		c.LastAttemptFailure = nil
 
 		// Compute next retry delay
 		// Use 0 for elapsed time as we don't limit the retry by time (for now)
@@ -108,7 +107,6 @@ var transitionCancellationFailed = chasm.NewTransition(
 		// Record the attempt
 		c.Attempt++
 		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
-		c.LastAttemptFailure = nil
 
 		// Store the failure
 		c.LastAttemptFailure = event.Failure

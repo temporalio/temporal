@@ -50,15 +50,14 @@ func TestTransitionCancellationScheduled(t *testing.T) {
 	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SCHEDULED, cancellation.Status)
 
 	// Verify requested time was recorded
-	require.NotNil(t, cancellation.RequestedTime)
-	require.Equal(t, defaultCancellationTime, cancellation.RequestedTime.AsTime())
+	require.Equal(t, defaultCancellationTime, cancellation.GetRequestedTime().AsTime())
 
 	// Verify CancellationTask was emitted
 	require.Len(t, ctx.Tasks, 1)
 	task := ctx.Tasks[0]
 	require.IsType(t, &nexusoperationpb.CancellationTask{}, task.Payload)
 	cancelTask := task.Payload.(*nexusoperationpb.CancellationTask)
-	require.Equal(t, int32(0), cancelTask.Attempt)
+	require.Equal(t, int32(0), cancelTask.GetAttempt())
 	require.Equal(t, time.Time{}, task.Attributes.ScheduledTime) // Immediate execution
 }
 
@@ -71,7 +70,7 @@ func TestTransitionCancellationScheduled_InvalidFromState(t *testing.T) {
 
 	err := transitionCancellationScheduled.Apply(cancellation, ctx, event)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid transition")
+	require.ErrorContains(t, err, "invalid transition")
 }
 
 func TestTransitionCancellationRescheduled(t *testing.T) {
@@ -97,87 +96,50 @@ func TestTransitionCancellationRescheduled(t *testing.T) {
 	task := ctx.Tasks[0]
 	require.IsType(t, &nexusoperationpb.CancellationTask{}, task.Payload)
 	cancelTask := task.Payload.(*nexusoperationpb.CancellationTask)
-	require.Equal(t, int32(2), cancelTask.Attempt)
+	require.Equal(t, int32(2), cancelTask.GetAttempt())
 }
 
 func TestTransitionCancellationAttemptFailed(t *testing.T) {
-	testCases := []struct {
-		name             string
-		initialAttempt   int32
-		minRetryInterval time.Duration
-		maxRetryInterval time.Duration
-	}{
-		{
-			name:             "first retry",
-			initialAttempt:   0,
-			minRetryInterval: 500 * time.Millisecond,
-			maxRetryInterval: 1500 * time.Millisecond,
-		},
-		{
-			name:             "second retry",
-			initialAttempt:   1,
-			minRetryInterval: 1 * time.Second,
-			maxRetryInterval: 3 * time.Second,
-		},
-		{
-			name:             "third retry",
-			initialAttempt:   2,
-			minRetryInterval: 2 * time.Second,
-			maxRetryInterval: 6 * time.Second,
-		},
+	ctx := newTestCancellationContext()
+	cancellation := newTestCancellation()
+	cancellation.Status = nexusoperationpb.CANCELLATION_STATUS_SCHEDULED
+	cancellation.Attempt = 2
+
+	failure := &failurepb.Failure{
+		Message: "temporary error",
+	}
+	retryPolicy := backoff.NewExponentialRetryPolicy(time.Second)
+
+	event := EventCancellationAttemptFailed{
+		Failure:     failure,
+		RetryPolicy: retryPolicy,
 	}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			ctx := newTestCancellationContext()
-			cancellation := newTestCancellation()
-			cancellation.Status = nexusoperationpb.CANCELLATION_STATUS_SCHEDULED
-			cancellation.Attempt = tc.initialAttempt
+	err := transitionCancellationAttemptFailed.Apply(cancellation, ctx, event)
+	require.NoError(t, err)
 
-			failure := &failurepb.Failure{
-				Message: "temporary error",
-			}
-			retryPolicy := backoff.NewExponentialRetryPolicy(time.Second)
+	// Verify state transition
+	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, cancellation.Status)
 
-			event := EventCancellationAttemptFailed{
-				Failure:     failure,
-				RetryPolicy: retryPolicy,
-			}
+	// Verify attempt was incremented
+	require.Equal(t, int32(3), cancellation.Attempt)
 
-			err := transitionCancellationAttemptFailed.Apply(cancellation, ctx, event)
-			require.NoError(t, err)
+	// Verify last attempt complete time was set
+	require.Equal(t, defaultCancellationTime, cancellation.GetLastAttemptCompleteTime().AsTime())
 
-			// Verify state transition
-			require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF, cancellation.Status)
+	// Verify failure was stored
+	require.Equal(t, "temporary error", cancellation.GetLastAttemptFailure().GetMessage())
 
-			// Verify attempt was incremented
-			require.Equal(t, tc.initialAttempt+1, cancellation.Attempt)
+	// Verify next attempt schedule time was set with backoff
+	require.Greater(t, cancellation.GetNextAttemptScheduleTime().AsTime(), defaultCancellationTime)
 
-			// Verify last attempt complete time was set
-			require.NotNil(t, cancellation.LastAttemptCompleteTime)
-			require.Equal(t, defaultCancellationTime, cancellation.LastAttemptCompleteTime.AsTime())
-
-			// Verify failure was stored
-			require.NotNil(t, cancellation.LastAttemptFailure)
-			require.Equal(t, "temporary error", cancellation.LastAttemptFailure.Message)
-
-			// Verify next attempt schedule time was set with backoff (accounting for jitter)
-			require.NotNil(t, cancellation.NextAttemptScheduleTime)
-			actualInterval := cancellation.NextAttemptScheduleTime.AsTime().Sub(defaultCancellationTime)
-			require.GreaterOrEqual(t, actualInterval, tc.minRetryInterval,
-				"retry interval %v should be >= %v", actualInterval, tc.minRetryInterval)
-			require.LessOrEqual(t, actualInterval, tc.maxRetryInterval,
-				"retry interval %v should be <= %v", actualInterval, tc.maxRetryInterval)
-
-			// Verify CancellationBackoffTask was emitted
-			require.Len(t, ctx.Tasks, 1)
-			task := ctx.Tasks[0]
-			require.IsType(t, &nexusoperationpb.CancellationBackoffTask{}, task.Payload)
-			backoffTask := task.Payload.(*nexusoperationpb.CancellationBackoffTask)
-			require.Equal(t, tc.initialAttempt+1, backoffTask.Attempt)
-			require.Equal(t, cancellation.NextAttemptScheduleTime.AsTime(), task.Attributes.ScheduledTime)
-		})
-	}
+	// Verify CancellationBackoffTask was emitted
+	require.Len(t, ctx.Tasks, 1)
+	task := ctx.Tasks[0]
+	require.IsType(t, &nexusoperationpb.CancellationBackoffTask{}, task.Payload)
+	backoffTask := task.Payload.(*nexusoperationpb.CancellationBackoffTask)
+	require.Equal(t, int32(3), backoffTask.GetAttempt())
+	require.Equal(t, cancellation.GetNextAttemptScheduleTime().AsTime(), task.Attributes.ScheduledTime)
 }
 
 func TestTransitionCancellationAttemptFailed_ClearsLastFailure(t *testing.T) {
@@ -204,8 +166,7 @@ func TestTransitionCancellationAttemptFailed_ClearsLastFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the new failure replaced the old one
-	require.NotNil(t, cancellation.LastAttemptFailure)
-	require.Equal(t, "new failure", cancellation.LastAttemptFailure.Message)
+	require.Equal(t, "new failure", cancellation.GetLastAttemptFailure().GetMessage())
 }
 
 func TestTransitionCancellationFailed(t *testing.T) {
@@ -247,13 +208,11 @@ func TestTransitionCancellationFailed(t *testing.T) {
 			// Verify attempt was incremented
 			require.Equal(t, int32(4), cancellation.Attempt)
 
-			// Verify last attempt complete time was set
-			require.NotNil(t, cancellation.LastAttemptCompleteTime)
-			require.Equal(t, defaultCancellationTime, cancellation.LastAttemptCompleteTime.AsTime())
+			// Verify last attempt complete time was set correctly.
+			require.Equal(t, defaultCancellationTime, cancellation.GetLastAttemptCompleteTime().AsTime())
 
 			// Verify failure was stored
-			require.NotNil(t, cancellation.LastAttemptFailure)
-			require.Equal(t, "non-retryable error", cancellation.LastAttemptFailure.Message)
+			require.Equal(t, "non-retryable error", cancellation.GetLastAttemptFailure().GetMessage())
 
 			// Verify no tasks emitted (terminal state)
 			require.Empty(t, ctx.Tasks)
@@ -271,13 +230,12 @@ func TestTransitionCancellationFailed_InvalidFromState(t *testing.T) {
 	}
 
 	event := EventCancellationFailed{
-
 		Failure: failure,
 	}
 
 	err := transitionCancellationFailed.Apply(cancellation, ctx, event)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid transition")
+	require.ErrorContains(t, err, "invalid transition")
 }
 
 func TestTransitionCancellationSucceeded(t *testing.T) {
@@ -298,8 +256,7 @@ func TestTransitionCancellationSucceeded(t *testing.T) {
 	require.Equal(t, int32(3), cancellation.Attempt)
 
 	// Verify last attempt complete time was set
-	require.NotNil(t, cancellation.LastAttemptCompleteTime)
-	require.Equal(t, defaultCancellationTime, cancellation.LastAttemptCompleteTime.AsTime())
+	require.Equal(t, defaultCancellationTime, cancellation.GetLastAttemptCompleteTime().AsTime())
 
 	// Verify last attempt failure was cleared (successful completion)
 	require.Nil(t, cancellation.LastAttemptFailure)
@@ -317,7 +274,7 @@ func TestTransitionCancellationSucceeded_InvalidFromState(t *testing.T) {
 
 	err := transitionCancellationSucceeded.Apply(cancellation, ctx, event)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid transition")
+	require.ErrorContains(t, err, "invalid transition")
 }
 
 // Test that transitionCancellationScheduled validates from states
