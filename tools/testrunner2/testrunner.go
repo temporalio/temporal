@@ -306,9 +306,15 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 // streamRetryHandler returns a testEvent handler that emits retries for
 // leaf test failures and stuck tests as they happen (both modes).
 func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map[string]bool, emit func(...*queueItem)) func(testEvent) {
+	passed := make(map[string]bool)
+
 	return func(ev testEvent) {
 		if strings.Contains(ev.Test, "/") {
 			children[parentTestName(ev.Test)] = true
+		}
+		if ev.Action == actionPass {
+			passed[ev.Test] = true
+			return
 		}
 		if ev.Action != actionFail && ev.Action != actionStuck {
 			return
@@ -317,10 +323,28 @@ func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map
 			return
 		}
 		emittedRetries[ev.Test] = true
-		if items := cfg.retry.forFailures([]string{ev.Test}, cfg.attempt); len(items) > 0 {
+		skipNames := passedSiblings(ev.Test, passed)
+		if items := cfg.retry.forFailures([]string{ev.Test}, skipNames, cfg.attempt); len(items) > 0 {
 			emit(items...)
 		}
 	}
+}
+
+// passedSiblings returns passed tests that share the same parent as testName.
+// These can be skipped when retrying the failed test's parent.
+func passedSiblings(testName string, passed map[string]bool) []string {
+	parent := parentTestName(testName)
+	if parent == "" {
+		return nil // top-level test, no siblings to skip
+	}
+	prefix := parent + "/"
+	var siblings []string
+	for name := range passed {
+		if strings.HasPrefix(name, prefix) {
+			siblings = append(siblings, name)
+		}
+	}
+	return siblings
 }
 
 // collectAlertsFromFile parses alerts from a log file on disk and appends stuck test alerts.
@@ -381,7 +405,7 @@ func (r *runner) emitCrashRecoveryRetries(cfg execConfig, failed bool, numTests 
 		}
 	}
 	if len(unretried) > 0 {
-		if items := cfg.retry.forFailures(unretried, cfg.attempt); len(items) > 0 {
+		if items := cfg.retry.forFailures(unretried, nil, cfg.attempt); len(items) > 0 {
 			emit(items...)
 		}
 		return
