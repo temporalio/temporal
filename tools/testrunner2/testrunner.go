@@ -28,18 +28,9 @@ func Main() {
 	log.SetFlags(log.Ltime)
 	ctx := context.Background()
 
-	if len(os.Args) < 2 {
-		log.Fatal("expected at least 2 arguments")
-	}
-
-	command := os.Args[1]
-	if command != "test" {
-		log.Fatalf("unknown command %q", command)
-	}
-
 	cfg := defaultConfig()
 	cfg.log = log.Printf
-	args, err := parseArgs(os.Args[2:], &cfg)
+	args, err := parseArgs(os.Args[1:], &cfg)
 	if err != nil {
 		log.Fatalf("failed to parse command line options: %v", err)
 	}
