@@ -376,21 +376,28 @@ func TestIntegration(t *testing.T) {
 		require.NoError(t, res.err)
 
 		assertConsole(t, res,
-			// All failure modes on attempt 1
+			// crash package (1 test: crashes immediately)
 			printed("❌️", "TestCrash", "failure=crash"),
+			// flaky package (3 tests: TestStable passes, TestFlaky+TestSuite fail)
+			printed("✅ [1/7]", "TestStable", "attempt=1"),
 			printed("❌️", "TestFlaky", "failure=failed"),
 			printed("❌️", "TestSuite", "failure=failed"),
+			// timeout package (3 tests: TestQuick passes, TestSlowOnce+TestWithSub stuck)
+			printed("✅ [2/7]", "TestQuick", "attempt=1"),
 			printed("❌️", "TestSlowOnce", "failure=timeout"),
 			printed("❌️", "TestWithSub", "failure=timeout"),
-			// All pass on attempt 2
-			printed("✅ [", "TestCrash", "attempt=2"),
-			printed("✅ [", "TestFlaky", "attempt=2"),
-			printed("✅ [", "TestSuite", "attempt=2"),
-			printed("✅ [", "TestSlowOnce", "attempt=2"),
-			printed("✅ [", "TestWithSub", "attempt=2"),
+			// All retries pass
+			printed("✅ [3/7]", "TestCrash", "attempt=2"),
+			printed("✅ [4/7]", "TestFlaky", "attempt=2"),
+			printed("✅ [5/7]", "TestSuite", "attempt=2"),
+			printed("✅ [6/7]", "TestSlowOnce", "attempt=2"),
+			printed("✅ [7/7]", "TestWithSub", "attempt=2"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
+			file("TestCrash",
+				"intentional crash",
+			),
 			file("TestFlaky",
 				"intentional first-attempt failure",
 			),
@@ -402,9 +409,6 @@ func TestIntegration(t *testing.T) {
 			),
 			file("TestWithSub",
 				"=== RUN   TestWithSub",
-			),
-			file("TestCrash",
-				"intentional crash",
 			),
 		)
 	})
