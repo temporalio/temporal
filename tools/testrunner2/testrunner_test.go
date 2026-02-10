@@ -66,7 +66,7 @@ func TestIntegration(t *testing.T) {
 				printed("running in 'none' mode"),
 				printed("🚀", "all", "attempt 1"),
 				printed("$", "go test", "./testpkg/passing"),
-				printed("✅ [1/1]", "all", "attempt=1"),
+				printed("✅ [1/1]", "all", "attempt=1", "passed=3/3"),
 				printed("test run completed"),
 				notPrinted("go test -c"), // no compile step
 			)
@@ -86,7 +86,7 @@ func TestIntegration(t *testing.T) {
 				printed("running in 'none' mode"),
 				printed("🚀", "all", "attempt 1"),
 				printed("$", "go test", "-run", "TestA1", "./testpkg/passing"),
-				printed("✅ [1/1]", "all", "attempt=1"),
+				printed("✅ [1/1]", "all", "attempt=1", "passed=1/1"),
 				printed("test run completed"),
 			)
 			assertNoLogFiles(t, res)
@@ -111,14 +111,14 @@ func TestIntegration(t *testing.T) {
 			assertConsole(t, res,
 				printed("$", ".test", "-test.run ^TestAlwaysFails$"),
 				printed("🔄 scheduling retry:", "^TestAlwaysFails$"), // mid-stream retry
-				printed("❌️", "TestAlwaysFails", "attempt=1", "failure=failed"),
+				printed("❌️", "TestAlwaysFails", "attempt=1", "passed=0/1", "failure=failed"),
 				printed("--- TestAlwaysFails"), // failed test name shown in body
 				printed("always fails"),        // failure details shown in body
 				printed("$", ".test", "-test.run ^TestOK$"),
 				printed("✅ [1/2]", "TestOK", "attempt=1", "passed=1/1"),
 				printed("🚀", "TestAlwaysFails", "attempt 2"),
 				printed("$", ".test", "-test.run ^TestAlwaysFails$"),
-				printed("❌️", "TestAlwaysFails", "attempt=2", "failure=failed"),
+				printed("❌️", "TestAlwaysFails", "attempt=2", "passed=0/1", "failure=failed"),
 				notPrinted("test run completed"),
 			)
 			assertLogFiles(t, res, // attempt 1 + attempt 2 both fail
@@ -150,10 +150,10 @@ func TestIntegration(t *testing.T) {
 				printed("🔄 scheduling retry:", "^TestAlwaysFails$"),
 				printed("🚀", "all", "attempt 2"),
 				printed("$", "go test", "-run", "^TestAlwaysFails$", "./testpkg/failing"),
-				printed("❌️", "all", "attempt=1", "failure=failed"),
+				printed("❌️", "all", "attempt=1", "passed=1/2", "failure=failed"),
 				printed("--- TestAlwaysFails"),
 				printed("always fails"),
-				printed("❌️", "all", "attempt=2"),
+				printed("❌️", "all", "attempt=2", "passed=0/1", "failure=failed"),
 				notPrinted("go test -c"), // no compile step
 			)
 		})
@@ -173,7 +173,7 @@ func TestIntegration(t *testing.T) {
 				printed("✅ [1/2]", "TestStable", "attempt=1", "passed=1/1"),
 				printed("$", ".test", "-test.run ^TestFlaky$"),
 				printed("🔄 scheduling retry:", "^TestFlaky$"), // mid-stream retry
-				printed("❌️", "TestFlaky", "failure=failed"),
+				printed("❌️", "TestFlaky", "attempt=1", "passed=0/1", "failure=failed"),
 				printed("--- TestFlaky"),                     // failed test name shown in body
 				printed("intentional first-attempt failure"), // failure details shown in body
 				printed("$", ".test", "-test.run ^TestFlaky$"),
@@ -203,10 +203,10 @@ func TestIntegration(t *testing.T) {
 				printed("🔄 scheduling retry:", "^TestFlaky$"),
 				printed("🚀", "all", "attempt 2"),
 				printed("$", "go test", "-run", "^TestFlaky$", "./testpkg/flaky"),
-				printed("❌️", "all", "attempt=1", "failure=failed"),
+				printed("❌️", "all", "attempt=1", "passed=1/2", "failure=failed"),
 				printed("--- TestFlaky"),
 				printed("intentional first-attempt failure"),
-				printed("✅ [1/1]", "all", "attempt=2"),
+				printed("✅ [1/1]", "all", "attempt=2", "passed=1/1"),
 				printed("test run completed"),
 				notPrinted("go test -c"),
 			)
@@ -224,7 +224,7 @@ func TestIntegration(t *testing.T) {
 		assertConsole(t, res,
 			printed("$", ".test", "-test.run ^TestSuite$"),
 			printed("🔄 scheduling retry:", "^TestSuite$/^FailChild$"),
-			printed("❌️", "TestSuite", "failure=failed"),
+			printed("❌️", "TestSuite", "attempt=1", "passed=1/3", "failure=failed"),
 			// Retry targets only the leaf subtest, skipping passed sibling
 			printed("$", ".test",
 				"-test.run ^TestSuite$/^FailChild$",
@@ -254,7 +254,7 @@ func TestIntegration(t *testing.T) {
 		)
 		assertConsole(t, res,
 			printed("$", ".test", "-test.run ^TestCrash$"),
-			printed("❌️"),
+			printed("❌️", "TestCrash", "attempt=1", "passed=0/?", "failure=crash"),
 			printed("PANIC:", "intentional crash"),
 			printed("🔄 scheduling retry:", "^TestCrash$"), // post-exit crash recovery
 			printed("$", ".test", "-test.run ^TestCrash$"),
@@ -288,7 +288,7 @@ func TestIntegration(t *testing.T) {
 			printed("✅ [1/2]", "TestQuick", "attempt=1", "passed=1/1"),
 			printed("$", ".test", "-test.run ^TestSlowOnce$"),
 			printed("🔄 scheduling retry:", "^TestSlowOnce$"),
-			printed("❌️", "TestSlowOnce", "failure=timeout"),
+			printed("❌️", "TestSlowOnce", "attempt=1", "passed=0/?", "failure=timeout"),
 			printed("--- TIMEOUT:", "test stuck", "TestSlowOnce", "no progress for"),
 			printed("$", ".test", "-test.run ^TestSlowOnce$"),
 			printed("✅ [2/2]", "TestSlowOnce", "attempt=2", "passed=1/1"),
@@ -315,12 +315,12 @@ func TestIntegration(t *testing.T) {
 		assertConsole(t, res,
 			printed("$", ".test", "-test.run ^TestWithSub$"),
 			printed("🔄 scheduling retry:", "^TestWithSub$/^Slow$"),
-			printed("❌️", "TestWithSub", "failure=timeout"),
+			printed("❌️", "TestWithSub", "attempt=1", "passed=2/?", "failure=timeout"),
 			printed("--- TIMEOUT:", "TestWithSub/Slow"),
 			notPrinted("— in TestWithSub\n"), // leaf shown, not parent
 			// Retry skips passed siblings
 			printed("$", ".test", "-test.run ^TestWithSub$/^Slow$", "-test.skip ^TestWithSub$/^(Pass"),
-			printed("✅ [1/1]", "TestWithSub", "attempt=2"),
+			printed("✅ [1/1]", "TestWithSub", "attempt=2", "passed=2/2"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
@@ -348,7 +348,7 @@ func TestIntegration(t *testing.T) {
 			)
 			assertConsole(ct, res,
 				printed("$", ".test", "-test.run ^TestRace$"),
-				printed("❌️", "failure=crash"),
+				printed("❌️", "attempt=1", "failure=crash"),
 				printed("RACE:", "Data race detected", "TestRace"),
 				notPrinted("test run completed"),
 			)
@@ -377,21 +377,21 @@ func TestIntegration(t *testing.T) {
 
 		assertConsole(t, res,
 			// crash package (1 test: crashes immediately)
-			printed("❌️", "TestCrash", "failure=crash"),
+			printed("❌️", "TestCrash", "attempt=1", "passed=0/?", "failure=crash"),
 			// flaky package (3 tests: TestStable passes, TestFlaky+TestSuite fail)
-			printed("✅ [1/7]", "TestStable", "attempt=1"),
-			printed("❌️", "TestFlaky", "failure=failed"),
-			printed("❌️", "TestSuite", "failure=failed"),
+			printed("✅ [1/7]", "TestStable", "attempt=1", "passed=1/1"),
+			printed("❌️", "TestFlaky", "attempt=1", "passed=0/1", "failure=failed"),
+			printed("❌️", "TestSuite", "attempt=1", "passed=1/3", "failure=failed"),
 			// timeout package (3 tests: TestQuick passes, TestSlowOnce+TestWithSub stuck)
-			printed("✅ [2/7]", "TestQuick", "attempt=1"),
-			printed("❌️", "TestSlowOnce", "failure=timeout"),
-			printed("❌️", "TestWithSub", "failure=timeout"),
+			printed("✅ [2/7]", "TestQuick", "attempt=1", "passed=1/1"),
+			printed("❌️", "TestSlowOnce", "attempt=1", "passed=0/?", "failure=timeout"),
+			printed("❌️", "TestWithSub", "attempt=1", "passed=2/?", "failure=timeout"),
 			// All retries pass
-			printed("✅ [3/7]", "TestCrash", "attempt=2"),
-			printed("✅ [4/7]", "TestFlaky", "attempt=2"),
-			printed("✅ [5/7]", "TestSuite", "attempt=2"),
-			printed("✅ [6/7]", "TestSlowOnce", "attempt=2"),
-			printed("✅ [7/7]", "TestWithSub", "attempt=2"),
+			printed("✅ [3/7]", "TestCrash", "attempt=2", "passed=1/1"),
+			printed("✅ [4/7]", "TestFlaky", "attempt=2", "passed=1/1"),
+			printed("✅ [5/7]", "TestSuite", "attempt=2", "passed=2/2"),
+			printed("✅ [6/7]", "TestSlowOnce", "attempt=2", "passed=1/1"),
+			printed("✅ [7/7]", "TestWithSub", "attempt=2", "passed=2/2"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
