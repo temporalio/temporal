@@ -646,12 +646,13 @@ func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
 	err error,
 ) {
 	if err != nil && len(newBranchToken) > 0 {
-		if err := r.shardContext.GetExecutionManager().DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
-			ShardID:     r.shardContext.GetShardID(),
-			BranchToken: newBranchToken,
-		}); err != nil {
-			r.logger.Error("failed to clean up workflow execution", tag.Error(err))
-		}
+		// Don't delete the branch - history writes may have succeeded even if the workflow creation failed.
+		// Orphaned branches will be cleaned up by the garbage collection mechanism.
+		// Emit metrics to track how often this occurs.
+		metrics.ReplicationOrphanedHistoryBranch.With(r.shardContext.GetMetricsHandler()).Record(1)
+		r.logger.Warn("skipping history branch cleanup on error - branch may be orphaned",
+			tag.Error(err),
+			tag.ShardID(r.shardContext.GetShardID()))
 	}
 }
 
