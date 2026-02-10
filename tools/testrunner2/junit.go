@@ -126,7 +126,7 @@ func (j *junitReport) collectTestCaseFailures() []string {
 	return filterParentNames(failures)
 }
 
-func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport, error) {
+func mergeReports(reports []*junitReport) (*junitReport, error) {
 	if len(reports) == 0 {
 		return nil, errors.New("no reports to merge")
 	}
@@ -195,21 +195,14 @@ func mergeReports(reports []*junitReport, quarantined ...[]string) (*junitReport
 		}
 	}
 
-	var quarantinedNames []string
-	for _, q := range quarantined {
-		quarantinedNames = append(quarantinedNames, q...)
-	}
-
 	return &junitReport{
 		Testsuites:    combined,
-		reportingErrs: validateRetries(reports, quarantinedNames),
+		reportingErrs: validateRetries(reports),
 	}, nil
 }
 
 // validateRetries checks that all failures from attempt N were retried in attempt N+1.
-// Quarantined tests are excluded: Go's -test.skip uses per-level cross-product matching,
-// so some stuck permutations can't be individually retried.
-func validateRetries(reports []*junitReport, quarantinedNames []string) []error {
+func validateRetries(reports []*junitReport) []error {
 	byAttempt := make(map[int][]*junitReport)
 	for _, r := range reports {
 		byAttempt[r.attempt] = append(byAttempt[r.attempt], r)
@@ -239,7 +232,7 @@ func validateRetries(reports []*junitReport, quarantinedNames []string) []error 
 		}
 		var missing []string
 		for f := range prevFailures {
-			if !nextCases[f] && !isQuarantined(f, quarantinedNames) {
+			if !nextCases[f] {
 				missing = append(missing, f)
 			}
 		}
@@ -250,19 +243,6 @@ func validateRetries(reports []*junitReport, quarantinedNames []string) []error 
 		}
 	}
 	return errs
-}
-
-// isQuarantined checks if testName is a quarantined test or a subtest of one.
-func isQuarantined(testName string, quarantinedNames []string) bool {
-	for _, q := range quarantinedNames {
-		if testName == q ||
-			strings.HasPrefix(testName, q+"/") ||
-			strings.Contains(testName, "/"+q+"/") ||
-			strings.HasSuffix(testName, "/"+q) {
-			return true
-		}
-	}
-	return false
 }
 
 // testFailure holds information about a failed test.
@@ -277,9 +257,16 @@ type testResults struct {
 	passes   []string
 }
 
-// newJUnitReport parses go test -v output and writes a JUnit XML report.
+// newJUnitReport parses go test -v output from a log file and writes a JUnit XML report.
 // Returns the test results including failures and passes.
-func newJUnitReport(output string, junitPath string) testResults {
+func newJUnitReport(logPath string, junitPath string) testResults {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		log.Printf("[runner] warning: failed to open log file for JUnit report: %v", err)
+		return testResults{}
+	}
+	output := stripLogHeader(string(data))
+
 	// Use ExcludeParents to filter out parent test entries (e.g., TestSuite when
 	// we only care about TestSuite/TestMethod). This works correctly with
 	// -test.v=test2json which emits --- PASS/FAIL lines as subtests complete.
@@ -291,9 +278,6 @@ func newJUnitReport(output string, junitPath string) testResults {
 	}
 
 	// Extract failed and passed tests from a clean parse (without test2json markers).
-	// Test binaries emit ^V (0x16) markers with -test.v=test2json, and the gotest
-	// parser doesn't attribute output to the correct test when they're present
-	// (output goes to the package level instead of individual tests).
 	results := extractResultsClean(output)
 
 	// Convert to JUnit and write
@@ -313,16 +297,16 @@ func newJUnitReport(output string, junitPath string) testResults {
 		}
 	}
 
-	f, err := os.Create(junitPath)
+	jf, err := os.Create(junitPath)
 	if err != nil {
 		return results
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = jf.Close() }()
 
-	if _, err := f.WriteString(xml.Header); err != nil {
+	if _, err := jf.WriteString(xml.Header); err != nil {
 		return results
 	}
-	encoder := xml.NewEncoder(f)
+	encoder := xml.NewEncoder(jf)
 	encoder.Indent("", "    ")
 	if err := encoder.Encode(testsuites); err != nil {
 		return results
@@ -371,6 +355,27 @@ func extractResultsClean(output string) testResults {
 	return extractResults(report)
 }
 
+// stripLogHeader removes the TESTRUNNER LOG header from log file content.
+func stripLogHeader(content string) string {
+	headerEnd := logHeaderSeparator + "\n\n"
+	if idx := strings.Index(content, headerEnd); idx >= 0 {
+		// Find the last occurrence of the separator (the header has 3 of them)
+		rest := content[idx+len(headerEnd):]
+		return rest
+	}
+	return content
+}
+
+// parseAlertsFromFile reads a log file from disk and parses alerts from it.
+func parseAlertsFromFile(logPath string) []alert {
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		return nil
+	}
+	output := stripLogHeader(string(data))
+	return parseAlerts(output)
+}
+
 // lastLines returns up to n non-empty lines from the end of output.
 func lastLines(output []string, n int) string {
 	var lines []string
@@ -382,3 +387,4 @@ func lastLines(output []string, n int) string {
 	slices.Reverse(lines)
 	return strings.Join(lines, "\n")
 }
+

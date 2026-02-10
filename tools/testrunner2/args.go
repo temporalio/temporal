@@ -13,7 +13,6 @@ const (
 	maxAttemptsFlag      = "--max-attempts"
 	coverProfileFlag     = "-coverprofile"
 	junitReportFlag      = "--junitfile"
-	runTimeoutFlag       = "--run-timeout"
 	stuckTestTimeoutFlag = "--stuck-test-timeout"
 	parallelismFlag      = "--parallelism"
 	timeoutFlag          = "-timeout"
@@ -39,7 +38,6 @@ type config struct {
 	buildTags        string
 	logDir           string        // directory for log files
 	timeout          time.Duration // overall timeout for the test run
-	runTimeout       time.Duration // timeout per test run file
 	stuckTestTimeout time.Duration // abort test if individual test runs longer than this
 	runFilter        string        // -run filter pattern (used to filter tests)
 	maxAttempts      int
@@ -99,18 +97,6 @@ var flagDefinitions = map[string]flagDefinition{
 			return nil
 		},
 	},
-	runTimeoutFlag: {
-		runnerOnly: true,
-		handle: func(after string, cfg *config) error {
-			d, err := time.ParseDuration(after)
-			if err != nil {
-				return fmt.Errorf("invalid argument %s: %w", runTimeoutFlag, err)
-			}
-			cfg.runTimeout = d
-			cfg.log("run timeout set to %v", cfg.runTimeout)
-			return nil
-		},
-	},
 	stuckTestTimeoutFlag: {
 		runnerOnly: true,
 		handle: func(after string, cfg *config) error {
@@ -124,7 +110,7 @@ var flagDefinitions = map[string]flagDefinition{
 		},
 	},
 	timeoutFlag: {
-		runnerOnly: false,
+		runnerOnly: true, // no longer passed to go test
 		handle: func(after string, cfg *config) error {
 			d, err := time.ParseDuration(after)
 			if err != nil {
@@ -191,10 +177,11 @@ var flagDefinitions = map[string]flagDefinition{
 // and values from environment variables
 func defaultConfig() config {
 	cfg := config{
-		maxAttempts: 1,
-		parallelism: runtime.NumCPU(),
-		totalShards: 1,
-		shardIndex:  0,
+		maxAttempts:      1,
+		parallelism:      runtime.NumCPU(),
+		totalShards:      1,
+		shardIndex:       0,
+		stuckTestTimeout: time.Minute,
 	}
 
 	if v := os.Getenv("TEST_RUNNER_SHARDS_TOTAL"); v != "" {
@@ -232,12 +219,6 @@ func parseArgs(args []string, cfg *config) ([]string, error) {
 		} else {
 			sanitizedArgs = append(sanitizedArgs, arg)
 		}
-	}
-
-	// If --run-timeout wasn't set, default to the total timeout
-	if cfg.runTimeout == 0 && cfg.timeout > 0 {
-		cfg.runTimeout = cfg.timeout
-		cfg.log("run timeout defaulting to total timeout: %v", cfg.runTimeout)
 	}
 
 	return sanitizedArgs, nil
