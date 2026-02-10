@@ -332,6 +332,27 @@ func TestIntegration(t *testing.T) {
 		)
 	})
 
+	t.Run("failure: parent stuck after subtests pass", func(t *testing.T) {
+		t.Parallel()
+
+		// TestParentStuck's children both pass, then the parent hangs
+		// (simulating a stuck teardown). The stuck detector should report
+		// the parent and the retry should skip already-passed children.
+		res := runIntegTest(t, []string{"./testpkg/timeout"}, "--group-by=test", "--max-attempts=2", "--stuck-test-timeout=2s", "-run=TestParentStuck")
+		require.NoError(t, res.err, "should pass on retry")
+
+		assertConsole(t, res,
+			printed("$", ".test", "-test.run ^TestParentStuck$"),
+			printed("🔄 scheduling retry:", "^TestParentStuck$"),
+			printed("❌️", "TestParentStuck", "attempt=1", "passed=2/?", "failure=timeout"),
+			printed("--- TIMEOUT:", "TestParentStuck"),
+			// Retry skips passed children
+			printed("$", ".test", "-test.run ^TestParentStuck$", "-test.skip ^TestParentStuck$/^(Child"),
+			printed("✅ [1/1]", "TestParentStuck", "attempt=2", "passed=1/1"),
+			printed("test run completed"),
+		)
+	})
+
 	t.Run("failure: data race", func(t *testing.T) {
 		t.Parallel()
 
@@ -379,19 +400,21 @@ func TestIntegration(t *testing.T) {
 			// crash package (1 test: crashes immediately)
 			printed("❌️", "TestCrash", "attempt=1", "passed=0/?", "failure=crash"),
 			// flaky package (3 tests: TestStable passes, TestFlaky+TestSuite fail)
-			printed("✅ [1/7]", "TestStable", "attempt=1", "passed=1/1"),
+			printed("✅ [1/8]", "TestStable", "attempt=1", "passed=1/1"),
 			printed("❌️", "TestFlaky", "attempt=1", "passed=0/1", "failure=failed"),
 			printed("❌️", "TestSuite", "attempt=1", "passed=1/3", "failure=failed"),
-			// timeout package (3 tests: TestQuick passes, TestSlowOnce+TestWithSub stuck)
-			printed("✅ [2/7]", "TestQuick", "attempt=1", "passed=1/1"),
+			// timeout package (4 tests: TestQuick passes, rest stuck)
+			printed("✅ [2/8]", "TestQuick", "attempt=1", "passed=1/1"),
 			printed("❌️", "TestSlowOnce", "attempt=1", "passed=0/?", "failure=timeout"),
 			printed("❌️", "TestWithSub", "attempt=1", "passed=2/?", "failure=timeout"),
+			printed("❌️", "TestParentStuck", "attempt=1", "passed=2/?", "failure=timeout"),
 			// All retries pass
-			printed("✅ [3/7]", "TestCrash", "attempt=2", "passed=1/1"),
-			printed("✅ [4/7]", "TestFlaky", "attempt=2", "passed=1/1"),
-			printed("✅ [5/7]", "TestSuite", "attempt=2", "passed=2/2"),
-			printed("✅ [6/7]", "TestSlowOnce", "attempt=2", "passed=1/1"),
-			printed("✅ [7/7]", "TestWithSub", "attempt=2", "passed=2/2"),
+			printed("✅ [3/8]", "TestCrash", "attempt=2", "passed=1/1"),
+			printed("✅ [4/8]", "TestFlaky", "attempt=2", "passed=1/1"),
+			printed("✅ [5/8]", "TestSuite", "attempt=2", "passed=2/2"),
+			printed("✅ [6/8]", "TestSlowOnce", "attempt=2", "passed=1/1"),
+			printed("✅ [7/8]", "TestWithSub", "attempt=2", "passed=2/2"),
+			printed("✅ [8/8]", "TestParentStuck", "attempt=2", "passed=1/1"),
 			printed("test run completed"),
 		)
 		assertLogFiles(t, res,
@@ -409,6 +432,9 @@ func TestIntegration(t *testing.T) {
 			),
 			file("TestWithSub",
 				"=== RUN   TestWithSub",
+			),
+			file("TestParentStuck",
+				"=== RUN   TestParentStuck",
 			),
 		)
 	})
