@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"encoding/binary"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -21,6 +22,13 @@ func generateRequestID(scheduler *Scheduler, backfillID string, nominal, actual 
 		nominal,
 		actual,
 	)
+}
+
+// serializeConflictToken serializes a conflict token as a byte slice.
+func serializeConflictToken(conflictToken int64) []byte {
+	token := make([]byte, 8)
+	binary.LittleEndian.PutUint64(token, uint64(conflictToken))
+	return token
 }
 
 // newTaggedLogger returns a logger tagged with the Scheduler's attributes.
