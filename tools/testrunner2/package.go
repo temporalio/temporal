@@ -34,10 +34,9 @@ type testCase struct {
 
 // workUnit represents a schedulable unit of test work.
 type workUnit struct {
-	pkg       string     // package path
-	tests     []testCase // specific tests to run (for test mode or retries)
-	label     string     // display label for progress output
-	skipTests []string   // tests to skip via -test.skip (for timeout retries)
+	pkg   string     // package path
+	tests []testCase // specific tests to run (for test mode or retries)
+	label string     // display label for progress output
 }
 
 // findTestPackages scans directories for _test.go files and returns package
