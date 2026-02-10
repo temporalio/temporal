@@ -614,6 +614,12 @@ func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollM
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
+func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
+	if c.pollerHistory != nil {
+		c.pollerHistory.removePoller(id)
+	}
+}
+
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
 	if c.pollerHistory == nil {

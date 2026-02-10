@@ -1209,10 +1209,22 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 }
 
 func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
-	_ context.Context,
+	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+
+	// Eagerly remove poller from history so DescribeTaskQueue doesn't show stale pollers.
+	if identity := request.GetIdentity(); identity != "" {
+		partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+		if err == nil {
+			pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
+			if err == nil && pm != nil {
+				pm.RemovePoller(pollerIdentity(identity))
+			}
+		}
+	}
+
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 

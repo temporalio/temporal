@@ -246,6 +246,9 @@ message CancelOutstandingWorkerPollsRequest {
     temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
     temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
     string worker_instance_key = 4;
+    // Identity of the worker. Used to eagerly remove the worker from pollerHistory
+    // so DescribeTaskQueue doesn't show stale pollers.
+    string identity = 5;
 }
 
 message CancelOutstandingWorkerPollsResponse {

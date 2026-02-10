@@ -780,6 +780,18 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	return ret
 }
 
+// RemovePoller eagerly removes a poller from history for graceful shutdown.
+func (pm *taskQueuePartitionManagerImpl) RemovePoller(identity pollerIdentity) {
+	if dbq := pm.defaultQueue(); dbq != nil {
+		dbq.RemovePoller(identity)
+	}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, vq := range pm.versionedQueues {
+		vq.RemovePoller(identity)
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
 	dbq := pm.defaultQueue()
 	if dbq != nil && dbq.HasPollerAfter(accessTime) {
