@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -1083,6 +1084,74 @@ func TestValidateVersioningOverride(t *testing.T) {
 			expectError:   true,
 			errorContains: "override behavior is required",
 		},
+		// Unimplemented fallback tests
+		{
+			name: "v0.32: Pinned override, Unimplemented fallback, version is member",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("RPC not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{
+											DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+												testVersion.DeploymentName: {
+													Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+														testVersion.BuildId: {},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			expectError: false,
+		},
+		{
+			name: "v0.32: Pinned override, Unimplemented fallback, version is not member",
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version:  testVersion,
+					},
+				},
+			},
+			setupCache: func(c *testVersionMembershipCache) {},
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			expectError:   true,
+			errorContains: getPinnedVersionErrorMsg(testVersion, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		},
 	}
 
 	for _, tt := range tests {
@@ -1117,6 +1186,91 @@ func TestValidateVersioningOverride(t *testing.T) {
 				}
 			} else {
 				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestGetIsWFTaskQueueInVersionDetector_UnimplementedFallback(t *testing.T) {
+	testNamespaceID := "test-namespace-id"
+	testTaskQueue := "test-task-queue"
+	testVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-id",
+	}
+
+	tests := []struct {
+		name       string
+		setupMock  func(m *matchingservicemock.MockMatchingServiceClient)
+		wantMember bool
+		wantErr    bool
+	}{
+		{
+			name: "fallback returns true when version is member",
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{
+											DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+												testVersion.DeploymentName: {
+													Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+														testVersion.BuildId: {},
+													},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			wantMember: true,
+		},
+		{
+			name: "fallback returns false when version is not member",
+			setupMock: func(m *matchingservicemock.MockMatchingServiceClient) {
+				m.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+					Return(nil, serviceerror.NewUnimplemented("not implemented"))
+				m.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+					Return(&matchingservice.GetTaskQueueUserDataResponse{
+						UserData: &persistencespb.VersionedTaskQueueUserData{
+							Data: &persistencespb.TaskQueueUserData{
+								PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+									int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+										DeploymentData: &persistencespb.DeploymentData{},
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			wantMember: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			tt.setupMock(mockClient)
+
+			detector := GetIsWFTaskQueueInVersionDetector(mockClient)
+			isMember, err := detector(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantMember, isMember)
 			}
 		})
 	}
