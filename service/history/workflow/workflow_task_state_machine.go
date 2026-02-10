@@ -500,7 +500,15 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
 				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
-			targetDeploymentVersionChanged = true
+			// Only signal if this is a NEW target (not one we already told the workflow about).
+			// This prevents infinite CAN loops for pinned workflows that CAN without AutoUpgrade.
+			lastSignaled := m.ms.executionInfo.WorkflowTaskLastSignaledTargetDeploymentVersion
+			if lastSignaled == nil ||
+				lastSignaled.DeploymentName != targetDeploymentVersion.DeploymentName ||
+				lastSignaled.BuildId != targetDeploymentVersion.BuildId {
+				targetDeploymentVersionChanged = true
+				m.ms.executionInfo.WorkflowTaskLastSignaledTargetDeploymentVersion = targetDeploymentVersion
+			}
 		}
 	}
 	// emit metric
@@ -1093,6 +1101,7 @@ func (m *workflowTaskStateMachine) UpdateWorkflowTask(
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNew = workflowTask.SuggestContinueAsNew
 	m.ms.executionInfo.WorkflowTaskSuggestContinueAsNewReasons = workflowTask.SuggestContinueAsNewReasons
 	m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged = workflowTask.TargetWorkerDeploymentVersionChanged
+	m.ms.executionInfo.WorkflowTaskLastSignaledTargetDeploymentVersion = workflowTask.LastSignaledTargetDeploymentVersion
 	m.ms.executionInfo.WorkflowTaskHistorySizeBytes = workflowTask.HistorySizeBytes
 	m.ms.executionInfo.WorkflowTaskBuildId = workflowTask.BuildId
 	m.ms.executionInfo.WorkflowTaskBuildIdRedirectCounter = workflowTask.BuildIdRedirectCounter
@@ -1227,7 +1236,8 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		StartToCloseTimeoutTask:     m.ms.GetWorkflowTaskStartToCloseTimeoutTask(),
 		Stamp:                       m.ms.executionInfo.WorkflowTaskStamp,
 
-		TargetWorkerDeploymentVersionChanged: m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+		TargetWorkerDeploymentVersionChanged:   m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+		LastSignaledTargetDeploymentVersion:     m.ms.executionInfo.WorkflowTaskLastSignaledTargetDeploymentVersion,
 	}
 
 	return wft

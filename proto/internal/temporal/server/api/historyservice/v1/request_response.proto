@@ -99,6 +99,9 @@ message StartWorkflowExecutionRequest {
     // After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
     // subsequent workflow tasks.
     temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
+    // The last target deployment version that was signaled to the previous run.
+    // Used to prevent re-signaling the same target version change across CAN runs.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_signaled_target_deployment_version = 17;
 }
 
 message StartWorkflowExecutionResponse {
