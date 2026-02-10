@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -27,6 +28,7 @@ type (
 		shardContext                historyi.ShardContext
 		transactionMgr              TransactionManager
 		bypassVersionSemanticsCheck bool
+		taskRefresher               workflow.TaskRefresher
 	}
 )
 
@@ -36,12 +38,14 @@ func newNDCTransactionMgrForExistingWorkflow(
 	shardContext historyi.ShardContext,
 	transactionMgr TransactionManager,
 	bypassVersionSemanticsCheck bool,
+	taskRefresher workflow.TaskRefresher,
 ) *nDCTransactionMgrForExistingWorkflowImpl {
 
 	return &nDCTransactionMgrForExistingWorkflowImpl{
 		shardContext:                shardContext,
 		transactionMgr:              transactionMgr,
 		bypassVersionSemanticsCheck: bypassVersionSemanticsCheck,
+		taskRefresher:               taskRefresher,
 	}
 }
 
@@ -331,6 +335,15 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 			return err
 		}
 		newWorkflowPolicy = historyi.TransactionPolicyPassive.Ptr()
+	}
+
+	if err := r.taskRefresher.Refresh(ctx, targetWorkflow.GetMutableState(), false); err != nil {
+		return err
+	}
+	if newWorkflow != nil {
+		if err := r.taskRefresher.Refresh(ctx, newWorkflow.GetMutableState(), false); err != nil {
+			return err
+		}
 	}
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
