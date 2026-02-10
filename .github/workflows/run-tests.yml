@@ -302,7 +302,7 @@ jobs:
 
       - name: Print test logs
         if: always()
-        run: for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done
+        run: shopt -s nullglob; for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done; true
 
       - name: Write test summary
         if: ${{ !cancelled() }}
@@ -398,7 +398,7 @@ jobs:
 
       - name: Print test logs
         if: always()
-        run: for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done
+        run: shopt -s nullglob; for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done; true
 
       - name: Write test summary
         if: ${{ !cancelled() }}
@@ -534,7 +534,7 @@ jobs:
 
       - name: Print test logs
         if: always()
-        run: for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done
+        run: shopt -s nullglob; for f in .testoutput/*.log; do [ -s "$f" ] && echo "::group::$(basename "$f")" && cat "$f" && echo "::endgroup::"; done; true
 
       - name: Write test summary
         if: ${{ !cancelled() }}
