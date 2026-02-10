@@ -6,9 +6,11 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -27,6 +29,8 @@ type MockNodeBackend struct {
 	HandleUpdateWorkflowStateStatus  func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                 func() bool
 	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
+	HandleAddHistoryEvent            func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	HandleGetNamespaceEntry          func() *namespace.Namespace
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -169,6 +173,20 @@ func (m *MockNodeBackend) GetNexusCompletion(
 		return m.HandleGetNexusCompletion(ctx, requestID)
 	}
 	return nil, nil
+}
+
+func (m *MockNodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	if m.HandleAddHistoryEvent != nil {
+		return m.HandleAddHistoryEvent(t, setAttributes)
+	}
+	return nil
+}
+
+func (m *MockNodeBackend) GetNamespaceEntry() *namespace.Namespace {
+	if m.HandleGetNamespaceEntry != nil {
+		return m.HandleGetNamespaceEntry()
+	}
+	return nil
 }
 
 func (m *MockNodeBackend) NumTasksAdded() int {

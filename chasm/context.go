@@ -4,7 +4,10 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 )
 
 type Context interface {
@@ -26,12 +29,16 @@ type Context interface {
 	ExecutionCloseTime() time.Time
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
+	// GetNamespaceEntry returns the namespace entry for the execution.
+	GetNamespaceEntry() *namespace.Namespace
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
+	// GetContext returns the underlying context.Context for use in I/O operations (e.g., RPC calls).
+	GetContext() context.Context
+
 	structuredRef(Component) (ComponentRef, error)
-	getContext() context.Context
 }
 
 type MutableContext interface {
@@ -42,8 +49,8 @@ type MutableContext interface {
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
 
-	// Add more methods here for other storage commands/primitives.
-	// e.g. HistoryEvent
+	// AddHistoryEvent adds a history event for the execution.
+	AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition
@@ -132,7 +139,11 @@ func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) 
 	return c.root.structuredRef(component)
 }
 
-func (c *immutableCtx) getContext() context.Context {
+func (c *immutableCtx) GetNamespaceEntry() *namespace.Namespace {
+	return c.root.backend.GetNamespaceEntry()
+}
+
+func (c *immutableCtx) GetContext() context.Context {
 	return c.ctx
 }
 
@@ -155,4 +166,11 @@ func (c *mutableCtx) AddTask(
 	payload any,
 ) {
 	c.root.AddTask(component, attributes, payload)
+}
+
+func (c *mutableCtx) AddHistoryEvent(
+	t enumspb.EventType,
+	setAttributes func(*historypb.HistoryEvent),
+) *historypb.HistoryEvent {
+	return c.root.backend.AddHistoryEvent(t, setAttributes)
 }

@@ -2,7 +2,7 @@ package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
 
 var _ chasm.Component = (*Operation)(nil)
@@ -15,8 +15,8 @@ type Operation struct {
 	*nexusoperationpb.OperationState
 }
 
-func NewOperation() *Operation {
-	return &Operation{}
+func NewOperation(state *nexusoperationpb.OperationState) *Operation {
+	return &Operation{OperationState: state}
 }
 
 func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {

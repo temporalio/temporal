@@ -118,6 +118,21 @@ func (w *Workflow) AddCompletionCallbacks(
 	return nil
 }
 
+func (w *Workflow) AddNexusOperation(
+	ctx chasm.MutableContext,
+	key string,
+	op *nexusoperation.Operation,
+) {
+	if w.Operations == nil {
+		w.Operations = make(chasm.Map[string, *nexusoperation.Operation])
+	}
+	w.Operations[key] = chasm.NewComponentField(ctx, op)
+}
+
+func (w *Workflow) PendingNexusOperationCount() int {
+	return len(w.Operations)
+}
+
 func (w *Workflow) GetNexusCompletion(
 	ctx chasm.Context,
 	requestID string,
