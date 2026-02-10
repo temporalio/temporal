@@ -286,10 +286,20 @@ func MakeDirectiveForWorkflowTask(
 
 type IsWFTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
 
-func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) IsWFTaskQueueInVersionDetector {
+func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, versionMembershipCache VersionMembershipCache) IsWFTaskQueueInVersionDetector {
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
+		// Check cache first.
+		if versionMembershipCache != nil {
+			if isMember, ok := versionMembershipCache.Get(
+				namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				version.GetDeploymentName(), version.GetBuildId(),
+			); ok {
+				return isMember, nil
+			}
+		}
+
 		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
 			NamespaceId:   namespaceID,
 			TaskQueue:     tq,
@@ -301,10 +311,28 @@ func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) I
 			// fall back to fetching full user data and checking version membership based on the receieved information.
 			var unimplErr *serviceerror.Unimplemented
 			if errors.As(err, &unimplErr) {
-				return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
+				isMember, fallbackErr := checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
+				if fallbackErr == nil && versionMembershipCache != nil {
+					versionMembershipCache.Put(
+						namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+						version.GetDeploymentName(), version.GetBuildId(),
+						isMember,
+					)
+				}
+				return isMember, fallbackErr
 			}
 			return false, err
 		}
+
+		// Populate cache after successful RPC.
+		if versionMembershipCache != nil {
+			versionMembershipCache.Put(
+				namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				version.GetDeploymentName(), version.GetBuildId(),
+				resp.GetIsMember(),
+			)
+		}
+
 		return resp.GetIsMember(), nil
 	}
 }

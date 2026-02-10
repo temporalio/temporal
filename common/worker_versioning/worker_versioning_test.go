@@ -41,8 +41,10 @@ var (
 )
 
 type testVersionMembershipCache struct {
-	mu sync.Mutex
-	m  map[versionMembershipCacheKey]bool
+	mu       sync.Mutex
+	m        map[versionMembershipCacheKey]bool
+	getCalls int
+	putCalls int
 }
 
 func newTestVersionMembershipCache() *testVersionMembershipCache {
@@ -60,6 +62,7 @@ func (c *testVersionMembershipCache) Get(
 ) (isMember bool, ok bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.getCalls++
 	v, ok := c.m[versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      taskQueue,
@@ -80,6 +83,7 @@ func (c *testVersionMembershipCache) Put(
 ) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.putCalls++
 	c.m[versionMembershipCacheKey{
 		namespaceID:    namespaceID,
 		taskQueue:      taskQueue,
@@ -1263,8 +1267,8 @@ func TestGetIsWFTaskQueueInVersionDetector_UnimplementedFallback(t *testing.T) {
 			mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 			tt.setupMock(mockClient)
 
-			detector := GetIsWFTaskQueueInVersionDetector(mockClient)
-			isMember, err := detector(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+			function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+			isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -1274,6 +1278,132 @@ func TestGetIsWFTaskQueueInVersionDetector_UnimplementedFallback(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestGetIsWFTaskQueueInVersionDetector(t *testing.T) {
+	testNamespaceID := "test-namespace-id"
+	testTaskQueue := "test-task-queue"
+	testVersion := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-id",
+	}
+
+	t.Run("RPC returns isMember true", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: true}, nil)
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.True(t, isMember)
+	})
+
+	t.Run("RPC returns isMember false", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: false}, nil)
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.False(t, isMember)
+	})
+
+	t.Run("RPC error propagated", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewInternal("internal error"))
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, nil)
+		_, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.Error(t, err)
+	})
+
+	t.Run("cache hit returns cached value - no RPC", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		// No EXPECT on mockClient — any call will fail the test.
+
+		cache := newTestVersionMembershipCache()
+		cache.m[versionMembershipCacheKey{
+			namespaceID:    testNamespaceID,
+			taskQueue:      testTaskQueue,
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			deploymentName: testVersion.DeploymentName,
+			buildID:        testVersion.BuildId,
+		}] = true
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.True(t, isMember)
+		assert.Equal(t, 1, cache.getCalls)
+		assert.Equal(t, 0, cache.putCalls)
+	})
+
+	t.Run("cache hit returns false - no RPC", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+
+		cache := newTestVersionMembershipCache()
+		cache.m[versionMembershipCacheKey{
+			namespaceID:    testNamespaceID,
+			taskQueue:      testTaskQueue,
+			taskQueueType:  enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			deploymentName: testVersion.DeploymentName,
+			buildID:        testVersion.BuildId,
+		}] = false
+
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.False(t, isMember)
+	})
+
+	t.Run("cache miss triggers RPC and populates cache", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{IsMember: true}, nil)
+
+		cache := newTestVersionMembershipCache()
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		isMember, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.NoError(t, err)
+		assert.True(t, isMember)
+		assert.Equal(t, 1, cache.getCalls)
+		assert.Equal(t, 1, cache.putCalls)
+
+		// Verify the value was actually stored.
+		cached, ok := cache.Get(testNamespaceID, testTaskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW, testVersion.DeploymentName, testVersion.BuildId)
+		assert.True(t, ok)
+		assert.True(t, cached)
+	})
+
+	t.Run("cache not populated on RPC error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockClient.EXPECT().CheckTaskQueueVersionMembership(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewInternal("internal error"))
+
+		cache := newTestVersionMembershipCache()
+		function := GetIsWFTaskQueueInVersionDetector(mockClient, cache)
+		_, err := function(context.Background(), testNamespaceID, testTaskQueue, testVersion)
+		require.Error(t, err)
+		assert.Equal(t, 1, cache.getCalls)
+		assert.Equal(t, 0, cache.putCalls)
+	})
 }
 
 func TestCleanupOldDeletedVersions(t *testing.T) {
