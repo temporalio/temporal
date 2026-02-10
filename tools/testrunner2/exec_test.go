@@ -5,7 +5,6 @@ import (
 	"io"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -113,19 +112,17 @@ func TestRunDirectGoTest(t *testing.T) {
 		assert.Contains(t, argsStr, "./pkg/a ./pkg/b")
 	})
 
-	t.Run("run and skip filters", func(t *testing.T) {
+	t.Run("run filter", func(t *testing.T) {
 		t.Parallel()
 		var captured []string
 		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:       []string{"./pkg/a"},
-			runFilter:  "^TestFoo$",
-			skipFilter: "^TestBar$",
-			output:     io.Discard,
+			pkgs:      []string{"./pkg/a"},
+			runFilter: "^TestFoo$",
+			output:    io.Discard,
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
 		assert.Contains(t, argsStr, "-run ^TestFoo$")
-		assert.Contains(t, argsStr, "-skip ^TestBar$")
 	})
 
 	t.Run("race and tags", func(t *testing.T) {
@@ -143,19 +140,6 @@ func TestRunDirectGoTest(t *testing.T) {
 		assert.Contains(t, argsStr, "-tags=integration")
 	})
 
-	t.Run("timeout", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
-			pkgs:    []string{"./pkg/a"},
-			timeout: 30 * time.Second,
-			output:  io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-timeout=30s")
-	})
-
 	t.Run("extra args", func(t *testing.T) {
 		t.Parallel()
 		var captured []string
@@ -169,39 +153,38 @@ func TestRunDirectGoTest(t *testing.T) {
 		assert.Contains(t, argsStr, "-shuffle=on")
 		assert.Contains(t, argsStr, "-count=1")
 	})
+
+	t.Run("no timeout or skip args", func(t *testing.T) {
+		t.Parallel()
+		var captured []string
+		runDirectGoTest(context.Background(), mockExec(&captured), runDirectGoTestInput{
+			pkgs:   []string{"./pkg/a"},
+			output: io.Discard,
+		}, nil)
+
+		argsStr := strings.Join(captured, " ")
+		assert.NotContains(t, argsStr, "-timeout")
+		assert.NotContains(t, argsStr, "-skip")
+	})
 }
 
 func TestExecuteTest(t *testing.T) {
 	t.Parallel()
 
-	t.Run("timeout and cover profile", func(t *testing.T) {
+	t.Run("cover profile", func(t *testing.T) {
 		t.Parallel()
 		var captured []string
 		executeTest(context.Background(), mockExec(&captured), executeTestInput{
 			binary:       "/tmp/foo.test",
 			tests:        []testCase{{name: "TestFoo"}},
-			timeout:      10 * time.Second,
 			coverProfile: "cover.out",
 			output:       io.Discard,
 		}, nil)
 
 		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-test.timeout=10s")
 		assert.Contains(t, argsStr, "-test.coverprofile=cover.out")
-	})
-
-	t.Run("skip pattern", func(t *testing.T) {
-		t.Parallel()
-		var captured []string
-		executeTest(context.Background(), mockExec(&captured), executeTestInput{
-			binary:      "/tmp/foo.test",
-			tests:       []testCase{{name: "TestFoo"}},
-			skipPattern: "^TestBar$",
-			output:      io.Discard,
-		}, nil)
-
-		argsStr := strings.Join(captured, " ")
-		assert.Contains(t, argsStr, "-test.skip ^TestBar$")
+		assert.NotContains(t, argsStr, "-test.timeout")
+		assert.NotContains(t, argsStr, "-test.skip")
 	})
 
 	t.Run("extra args", func(t *testing.T) {

@@ -246,10 +246,7 @@ type execConfig struct {
 	junitPath string
 	logHeader *logFileHeader // optional, compiled mode only
 
-	// Whether to emit retries mid-stream (direct mode = true, compiled mode = false).
-	streamRetries bool
-
-	// Retry callbacks for failures, crashes, and unknown exits.
+	// Retry callback for failures.
 	retry retryHandler
 }
 
@@ -272,39 +269,35 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 				lc, _ = newLogCapture(logCaptureConfig{})
 			}
 
-			// 2. Set up event stream with mid-stream retry handler
+			// 2. Set up event stream with unified stream retry handler
 			testCtx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
 			emittedRetries := make(map[string]bool)
 			children := make(map[string]bool)
 
-			handler := r.midStreamRetryHandler(cfg, emittedRetries, children, emit)
+			handler := r.streamRetryHandler(cfg, emittedRetries, children, emit)
 			stream := newTestEventStream(testEventStreamConfig{
-				Writer:            lc,
-				Handler:           handler,
-				StuckThreshold:    r.stuckTestTimeout,
-				AllStuckThreshold: r.runTimeout,
-				StuckCancel:       cancel,
-				Log:               r.log,
+				Writer:         lc,
+				Handler:        handler,
+				StuckThreshold: r.stuckTestTimeout,
+				StuckCancel:    cancel,
+				Log:            r.log,
 			})
 			defer stream.Close()
 
 			// 3. Start process and collect results
 			result := cfg.startProcess(testCtx, stream)
-			outputStr, err := lc.GetOutput()
-			if err != nil {
-				r.log("warning: failed to get test output: %v", err)
-			}
 			_ = lc.Close()
 
-			results := newJUnitReport(outputStr, cfg.junitPath)
-			detectedAlerts := r.collectAlerts(outputStr, stream)
+			// 4. Parse results and alerts from disk
+			results := newJUnitReport(cfg.logPath, cfg.junitPath)
+			detectedAlerts := r.collectAlertsFromFile(cfg.logPath, stream)
 
-			// 4. Read JUnit report and classify outcome
+			// 5. Read JUnit report and classify outcome
 			numTests, numFailedTests, failureKind := r.collectJUnitResult(cfg, result, detectedAlerts)
 
-			// 5. Console output
+			// 6. Console output
 			writeConsoleResult(r, cfg, result, numTests, numFailedTests,
 				failureKind, detectedAlerts, results, start)
 
@@ -313,21 +306,20 @@ func (r *runner) newExecItem(cfg execConfig) *queueItem {
 				_ = os.Remove(cfg.logPath)
 			}
 
-			// 6. Post-exit retry logic
-			r.emitPostExitRetries(cfg, failed, numTests, failureKind,
-				results, detectedAlerts, emittedRetries, emit)
+			// 7. Post-exit crash recovery: retry any test still in running map
+			r.emitCrashRecoveryRetries(cfg, failed, numTests, emittedRetries, stream, emit)
 		},
 	}
 }
 
-// midStreamRetryHandler returns a testEvent handler that emits retries for
-// leaf test failures as they happen (direct mode only).
-func (r *runner) midStreamRetryHandler(cfg execConfig, emittedRetries, children map[string]bool, emit func(...*queueItem)) func(testEvent) {
+// streamRetryHandler returns a testEvent handler that emits retries for
+// leaf test failures and stuck tests as they happen (both modes).
+func (r *runner) streamRetryHandler(cfg execConfig, emittedRetries, children map[string]bool, emit func(...*queueItem)) func(testEvent) {
 	return func(ev testEvent) {
 		if strings.Contains(ev.Test, "/") {
 			children[parentTestName(ev.Test)] = true
 		}
-		if !cfg.streamRetries || ev.Action != actionFail {
+		if ev.Action != actionFail && ev.Action != actionStuck {
 			return
 		}
 		if children[ev.Test] || emittedRetries[ev.Test] || cfg.attempt >= r.maxAttempts {
@@ -340,16 +332,10 @@ func (r *runner) midStreamRetryHandler(cfg execConfig, emittedRetries, children 
 	}
 }
 
-// collectAlerts parses alerts from test output and appends stuck test alerts.
-func (r *runner) collectAlerts(outputStr string, stream *testEventStream) alerts {
-	detectedAlerts := parseAlerts(outputStr)
-	if stuckNames, stuckDur := stream.StuckTests(); len(stuckNames) > 0 {
-		detectedAlerts = append(detectedAlerts, alert{
-			Kind:    failureKindTimeout,
-			Summary: fmt.Sprintf("test stuck (no progress for %v)", stuckDur.Round(time.Second)),
-			Tests:   stuckNames,
-		})
-	}
+// collectAlertsFromFile parses alerts from a log file on disk and appends stuck test alerts.
+func (r *runner) collectAlertsFromFile(logPath string, stream *testEventStream) alerts {
+	detectedAlerts := alerts(parseAlertsFromFile(logPath))
+	detectedAlerts = append(detectedAlerts, stream.StuckAlerts()...)
 	r.addAlerts(detectedAlerts)
 	return detectedAlerts
 }
@@ -370,7 +356,7 @@ func (r *runner) collectJUnitResult(cfg execConfig, result commandResult, detect
 				Summary: "No tests were executed (possible parsing error or test filter mismatch)",
 			}})
 		}
-	} else {
+	} else if failureKind == "" {
 		failureKind = "crash"
 		r.addAlerts([]alert{{
 			Kind:    failureKindCrash,
@@ -380,59 +366,44 @@ func (r *runner) collectJUnitResult(cfg execConfig, result commandResult, detect
 	return
 }
 
-// emitPostExitRetries decides which retry strategy to use after a test process exits.
-func (r *runner) emitPostExitRetries(cfg execConfig, failed bool, numTests int,
-	failureKind string, results testResults, detectedAlerts alerts,
-	emittedRetries map[string]bool, emit func(...*queueItem)) {
+// emitCrashRecoveryRetries retries any tests that were still running when the process
+// exited (e.g., a panic killed the process before `--- FAIL` was emitted).
+func (r *runner) emitCrashRecoveryRetries(cfg execConfig, failed bool, numTests int,
+	emittedRetries map[string]bool, stream *testEventStream, emit func(...*queueItem)) {
 
 	if !failed && numTests > 0 {
-		if cfg.streamRetries {
-			r.log("all tests passed on attempt %d", cfg.attempt)
-		}
 		return
 	}
 	if cfg.attempt >= r.maxAttempts {
-		r.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
+		if len(emittedRetries) == 0 {
+			r.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
+		}
 		return
 	}
 
-	switch {
-	case failureKind == "timeout" || failureKind == "crash":
-		quarantined := quarantinedTestNames(detectedAlerts)
-		if items := cfg.retry.forCrash(results.passes, quarantined, cfg.attempt); len(items) > 0 {
-			emit(items...)
+	// Check for tests that started but never finished (crash recovery)
+	stillRunning := stream.RunningTests()
+	var unretried []string
+	for _, name := range stillRunning {
+		if !emittedRetries[name] {
+			unretried = append(unretried, name)
 		}
-	case len(filterEmitted(results.failures, emittedRetries)) > 0:
-		unemitted := filterEmitted(results.failures, emittedRetries)
-		failures := filterParentFailures(unemitted)
-		var failedNames []string
-		for _, f := range failures {
-			failedNames = append(failedNames, f.Name)
-		}
-		if items := cfg.retry.forFailures(failedNames, cfg.attempt); len(items) > 0 {
-			emit(items...)
-		}
-	case len(emittedRetries) == 0:
-		if items := cfg.retry.forUnknown(results.passes, cfg.attempt); len(items) > 0 {
-			emit(items...)
-		}
-	default:
-		// All failures were already retried mid-stream; nothing to do.
 	}
-}
+	if len(unretried) > 0 {
+		if items := cfg.retry.forFailures(unretried, cfg.attempt); len(items) > 0 {
+			emit(items...)
+		}
+		return
+	}
 
-// effectiveTimeout returns the overall timeout if set, falling back to runTimeout.
-// The overall timeout is used for Go's -test.timeout to give test suites enough
-// total execution time. The per-test --run-timeout is used for stuck detection.
-func (r *runner) effectiveTimeout() time.Duration {
-	if r.timeout > 0 {
-		return r.timeout
+	// If failed but no retries were emitted (no tests in running, no stream retries)
+	if len(emittedRetries) == 0 {
+		r.addError(fmt.Errorf("%s failed on attempt %d", cfg.label, cfg.attempt))
 	}
-	return r.runTimeout
 }
 
 func (r *runner) finalizeReport(reports []*junitReport) error {
-	mergedReport, err := mergeReports(reports, quarantinedTestNames(r.alerts))
+	mergedReport, err := mergeReports(reports)
 	if err != nil {
 		return err
 	}
