@@ -1,0 +1,119 @@
+log:
+  stdout: true
+  level: info
+
+persistence:
+  defaultStore: starrocks-default
+  visibilityStore: starrocks-visibility
+  numHistoryShards: 1
+  datastores:
+    starrocks-default:
+      sql:
+        user: "root"
+        password: ""
+        pluginName: "starrocks"
+        databaseName: "temporal"
+        connectAddr: "localhost:9030"
+        connectProtocol: "tcp"
+        connectAttributes:
+          # StarRocks specific connection attributes
+          autocommit: "true"
+        maxConns: 20
+        maxIdleConns: 5
+        maxConnLifetime: "1h"
+        tls:
+          enabled: false
+          caFile: ""
+          certFile: ""
+          keyFile: ""
+          enableHostVerification: false
+          serverName: ""
+
+    starrocks-visibility:
+      sql:
+        user: "root"
+        password: ""
+        pluginName: "starrocks"
+        databaseName: "temporal_visibility"
+        connectAddr: "localhost:9030"
+        connectProtocol: "tcp"
+        connectAttributes:
+          # StarRocks specific connection attributes
+          autocommit: "true"
+        maxConns: 20
+        maxIdleConns: 5
+        maxConnLifetime: "1h"
+        tls:
+          enabled: false
+          caFile: ""
+          certFile: ""
+          keyFile: ""
+          enableHostVerification: false
+          serverName: ""
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+      bindOnLocalHost: true
+      bindOnIP: "0.0.0.0"
+
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+      bindOnLocalHost: true
+      bindOnIP: "0.0.0.0"
+
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+      bindOnLocalHost: true
+      bindOnIP: "0.0.0.0"
+
+  worker:
+    rpc:
+      grpcPort: 7239
+      membershipPort: 6939
+      bindOnLocalHost: true
+      bindOnIP: "0.0.0.0"
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcName: "frontend"
+      rpcAddress: "127.0.0.1:7233"
+
+dcRedirectionPolicy:
+  policy: "noop"
+
+archival:
+  history:
+    state: "disabled"
+    enableRead: false
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  visibility:
+    state: "disabled"
+    enableRead: false
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+publicClient:
+  hostPort: "127.0.0.1:7233"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development-sql.yaml"
+  pollInterval: "10s"
