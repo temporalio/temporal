@@ -112,12 +112,10 @@ type (
 
 	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
 	// during worker shutdown. Thread-safe via internal mutex.
-	// The inner map key is partition:pollerID (not just pollerID) because when a poll is
-	// forwarded to a parent partition, the same pollerID is used. Without the partition prefix,
-	// the parent's cancel func would overwrite the child's, leaving the child's poll uncancelled.
+	// The inner map uses a UUID key (not pollerID) because pollerID is reused when forwarded.
 	workerPollerTracker struct {
 		lock    sync.Mutex
-		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> partition:pollerID -> cancel
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> pollerTrackerKey -> cancel
 	}
 
 	// Implements matching.Engine
@@ -184,24 +182,14 @@ type (
 func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	pollerCancels := t.pollers[workerKey]
-	if pollerCancels == nil {
-		pollerCancels = make(map[string]context.CancelFunc)
-		t.pollers[workerKey] = pollerCancels
-	}
-	pollerCancels[pollerID] = cancel
+	util.GetOrSetMap(t.pollers, workerKey)[pollerID] = cancel
 }
 
 // Remove unregisters a poller. Cleans up empty worker entries to prevent memory leak. Thread-safe.
 func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	if pollerCancels, ok := t.pollers[workerKey]; ok {
-		delete(pollerCancels, pollerID)
-		if len(pollerCancels) == 0 {
-			delete(t.pollers, workerKey)
-		}
-	}
+	util.DeleteFromMap(t.pollers, workerKey, pollerID)
 }
 
 // CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
@@ -2833,19 +2821,17 @@ func (e *matchingEngineImpl) pollTask(
 		e.outstandingPollers.Set(pollerID, cancel)
 
 		// Also track by worker instance key for bulk cancellation during shutdown.
-		// We use partition:pollerID as the key because when a poll is forwarded to a parent
-		// partition, the same pollerID is reused. Without the partition prefix, the parent's
-		// cancel func would overwrite the child's entry.
+		// Use UUID (not pollerID) because pollerID is reused when forwarded.
 		workerInstanceKey := pollMetadata.workerInstanceKey
-		partitionPollerKey := partition.RpcName() + ":" + pollerID
+		pollerTrackerKey := uuid.NewString()
 		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, partitionPollerKey, cancel)
+			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
 		}
 
 		defer func() {
 			e.outstandingPollers.Delete(pollerID)
 			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, partitionPollerKey)
+				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
 			}
 		}()
 	}
