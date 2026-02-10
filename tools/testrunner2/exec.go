@@ -203,7 +203,7 @@ func (r *runner) compiledExecConfig(unit workUnit, binaryPath string, attempt in
 
 	junitFilename := fmt.Sprintf("junit_%s.xml", uuid.New().String())
 	junitPath := filepath.Join(r.logDir, junitFilename)
-	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, desc))
+	logPath, _ := filepath.Abs(buildLogFilename(r.logDir, desc, attempt))
 
 	retry := r.buildRetryHandler(
 		func(failedNames, skipNames []string, attempt int) *queueItem {
