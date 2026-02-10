@@ -114,14 +114,14 @@ type StartExecutionResult[O any] struct {
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
-//   - Output1: The output value returned by the first factory function.
-//   - Output2: The output value returned by the second factory function.
+//   - StartOutput: The output value returned by the start functiton.
+//   - UpdateOutput: The output value returned by the update function.
 type UpdateWithStartExecutionResult[O1 any, O2 any] struct {
 	ExecutionKey ExecutionKey
 	ExecutionRef []byte
 	Created      bool
-	Output1      O1
-	Output2      O2
+	StartOutput  O1
+	UpdateOutput O2
 }
 
 // EngineStartExecutionResult is a type alias for the result type returned by the Engine implementation.

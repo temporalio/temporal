@@ -112,6 +112,10 @@ func (e *ChasmEngine) StartExecution(
 		return chasm.EngineStartExecutionResult{}, err
 	}
 
+	if executionRef.RunID != "" {
+		return chasm.EngineStartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for StartExecution")
+	}
+
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
 		ctx,
 		shardContext,
@@ -193,13 +197,11 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
-	refWithEmptyRunID := executionRef
 	if executionRef.RunID != "" {
 		return chasm.EngineUpdateWithStartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for UpdateWithStartExecution")
 	}
-	refWithEmptyRunID.RunID = ""
 
-	_, executionLease, err := e.getExecutionLease(ctx, refWithEmptyRunID)
+	_, executionLease, err := e.getExecutionLease(ctx, executionRef)
 	switch err.(type) {
 	case nil:
 		defer func() {
@@ -214,7 +216,7 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 			return chasm.EngineUpdateWithStartExecutionResult{
 				ExecutionKey: executionKey,
 				ExecutionRef: executionRef,
-				Created:      true,
+				Created:      false,
 			}, nil
 		}
 
