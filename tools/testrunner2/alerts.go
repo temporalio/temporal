@@ -69,9 +69,11 @@ func splitTestName(fullName string) (classname, name string) {
 	} else {
 		name = fullName
 	}
-	// Strip anonymous function suffixes like .func1
-	if i := strings.Index(name, ".func"); i >= 0 {
-		name = name[:i]
+	// Strip anonymous function suffixes like .func1 or .gowrap1
+	for _, suffix := range []string{".func", ".gowrap"} {
+		if i := strings.Index(name, suffix); i >= 0 {
+			name = name[:i]
+		}
 	}
 	return classname, name
 }
