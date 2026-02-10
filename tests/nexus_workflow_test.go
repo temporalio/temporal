@@ -832,8 +832,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
-
 	ctx := testcore.NewContext()
 	taskQueues := []string{testcore.RandomizeStr(s.T().Name()), testcore.RandomizeStr(s.T().Name())}
 	wfRuns := []client.WorkflowRun{}

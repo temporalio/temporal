@@ -322,12 +322,12 @@ func TestOtelMetricsHandler_Error(t *testing.T) {
 	msg := "error getting metric"
 	errTag := tag.Error(testErr)
 
-	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "counter"), errTag)
+	logger.EXPECT().Error(msg, tag.String("MetricName", "counter"), errTag)
 	handler.Counter("counter").Record(1)
-	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "timer"), errTag)
+	logger.EXPECT().Error(msg, tag.String("MetricName", "timer"), errTag)
 	handler.Timer("timer").Record(time.Second)
-	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "gauge"), errTag)
+	logger.EXPECT().Error(msg, tag.String("MetricName", "gauge"), errTag)
 	handler.Gauge("gauge").Record(1.0)
-	logger.EXPECT().Error(msg, tag.NewStringTag("MetricName", "histogram"), errTag)
+	logger.EXPECT().Error(msg, tag.String("MetricName", "histogram"), errTag)
 	handler.Histogram("histogram", Bytes).Record(1)
 }
