@@ -37,11 +37,11 @@ func TestListInfo(t *testing.T) {
 	require.Equal(t, expectedFutureTimes, listInfo.FutureActionTimes)
 }
 
-// Tests for CreateSchedulerFromMigration - creates scheduler from migrated V1 state
-
-func testMigrateScheduleRequest() *schedulerpb.MigrateScheduleRequest {
+func TestCreateSchedulerFromMigration(t *testing.T) {
 	now := time.Now().UTC()
-	return &schedulerpb.MigrateScheduleRequest{
+	_, _, node := setupSchedulerForTest(t)
+
+	req := &schedulerpb.MigrateScheduleRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
 			SchedulerState: &schedulerpb.SchedulerState{
@@ -50,8 +50,7 @@ func testMigrateScheduleRequest() *schedulerpb.MigrateScheduleRequest {
 				Namespace:     namespace,
 				NamespaceId:   namespaceID,
 				ScheduleId:    scheduleID,
-				ConflictToken: 42, // Non-initial conflict token
-				Closed:        false,
+				ConflictToken: 42,
 			},
 			GeneratorState: &schedulerpb.GeneratorState{
 				LastProcessedTime: timestamppb.New(now),
@@ -64,6 +63,13 @@ func testMigrateScheduleRequest() *schedulerpb.MigrateScheduleRequest {
 						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 						RequestId:     "req-1",
 						WorkflowId:    "wf-1",
+					},
+					{
+						NominalTime:   timestamppb.New(now.Add(time.Minute)),
+						ActualTime:    timestamppb.New(now.Add(time.Minute)),
+						OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+						RequestId:     "req-2",
+						WorkflowId:    "wf-2",
 					},
 				},
 			},
@@ -90,121 +96,45 @@ func testMigrateScheduleRequest() *schedulerpb.MigrateScheduleRequest {
 			},
 		},
 	}
-}
 
-func TestCreateSchedulerFromMigration_InitializesComponents(t *testing.T) {
-	_, _, node := setupSchedulerForTest(t)
-	req := testMigrateScheduleRequest()
-
-	// Create a new context for the migration (we need a fresh transaction)
 	ctx := chasm.NewMutableContext(context.Background(), node)
-
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
-	require.NotNil(t, sched)
 
-	// Verify scheduler state
+	// Scheduler state
 	require.Equal(t, namespace, sched.Namespace)
 	require.Equal(t, namespaceID, sched.NamespaceId)
 	require.Equal(t, scheduleID, sched.ScheduleId)
+	require.Equal(t, int64(42), sched.ConflictToken)
 	require.False(t, sched.Closed)
 
-	// Verify generator initialized
+	// Generator
 	generator := sched.Generator.Get(ctx)
-	require.NotNil(t, generator)
-	require.NotNil(t, generator.LastProcessedTime)
+	require.Equal(t, now, generator.LastProcessedTime.AsTime())
 
-	// Verify invoker initialized with buffered starts
-	invoker := sched.Invoker.Get(ctx)
-	require.NotNil(t, invoker)
-	require.Len(t, invoker.BufferedStarts, 1)
-	require.Equal(t, "req-1", invoker.BufferedStarts[0].RequestId)
-
-	// Verify backfillers initialized
-	require.Len(t, sched.Backfillers, 1)
-	backfiller := sched.Backfillers["bf-1"]
-	require.NotNil(t, backfiller)
-	bf := backfiller.Get(ctx)
-	require.Equal(t, "bf-1", bf.BackfillId)
-
-	// Verify last completion result
-	lastResult := sched.LastCompletionResult.Get(ctx)
-	require.NotNil(t, lastResult)
-	require.NotNil(t, lastResult.Success)
-	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
-
-	// Close transaction to finalize
-	node.SetRootComponent(sched)
-	_, err = node.CloseTransaction()
-	require.NoError(t, err)
-}
-
-func TestCreateSchedulerFromMigration_PreservesConflictToken(t *testing.T) {
-	_, _, node := setupSchedulerForTest(t)
-	req := testMigrateScheduleRequest()
-	req.State.SchedulerState.ConflictToken = 99 // Specific conflict token to verify
-
-	// Create a new context for the migration
-	ctx := chasm.NewMutableContext(context.Background(), node)
-
-	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
-	require.NoError(t, err)
-
-	node.SetRootComponent(sched)
-	_, err = node.CloseTransaction()
-	require.NoError(t, err)
-
-	// Conflict token must be preserved for client compatibility
-	require.Equal(t, int64(99), sched.ConflictToken)
-}
-
-func TestCreateSchedulerFromMigration_ProcessesBufferedStarts(t *testing.T) {
-	_, _, node := setupSchedulerForTest(t)
-	req := testMigrateScheduleRequest()
-
-	// Add multiple buffered starts
-	now := time.Now().UTC()
-	req.State.InvokerState.BufferedStarts = []*schedulespb.BufferedStart{
-		{
-			NominalTime:   timestamppb.New(now),
-			ActualTime:    timestamppb.New(now),
-			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
-			RequestId:     "req-1",
-			WorkflowId:    "wf-1",
-		},
-		{
-			NominalTime:   timestamppb.New(now.Add(time.Minute)),
-			ActualTime:    timestamppb.New(now.Add(time.Minute)),
-			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			RequestId:     "req-2",
-			WorkflowId:    "wf-2",
-		},
-	}
-
-	// Create a new context for the migration
-	ctx := chasm.NewMutableContext(context.Background(), node)
-
-	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
-	require.NoError(t, err)
-
-	node.SetRootComponent(sched)
-	_, err = node.CloseTransaction()
-	require.NoError(t, err)
-
-	// Reopen context for reading
-	ctx = chasm.NewMutableContext(context.Background(), node)
-
-	// Verify all buffered starts are preserved
+	// Invoker buffered starts
 	invoker := sched.Invoker.Get(ctx)
 	require.Len(t, invoker.BufferedStarts, 2)
 	require.Equal(t, "req-1", invoker.BufferedStarts[0].RequestId)
 	require.Equal(t, "req-2", invoker.BufferedStarts[1].RequestId)
+
+	// Backfillers
+	require.Len(t, sched.Backfillers, 1)
+	bf := sched.Backfillers["bf-1"].Get(ctx)
+	require.Equal(t, "bf-1", bf.BackfillId)
+
+	// Last completion result
+	lastResult := sched.LastCompletionResult.Get(ctx)
+	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
+
+	node.SetRootComponent(sched)
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
 }
 
-func TestCreateSchedulerFromMigration_HandlesEmptyState(t *testing.T) {
+func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	_, _, node := setupSchedulerForTest(t)
 
-	// Minimal request with empty optional fields
 	req := &schedulerpb.MigrateScheduleRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
@@ -218,27 +148,20 @@ func TestCreateSchedulerFromMigration_HandlesEmptyState(t *testing.T) {
 			},
 			GeneratorState: &schedulerpb.GeneratorState{},
 			InvokerState:   &schedulerpb.InvokerState{},
-			Backfillers:    nil,
 		},
 	}
 
-	// Create a new context for the migration
 	ctx := chasm.NewMutableContext(context.Background(), node)
-
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
 
-	node.SetRootComponent(sched)
-	_, err = node.CloseTransaction()
-	require.NoError(t, err)
-
-	// Reopen context for reading
-	ctx = chasm.NewMutableContext(context.Background(), node)
-
-	// Verify minimal state is valid
 	require.Equal(t, int64(1), sched.ConflictToken)
 	require.Empty(t, sched.Backfillers)
 
 	invoker := sched.Invoker.Get(ctx)
 	require.Empty(t, invoker.BufferedStarts)
+
+	node.SetRootComponent(sched)
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
 }
