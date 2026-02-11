@@ -109,6 +109,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			false,
 			nil, // TODO: test usage of commandHandlerRegistry?
 			nil,
+			nil,
 		)
 	}
 
