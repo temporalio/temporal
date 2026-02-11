@@ -186,16 +186,16 @@ func validateBlobSize(
 	sizeWarnLimit := blobSizeLimitWarn(namespaceName)
 	sizeErrorLimit := blobSizeLimitError(namespaceName)
 
-	if blobSize > sizeErrorLimit {
-		return common.ErrBlobSizeExceedsLimit
-	}
-
 	if blobSize > sizeWarnLimit {
 		logger.Warn("Activity blob size exceeds the warning limit.",
 			tag.WorkflowNamespace(namespaceName),
 			tag.ActivityID(activityID),
 			tag.ActivitySize(int64(blobSize)),
 			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
+	}
+
+	if blobSize > sizeErrorLimit {
+		return common.ErrBlobSizeExceedsLimit
 	}
 
 	return nil
@@ -316,7 +316,7 @@ func validateRequestCancelActivityExecutionRequest(
 		logger,
 		req.GetNamespace())
 	if err != nil {
-		return serviceerror.NewInvalidArgumentf("reason exceeds length limit")
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
 	}
 
 	return nil

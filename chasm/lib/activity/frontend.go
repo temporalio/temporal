@@ -389,12 +389,12 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 
 	maxIDLengthLimit := h.config.MaxIDLengthLimit()
 
-	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
+	if len(req.GetRequestId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetRequestId()), maxIDLengthLimit)
 	}
 
-	if len(req.GetIdentity()) > h.config.MaxIDLengthLimit() {
+	if len(req.GetIdentity()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), maxIDLengthLimit)
 	}
