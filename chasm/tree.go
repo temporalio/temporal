@@ -595,7 +595,16 @@ func (n *Node) isMap() bool {
 }
 
 func (n *Node) isDetached() bool {
-	return n.serializedNode.GetMetadata().GetComponentAttributes().GetDetached()
+	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
+	if componentAttr == nil {
+		return false
+	}
+	if componentAttr.GetTypeId() == CallbackComponentID {
+		// For backward compatibility purpose, we need to special handle callback component,
+		// which is implemented before we detached component is supported by the framework.
+		return true
+	}
+	return componentAttr.GetDetached()
 }
 
 func (n *Node) fieldType() fieldType {

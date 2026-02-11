@@ -25,12 +25,15 @@ func newLibrary(
 }
 
 func (l *Library) Name() string {
-	return "callback"
+	return chasm.CallbackLibraryName
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Callback]("callback"),
+		chasm.NewRegistrableComponent[*Callback](
+			chasm.CallbackComponentName,
+			chasm.WithDetached(),
+		),
 	}
 }
 
