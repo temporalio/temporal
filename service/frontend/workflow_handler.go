@@ -5676,6 +5676,7 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
+	// nolint:staticcheck // checking deprecated field for backwards compatibility
 	if opErr := request.GetResponse().GetStartOperation().GetOperationError(); opErr != nil {
 		if details := opErr.GetFailure().GetDetails(); details != nil && !json.Valid(details) {
 			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
