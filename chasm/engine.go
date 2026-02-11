@@ -114,21 +114,20 @@ type StartExecutionResult[O any] struct {
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
-//   - StartOutput: The output value returned by the start functiton.
 //   - UpdateOutput: The output value returned by the update function.
-type UpdateWithStartExecutionResult[O1 any, O2 any] struct {
+type UpdateWithStartExecutionResult[O any] struct {
 	ExecutionKey ExecutionKey
 	ExecutionRef []byte
 	Created      bool
-	StartOutput  O1
-	UpdateOutput O2
+	UpdateOutput O
 }
 
 // EngineStartExecutionResult is a type alias for the result type returned by the Engine implementation.
 // This avoids repeating [struct{}] everywhere in the engine implementation.
 type EngineStartExecutionResult = StartExecutionResult[struct{}]
 
-type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}, struct{}]
+// EngineUpdateWithStartExecutionResult is a type alias for the result type returned by the UpdateWithStart Engine implementation.
+type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -233,16 +232,15 @@ func StartExecution[C Component, I any, O any](
 	}, nil
 }
 
-func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
+func UpdateWithStartExecution[C Component, I any, O any](
 	ctx context.Context,
 	key ExecutionKey,
-	startFn func(MutableContext, I) (C, O1, error),
-	updateFn func(C, MutableContext, I) (O2, error),
+	startFn func(MutableContext, I) (C, error),
+	updateFn func(C, MutableContext, I) (O, error),
 	input I,
 	opts ...TransitionOption,
-) (UpdateWithStartExecutionResult[O1, O2], error) {
-	var output1 O1
-	var output2 O2
+) (UpdateWithStartExecutionResult[O], error) {
+	var output O
 	result, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
@@ -251,30 +249,28 @@ func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
 
 			var c C
 			var err error
-			c, output1, err = startFn(ctx, input)
+			c, err = startFn(ctx, input)
 			return c, err
 		},
 		func(ctx MutableContext, c Component) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output2, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(c.(C), ctx, input)
 			return err
 		},
 		opts...,
 	)
 	if err != nil {
-		return UpdateWithStartExecutionResult[O1, O2]{
-			Output1: output1,
-			Output2: output2,
+		return UpdateWithStartExecutionResult[O]{
+			UpdateOutput: output,
 		}, err
 	}
-	return UpdateWithStartExecutionResult[O1, O2]{
+	return UpdateWithStartExecutionResult[O]{
 		ExecutionKey: result.ExecutionKey,
 		ExecutionRef: result.ExecutionRef,
 		Created:      result.Created,
-		Output1:      output1,
-		Output2:      output2,
+		UpdateOutput: output,
 	}, nil
 }
 
