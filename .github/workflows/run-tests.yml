@@ -24,26 +24,21 @@ env:
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   MAX_TEST_ATTEMPTS: 3
+  SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
 
 jobs:
-  set-up-functional-test:
-    name: Set up functional test
+  test-setup:
+    name: Test setup
     runs-on: ubuntu-latest
     outputs:
-      shard_indices: ${{ steps.generate_output.outputs.shard_indices }}
-      total_shards: ${{ steps.generate_output.outputs.shards }}
-      github_timeout: ${{ steps.generate_output.outputs.github_timeout }}
-      test_timeout: ${{ steps.generate_output.outputs.test_timeout }}
-      runs_on: ${{ steps.generate_output.outputs.runs_on }}
-      runner_x64: ${{ steps.generate_output.outputs.runner_x64 }}
-      runner_arm: ${{ steps.generate_output.outputs.runner_arm }}
+      job_matrix: ${{ steps.build_matrix.outputs.job_matrix }}
+      runner_x64: ${{ steps.configure_runners.outputs.runner_x64 }}
+      runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
-      - id: generate_output
+      - name: Configure runners
+        id: configure_runners
         run: |
-          shards=3
-          timeout=35   # update this to TEST_TIMEOUT if you update the Makefile
-
-          # Runner configuration: use 8-core runners for temporalio org, standard runners for forks
+          # Use 8-core runners for temporalio org, standard runners for forks
           if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
             runner_x64="ubuntu-latest-8-cores"
             runner_arm="ubuntu-24.04-arm64-8-cores"
@@ -51,25 +46,98 @@ jobs:
             runner_x64="ubuntu-latest"
             runner_arm="ubuntu-24.04-arm"
           fi
-          runs_on="[\"${runner_x64}\"]"
 
           {
-            echo "shard_indices=[ $(seq -s, 0 $((shards-1))) ]"
-            echo "shards=$shards"
-            echo "github_timeout=$((timeout+5))"
-            echo "test_timeout=${timeout}m"
-            echo "runs_on=$runs_on"
             echo "runner_x64=$runner_x64"
             echo "runner_arm=$runner_arm"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Build job matrix
+        id: build_matrix
+        env:
+          DB_CONFIGS: |
+            cass_es:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, elasticsearch]
+            cass_es8:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, elasticsearch8]
+            cass_os2:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, opensearch2]
+            cass_os3:
+              persistence_type: nosql
+              persistence_driver: cassandra
+              containers: [cassandra, opensearch3]
+            sqlite:
+              persistence_type: sql
+              persistence_driver: sqlite
+              containers: []
+              arch: arm
+            mysql8:
+              persistence_type: sql
+              persistence_driver: mysql8
+              containers: [mysql]
+            postgres12:
+              persistence_type: sql
+              persistence_driver: postgres12
+              containers: [postgresql]
+            postgres12_pgx:
+              persistence_type: sql
+              persistence_driver: postgres12_pgx
+              containers: [postgresql]
+          JOB_TYPES: |
+            functest:
+              cmd: make functional-test-coverage
+              test_timeout: 35m
+              github_timeout: 40
+              sharded: true
+            ndc:
+              cmd: make functional-test-ndc-coverage
+              test_timeout: 10m
+              github_timeout: 15
+            xdc:
+              cmd: make functional-test-xdc-coverage
+              test_timeout: 30m
+              github_timeout: 35
+        run: |
+          MATRIX=$(
+            jq -c --argjson shard_count "$SHARD_COUNT" '
+              # Cross-product of every db config × every job type
+              input as $jobs |
+              [ to_entries[] as $db | $jobs | to_entries[] as $job |
+
+                # Base entry: merge db config + job config (without sharded flag) + name
+                ($db.value + ($job.value | del(.sharded)) + {name: $db.key}) as $base |
+
+                # If sharded, emit one entry per shard; otherwise emit one entry
+                if $job.value.sharded then
+                  range($shard_count) as $i |
+                  $base + {
+                    display_name: "shard\($i)",
+                    shard_index: $i,
+                    total_shards: $shard_count
+                  }
+                else
+                  $base + {display_name: $job.key}
+                end
+              ]
+            ' <(yq -o=json <<< "$DB_CONFIGS") <(yq -o=json <<< "$JOB_TYPES")
+          )
+
+          echo "job_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "Generated $(jq length <<< "$MATRIX") jobs"
+
   pre-build:
     name: Pre-build for cache (${{ matrix.arch }})
-    needs: set-up-functional-test
+    needs: test-setup
     strategy:
       matrix:
         arch: [x64, arm]
-    runs-on: ${{ matrix.arch == 'arm' && needs.set-up-functional-test.outputs.runner_arm || needs.set-up-functional-test.outputs.runner_x64 }}
+    runs-on: ${{ matrix.arch == 'arm' && needs.test-setup.outputs.runner_arm || needs.test-setup.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -105,8 +173,8 @@ jobs:
 
   misc-checks:
     name: Misc checks
-    needs: [pre-build, set-up-functional-test]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
+    needs: [pre-build, test-setup]
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -144,8 +212,8 @@ jobs:
 
   unit-test:
     name: Unit test
-    needs: [pre-build, set-up-functional-test]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
+    needs: [pre-build, test-setup]
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -174,8 +242,8 @@ jobs:
         run: TEST_TIMEOUT=15m make unit-test-coverage
 
       - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: |
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -217,8 +285,8 @@ jobs:
 
   integration-test:
     name: Integration test
-    needs: [pre-build, set-up-functional-test]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
+    needs: [pre-build, test-setup]
+    runs-on: ${{ needs.test-setup.outputs.runner_x64 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -257,8 +325,8 @@ jobs:
         run: make integration-test-coverage
 
       - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: |
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -303,69 +371,21 @@ jobs:
         run: |
           docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} down -v
 
-  # Root job name includes matrix details so it is unique per shard.
+  # Root job name includes matrix details so it is unique per job variant.
   # This MUST stay in sync with the `job_name` passed to the job-id action below.
   functional-test:
     # Display name shown in the UI. The job-id lookup uses this exact value.
-    name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
-    needs: [pre-build, set-up-functional-test]
+    name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
+    needs: [pre-build, test-setup]
     strategy:
       fail-fast: false
       matrix:
-        name:
-          - cass_es
-          - cass_es8
-          - cass_os2
-          - cass_os3
-          - sqlite
-          - mysql8
-          - postgres12
-          - postgres12_pgx
-        shard_index: ${{ fromJson(needs.set-up-functional-test.outputs.shard_indices) }}
-        runs-on: ${{ fromJson(needs.set-up-functional-test.outputs.runs_on) }}
-        include:
-          - name: cass_es
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, elasticsearch]
-            es_version: v7
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, elasticsearch8]
-            es_version: v8
-          - name: cass_os2
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, opensearch2]
-          - name: cass_os3
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, opensearch3]
-          - name: sqlite
-            persistence_type: sql
-            persistence_driver: sqlite
-            containers: []
-            arch: arm
-          - name: mysql8
-            persistence_type: sql
-            persistence_driver: mysql8
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql]
-    runs-on: ${{ matrix.arch == 'arm' && needs.set-up-functional-test.outputs.runner_arm || needs.set-up-functional-test.outputs.runner_x64 }}
+        include: ${{ fromJson(needs.test-setup.outputs.job_matrix) }}
+    runs-on: ${{ matrix.arch == 'arm' && needs.test-setup.outputs.runner_arm || needs.test-setup.outputs.runner_x64 }}
     env:
-      TEST_TOTAL_SHARDS: ${{ needs.set-up-functional-test.outputs.total_shards }}
-      TEST_SHARD_INDEX: ${{ matrix.shard_index }}
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      TEST_TIMEOUT: ${{ needs.set-up-functional-test.outputs.test_timeout }}
+      TEST_TIMEOUT: ${{ matrix.test_timeout }}
     steps:
       - uses: ScribeMD/docker-cache@0.3.7
         with:
@@ -405,20 +425,23 @@ jobs:
         id: get_job_id
         uses: ./.github/actions/get-job-id
         with:
-          job_name: Functional test (${{ matrix.name }}, shard ${{ matrix.shard_index }})
+          job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
           run_id: ${{ github.run_id }}
 
       - name: Run functional test
-        timeout-minutes: ${{ fromJSON(needs.set-up-functional-test.outputs.github_timeout) }} # make sure this is larger than the test timeout in the Makefile
-        run: ./develop/github/monitor_test.sh make functional-test-coverage
+        timeout-minutes: ${{ matrix.github_timeout }}
+        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        env:
+          TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
+          TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
 
       - name: Print memory snapshot
         if: always()
         run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
+        run: |
           [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
             CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
 
@@ -453,282 +476,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--${{matrix.shard_index}}--functional-test
-          path: ./.testoutput/junit.*.xml
-          include-hidden-files: true
-          retention-days: 28
-
-  # XDC matrix job. Include `${{ matrix.name }}` in the display name so each
-  # matrix variant has a unique name for the job-id lookup.
-  functional-test-xdc:
-    # Display name shown in the UI. The job-id lookup uses this exact value.
-    name: Functional test xdc (${{ matrix.name }})
-    needs: [pre-build, set-up-functional-test]
-    strategy:
-      fail-fast: false
-      matrix:
-        name:
-          - cass_es
-          - cass_es8
-          - cass_os2
-          - cass_os3
-          - mysql8
-          - postgres12
-          - postgres12_pgx
-        include:
-          - name: cass_es
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            parallel_flags: ""
-            containers: [cassandra, elasticsearch]
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            parallel_flags: ""
-            containers: [cassandra, elasticsearch8]
-          - name: cass_os2
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, opensearch2]
-          - name: cass_os3
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, opensearch3]
-          - name: mysql8
-            persistence_type: sql
-            persistence_driver: mysql8
-            parallel_flags: ""
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            parallel_flags: "-parallel=2" # reduce parallelism for postgres
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            parallel_flags: "-parallel=2" # reduce parallelism for postgres
-            containers: [postgresql]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
-    env:
-      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      TEST_PARALLEL_FLAGS: ${{ matrix.parallel_flags }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-      # Resolve the numeric job ID for this job instance.
-      # IMPORTANT: `job_name` must exactly match the job's display name above.
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test xdc (${{ matrix.name }})
-          run_id: ${{ github.run_id }}
-
-      - name: Start containerized dependencies
-        uses: hoverkraft-tech/compose-action@v2.0.1
-        with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: "${{ join(matrix.containers, '\n') }}"
-          down-flags: -v
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
-
-      - name: Run functional test xdc
-        timeout-minutes: 35 # update this to TEST_TIMEOUT+5 if you update the Makefile
-        run: ./develop/github/monitor_test.sh make functional-test-xdc-coverage
-
-      - name: Print memory snapshot
-        if: always()
-        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
-
-      - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Generate test summary
-        uses: mikepenz/action-junit-report@v5.0.0-rc01
-        if: failure()
-        with:
-          report_paths: ./.testoutput/junit.*.xml
-          detailed_summary: true
-          check_annotations: false
-          annotate_only: true
-          skip_annotations: true
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test-xdc
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test-xdc
-          report_type: test_results
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v4.4.3
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-xdc
-          path: ./.testoutput
-          include-hidden-files: true
-          retention-days: 28
-
-  # NDC matrix job. Include `${{ matrix.name }}` in the display name so each
-  # matrix variant has a unique name for the job-id lookup.
-  functional-test-ndc:
-    # Display name shown in the UI. The job-id lookup uses this exact value.
-    name: Functional test ndc (${{ matrix.name }})
-    needs: [pre-build, set-up-functional-test]
-    strategy:
-      fail-fast: false
-      matrix:
-        name:
-          - cass_es
-          - cass_es8
-          - cass_os2
-          - cass_os3
-          - mysql8
-          - postgres12
-          - postgres12_pgx
-        include:
-          - name: cass_es
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch]
-            es_version: v7
-          - name: cass_es8
-            persistence_type: nosql
-            persistence_driver: elasticsearch
-            containers: [cassandra, elasticsearch8]
-            es_version: v8
-          - name: cass_os2
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, opensearch2]
-          - name: cass_os3
-            persistence_type: nosql
-            persistence_driver: cassandra
-            containers: [cassandra, opensearch3]
-          - name: mysql8
-            persistence_type: sql
-            persistence_driver: mysql8
-            containers: [mysql]
-          - name: postgres12
-            persistence_type: sql
-            persistence_driver: postgres12
-            containers: [postgresql]
-          - name: postgres12_pgx
-            persistence_type: sql
-            persistence_driver: postgres12_pgx
-            containers: [postgresql]
-    runs-on: ${{ needs.set-up-functional-test.outputs.runner_x64 }}
-    env:
-      PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
-      PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
-      ES_VERSION: ${{ matrix.es_version }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-      # Resolve the numeric job ID for this job instance.
-      # IMPORTANT: `job_name` must exactly match the job's display name above.
-      - name: Get job ID
-        id: get_job_id
-        uses: ./.github/actions/get-job-id
-        with:
-          job_name: Functional test ndc (${{ matrix.name }})
-          run_id: ${{ github.run_id }}
-
-      - name: Start containerized dependencies
-        uses: hoverkraft-tech/compose-action@v2.0.1
-        with:
-          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
-          services: "${{ join(matrix.containers, '\n') }}"
-          down-flags: -v
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
-
-      - name: Run functional test ndc
-        timeout-minutes: 15
-        run: ./develop/github/monitor_test.sh make functional-test-ndc-coverage
-
-      - name: Print memory snapshot
-        if: always()
-        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
-
-      - name: Generate crash report
-        if: failure()
-        run: | # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
-          [ "$(find .testoutput -maxdepth 1 -name 'junit.*.xml' | wc -l)" -lt "$MAX_TEST_ATTEMPTS" ] &&
-            CRASH_REPORT_NAME="$GITHUB_JOB" make report-test-crash
-
-      - name: Upload code coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test-ndc
-
-      - name: Upload test results to Codecov
-        if: ${{ !cancelled() }}
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          directory: ./.testoutput
-          flags: functional-test-ndc
-          report_type: test_results
-
-      - name: Upload test results to GitHub
-        # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
-        uses: actions/upload-artifact@v4.4.3
-        if: ${{ !cancelled() }}
-        with:
-          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--functional-test-ndc
+          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--shard${{matrix.shard_index}}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -741,8 +489,6 @@ jobs:
       - unit-test
       - integration-test
       - functional-test
-      - functional-test-xdc
-      - functional-test-ndc
     runs-on: ubuntu-latest
     env:
       RESULTS: ${{ toJSON(needs.*.result) }}
@@ -780,6 +526,6 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          go run ./cmd/tools/ci-notify \
+          go run ./cmd/tools/ci-notify alert \
             --run-id "${{ github.run_id }}" \
             --slack-webhook "$SLACK_WEBHOOK"
