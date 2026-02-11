@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -171,7 +172,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
-		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		// Use context with metadata to verify it's set via transaction close
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -193,6 +197,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
   4 WorkflowTaskCompleted
   5 WorkflowExecutionUpdateAccepted
   6 WorkflowExecutionUpdateCompleted`, <-writtenHistoryCh)
+
+		// VERIFY: Context metadata set via transaction close (normal case WITH commands)
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set in normal case with commands")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set in normal case with commands")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 
 	s.Run("Reject", func() {
@@ -204,7 +217,10 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
-		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		// Use context with metadata support to verify SetContextMetadata is called
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -218,6 +234,46 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.NoError(err)
 		s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED.String(), updStatus.Stage.String())
 		s.Equal("rejection-of-"+tv.UpdateID(), updStatus.Outcome.GetFailure().GetMessage())
+
+		// VERIFY: Context metadata set for readonly operation (no commands, only messages)
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set for readonly operation")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set for readonly operation")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
+	})
+
+	s.Run("Heartbeat (empty completion)", func() {
+		tv := testvars.New(s.T())
+		tv = tv.WithRunID(tv.Any().RunID())
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+		wfContext := s.createStartedWorkflow(tv)
+
+		_, _, serializedTaskToken := s.createSentUpdate(tv, wfContext)
+
+		// Use context with metadata support to verify SetContextMetadata is called
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
+			NamespaceId: tv.NamespaceID().String(),
+			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+				TaskToken: serializedTaskToken,
+				// No Commands, no Messages - this is a workflow task heartbeat
+				Identity: tv.Any().String(),
+			},
+		})
+		s.NoError(err)
+
+		// VERIFY: Context metadata set for heartbeat (no commands, no messages)
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set for heartbeat")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set for heartbeat")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 
 	s.Run("Write failed on normal task queue", func() {
@@ -232,7 +288,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
-		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -244,6 +302,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.ErrorIs(err, writeErr)
 
 		s.Nil(wfContext.(*workflow.ContextImpl).MutableState, "mutable state must be cleared")
+
+		// VERIFY: Context metadata set even when write fails (transaction close is attempted)
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set even when write fails")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set even when write fails")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 
 	s.Run("Write failed on sticky task queue", func() {
@@ -261,7 +328,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
-		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:        serializedTaskToken,
@@ -274,6 +343,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.ErrorIs(err, writeErr)
 
 		s.Nil(wfContext.(*workflow.ContextImpl).MutableState, "mutable state must be cleared")
+
+		// VERIFY: Context metadata set even when sticky write fails
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set even when sticky write fails")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set even when sticky write fails")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 
 	s.Run("GetHistory failed", func() {
@@ -290,7 +368,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		readHistoryErr := errors.New("get history failed")
 		s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, readHistoryErr)
 
-		_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err := s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:                  serializedTaskToken,
@@ -316,6 +396,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
   6 WorkflowExecutionUpdateCompleted
   7 WorkflowTaskScheduled
   8 WorkflowTaskStarted`, <-writtenHistoryCh)
+
+		// VERIFY: Context metadata set even when ReadHistoryBranch fails
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set even when ReadHistoryBranch fails")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set even when ReadHistoryBranch fails")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 
 	s.Run("Discard speculative WFT with events", func() {
@@ -346,7 +435,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
-		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -374,6 +465,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		s.EqualHistoryEvents(`
   3 TimerFired // No WFT events in between 2 and 3.
 `, <-writtenHistoryCh)
+
+		// VERIFY: Context metadata set for discard speculative WFT case
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set when discarding speculative WFT")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set when discarding speculative WFT")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 
 	s.Run("Do not discard speculative WFT with more than 10 events", func() {
@@ -416,7 +516,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		updRequestMsg, upd, serializedTaskToken := s.createSentUpdate(tv, wfContext)
 		s.NotNil(upd)
 
-		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken: serializedTaskToken,
@@ -439,6 +541,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
  14 WorkflowTaskStarted
  15 WorkflowTaskCompleted
 `, <-writtenHistoryCh)
+
+		// VERIFY: Context metadata set when NOT discarding speculative WFT (>10 events)
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set when keeping speculative WFT")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set when keeping speculative WFT")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 }
 
@@ -453,7 +564,9 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPaus
 		s.NoError(err)
 		s.True(ms.IsWorkflowExecutionStatusPaused())
 
-		_, err = s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		ctx := contextutil.WithMetadataContext(context.Background())
+
+		_, err = s.workflowTaskCompletedHandler.Invoke(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 			NamespaceId: tv.NamespaceID().String(),
 			CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
 				TaskToken:                  serializedTaskToken,
@@ -465,6 +578,15 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPaus
 		var failedPrecondition *serviceerror.FailedPrecondition
 		s.ErrorAs(err, &failedPrecondition)
 		s.Contains(err.Error(), "Workflow is paused and force create new workflow task is not allowed")
+
+		// VERIFY: Context metadata set even when paused workflow returns error
+		contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+		s.True(ok, "context workflow type MUST be set even for paused workflow error")
+		s.Equal(tv.WorkflowType().GetName(), contextWorkflowType)
+
+		contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+		s.True(ok, "context task queue MUST be set even for paused workflow error")
+		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
 }
 
