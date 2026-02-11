@@ -625,6 +625,194 @@ func (s *MatcherDataSuite) TestMatchPollerImmediately() {
 	s.Equal(t2, res.task)
 }
 
+func (s *MatcherDataSuite) TestFindMatch() {
+	// Table-driven test for findMatch logic. Each case sets up one task and one poller
+	// and verifies whether they match.
+	cases := []struct {
+		name            string
+		allowForwarding bool
+		// task properties
+		taskIsQuery           bool
+		taskPollForwarderType pollForwarderType
+		taskForwardCtx        bool // true means task has forwardCtx (sync match task)
+		taskPriority          int32
+		// poller properties
+		pollerQueryOnly         bool
+		pollerForwardCtx        bool // true means poller can be forwarded
+		pollerTaskForwarderType taskForwarderType
+		pollerMinPriority       int32
+		// expected
+		shouldMatch bool
+	}{
+		// Basic matching
+		{
+			name:            "basic match",
+			allowForwarding: true,
+			shouldMatch:     true,
+		},
+		// queryOnly poller conditions
+		{
+			name:            "queryOnly poller with non-query task - no match",
+			allowForwarding: true,
+			pollerQueryOnly: true,
+			shouldMatch:     false,
+		},
+		{
+			name:            "queryOnly poller with query task - match",
+			allowForwarding: true,
+			taskIsQuery:     true,
+			pollerQueryOnly: true,
+			shouldMatch:     true,
+		},
+		{
+			name:                  "queryOnly poller with pollForwarder task - match",
+			allowForwarding:       true,
+			taskPollForwarderType: normalPollForwarder,
+			pollerQueryOnly:       true,
+			pollerForwardCtx:      true, // poll forwarder needs forwardCtx
+			shouldMatch:           true,
+		},
+		// pollForwarder task conditions
+		{
+			name:                  "pollForwarder task with poller without forwardCtx - no match",
+			allowForwarding:       true,
+			taskPollForwarderType: normalPollForwarder,
+			pollerForwardCtx:      false,
+			shouldMatch:           false,
+		},
+		{
+			name:                  "pollForwarder task with poller with forwardCtx - match",
+			allowForwarding:       true,
+			taskPollForwarderType: normalPollForwarder,
+			pollerForwardCtx:      true,
+			shouldMatch:           true,
+		},
+		// taskForwarder poller conditions
+		{
+			name:                    "parentTaskForwarder with allowForwarding=false - no match",
+			allowForwarding:         false,
+			pollerTaskForwarderType: parentTaskForwarder,
+			shouldMatch:             false,
+		},
+		{
+			name:                    "parentTaskForwarder with allowForwarding=true - match",
+			allowForwarding:         true,
+			pollerTaskForwarderType: parentTaskForwarder,
+			shouldMatch:             true,
+		},
+		// validatorTaskForwarder conditions
+		{
+			name:                    "validatorTaskForwarder with forwarded task - no match",
+			allowForwarding:         true,
+			taskForwardCtx:          true, // forwarded task has forwardCtx
+			pollerTaskForwarderType: validatorTaskForwarder,
+			shouldMatch:             false,
+		},
+		{
+			name:                    "validatorTaskForwarder with local backlog task - match",
+			allowForwarding:         true,
+			taskForwardCtx:          false,
+			pollerTaskForwarderType: validatorTaskForwarder,
+			shouldMatch:             true,
+		},
+		// minPriority filtering
+		{
+			name:              "minPriority excludes higher priority number - no match",
+			allowForwarding:   true,
+			taskPriority:      5,
+			pollerMinPriority: 2, // only accepts priority <= 2
+			shouldMatch:       false,
+		},
+		{
+			name:              "minPriority includes matching priority - match",
+			allowForwarding:   true,
+			taskPriority:      2,
+			pollerMinPriority: 2,
+			shouldMatch:       true,
+		},
+		{
+			name:              "minPriority includes lower priority number - match",
+			allowForwarding:   true,
+			taskPriority:      1,
+			pollerMinPriority: 5,
+			shouldMatch:       true,
+		},
+		{
+			name:              "minPriority=0 matches any priority - match",
+			allowForwarding:   true,
+			taskPriority:      5,
+			pollerMinPriority: 0,
+			shouldMatch:       true,
+		},
+		// allowForwarding=false with poll forwarder tasks
+		{
+			name:                  "normalPollForwarder task skipped when allowForwarding=false",
+			allowForwarding:       false,
+			taskPollForwarderType: normalPollForwarder,
+			pollerForwardCtx:      true,
+			shouldMatch:           false, // task is skipped entirely
+		},
+		{
+			name:                  "priorityBacklogPollForwarder task allowed when allowForwarding=false",
+			allowForwarding:       false,
+			taskPollForwarderType: priorityBacklogPollForwarder,
+			pollerForwardCtx:      true,
+			shouldMatch:           true,
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			// Create task
+			var task *internalTask
+			if tc.taskIsQuery {
+				task = newInternalQueryTask("test", &matchingservice.QueryWorkflowRequest{})
+			} else if tc.taskPollForwarderType != notPollForwarder {
+				task = newPollForwarderTask(pollForwarderPriority, tc.taskPollForwarderType)
+			} else {
+				task = s.newBacklogTask(1, 0, nil)
+				if tc.taskPriority > 0 {
+					task.effectivePriority = effectivePriorityFactor * priorityKey(tc.taskPriority)
+				}
+			}
+			if tc.taskForwardCtx {
+				task.forwardCtx = context.Background()
+			}
+			s.md.tasks.heap = []*internalTask{task}
+
+			// Create poller
+			poller := &waitingPoller{
+				startTime:         s.now(),
+				queryOnly:         tc.pollerQueryOnly,
+				taskForwarderType: tc.pollerTaskForwarderType,
+				pollMetadata:      &pollMetadata{},
+			}
+			if tc.pollerForwardCtx {
+				poller.forwardCtx = context.Background()
+			}
+			if tc.pollerMinPriority > 0 {
+				poller.pollMetadata.conditions = &matchingservice.PollConditions{
+					MinPriority: tc.pollerMinPriority,
+				}
+			}
+			s.md.pollers.heap = []*waitingPoller{poller}
+
+			// Call findMatch
+			s.md.lock.Lock()
+			foundTask, foundPoller := s.md.findMatch(tc.allowForwarding)
+			s.md.lock.Unlock()
+
+			if tc.shouldMatch {
+				s.NotNil(foundTask, "expected task to be returned")
+				s.NotNil(foundPoller, "expected poller to be returned")
+			} else {
+				s.Nil(foundTask, "expected no task match")
+				s.Nil(foundPoller, "expected no poller match")
+			}
+		})
+	}
+}
+
 // simple limiter tests
 
 func TestSimpleLimiter(t *testing.T) {
