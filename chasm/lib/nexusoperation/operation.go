@@ -8,11 +8,19 @@ import (
 var _ chasm.Component = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 
+type OperationStore interface {
+	// TODO
+}
+
 type Operation struct {
 	chasm.UnimplementedComponent
 
 	// Persisted internal state
 	*nexusoperationpb.OperationState
+
+	// Pointer to an implementation of the "store". For a workflow-based Nexus operation
+	// this is a parent pointer back to the workflow. For a standalone Nexus operation this is nil.
+	Store chasm.ParentPtr[OperationStore]
 }
 
 func NewOperation(state *nexusoperationpb.OperationState) *Operation {
