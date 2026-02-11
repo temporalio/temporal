@@ -387,8 +387,16 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 		req.RequestId = uuid.NewString()
 	}
 
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+
 	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > h.config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
 	}
 
 	if err := normalizeAndValidateIDPolicy(req); err != nil {
@@ -403,7 +411,7 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 		req.Input.Size(),
 		h.logger,
 		req.GetNamespace()); err != nil {
-		return err
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
 	}
 
 	if req.GetSearchAttributes() != nil {

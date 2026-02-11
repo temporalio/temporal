@@ -35,6 +35,7 @@ import (
 const (
 	defaultStartToCloseTimeout = 1 * time.Minute
 	defaultIdentity            = "test-worker"
+	defaultMaxIDLengthLimit    = 1000
 )
 
 var (
@@ -323,6 +324,107 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
 	protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
 	require.NotNil(t, pollTaskResp.TaskToken)
+}
+
+func (s *standaloneActivityTestSuite) TestStart() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	t.Run("RequestValidations", func(t *testing.T) {
+		t.Run("RequestIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   s.tv.ActivityID(),
+				ActivityType: s.tv.ActivityType(),
+				Identity:     s.tv.WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: s.tv.TaskQueue().GetName(),
+				},
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           string(make([]byte, defaultMaxIDLengthLimit+1)),
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("IdentityTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   s.tv.ActivityID(),
+				ActivityType: s.tv.ActivityType(),
+				Identity:     string(make([]byte, defaultMaxIDLengthLimit+1)),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: s.tv.TaskQueue().GetName(),
+				},
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           s.tv.RequestID(),
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("InputTooLarge", func(t *testing.T) {
+			blobSizeLimitError := 1000
+			s.OverrideDynamicConfig(
+				dynamicconfig.BlobSizeLimitError,
+				blobSizeLimitError,
+			)
+
+			input := payloads.EncodeString(string(make([]byte, blobSizeLimitError+1)))
+
+			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   s.tv.ActivityID(),
+				ActivityType: s.tv.ActivityType(),
+				Identity:     s.tv.WorkerIdentity(),
+				Input:        input,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: s.tv.TaskQueue().GetName(),
+				},
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           s.tv.RequestID(),
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Contains(t, invalidArgErr.Message, "input exceeds length limit")
+		})
+
+		t.Run("SearchAttributesInvalid", func(t *testing.T) {
+			invalidSearchAttributes := &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					"InvalidSearchAttributeKey": payload.EncodeString("value"),
+				},
+			}
+
+			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:    s.Namespace().String(),
+				ActivityId:   s.tv.ActivityID(),
+				ActivityType: s.tv.ActivityType(),
+				Identity:     s.tv.WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: s.tv.TaskQueue().GetName(),
+				},
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           s.tv.RequestID(),
+				SearchAttributes:    invalidSearchAttributes,
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Contains(t, invalidArgErr.Message, "no mapping defined for search attribute")
+		})
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestComplete() {
@@ -1318,7 +1420,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 		t.Run("ActivityIDTooLong", func(t *testing.T) {
 			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-				ActivityId: string(make([]byte, 1001)), // dynamic config default is 1000
+				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Cancellation",
 				Identity:   "cancelling-worker",
@@ -1326,13 +1428,14 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
 		})
 
 		t.Run("RequestIDTooLong", func(t *testing.T) {
 			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 				ActivityId: testcore.RandomizeStr(t.Name()),
-				RequestId:  string(make([]byte, 1001)), // dynamic config default is 1000
+				RequestId:  string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Cancellation",
 				Identity:   "cancelling-worker",
@@ -1340,7 +1443,8 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
 		})
 
 		t.Run("IdentityTooLong", func(t *testing.T) {
@@ -1348,12 +1452,13 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 				ActivityId: testcore.RandomizeStr(t.Name()),
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Cancellation",
-				Identity:   string(make([]byte, 1001)), // dynamic config default is 1000
+				Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
 		})
 
 		t.Run("InvalidRunID", func(t *testing.T) {
@@ -1824,7 +1929,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 		t.Run("ActivityIDTooLong", func(t *testing.T) {
 			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
-				ActivityId: string(make([]byte, 1001)), // dynamic config default is 1000
+				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Termination",
 				Identity:   "terminator",
@@ -1832,13 +1937,14 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
 		})
 
 		t.Run("RequestIDTooLong", func(t *testing.T) {
 			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
 				ActivityId: testcore.RandomizeStr(t.Name()),
-				RequestId:  string(make([]byte, 1001)), // dynamic config default is 1000
+				RequestId:  string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Termination",
 				Identity:   "terminator",
@@ -1846,7 +1952,8 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+			require.Equal(t, fmt.Sprintf("request ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
 		})
 
 		t.Run("IdentityTooLong", func(t *testing.T) {
@@ -1854,12 +1961,13 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 				ActivityId: testcore.RandomizeStr(t.Name()),
 				Namespace:  s.Namespace().String(),
 				Reason:     "Test Termination",
-				Identity:   string(make([]byte, 1001)), // dynamic config default is 1000
+				Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)), // dynamic config default is 1000
 			})
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d", 1001, 1000), invalidArgErr.Message)
+			require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
 		})
 
 		t.Run("InvalidRunID", func(t *testing.T) {
