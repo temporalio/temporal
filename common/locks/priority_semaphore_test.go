@@ -52,12 +52,12 @@ func (s *prioritySemaphoreSuite) SetupSuite() {
 
 func (s *prioritySemaphoreSuite) TestTryAcquire() {
 	semaphore := NewPrioritySemaphore(2)
-	s.True(semaphore.TryAcquire(1))
-	s.True(semaphore.TryAcquire(1))
-	s.False(semaphore.TryAcquire(1))
-	s.False(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
 	semaphore.Release(2)
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 }
 
 func (s *prioritySemaphoreSuite) TestAcquire_High_Success() {
@@ -65,9 +65,9 @@ func (s *prioritySemaphoreSuite) TestAcquire_High_Success() {
 	ctx := context.Background()
 	err := semaphore.Acquire(ctx, PriorityHigh, 1)
 	s.NoError(err)
-	s.False(semaphore.TryAcquire(1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
 	semaphore.Release(1)
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 }
 
 func (s *prioritySemaphoreSuite) TestAcquire_Low_Success() {
@@ -75,9 +75,9 @@ func (s *prioritySemaphoreSuite) TestAcquire_Low_Success() {
 	ctx := context.Background()
 	err := semaphore.Acquire(ctx, PriorityLow, 1)
 	s.NoError(err)
-	s.False(semaphore.TryAcquire(1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
 	semaphore.Release(1)
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 }
 
 func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
@@ -85,7 +85,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
 	cLock := make(chan struct{})
 	go func() {
 		// Acquire the function to make the next call blocking.
-		s.True(semaphore.TryAcquire(1))
+		s.True(semaphore.TryAcquire(PriorityHigh, 1))
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
@@ -102,7 +102,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_LowAfterWaiting() {
 	cLock := make(chan struct{})
 	go func() {
 		// Acquire the function to make the next call blocking.
-		s.True(semaphore.TryAcquire(1))
+		s.True(semaphore.TryAcquire(PriorityHigh, 1))
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
@@ -117,7 +117,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_LowAfterWaiting() {
 func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	semaphore := NewPrioritySemaphore(1)
 	wg := sync.WaitGroup{}
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 	wg.Add(1)
 	go func() {
 		s.waitUntilBlockedInSemaphore(2)
