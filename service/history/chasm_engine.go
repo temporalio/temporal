@@ -113,7 +113,7 @@ func (e *ChasmEngine) StartExecution(
 	}
 
 	if executionRef.RunID != "" {
-		return chasm.EngineStartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for StartExecution")
+		return chasm.StartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for StartExecution")
 	}
 
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(

@@ -819,10 +819,10 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_UpdateExisting() {
 			NamespaceID: s.NamespaceID().String(),
 			BusinessID:  storeID,
 		},
-		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, any, error) {
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
 			newFnCalled = true
 			s.Fail("newFn should not be called when execution exists and is running")
-			return nil, nil, nil
+			return nil, nil
 		},
 		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
 			updateFnCalled = true
@@ -868,10 +868,10 @@ func (s *ChasmTestSuite) TestUpdateWithStartExecution_CreateNew() {
 			NamespaceID: s.NamespaceID().String(),
 			BusinessID:  storeID,
 		},
-		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, any, error) {
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
 			newFnCalled = true
 			store, err := tests.NewPayloadStore(mutableContext)
-			return store, nil, err
+			return store, err
 		},
 		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
 			updateFnCalled = true
