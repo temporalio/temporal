@@ -214,9 +214,13 @@ func (s *Starter) Invoke(
 		var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 		if errors.As(err, &currentWorkflowConditionFailedError) && len(currentWorkflowConditionFailedError.RunID) > 0 {
 			// The history and mutable state generated above will be deleted by a background process.
-			return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+			resp, outcome, conflictErr := s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+			if conflictErr == nil {
+				// Notify version workflow if we are starting a workflow execution on a potentially drained version.
+				api.ReactivateVersionWorkflowIfPinned(ctx, s.shardContext, s.namespace.ID(), s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+			}
+			return resp, outcome, conflictErr
 		}
-
 		return nil, StartErr, err
 	}
 
