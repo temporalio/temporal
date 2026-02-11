@@ -276,6 +276,12 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
+	if req.GetRequestId() == "" {
+		// Since this mutates the request, we clone it first so that any retries use the original request.
+		req = common.CloneProto(req)
+		req.RequestId = uuid.NewString()
+	}
+
 	if err := validateTerminateActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
@@ -283,12 +289,6 @@ func (h *frontendHandler) TerminateActivityExecution(
 		h.config.BlobSizeLimitWarn,
 		h.logger); err != nil {
 		return nil, err
-	}
-
-	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
-		req.RequestId = uuid.NewString()
 	}
 
 	_, err = h.client.TerminateActivityExecution(ctx, &activitypb.TerminateActivityExecutionRequest{
@@ -315,6 +315,12 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
+	if req.GetRequestId() == "" {
+		// Since this mutates the request, we clone it first so that any retries use the original request.
+		req = common.CloneProto(req)
+		req.RequestId = uuid.NewString()
+	}
+
 	if err := validateRequestCancelActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
@@ -322,12 +328,6 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		h.config.BlobSizeLimitWarn,
 		h.logger); err != nil {
 		return nil, err
-	}
-
-	if req.GetRequestId() == "" {
-		// Since this mutates the request, we clone it first so that any retries use the original request.
-		req = common.CloneProto(req)
-		req.RequestId = uuid.NewString()
 	}
 
 	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
