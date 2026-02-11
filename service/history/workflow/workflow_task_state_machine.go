@@ -525,6 +525,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	workflowTaskScheduledEventCreated := scheduledEventCreatedForRedirect ||
 		(!m.ms.IsTransientWorkflowTask() && workflowTask.Type != enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
 
+	//if strings.Contains(m.get)
 	// If new events came since transient/speculative WT was scheduled or failover happened during lifetime of transient/speculative WT,
 	// transient/speculative WT needs to be converted to normal WT, i.e. WorkflowTaskScheduledEvent needs to be created now.
 	if !workflowTaskScheduledEventCreated &&
