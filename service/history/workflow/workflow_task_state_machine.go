@@ -499,8 +499,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
 		targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
-			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
-				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
+			(currentDeploymentVersion.GetBuildId() != targetDeploymentVersion.GetBuildId() ||
+				currentDeploymentVersion.GetSeriesName() != targetDeploymentVersion.GetDeploymentName()) {
 			targetDeploymentVersionChanged = true
 		}
 	}
