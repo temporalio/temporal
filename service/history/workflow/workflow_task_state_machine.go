@@ -495,7 +495,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	// that are about to transition to the target version. This is good, because if their transition succeeds, they
 	// don't need to CaN to start using the new version.
 	var targetDeploymentVersionChanged bool
-	if m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
+	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
+		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
 		targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
 			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||

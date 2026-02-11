@@ -907,6 +907,11 @@ and deployment interaction in matching and history.`,
 		false,
 		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
 	)
+	EnableSendTargetVersionChanged = NewNamespaceBoolSetting(
+		"system.EnableSendTargetVersionChanged",
+		false,
+		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,
