@@ -44,6 +44,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -457,6 +458,10 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
+	// RoutingInfoCacheGetScope is the scope used by routing info cache
+	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
+	// RoutingInfoCachePutScope is the scope used by routing info cache
+	RoutingInfoCachePutScope = "RoutingInfoCachePut"
 )
 
 // Matching Scope
@@ -598,6 +603,9 @@ const (
 const (
 	ScheduleActionTypeTag       = "schedule_action"
 	ScheduleActionStartWorkflow = "start_workflow"
+	ScheduleBackendTag          = "scheduler_backend"
+	ScheduleBackendChasm        = "chasm"
+	ScheduleBackendLegacy       = "legacy"
 )
 
 var (
@@ -1005,6 +1013,9 @@ var (
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
+	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
+	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")

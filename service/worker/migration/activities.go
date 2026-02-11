@@ -39,7 +39,7 @@ type (
 	replicationTasksHeartbeatDetails struct {
 		NextIndex                        int
 		CheckPoint                       time.Time
-		LastNotVerifiedWorkflowExecution *replicationspb.MigrationExecutionInfo
+		LastNotVerifiedWorkflowExecution *ExecutionInfo
 	}
 
 	verifyStatus int
@@ -49,7 +49,7 @@ type (
 	}
 
 	listWorkflowsResponse struct {
-		Executions    []*replicationspb.MigrationExecutionInfo
+		Executions    []*ExecutionInfo
 		NextPageToken []byte
 		Error         error
 
@@ -64,7 +64,7 @@ type (
 
 	generateReplicationTasksRequest struct {
 		NamespaceID      string
-		Executions       []*replicationspb.MigrationExecutionInfo
+		Executions       []*ExecutionInfo
 		RPS              float64
 		GetParentInfoRPS float64
 		TargetClusters   []string
@@ -76,7 +76,7 @@ type (
 		TargetClusterEndpoint string
 		TargetClusterName     string
 		VerifyInterval        time.Duration `validate:"gte=0"`
-		Executions            []*replicationspb.MigrationExecutionInfo
+		Executions            []*ExecutionInfo
 	}
 
 	verifyReplicationTasksResponse struct {
@@ -124,7 +124,7 @@ type (
 		remoteAdminClient adminservice.AdminServiceClient,
 		localAdminClient adminservice.AdminServiceClient,
 		ns *namespace.Namespace,
-		execution *replicationspb.MigrationExecutionInfo,
+		execution *ExecutionInfo,
 		mu *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error)
 )
@@ -245,17 +245,17 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
 			}
 			a.logger.Info("Wait catchup not ready",
-				tag.NewInt32("ShardId", shard.ShardId),
-				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
-				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
-				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
-				tag.NewTimeTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
-				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
-				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
+				tag.Int32("ShardId", shard.ShardId),
+				tag.String("RemoteCluster", waitRequest.RemoteCluster),
+				tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.Int64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+				tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
+				tag.Duration("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
+				tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.Time("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
+				tag.Time("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
+				tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
+				tag.Int64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 		}
 	}
@@ -327,12 +327,12 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 				a.logger.Info("Wait handover missing handover namespace info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster), tag.WorkflowNamespace(waitRequest.Namespace))
 			} else {
 				a.logger.Info("Wait handover not ready",
-					tag.NewInt32("ShardId", shard.ShardId),
-					tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-					tag.NewInt64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
-					tag.NewStringTag("Namespace", waitRequest.Namespace),
-					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-					tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+					tag.Int32("ShardId", shard.ShardId),
+					tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
+					tag.Int64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
+					tag.String("Namespace", waitRequest.Namespace),
+					tag.String("RemoteCluster", waitRequest.RemoteCluster),
+					tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
 				)
 			}
 		}
@@ -345,9 +345,9 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
 		metrics.NamespaceTag(waitRequest.Namespace))
 	a.logger.Info("Wait handover ready shard count.",
-		tag.NewInt("ReadyShards", readyShardCount),
-		tag.NewStringTag("Namespace", waitRequest.Namespace),
-		tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster))
+		tag.Int("ReadyShards", readyShardCount),
+		tag.String("Namespace", waitRequest.Namespace),
+		tag.String("RemoteCluster", waitRequest.RemoteCluster))
 
 	return readyShardCount == len(resp.Shards), nil
 }
@@ -357,7 +357,7 @@ func (a *activities) generateWorkflowReplicationTask(
 	rateLimiter quotas.RateLimiter,
 	namespaceName string,
 	namespaceID string,
-	execution *replicationspb.MigrationExecutionInfo,
+	execution *ExecutionInfo,
 	targetClusters []string,
 	generateViaFrontend bool,
 ) error {
@@ -371,7 +371,7 @@ func (a *activities) generateWorkflowReplicationTask(
 
 	var stateTransitionCount, historyLength int64
 	if generateViaFrontend {
-		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeId)
+		archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
 		if err != nil {
 			return err
 		}
@@ -379,8 +379,8 @@ func (a *activities) generateWorkflowReplicationTask(
 		resp, err := a.adminClient.GenerateLastHistoryReplicationTasks(ctx, &adminservice.GenerateLastHistoryReplicationTasksRequest{
 			Namespace: namespaceName,
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: execution.BusinessId,
-				RunId:      execution.RunId,
+				WorkflowId: execution.BusinessID,
+				RunId:      execution.RunID,
 			},
 			Archetype:      archetype,
 			TargetClusters: targetClusters,
@@ -394,10 +394,10 @@ func (a *activities) generateWorkflowReplicationTask(
 		resp, err := a.historyClient.GenerateLastHistoryReplicationTasks(ctx, &historyservice.GenerateLastHistoryReplicationTasksRequest{
 			NamespaceId: namespaceID,
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: execution.BusinessId,
-				RunId:      execution.RunId,
+				WorkflowId: execution.BusinessID,
+				RunId:      execution.RunID,
 			},
-			ArchetypeId:    execution.ArchetypeId,
+			ArchetypeId:    execution.ArchetypeID,
 			TargetClusters: targetClusters,
 		})
 		if err != nil {
@@ -486,11 +486,11 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	}
 	var lastCloseTime, lastStartTime time.Time
 
-	executions := make([]*replicationspb.MigrationExecutionInfo, 0, len(resp.Executions))
+	executions := make([]*ExecutionInfo, 0, len(resp.Executions))
 	for _, e := range resp.Executions {
-		executionInfo := &replicationspb.MigrationExecutionInfo{
-			BusinessId: e.Execution.GetWorkflowId(),
-			RunId:      e.Execution.GetRunId(),
+		executionInfo := &ExecutionInfo{
+			BusinessID: e.Execution.GetWorkflowId(),
+			RunID:      e.Execution.GetRunId(),
 			// Ideally we should use chasm.WorkflowArchetypeID by default,
 			// but for backward compatibility reason we need this field to be 0
 			// to avoid unmarshaling errors since the previous type returned in
@@ -498,7 +498,7 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			// which does not have ArchetypeId field.
 			//
 			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
-			ArchetypeId: chasm.UnspecifiedArchetypeID,
+			ArchetypeID: chasm.UnspecifiedArchetypeID,
 		}
 
 		archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(e)
@@ -509,7 +509,7 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 			// For backward compatibility reason we need this field to be 0
 			// to avoid unmarshaling errors for workflows.
 			// Check comment above for more details.
-			executionInfo.ArchetypeId = archetypeID
+			executionInfo.ArchetypeID = archetypeID
 		}
 
 		executions = append(executions, executionInfo)
@@ -581,16 +581,16 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 			if !common.IsNotFoundError(err) {
 				a.logger.Error("force-replication failed to generate replication task",
 					tag.WorkflowNamespaceID(request.NamespaceID),
-					tag.WorkflowID(we.GetBusinessId()),
-					tag.WorkflowRunID(we.GetRunId()),
+					tag.WorkflowID(we.BusinessID),
+					tag.WorkflowRunID(we.RunID),
 					tag.Error(err))
 				return err
 			}
 
 			a.logger.Warn("force-replication ignore replication task due to NotFoundServiceError",
 				tag.WorkflowNamespaceID(request.NamespaceID),
-				tag.WorkflowID(we.GetBusinessId()),
-				tag.WorkflowRunID(we.GetRunId()),
+				tag.WorkflowID(we.BusinessID),
+				tag.WorkflowRunID(we.RunID),
 				tag.Error(err))
 		}
 		activity.RecordHeartbeat(ctx, i)
@@ -694,18 +694,22 @@ func (a *activities) SeedReplicationQueueWithUserDataEntries(ctx context.Context
 func (a *activities) checkSkipWorkflowExecution(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	execution *replicationspb.MigrationExecutionInfo,
+	execution *ExecutionInfo,
 	ns *namespace.Namespace,
 ) (verifyResult, error) {
 	namespaceID := request.NamespaceID
-	tags := []tag.Tag{tag.WorkflowNamespaceID(namespaceID), tag.WorkflowID(execution.BusinessId), tag.WorkflowRunID(execution.RunId)}
+	tags := []tag.Tag{
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.WorkflowID(execution.BusinessID),
+		tag.WorkflowRunID(execution.RunID),
+	}
 	resp, err := a.historyClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
 		NamespaceId: namespaceID,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.BusinessId,
-			RunId:      execution.RunId,
+			WorkflowId: execution.BusinessID,
+			RunId:      execution.RunID,
 		},
-		ArchetypeId:     execution.ArchetypeId,
+		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
 
@@ -758,12 +762,12 @@ func (a *activities) verifySingleReplicationTask(
 	request *verifyReplicationTasksRequest,
 	remotAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
-	execution *replicationspb.MigrationExecutionInfo,
+	execution *ExecutionInfo,
 ) (verifyResult, error) {
 	s := time.Now()
 	// Check if execution exists on remote cluster
 
-	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeId)
+	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
 	if err != nil {
 		return verifyResult{
 			status: notVerified,
@@ -773,8 +777,8 @@ func (a *activities) verifySingleReplicationTask(
 	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: request.Namespace,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.BusinessId,
-			RunId:      execution.RunId,
+			WorkflowId: execution.BusinessID,
+			RunId:      execution.RunID,
 		},
 		Archetype:       archetype,
 		SkipForceReload: true,
@@ -1031,17 +1035,17 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 			}
 
 			a.logger.Info("Wait catchup not ready",
-				tag.NewInt32("ShardId", shard.ShardId),
-				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-				tag.NewStringTag("Namespace", waitRequest.Namespace),
-				tag.NewStringTag("CatchupCluster", waitRequest.CatchupCluster),
-				tag.NewStringTag("TargetCluster", waitRequest.TargetCluster),
-				tag.NewInt64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
-				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
-				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
-				tag.NewTimeTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
-				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
+				tag.Int32("ShardId", shard.ShardId),
+				tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.String("Namespace", waitRequest.Namespace),
+				tag.String("CatchupCluster", waitRequest.CatchupCluster),
+				tag.String("TargetCluster", waitRequest.TargetCluster),
+				tag.Int64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
+				tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.Duration("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
+				tag.Time("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
+				tag.Time("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
+				tag.Int64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 
 		}

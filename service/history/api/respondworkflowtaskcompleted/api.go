@@ -62,6 +62,7 @@ type (
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
 		matchingClient                 matchingservice.MatchingServiceClient
+		versionMembershipCache         worker_versioning.VersionMembershipCache
 	}
 )
 
@@ -74,6 +75,7 @@ func NewWorkflowTaskCompletedHandler(
 	visibilityManager manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *WorkflowTaskCompletedHandler {
 	return &WorkflowTaskCompletedHandler{
 		config:                     shardContext.GetConfig(),
@@ -96,6 +98,7 @@ func NewWorkflowTaskCompletedHandler(
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
 		matchingClient:                 matchingClient,
+		versionMembershipCache:         versionMembershipCache,
 	}
 }
 
@@ -147,6 +150,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	weContext := workflowLease.GetContext()
 	ms := workflowLease.GetMutableState()
 	currentWorkflowTask := ms.GetWorkflowTaskByID(token.GetScheduledEventId())
+
+	if len(request.Commands) == 0 {
+		// Context metadata is automatically set during mutable state transaction close. For RespondWorkflowTaskCompleted
+		// with no commands (e.g., workflow task heartbeat or only readonly messages like `update.Rejection`), the transaction
+		// is never closed. We explicitly call SetContextMetadata here to ensure workflow metadata is populated in the context.
+		ms.SetContextMetadata(ctx)
+	}
+
 	defer func() {
 		var errForRelease error
 		if releaseLeaseWithError {
@@ -393,6 +404,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			hasBufferedEventsOrMessages,
 			handler.commandHandlerRegistry,
 			handler.matchingClient,
+			handler.versionMembershipCache,
 		)
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
@@ -774,7 +786,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 	ctx context.Context,
 	namespaceName namespace.Name,
 	namespaceID namespace.ID,
-	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
+	matchingResp *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory,
 	branchToken []byte,
 	maximumPageSize int32,
 ) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {

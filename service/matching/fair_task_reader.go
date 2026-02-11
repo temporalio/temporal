@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
+	"github.com/tidwall/btree"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -43,6 +44,12 @@ type (
 		ackLevel         fairLevel   // inclusive: task exactly at ackLevel _has_ been acked
 		atEnd            bool        // whether we believe outstandingTasks represents the entire queue right now
 
+		// Small cache of acked task levels that were evicted from outstandingTasks. When tasks
+		// are evicted from memory, we lose track of which ones were already acked. This cache
+		// helps avoid reprocessing tasks that we know were already acked but whose ack was
+		// evicted before it could be used to advance ackLevel.
+		evictedAcks *btree.BTreeG[fairLevel]
+
 		// Hold tasks written while a read is pending so we make sure to account for them in
 		// our read level.
 		newlyWrittenTasks []*persistencespb.AllocatedTaskInfo
@@ -68,6 +75,11 @@ const (
 	mergeWrite
 )
 
+// Max number of evicted ack levels to cache. This is a small cache to avoid
+// reprocessing tasks that were acked but whose acks were evicted before they
+// could be used to advance ackLevel.
+const evictedAcksCacheSize = 256
+
 func newFairTaskReader(
 	backlogMgr *fairBacklogManagerImpl,
 	subqueue subqueueIndex,
@@ -88,6 +100,7 @@ func newFairTaskReader(
 		outstandingTasks: *newFairLevelTreeMap(),
 		readLevel:        initialAckLevel,
 		ackLevel:         initialAckLevel,
+		evictedAcks:      btree.NewBTreeG(fairLevel.less),
 
 		// gc state
 		lastGCTime: time.Now(),
@@ -303,7 +316,9 @@ func (tr *fairTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	// - versioning wants to re-spool the task on a different queue and that failed
 	// - versioning says StickyWorkerUnavailable
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
-		return false, false
+		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
+		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
+		return false, true
 	}
 	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
 	if errors.As(err, &stickyUnavailable) {
@@ -397,6 +412,9 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// If write/read race or we have to re-read a range, we may read something we had
 			// already added to the matcher or acked. Ignore tasks we already have.
 			continue
+		} else if _, have := tr.evictedAcks.Delete(level); have {
+			// This task was already acked but the ack was evicted. Skip it.
+			continue
 		}
 		merged.Put(level, t)
 	}
@@ -445,14 +463,19 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// We also have to remove any acked levels (nils) in outstandingTasks that are above our
 	// new read level (and accept reprocessing those tasks when we see them again), otherwise
 	// we may use these acks to increment our ack level across dropped ranges of tasks.
-	// TODO: we could add an additional cache to improve this
+	// Cache these evicted acks so we can skip them if we re-read them later.
 	tr.outstandingTasks.Select(func(k, v any) bool {
 		return v == nil && tr.readLevel.less(k.(fairLevel))
 	}).Each(func(k, v any) {
 		evictedAnyTasks = true
-		tr.outstandingTasks.Remove(k)
-		// TODO: metric for this?
+		level := k.(fairLevel) //nolint:revive
+		tr.outstandingTasks.Remove(level)
+		tr.evictedAcks.Set(level)
 	})
+	// Trim the cache to max size by removing highest levels.
+	for tr.evictedAcks.Len() > evictedAcksCacheSize {
+		tr.evictedAcks.PopMax()
+	}
 
 	internalTasks := make([]*internalTask, len(tasks))
 	for i, t := range tasks {
@@ -513,6 +536,15 @@ func (tr *fairTaskReader) getLoadedTasks() int {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	return tr.loadedTasks
+}
+
+// isDrained returns true if this subqueue has been fully drained:
+// - We've read to the end of the queue (atEnd is true)
+// - No tasks are loaded in memory
+func (tr *fairTaskReader) isDrained() bool {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	return tr.atEnd && tr.loadedTasks == 0
 }
 
 func (tr *fairTaskReader) ackLevelPinnedLocked() bool {
@@ -610,12 +642,7 @@ func (tr *fairTaskReader) shouldGCLocked() bool {
 
 // called in new goroutine
 func (tr *fairTaskReader) doGC(ackLevel fairLevel) {
-	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
-
-	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
-	defer cancel()
-
-	n, err := tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
+	rowsDeleted, err := tr.doGCAt(ackLevel)
 
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
@@ -627,11 +654,31 @@ func (tr *fairTaskReader) doGC(ackLevel fairLevel) {
 	// implementation behavior for CompleteTasksLessThan:
 	// - unit test, cassandra: always return UnknownNumRowsAffected (in this case means "all")
 	// - sql: return number of rows affected (should be <= batchSize)
-	// if we get UnknownNumRowsAffected or a smaller number than our limit, we know we got
-	// everything <= ackLevel, so we can reset ours. if not, we may have to try again.
-	if n == persistence.UnknownNumRowsAffected {
+	if rowsDeleted == persistence.UnknownNumRowsAffected {
 		tr.numToGC = 0
 	} else {
-		tr.numToGC = max(0, tr.numToGC-n)
+		tr.numToGC = max(0, tr.numToGC-rowsDeleted)
 	}
+}
+
+func (tr *fairTaskReader) doGCAt(ackLevel fairLevel) (int, error) {
+	batchSize := tr.backlogMgr.config.MaxTaskDeleteBatchSize()
+
+	ctx, cancel := context.WithTimeout(tr.backlogMgr.tqCtx, ioTimeout)
+	defer cancel()
+
+	n, err := tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
+	if err != nil {
+		tr.logger.Warn("failed to gc tasks", tag.Error(err))
+	}
+	return n, err
+}
+
+// finalGC does a single synchronous gc.
+// Used when unloading a draining queue that won't be reloaded.
+func (tr *fairTaskReader) finalGC() {
+	tr.lock.Lock()
+	ackLevel := tr.ackLevel
+	tr.lock.Unlock()
+	_, _ = tr.doGCAt(ackLevel)
 }

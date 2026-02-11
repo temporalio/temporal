@@ -1420,6 +1420,31 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 	s.ErrorAs(err, &namespaceNotActive)
 }
 
+// TestReadComponent_NotFound tests that ReadComponent returns an appropriate NotFound error message.
+func (s *chasmEngineSuite) TestReadComponent_NotFound() {
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("this error message will not be returned by ReadComponent")).Times(1)
+
+	err := s.engine.ReadComponent(
+		context.Background(),
+		chasm.NewComponentRef[*testComponent](
+			chasm.ExecutionKey{
+				NamespaceID: string(tests.NamespaceID),
+				BusinessID:  "non-existent-execution",
+				RunID:       "11111111-2222-3333-4444-555555555555",
+			},
+		),
+		func(ctx chasm.Context, component chasm.Component) error {
+			s.Fail("readFn should not be called")
+			return nil
+		},
+	)
+	s.Error(err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	s.Equal("test_component not found for ID: non-existent-execution", notFound.Message)
+}
+
 func (s *chasmEngineSuite) buildPersistenceMutableState(
 	key chasm.ExecutionKey,
 	componentState proto.Message,

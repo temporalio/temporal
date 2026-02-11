@@ -31,6 +31,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.CancelOutstandingPollResponse:
 		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsRequest:
+		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsResponse:
+		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationRequest:
 		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationResponse:
@@ -120,7 +124,7 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.PollWorkflowTaskQueueRequest:
 		return nil
-	case *matchingservice.PollWorkflowTaskQueueResponse:
+	case *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),

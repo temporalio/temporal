@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/worker/scanner/build_ids"
 	"go.temporal.io/server/tests/testcore"
@@ -87,6 +88,8 @@ func (s *AdvancedVisibilitySuite) SetupSuite() {
 		dynamicconfig.RemovableBuildIdDurationSinceDefault.Key(): time.Microsecond,
 		// Enable the unified query converter
 		dynamicconfig.VisibilityEnableUnifiedQueryConverter.Key(): s.enableUnifiedQueryConverter,
+		// Enable external payload tracking for TestListWorkflow_ExternalPayloadSearchAttributes
+		dynamicconfig.ExternalPayloadsEnabled.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 
@@ -235,7 +238,12 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
 	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 	s.NoError(err)
 	query := fmt.Sprintf(`WorkflowId = "%s" and %s = "%s"`, id, testSearchAttributeKey, testSearchAttributeVal)
-	s.testHelperForReadOnce(we.GetRunId(), query)
+	openExecution := s.testHelperForReadOnce(we.GetRunId(), query)
+	searchValBytes, ok := openExecution.GetSearchAttributes().GetIndexedFields()[testSearchAttributeKey]
+	s.True(ok)
+	var searchVal string
+	_ = payload.Decode(searchValBytes, &searchVal)
+	s.Equal(testSearchAttributeVal, searchVal)
 
 	searchAttributes := s.createSearchAttributes()
 	// test upsert
@@ -846,7 +854,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	s.Nil(nextPageToken)
 }
 
-func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) {
+func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, query string) *workflowpb.WorkflowExecutionInfo {
 	var openExecution *workflowpb.WorkflowExecutionInfo
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
 		Namespace: s.Namespace().String(),
@@ -867,12 +875,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 	s.NotNil(openExecution)
 	s.Equal(expectedRunID, openExecution.GetExecution().GetRunId())
 	s.True(!openExecution.GetExecutionTime().AsTime().Before(openExecution.GetStartTime().AsTime()))
-	if openExecution.SearchAttributes != nil && len(openExecution.SearchAttributes.GetIndexedFields()) > 0 {
-		searchValBytes := openExecution.SearchAttributes.GetIndexedFields()[testSearchAttributeKey]
-		var searchVal string
-		_ = payload.Decode(searchValBytes, &searchVal)
-		s.Equal(testSearchAttributeVal, searchVal)
-	}
+	return openExecution
 }
 
 func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
@@ -2475,6 +2478,62 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
 	})
 	s.Require().NoError(err)
 	s.Require().Equal(0, len(res.BuildIdReachability[0].TaskQueueReachability))
+}
+
+func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttributes() {
+	id := "es-functional-external-payload-test"
+	wt := "es-functional-external-payload-test-type"
+	tl := "es-functional-external-payload-test-taskqueue"
+
+	// Create workflow input with external payload
+	externalPayloadSize := int64(1024)
+	workflowInput := &commonpb.Payloads{
+		Payloads: []*commonpb.Payload{{
+			Data: []byte("workflow input"),
+			ExternalPayloads: []*commonpb.Payload_ExternalPayloadDetails{
+				{SizeBytes: externalPayloadSize},
+			},
+		}},
+	}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Input:               workflowInput,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            "test-identity",
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+
+	// Complete the workflow using the new taskpoller API
+	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{{
+					CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+					Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+							Result: payloads.EncodeString("Done"),
+						},
+					},
+				}},
+			}, nil
+		},
+	)
+	s.NoError(err)
+
+	query := fmt.Sprintf(`WorkflowId = "%s" AND %s = 1`, id, sadefs.TemporalExternalPayloadCount)
+	s.testHelperForReadOnce(we.GetRunId(), query)
+
+	query = fmt.Sprintf(`WorkflowId = "%s" AND %s = %d`, id, sadefs.TemporalExternalPayloadSizeBytes, externalPayloadSize)
+	s.testHelperForReadOnce(we.GetRunId(), query)
 }
 
 func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {

@@ -228,6 +228,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
+		nil,
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -362,6 +363,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
+		nil,
 	).(*transferQueueActiveTaskExecutor)
 
 	// Execution should succeed.

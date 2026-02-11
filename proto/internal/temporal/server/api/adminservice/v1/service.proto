@@ -165,4 +165,7 @@ service AdminService {
     rpc DescribeTaskQueuePartition (DescribeTaskQueuePartitionRequest) returns (DescribeTaskQueuePartitionResponse) {}
 
     rpc ForceUnloadTaskQueuePartition (ForceUnloadTaskQueuePartitionRequest) returns (ForceUnloadTaskQueuePartitionResponse) {}
+
+    // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
+    rpc MigrateSchedule (MigrateScheduleRequest) returns (MigrateScheduleResponse) {}
 }

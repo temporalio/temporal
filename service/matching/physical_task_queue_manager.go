@@ -71,18 +71,19 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		backlogMgr        backlogManager
-		drainBacklogMgr   atomic.Value // backlogManager
-		liveness          *liveness
-		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
-		priMatcher        *priTaskMatcher
-		matcher           matcherInterface // TODO(pri): old matcher cleanup
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		throttledLogger   log.ThrottledLogger
-		matchingClient    matchingservice.MatchingServiceClient
-		clusterMeta       cluster.Metadata
-		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
+		backlogMgr          backlogManager
+		drainBacklogMgrLock sync.Mutex
+		drainBacklogMgr     backlogManager // protected by drainBacklogMgrLock
+		liveness            *liveness
+		oldMatcher          *TaskMatcher // TODO(pri): old matcher cleanup
+		priMatcher          *priTaskMatcher
+		matcher             matcherInterface // TODO(pri): old matcher cleanup
+		namespaceRegistry   namespace.Registry
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		clusterMeta         cluster.Metadata
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory               *pollerHistory
 		currentPolls                atomic.Int64
@@ -116,11 +117,11 @@ var (
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
 
-	backlogTagClassic       = tag.NewStringTag("backlog", "classic")
-	backlogTagPriority      = tag.NewStringTag("backlog", "priority")
-	backlogTagFairness      = tag.NewStringTag("backlog", "fairness")
-	backlogTagPriorityDrain = tag.NewStringTag("backlog", "priority-drain")
-	backlogTagFairnessDrain = tag.NewStringTag("backlog", "fairness-drain")
+	backlogTagClassic       = tag.String("backlog", "classic")
+	backlogTagPriority      = tag.String("backlog", "priority")
+	backlogTagFairness      = tag.String("backlog", "fairness")
+	backlogTagPriorityDrain = tag.String("backlog", "priority-drain")
+	backlogTagFairnessDrain = tag.String("backlog", "fairness-drain")
 )
 
 func newPhysicalTaskQueueManager(
@@ -311,8 +312,8 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		m.(backlogManager).Stop()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		m.Stop()
 	}
 	c.matcher.Stop()
 	c.liveness.Stop()
@@ -328,14 +329,21 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
 }
 
+// getDrainBacklogMgr returns the draining backlog manager, or nil if none.
+func (c *physicalTaskQueueManagerImpl) getDrainBacklogMgr() backlogManager {
+	c.drainBacklogMgrLock.Lock()
+	defer c.drainBacklogMgrLock.Unlock()
+	return c.drainBacklogMgr
+}
+
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	err := c.backlogMgr.WaitUntilInitialized(ctx)
 	if err == nil {
 		// If we're also draining another, then we need to wait for that also to write.
 		// TODO: we could try to optimize this so we can _dispatch_ before loading the other
 		// but still block on writing.
-		if m := c.drainBacklogMgr.Load(); m != nil {
-			err = m.(backlogManager).WaitUntilInitialized(ctx)
+		if m := c.getDrainBacklogMgr(); m != nil {
+			err = m.WaitUntilInitialized(ctx)
 		}
 	}
 	return err
@@ -388,12 +396,51 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 		return
 	}
 
-	prev := c.drainBacklogMgr.Swap(drainBacklogMgr)
+	c.drainBacklogMgrLock.Lock()
+	prev := c.drainBacklogMgr
+	c.drainBacklogMgr = drainBacklogMgr
+	c.drainBacklogMgrLock.Unlock()
 	if !softassert.That(c.logger, prev == nil, "SetupDraining called twice") {
 		return
 	}
 	logger.Info("Starting draining")
 	drainBacklogMgr.Start()
+}
+
+// FinishedDraining is called by a draining backlog manager when it has fully drained.
+// This updates the active backlog manager's metadata and unloads the draining manager.
+func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
+	if !softassert.That(c.logger, c.priMatcher != nil, "FinishedDraining called with old matcher") {
+		return
+	}
+
+	c.drainBacklogMgrLock.Lock()
+	drainMgr := c.drainBacklogMgr
+	c.drainBacklogMgr = nil
+	c.drainBacklogMgrLock.Unlock()
+
+	// Update active manager's OtherHasTasks field and persist
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	err := c.backlogMgr.getDB().SetOtherHasTasks(ctx, false)
+	cancel()
+	if err != nil {
+		c.logger.Warn("Failed to sync state after drain completion", tag.Error(err))
+		// Note: we've already cleared drainBacklogMgr, so we won't retry.
+		// The active manager's otherHasTasks is already false in memory,
+		// it will be persisted on the next periodic sync.
+	}
+
+	// Do final gc before stopping since this is the last chance to clean up
+	drainMgr.FinalGC()
+	drainMgr.Stop()
+	c.logger.Info("Drain completed, unloaded draining backlog manager")
+}
+
+func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
+	if c.priMatcher == nil {
+		return
+	}
+	c.priMatcher.ReprocessRedirectedTasksAfterStop()
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
@@ -461,8 +508,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 func (c *physicalTaskQueueManagerImpl) backlogCountHint() int64 {
 	n := c.backlogMgr.BacklogCountHint()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		n += m.(backlogManager).BacklogCountHint()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		n += m.BacklogCountHint()
 	}
 	return n
 }
@@ -510,12 +557,12 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) error {
 	if c.priMatcher == nil {
 		softassert.Fail(c.logger, "AddSpooledTaskToMatcher called on old matcher")
-		return
+		return errInternalMatchError
 	}
-	c.priMatcher.AddTask(task)
+	return c.priMatcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
@@ -610,8 +657,8 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		drainStats := m.(backlogManager).BacklogStatsByPriority()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		drainStats := m.BacklogStatsByPriority()
 		for pri, tqs := range drainStats {
 			mergeStats(util.GetOrSetNew(stats, pri), tqs)
 		}
@@ -633,8 +680,8 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	status := c.backlogMgr.InternalStatus()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		drainStatus := m.(backlogManager).InternalStatus()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		drainStatus := m.InternalStatus()
 		for _, st := range drainStatus {
 			st.Draining = true
 		}

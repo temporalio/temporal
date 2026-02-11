@@ -99,17 +99,17 @@ func (e *ChasmEngine) StartExecution(
 	executionRef chasm.ComponentRef,
 	startFn func(chasm.MutableContext) (chasm.Component, error),
 	opts ...chasm.TransitionOption,
-) (result chasm.EngineStartExecutionResult, retErr error) {
+) (result chasm.StartExecutionResult, retErr error) {
 	options := e.constructTransitionOptions(opts...)
 
 	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
-		return chasm.EngineStartExecutionResult{}, err
+		return chasm.StartExecutionResult{}, err
 	}
 
 	archetypeID, err := executionRef.ArchetypeID(e.registry)
 	if err != nil {
-		return chasm.EngineStartExecutionResult{}, err
+		return chasm.StartExecutionResult{}, err
 	}
 
 	if executionRef.RunID != "" {
@@ -124,7 +124,7 @@ func (e *ChasmEngine) StartExecution(
 		archetypeID,
 	)
 	if err != nil {
-		return chasm.EngineStartExecutionResult{}, err
+		return chasm.StartExecutionResult{}, err
 	}
 	defer func() {
 		currentExecutionReleaseFn(retErr)
@@ -139,7 +139,7 @@ func (e *ChasmEngine) StartExecution(
 		options,
 	)
 	if err != nil {
-		return chasm.EngineStartExecutionResult{}, err
+		return chasm.StartExecutionResult{}, err
 	}
 
 	currentRunInfo, hasCurrentRun, err := e.persistAsBrandNew(
@@ -151,18 +151,18 @@ func (e *ChasmEngine) StartExecution(
 		// Even though Created is false, it's not guaranteed the execution wasn't created.
 		// The persistence layer writes history events outside the main transaction, so on errors
 		// like network timeouts etc., the operation outcome is ambiguous.
-		return chasm.EngineStartExecutionResult{}, err
+		return chasm.StartExecutionResult{}, err
 	}
 	if !hasCurrentRun {
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
 			// Created is true here because persistAsBrandNew succeeded, but we failed to serialize the ref.
-			return chasm.EngineStartExecutionResult{
+			return chasm.StartExecutionResult{
 				ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
 				Created:      true,
 			}, err
 		}
-		return chasm.EngineStartExecutionResult{
+		return chasm.StartExecutionResult{
 			ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
 			ExecutionRef: serializedRef,
 			Created:      true,
@@ -766,15 +766,15 @@ func (e *ChasmEngine) handleExecutionConflict(
 	newExecutionParams newExecutionParams,
 	currentRunInfo currentExecutionInfo,
 	options chasm.TransitionOptions,
-) (chasm.EngineStartExecutionResult, error) {
-	// Check if this a retired request using requestID.
+) (chasm.StartExecutionResult, error) {
+	// Check if this a retried request using requestID.
 	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
 		newExecutionParams.executionRef.RunID = currentRunInfo.RunID
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.EngineStartExecutionResult{}, err
+			return chasm.StartExecutionResult{}, err
 		}
-		return chasm.EngineStartExecutionResult{
+		return chasm.StartExecutionResult{
 			ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
 			ExecutionRef: serializedRef,
 		}, nil
@@ -789,7 +789,7 @@ func (e *ChasmEngine) handleExecutionConflict(
 			nsEntry.IsGlobalNamespace(),
 			currentRunInfo.LastWriteVersion,
 		)
-		return chasm.EngineStartExecutionResult{}, serviceerror.NewNamespaceNotActive(
+		return chasm.StartExecutionResult{}, serviceerror.NewNamespaceNotActive(
 			nsEntry.Name().String(),
 			clusterMetadata.GetCurrentClusterName(),
 			clusterName,
@@ -802,7 +802,7 @@ func (e *ChasmEngine) handleExecutionConflict(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return e.handleReusePolicy(ctx, shardContext, newExecutionParams, currentRunInfo, options.ReusePolicy)
 	default:
-		return chasm.EngineStartExecutionResult{}, serviceerror.NewInternal(
+		return chasm.StartExecutionResult{}, serviceerror.NewInternal(
 			fmt.Sprintf("unexpected current run state when creating new execution: %v", currentRunInfo.State),
 		)
 	}
@@ -814,10 +814,10 @@ func (e *ChasmEngine) handleConflictPolicy(
 	newExecutionParams newExecutionParams,
 	currentRunInfo currentExecutionInfo,
 	conflictPolicy chasm.BusinessIDConflictPolicy,
-) (chasm.EngineStartExecutionResult, error) {
+) (chasm.StartExecutionResult, error) {
 	switch conflictPolicy {
 	case chasm.BusinessIDConflictPolicyFail:
-		return chasm.EngineStartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
+		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution still running. BusinessID: %s, RunID: %s, ID Conflict Policy: %v",
 				newExecutionParams.executionRef.BusinessID,
@@ -838,20 +838,20 @@ func (e *ChasmEngine) handleConflictPolicy(
 		// and we may have a chain of runs all created via TerminateExisting policy, meaning
 		// replication has to replicated all of them transactionally.
 		// We need a way to break this chain into consistent pieces and replicate them one by one.
-		return chasm.EngineStartExecutionResult{}, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
+		return chasm.StartExecutionResult{}, serviceerror.NewUnimplemented("ID Conflict Policy Terminate Existing is not yet supported")
 	case chasm.BusinessIDConflictPolicyUseExisting:
 		existingExecutionRef := newExecutionParams.executionRef
 		existingExecutionRef.RunID = currentRunInfo.RunID
 		serializedRef, err := existingExecutionRef.Serialize(e.registry)
 		if err != nil {
-			return chasm.EngineStartExecutionResult{}, err
+			return chasm.StartExecutionResult{}, err
 		}
-		return chasm.EngineStartExecutionResult{
+		return chasm.StartExecutionResult{
 			ExecutionKey: existingExecutionRef.ExecutionKey,
 			ExecutionRef: serializedRef,
 		}, nil
 	default:
-		return chasm.EngineStartExecutionResult{}, serviceerror.NewInternal(
+		return chasm.StartExecutionResult{}, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID conflict policy: %v", conflictPolicy),
 		)
 	}
@@ -863,14 +863,14 @@ func (e *ChasmEngine) handleReusePolicy(
 	newExecutionParams newExecutionParams,
 	currentRunInfo currentExecutionInfo,
 	reusePolicy chasm.BusinessIDReusePolicy,
-) (chasm.EngineStartExecutionResult, error) {
+) (chasm.StartExecutionResult, error) {
 	switch reusePolicy {
 	case chasm.BusinessIDReusePolicyAllowDuplicate:
 		// No more check needed.
 		// Fallthrough to persist the new execution as current run.
 	case chasm.BusinessIDReusePolicyAllowDuplicateFailedOnly:
 		if _, ok := consts.FailedWorkflowStatuses[currentRunInfo.Status]; !ok {
-			return chasm.EngineStartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
+			return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
 				fmt.Sprintf(
 					"CHASM execution already completed successfully. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 					newExecutionParams.executionRef.BusinessID,
@@ -883,7 +883,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		}
 		// Fallthrough to persist the new execution as current run.
 	case chasm.BusinessIDReusePolicyRejectDuplicate:
-		return chasm.EngineStartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
+		return chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr(
 			fmt.Sprintf(
 				"CHASM execution already finished. BusinessID: %s, RunID: %s, ID Reuse Policy: %v",
 				newExecutionParams.executionRef.BusinessID,
@@ -894,7 +894,7 @@ func (e *ChasmEngine) handleReusePolicy(
 			currentRunInfo.RunID,
 		)
 	default:
-		return chasm.EngineStartExecutionResult{}, serviceerror.NewInternal(
+		return chasm.StartExecutionResult{}, serviceerror.NewInternal(
 			fmt.Sprintf("unknown business ID reuse policy: %v", reusePolicy),
 		)
 	}
@@ -910,14 +910,14 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.events,
 	)
 	if err != nil {
-		return chasm.EngineStartExecutionResult{}, err
+		return chasm.StartExecutionResult{}, err
 	}
 
 	serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
 	if err != nil {
-		return chasm.EngineStartExecutionResult{ExecutionKey: newExecutionParams.executionRef.ExecutionKey, Created: true}, err
+		return chasm.StartExecutionResult{ExecutionKey: newExecutionParams.executionRef.ExecutionKey, Created: true}, err
 	}
-	return chasm.EngineStartExecutionResult{
+	return chasm.StartExecutionResult{
 		ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
 		ExecutionRef: serializedRef,
 		Created:      true,
@@ -996,7 +996,7 @@ func (e *ChasmEngine) getExecutionLease(
 		lockPriority,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, e.convertError(err, archetypeID, ref.BusinessID)
 	}
 
 	if predicateErr != nil {
@@ -1048,4 +1048,19 @@ func (e *ChasmEngine) getExecutionLease(
 	}
 
 	return shardContext, executionLease, nil
+}
+
+// convertError is a hook containing error conversion logic that creates more appropriate and/or
+// helpful errors.
+func (e *ChasmEngine) convertError(err error, archetypeID chasm.ArchetypeID, businessID string) error {
+	switch {
+	case errors.As(err, new(*serviceerror.NotFound)):
+		displayName, ok := e.registry.ArchetypeDisplayName(archetypeID)
+		if !ok {
+			displayName = "execution"
+		}
+		return serviceerror.NewNotFoundf("%s not found for ID: %s", displayName, businessID)
+	default:
+		return err
+	}
 }

@@ -355,6 +355,7 @@ func RedirectionInterceptorProvider(
 ) *interceptor.Redirection {
 	return interceptor.NewRedirection(
 		configuration.EnableNamespaceNotActiveAutoForwarding,
+		configuration.ForceNamespaceSelectedAPIAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,
@@ -787,7 +788,14 @@ func HandlerProvider(
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
 	registry *chasm.Registry,
+	frontendServiceResolver membership.ServiceResolver,
 ) Handler {
+	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
+		frontendServiceResolver,
+		serviceConfig.GlobalWorkerDeploymentReadRPS,
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	)
+
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
 		namespaceReplicationQueue,
@@ -816,6 +824,7 @@ func HandlerProvider(
 		httpEnabled(cfg, serviceName),
 		activityHandler,
 		registry,
+		workerDeploymentReadRateLimiter,
 	)
 	return wfHandler
 }
