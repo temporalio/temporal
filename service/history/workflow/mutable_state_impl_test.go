@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
@@ -6109,4 +6110,41 @@ func (s *mutableStateSuite) TestCHASMNodeSize() {
 	expectedTotalSize += updateNode.Size() - dbState.ChasmNodes[nodeKeyToUpdate].Size()
 	expectedTotalSize += len(newNodeKey) + newNode.Size()
 	s.Equal(expectedTotalSize, mutableState.GetApproximatePersistedSize())
+}
+
+func (s *mutableStateSuite) TestSetContextMetadata() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+
+	ctx := contextutil.WithMetadataContext(context.Background())
+	workflowType := "test-workflow-type"
+	taskQueue := "test-task-queue"
+
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:   tests.WorkflowID,
+				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+			},
+		},
+	)
+	s.NoError(err)
+
+	s.mutableState.SetContextMetadata(ctx)
+
+	// Verify metadata was set correctly
+	wfType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok)
+	s.Equal(workflowType, wfType)
+
+	tq, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok)
+	s.Equal(taskQueue, tq)
 }
