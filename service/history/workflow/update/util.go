@@ -45,10 +45,12 @@ func (i *instrumentation) countResponseMsg() {
 }
 
 func (i *instrumentation) countRateLimited() {
+	i.metrics.Counter(metrics.WorkflowExecutionUpdateRequestRateLimited.Name()).Record(1, metrics.NamespaceTag("some-namespace"))
 	i.oneOf(metrics.WorkflowExecutionUpdateRequestRateLimited.Name())
 }
 
 func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int, namespace string) {
+	i.oneOf(metrics.WorkflowExecutionUpdateRegistrySizeLimited.Name())
 	i.log.Warn("update registry size limit reached",
 		tag.Int("registry-size", registrySize),
 		tag.Int("payload-size", payloadSize),
