@@ -657,6 +657,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
 	)
+	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
+		"frontend.globalNamespaceWorkerDeploymentReadRPS",
+		50,
+		`FrontendGlobalWorkerDeploymentReadRPS is the global, per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion). The limit is evenly distributed among available frontend service instances.`,
+	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
 		1200,
@@ -896,6 +901,11 @@ and deployment interaction in matching and history.`,
 		"system.useRevisionNumberForWorkerVersioning",
 		false,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
+	)
+	EnableSuggestCaNOnNewTargetVersion = NewNamespaceBoolSetting(
+		"system.enableSuggestCaNOnNewTargetVersion",
+		false,
+		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
@@ -2734,13 +2744,6 @@ that task will be sent to DLQ.`,
 		`SendRawHistoryBytesToMatchingService controls whether to use the new raw_history_bytes field (21) instead of raw_history field (20) when sending history to matching service. Only enable after all services are upgraded. NOTE: This flag only has effect when SendRawHistoryBetweenInternalServices is also enabled.`,
 	)
 
-	// TODO(rodrigozhou): This is temporary dynamic config to be removed before the next release.
-	EnableRequestIdRefLinks = NewGlobalBoolSetting(
-		"history.enableRequestIdRefLinks",
-		false,
-		"Enable generating request ID reference links",
-	)
-
 	EnableChasm = NewNamespaceBoolSetting(
 		"history.enableChasm",
 		false,
@@ -2948,8 +2951,8 @@ because executions scanner support for SQL is not yet implemented.`,
 	HistoryScannerVerifyRetention = NewGlobalBoolSetting(
 		"worker.historyScannerVerifyRetention",
 		true,
-		`HistoryScannerVerifyRetention indicates the history scanner verify data retention.
-If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.`,
+		`HistoryScannerVerifyRetention indicates if the history scavenger should verify data retention.
+When enabled, the scavenger will delete completed workflow execution data that are older than the namespace retention period plus worker.executionDataDurationBuffer.`,
 	)
 	EnableBatcherNamespace = NewNamespaceBoolSetting(
 		"worker.enableNamespaceBatcher",
@@ -3081,6 +3084,14 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerHeartbeatsEnabled",
 		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
+	)
+
+	EnableCancelWorkerPollsOnShutdown = NewNamespaceBoolSetting(
+		"frontend.enableCancelWorkerPollsOnShutdown",
+		false,
+		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
+		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
+		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(

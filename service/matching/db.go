@@ -304,9 +304,9 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 	if newAckLevel < dbQueue.AckLevel {
 		softassert.Fail(db.logger,
 			"ack level in subqueue should not move backwards",
-			tag.NewInt("subqueue-id", int(subqueue)),
-			tag.NewAnyTag("cur-ack-level", dbQueue.AckLevel),
-			tag.NewAnyTag("new-ack-level", newAckLevel))
+			tag.Int("subqueue-id", int(subqueue)),
+			tag.Any("cur-ack-level", dbQueue.AckLevel),
+			tag.Any("new-ack-level", newAckLevel))
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
@@ -335,9 +335,9 @@ func (db *taskQueueDB) updateFairAckLevel(subqueue subqueueIndex, newAckLevel fa
 	if prev := fairLevelFromProto(dbQueue.FairAckLevel); newAckLevel.less(prev) {
 		softassert.Fail(db.logger,
 			"ack level in subqueue should not move backwards",
-			tag.NewInt("subqueue-id", int(subqueue)),
-			tag.NewAnyTag("cur-ack-level", prev),
-			tag.NewAnyTag("new-ack-level", newAckLevel))
+			tag.Int("subqueue-id", int(subqueue)),
+			tag.Any("cur-ack-level", prev),
+			tag.Any("new-ack-level", newAckLevel))
 	}
 	dbQueue.FairAckLevel = newAckLevel.toProto()
 

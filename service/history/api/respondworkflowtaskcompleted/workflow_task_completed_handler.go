@@ -79,6 +79,7 @@ type (
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		matchingClient         matchingservice.MatchingServiceClient
+		versionMembershipCache worker_versioning.VersionMembershipCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -118,6 +119,7 @@ func newWorkflowTaskCompletedHandler(
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -150,6 +152,7 @@ func newWorkflowTaskCompletedHandler(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 		matchingClient:         matchingClient,
+		versionMembershipCache: versionMembershipCache,
 	}
 }
 
@@ -245,9 +248,9 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 			tag.WorkflowID(wfKey.WorkflowID),
 			tag.WorkflowRunID(wfKey.RunID),
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
-			tag.NewStringTag("worker-identity", workerIdentity),
-			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
-			tag.NewInt("rejected-count", len(rejectedUpdateIDs)),
+			tag.String("worker-identity", workerIdentity),
+			tag.Strings("update-ids", rejectedUpdateIDs),
+			tag.Int("rejected-count", len(rejectedUpdateIDs)),
 		)
 	}
 
@@ -1027,7 +1030,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
-		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient),
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionMembershipCache),
 	)
 	if err != nil {
 		return nil, err
@@ -1446,13 +1449,11 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-
-	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	var invalidArgument *serviceerror.InvalidArgument
+	if errors.As(err, &invalidArgument) {
 		return handler.failWorkflowTask(wtFailedCause, err)
-	default:
-		return err
 	}
+	return err
 }
 
 func (handler *workflowTaskCompletedHandler) failWorkflowTask(
