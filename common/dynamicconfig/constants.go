@@ -909,7 +909,7 @@ and deployment interaction in matching and history.`,
 	)
 	EnableSendTargetVersionChanged = NewNamespaceBoolSetting(
 		"system.EnableSendTargetVersionChanged",
-		false,
+		true,
 		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
