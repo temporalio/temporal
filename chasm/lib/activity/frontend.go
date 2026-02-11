@@ -286,7 +286,7 @@ func (h *frontendHandler) TerminateActivityExecution(
 	}
 
 	if req.GetRequestId() == "" {
-		// Since this  mutates the request, we clone it first so that any retries use the original request.
+		// Since this mutates the request, we clone it first so that any retries use the original request.
 		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
