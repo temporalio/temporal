@@ -90,7 +90,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 
 	// add the task
 	task.resetMatcherState()
-	tm.AddTask(task)
+	_ = tm.AddTask(task)
 
 	// validator should pick up and check task
 	select {
