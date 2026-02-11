@@ -28,6 +28,19 @@ To pass in the required build tags, add them to the "Go tool arguments" field in
 -tags disable_grpc_modules,test_dep
 ```
 
+## Best Practices
+
+### Parallelization
+
+All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
+unless there is a reason not to.
+
+`make parallelize-tests` can be used to automatically add `t.Parallel()`.
+Use `//parallelize:ignore` to opt your test out of it.
+
+Functional tests in `tests/` using `testcore.NewEnv(t)` will always use `t.Parallel()`;
+unless the `MustRunSequential` option is passed.
+
 ## Test helpers
 
 Test helpers can be found in the [common/testing](../../common/testing) package.
