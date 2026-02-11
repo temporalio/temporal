@@ -408,6 +408,10 @@ fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, w
 		@printf $(COLOR) "Formatting imports..."
 		@$(GCI) write --skip-generated -s standard -s default ./*
 
+parallelize-tests:
+	@printf $(COLOR) "Add t.Parallel() to tests..."
+	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
+
 fmt-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Formatting YAML files..."
 	@$(YAMLFMT) -conf .github/.yamlfmt .

@@ -8,17 +8,21 @@ import (
 )
 
 func TestCQLClientTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(cassandra.CQLClientTestSuite))
 }
 
 func TestSetupCQLSchemaTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(cassandra.SetupSchemaTestSuite))
 }
 
 func TestUpdateCQLSchemaTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(cassandra.UpdateSchemaTestSuite))
 }
 
 func TestVersionTestSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(cassandra.VersionTestSuite))
 }

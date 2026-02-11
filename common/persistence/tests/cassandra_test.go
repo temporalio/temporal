@@ -120,6 +120,7 @@ func (s *recordingSession) Query(query string, args ...interface{}) gocql.Query 
 }
 
 func TestCassandraShardStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -138,6 +139,7 @@ func TestCassandraShardStoreSuite(t *testing.T) {
 }
 
 func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -161,6 +163,7 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 }
 
 func TestCassandraExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -186,6 +189,7 @@ func TestCassandraExecutionMutableStateTaskStoreSuite(t *testing.T) {
 // TODO: Merge persistence-tests into the tests directory.
 
 func TestCassandraHistoryStoreSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -199,6 +203,7 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 }
 
 func TestCassandraTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -212,6 +217,7 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 }
 
 func TestCassandraFairTaskQueueSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -225,6 +231,7 @@ func TestCassandraFairTaskQueueSuite(t *testing.T) {
 }
 
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -238,6 +245,7 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 }
 
 func TestCassandraTaskQueueFairTaskSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -251,6 +259,7 @@ func TestCassandraTaskQueueFairTaskSuite(t *testing.T) {
 }
 
 func TestCassandraTaskQueueUserDataSuite(t *testing.T) {
+	t.Parallel()
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
@@ -264,6 +273,7 @@ func TestCassandraTaskQueueUserDataSuite(t *testing.T) {
 }
 
 func TestCassandraHistoryV2Persistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup(nil)
@@ -271,6 +281,7 @@ func TestCassandraHistoryV2Persistence(t *testing.T) {
 }
 
 func TestCassandraMetadataPersistenceV2(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup(nil)
@@ -278,6 +289,7 @@ func TestCassandraMetadataPersistenceV2(t *testing.T) {
 }
 
 func TestCassandraClusterMetadataPersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup(nil)
@@ -285,6 +297,7 @@ func TestCassandraClusterMetadataPersistence(t *testing.T) {
 }
 
 func TestCassandraQueuePersistence(t *testing.T) {
+	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup(nil)
@@ -315,6 +328,7 @@ func TestCassandraQueueV2Persistence(t *testing.T) {
 }
 
 func TestCassandraNexusEndpointPersistence(t *testing.T) {
+	t.Parallel()
 	cluster := persistencetests.NewTestClusterForCassandra(&persistencetests.TestBaseOptions{}, log.NewNoopLogger())
 	cluster.SetupTestDatabase()
 	t.Cleanup(cluster.TearDownTestDatabase)
