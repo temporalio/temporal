@@ -573,6 +573,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
 		e.matchingClient,
+		e.versionMembershipCache,
 	)
 	return h.Invoke(ctx, req)
 }
