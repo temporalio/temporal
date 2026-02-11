@@ -75,7 +75,7 @@ func TestSuccessfulCompletion(t *testing.T) {
 	}, nil, nil)
 	defer teardown()
 
-	completion := &nexusrpc.OperationCompletionSuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Result:         666,
 		OperationToken: "test-operation-token",
 		StartTime:      startTime,
@@ -101,7 +101,7 @@ func TestSuccessfulCompletion_CustomSerializer(t *testing.T) {
 	ctx, callbackURL, teardown := setupForCompletion(t, &successfulCompletionHandler{}, serializer, nil)
 	defer teardown()
 
-	completion := &nexusrpc.OperationCompletionSuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Result: 666,
 		Links: []nexus.Link{{
 			URL: &url.URL{
@@ -175,7 +175,7 @@ func TestFailureCompletion(t *testing.T) {
 	}, nil, nil)
 	defer teardown()
 
-	completion := &nexusrpc.OperationCompletionUnsuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Error:          nexus.NewOperationCanceledErrorf("expected message"),
 		OperationToken: "test-operation-token",
 		StartTime:      startTime,
@@ -212,7 +212,7 @@ func TestFailureCompletion_CustomFailureConverter(t *testing.T) {
 	}, nil, fc)
 	defer teardown()
 
-	completion := &nexusrpc.OperationCompletionUnsuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Error:          nexus.NewOperationCanceledErrorf("expected message"),
 		OperationToken: "test-operation-token",
 		StartTime:      startTime,
@@ -245,7 +245,7 @@ func TestBadRequestCompletion(t *testing.T) {
 	ctx, callbackURL, teardown := setupForCompletion(t, &failingCompletionHandler{}, nil, nil)
 	defer teardown()
 
-	completion := &nexusrpc.OperationCompletionSuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Result: []byte("success"),
 	}
 	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{}).CompleteOperation(ctx, callbackURL, completion)

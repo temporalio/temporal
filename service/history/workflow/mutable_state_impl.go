@@ -722,10 +722,10 @@ func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) 
 func (ms *MutableStateImpl) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexusrpc.OperationCompletion, error) {
+) (nexusrpc.CompleteOperationOptions, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
-		return nil, err
+		return nexusrpc.CompleteOperationOptions{}, err
 	}
 
 	// Create the link information about the workflow to be attached to fabricated started event if completion is
@@ -767,7 +767,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		return &nexusrpc.OperationCompletionSuccessful{
+		return nexusrpc.CompleteOperationOptions{
 			Result:    p,
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			CloseTime: ce.GetEventTime().AsTime(),
@@ -776,7 +776,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		f, err := commonnexus.TemporalFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
 		opErr := &nexus.OperationError{
 			Message: "operation failed",
@@ -784,9 +784,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			Cause:   &nexus.FailureError{Failure: f},
 		}
 		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return &nexusrpc.OperationCompletionUnsuccessful{
+		return nexusrpc.CompleteOperationOptions{
 			Error:     opErr,
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			CloseTime: ce.GetEventTime().AsTime(),
@@ -802,7 +802,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
 		opErr := &nexus.OperationError{
 			State:   nexus.OperationStateCanceled,
@@ -810,9 +810,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			Cause:   &nexus.FailureError{Failure: f},
 		}
 		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return &nexusrpc.OperationCompletionUnsuccessful{
+		return nexusrpc.CompleteOperationOptions{
 			Error:     opErr,
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			CloseTime: ce.GetEventTime().AsTime(),
@@ -826,7 +826,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
 		opErr := &nexus.OperationError{
 			State:   nexus.OperationStateFailed,
@@ -834,9 +834,9 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			Cause:   &nexus.FailureError{Failure: f},
 		}
 		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return &nexusrpc.OperationCompletionUnsuccessful{
+		return nexusrpc.CompleteOperationOptions{
 			Error:     opErr,
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			CloseTime: ce.GetEventTime().AsTime(),
@@ -853,7 +853,7 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
 		opErr := &nexus.OperationError{
 			State:   nexus.OperationStateFailed,
@@ -861,16 +861,16 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			Cause:   &nexus.FailureError{Failure: f},
 		}
 		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return &nexusrpc.OperationCompletionUnsuccessful{
+		return nexusrpc.CompleteOperationOptions{
 			Error:     opErr,
 			StartTime: ms.executionState.GetStartTime().AsTime(),
 			CloseTime: ce.GetEventTime().AsTime(),
 			Links:     []nexus.Link{startLink},
 		}, nil
 	}
-	return nil, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
+	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
 }
 
 // GetHSMCallbackArg converts a workflow completion event into a [persistencespb.HSMCallbackArg].

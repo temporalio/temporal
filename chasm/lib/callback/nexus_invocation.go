@@ -27,7 +27,7 @@ var retryable4xxErrorTypes = []int{
 
 type nexusInvocation struct {
 	nexus             *callbackspb.Callback_Nexus
-	completion        nexusrpc.OperationCompletion
+	completion        nexusrpc.CompleteOperationOptions
 	workflowID, runID string
 	attempt           int32
 }

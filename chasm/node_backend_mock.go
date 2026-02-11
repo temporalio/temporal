@@ -26,7 +26,7 @@ type MockNodeBackend struct {
 	HandleGetWorkflowKey             func() definition.WorkflowKey
 	HandleUpdateWorkflowStateStatus  func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                 func() bool
-	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
+	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -164,11 +164,11 @@ func (m *MockNodeBackend) IsWorkflow() bool {
 func (m *MockNodeBackend) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexusrpc.OperationCompletion, error) {
+) (nexusrpc.CompleteOperationOptions, error) {
 	if m.HandleGetNexusCompletion != nil {
 		return m.HandleGetNexusCompletion(ctx, requestID)
 	}
-	return nil, nil
+	return nexusrpc.CompleteOperationOptions{}, nil
 }
 
 func (m *MockNodeBackend) NumTasksAdded() int {

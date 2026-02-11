@@ -54,11 +54,11 @@ func (fakeEnv) Now() time.Time {
 var _ hsm.Environment = fakeEnv{}
 
 type mutableState struct {
-	completionNexus nexusrpc.OperationCompletion
+	completionNexus nexusrpc.CompleteOperationOptions
 	completionHsm   *persistencespb.HSMCompletionCallbackArg
 }
 
-func (ms mutableState) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (ms mutableState) GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return ms.completionNexus, nil
 }
 
@@ -267,7 +267,7 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func newMutableState(t *testing.T) mutableState {
-	completionNexus := &nexusrpc.OperationCompletionSuccessful{}
+	completionNexus := nexusrpc.CompleteOperationOptions{}
 	hsmCallbackArg := &persistencespb.HSMCompletionCallbackArg{
 		NamespaceId: "mynsid",
 		WorkflowId:  "mywid",
@@ -314,7 +314,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	cases := []struct {
 		name                 string
 		setupHistoryClient   func(*testing.T, *gomock.Controller) *historyservicemock.MockHistoryServiceClient
-		completion           nexusrpc.OperationCompletion
+		completion           nexusrpc.CompleteOperationOptions
 		headerValue          string
 		expectsInternalError bool
 		assertOutcome        func(*testing.T, callbacks.Callback)
@@ -347,8 +347,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				})
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result:    createPayload([]byte("result-data")),
 					CloseTime: dummyTime,
 				}
@@ -374,8 +374,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				})
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionUnsuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Error: &nexus.OperationError{
 						State: nexus.OperationStateFailed,
 						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
@@ -398,8 +398,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				).Return(nil, status.Error(codes.Unavailable, "service unavailable"))
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayload([]byte("result-data")),
 				}
 			}(),
@@ -419,8 +419,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				).Return(nil, status.Error(codes.InvalidArgument, "invalid request"))
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayload([]byte("result-data")),
 				}
 			}(),
@@ -436,8 +436,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				// No RPC call expected
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayload([]byte("result-data")),
 				}
 			}(),

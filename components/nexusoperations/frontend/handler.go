@@ -261,11 +261,11 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		}
 	}
 
-	var completion nexusrpc.OperationCompletion
+	var completion nexusrpc.CompleteOperationOptions
 
 	switch r.State {
 	case nexus.OperationStateSucceeded:
-		completion = &nexusrpc.OperationCompletionSuccessful{
+		completion = nexusrpc.CompleteOperationOptions{
 			Result:         r.Result.Reader,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
@@ -275,7 +275,7 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
 		// the failure, so we must construct a new completion to forward.
-		completion = &nexusrpc.OperationCompletionUnsuccessful{
+		completion = nexusrpc.CompleteOperationOptions{
 			Error:          r.Error,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,

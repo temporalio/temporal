@@ -714,7 +714,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
-	completion := &nexusrpc.OperationCompletionSuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Result: s.mustToPayload(result),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
@@ -726,11 +726,11 @@ func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context,
 }
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
-	completion := &nexusrpc.OperationCompletionUnsuccessful{
+	completion := nexusrpc.CompleteOperationOptions{
 		Error: nexus.NewOperationCanceledErrorf("operation canceled"),
 	}
 	if callbackToken != "" {
-		completion.SetHeader(commonnexus.CallbackTokenHeader, callbackToken)
+		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
 	}
 	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: commonnexus.PayloadSerializer,

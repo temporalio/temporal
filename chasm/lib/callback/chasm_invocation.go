@@ -27,7 +27,7 @@ import (
 type chasmInvocation struct {
 	nexus      *callbackspb.Callback_Nexus
 	attempt    int32
-	completion nexusrpc.OperationCompletion
+	completion nexusrpc.CompleteOperationOptions
 	requestID  string
 }
 
@@ -134,14 +134,13 @@ func (c chasmInvocation) getHistoryRequest(
 		RequestId:    c.requestID,
 	}
 
-	switch op := c.completion.(type) {
-	case *nexusrpc.OperationCompletionSuccessful:
+	if c.completion.Error == nil {
 		var payload *commonpb.Payload
-		if op.Result != nil {
+		if c.completion.Result != nil {
 			var ok bool
-			payload, ok = op.Result.(*commonpb.Payload)
+			payload, ok = c.completion.Result.(*commonpb.Payload)
 			if !ok {
-				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", op.Result)
+				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", c.completion.Result)
 			}
 		}
 
@@ -149,11 +148,11 @@ func (c chasmInvocation) getHistoryRequest(
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
 				Success: payload,
 			},
-			CloseTime:  timestamppb.New(op.CloseTime),
+			CloseTime:  timestamppb.New(c.completion.CloseTime),
 			Completion: completion,
 		}
-	case *nexusrpc.OperationCompletionUnsuccessful:
-		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(op.Error)
+	} else {
+		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
 		}
@@ -171,10 +170,8 @@ func (c chasmInvocation) getHistoryRequest(
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
 				Failure: apiFailure,
 			},
-			CloseTime: timestamppb.New(op.CloseTime),
+			CloseTime: timestamppb.New(c.completion.CloseTime),
 		}
-	default:
-		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", completion)
 	}
 
 	return req, nil

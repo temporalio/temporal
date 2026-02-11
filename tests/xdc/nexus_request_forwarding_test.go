@@ -381,14 +381,14 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandbyToActive() {
 	testCases := []struct {
 		name                          string
-		getCompletionFn               func() nexusrpc.OperationCompletion
+		getCompletionFn               func() nexusrpc.CompleteOperationOptions
 		assertHistoryAndGetCompleteWF func(*testing.T, []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest
 		assertResult                  func(*testing.T, string)
 	}{
 		{
 			name: "success",
-			getCompletionFn: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{Result: s.mustToPayload("result")}
+			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{Result: s.mustToPayload("result")}
 			},
 			assertHistoryAndGetCompleteWF: func(t *testing.T, events []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest {
 				completedEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
@@ -412,12 +412,12 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 		},
 		{
 			name: "operation error",
-			getCompletionFn: func() nexusrpc.OperationCompletion {
+			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
 				opErr := &nexus.OperationError{
 					State: nexus.OperationStateFailed,
 					Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "intentional operation failure"}},
 				}
-				return &nexusrpc.OperationCompletionUnsuccessful{
+				return nexusrpc.CompleteOperationOptions{
 					Error: opErr,
 				}
 			},
@@ -443,9 +443,9 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 		},
 		{
 			name: "canceled",
-			getCompletionFn: func() nexusrpc.OperationCompletion {
+			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
 				f := nexus.Failure{Message: "operation canceled"}
-				return &nexusrpc.OperationCompletionUnsuccessful{
+				return nexusrpc.CompleteOperationOptions{
 					Error: &nexus.OperationError{State: nexus.OperationStateCanceled, Cause: &nexus.FailureError{Failure: f}},
 				}
 			},
@@ -684,7 +684,7 @@ func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	t *testing.T,
 	testCluster *testcore.TestCluster,
 	url string,
-	completion nexusrpc.OperationCompletion,
+	completion nexusrpc.CompleteOperationOptions,
 ) (map[string][]*metricstest.CapturedRecording, error) {
 	metricsHandler, ok := testCluster.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 	s.True(ok)

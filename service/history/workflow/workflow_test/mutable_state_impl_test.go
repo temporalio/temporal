@@ -362,7 +362,7 @@ func TestGetNexusCompletion(t *testing.T) {
 	cases := []struct {
 		name             string
 		mutateState      func(historyi.MutableState) (*historypb.HistoryEvent, error)
-		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.OperationCompletion)
+		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.CompleteOperationOptions)
 	}{
 		{
 			name: "success",
@@ -378,14 +378,13 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				success, ok := completion.(*nexusrpc.OperationCompletionSuccessful)
-				require.True(t, ok)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.Nil(t, completion.Error)
 				require.Equal(t, commonpb.Payload{
 					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
 					Data:     []byte("3"),
-				}, success.Result)
-				require.Equal(t, event.GetEventTime().AsTime(), success.CloseTime)
+				}, completion.Result)
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -397,12 +396,11 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.Error.State)
-				require.Equal(t, "workflow failed", failure.Error.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
+				require.Equal(t, "workflow failed", completion.Error.Message)
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -410,12 +408,11 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.Error.State)
-				require.Equal(t, "operation terminated", failure.Error.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
+				require.Equal(t, "operation terminated", completion.Error.Message)
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -423,12 +420,11 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionCanceledEvent(mutableState.GetNextEventID(), &commandpb.CancelWorkflowExecutionCommandAttributes{})
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateCanceled, failure.Error.State)
-				require.Equal(t, "operation canceled", failure.Error.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateCanceled, completion.Error.State)
+				require.Equal(t, "operation canceled", completion.Error.Message)
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 	}

@@ -25,12 +25,12 @@ var retryable4xxErrorTypes = []int{
 }
 
 type CanGetNexusCompletion interface {
-	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
+	GetNexusCompletion(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 }
 
 type nexusInvocation struct {
 	nexus             *persistencespb.Callback_Nexus
-	completion        nexusrpc.OperationCompletion
+	completion        nexusrpc.CompleteOperationOptions
 	workflowID, runID string
 	attempt           int32
 }

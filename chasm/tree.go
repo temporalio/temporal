@@ -199,7 +199,7 @@ type (
 		GetNexusCompletion(
 			ctx context.Context,
 			requestID string,
-		) (nexusrpc.OperationCompletion, error)
+		) (nexusrpc.CompleteOperationOptions, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.

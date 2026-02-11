@@ -52,7 +52,7 @@ func NewCompletionHTTPClient(options CompletionHTTPClientOptions) *CompletionHTT
 }
 
 // CompleteOperation sends a completion callback for a Nexus operation to the given URL with the given completion details.
-func (c *CompletionHTTPClient) CompleteOperation(ctx context.Context, url string, completion OperationCompletion) error {
+func (c *CompletionHTTPClient) CompleteOperation(ctx context.Context, url string, completion CompleteOperationOptions) error {
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, nil)
 	if err != nil {
 		return err
@@ -86,93 +86,9 @@ func (c *CompletionHTTPClient) CompleteOperation(ctx context.Context, url string
 	return c.bestEffortHandlerErrorFromResponse(response, body)
 }
 
-// OperationCompletion is input for CompleteOperation.
-// It has two implementations: [OperationCompletionSuccessful] and [OperationCompletionUnsuccessful].
-type OperationCompletion interface {
-	SetHeader(key, value string)
-	applyToHTTPRequest(*CompletionHTTPClient, *http.Request) error
-}
-
-// OperationCompletionSuccessful is input for CompleteOperation, used to deliver successful operation results.
-type OperationCompletionSuccessful struct {
-	// Header to send in the completion request.
-	// Note that this is a Nexus header, not an HTTP header.
-	Header nexus.Header
-	// Result to deliver with the completion. Uses the client's serializer to serialize the result into the request body.
-	Result any
-	// OperationToken is the unique token for this operation. Used when a completion callback is received before a
-	// started response.
-	OperationToken string
-	// StartTime is the time the operation started. Used when a completion callback is received before a started response.
-	StartTime time.Time
-	// CloseTime is the time the operation completed. Used when a completion callback is received before a started response.
-	CloseTime time.Time
-	// Links are used to link back to the operation when a completion callback is received before a started response.
-	Links []nexus.Link
-}
-
-func (c *OperationCompletionSuccessful) SetHeader(key, value string) {
-	if c.Header == nil {
-		c.Header = make(nexus.Header, 1)
-	}
-	c.Header[key] = value
-}
-
-func (c *OperationCompletionSuccessful) applyToHTTPRequest(cc *CompletionHTTPClient, request *http.Request) error {
-	reader, ok := c.Result.(*nexus.Reader)
-	if !ok {
-		content, ok := c.Result.(*nexus.Content)
-		if !ok {
-			var err error
-			content, err = cc.serializer.Serialize(c.Result)
-			if err != nil {
-				return err
-			}
-		}
-		request.ContentLength = int64(len(content.Data))
-
-		reader = &nexus.Reader{
-			Header:     content.Header,
-			ReadCloser: io.NopCloser(bytes.NewReader(content.Data)),
-		}
-	}
-	if request.Header == nil {
-		request.Header = make(http.Header, len(c.Header)+len(reader.Header)+1) // +1 for headerOperationState
-	}
-	if reader.Header != nil {
-		addContentHeaderToHTTPHeader(reader.Header, request.Header)
-	}
-	if c.Header != nil {
-		addNexusHeaderToHTTPHeader(c.Header, request.Header)
-	}
-	if c.Header.Get(headerUserAgent) == "" {
-		request.Header.Set(headerUserAgent, userAgent)
-	}
-
-	request.Header.Set(headerOperationState, string(nexus.OperationStateSucceeded))
-
-	if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
-		request.Header.Set(nexus.HeaderOperationToken, c.OperationToken)
-	}
-	if c.Header.Get(headerOperationStartTime) == "" && !c.StartTime.IsZero() {
-		request.Header.Set(headerOperationStartTime, c.StartTime.Format(http.TimeFormat))
-	}
-	if c.Header.Get(headerOperationCloseTime) == "" && !c.CloseTime.IsZero() {
-		request.Header.Set(headerOperationCloseTime, marshalTimestamp(c.CloseTime))
-	}
-	if c.Header.Get(headerLink) == "" {
-		if err := addLinksToHTTPHeader(c.Links, request.Header); err != nil {
-			return err
-		}
-	}
-
-	request.Body = reader.ReadCloser
-	return nil
-}
-
-// OperationCompletionUnsuccessful is input for [NewCompletionHTTPRequest], used to deliver unsuccessful operation
-// results.
-type OperationCompletionUnsuccessful struct {
+// CompleteOperationOptions is input for CompleteOperation.
+// If Error is set, the completion is unsuccessful. Otherwise, it is successful.
+type CompleteOperationOptions struct {
 	// Header to send in the completion request.
 	// Note that this is a Nexus header, not an HTTP header.
 	Header nexus.Header
@@ -185,41 +101,73 @@ type OperationCompletionUnsuccessful struct {
 	CloseTime time.Time
 	// Links are used to link back to the operation when a completion callback is received before a started response.
 	Links []nexus.Link
-	// Error to send with the completion.
+	// Error to send with the completion. If set, the completion is unsuccessful.
 	Error *nexus.OperationError
+	// Result to deliver with the completion. Uses the client's serializer to serialize the result into the request body.
+	// Only used for successful completions.
+	Result any
 }
 
-func (c *OperationCompletionUnsuccessful) SetHeader(key, value string) {
+func (c CompleteOperationOptions) SetHeader(key, value string) {
 	if c.Header == nil {
 		c.Header = make(nexus.Header, 1)
 	}
 	c.Header[key] = value
 }
 
-func (c *OperationCompletionUnsuccessful) applyToHTTPRequest(cc *CompletionHTTPClient, request *http.Request) error {
-	failure, err := cc.failureConverter.ErrorToFailure(c.Error)
-	if err != nil {
-		return err
-	}
-	// Backwards compatibility: if the failure has a cause, unwrap it to maintain the behavior as older servers.
-	if failure.Cause != nil {
-		failure = *failure.Cause
+func (c CompleteOperationOptions) applyToHTTPRequest(cc *CompletionHTTPClient, request *http.Request) error {
+	if request.Header == nil {
+		request.Header = make(http.Header)
 	}
 
-	if request.Header == nil {
-		request.Header = make(http.Header, len(c.Header)+2) // +2 for headerOperationState and content-type
+	// Set the body and operation state based on whether the completion is successful or not.
+	if c.Error != nil {
+		failure, err := cc.failureConverter.ErrorToFailure(c.Error)
+		if err != nil {
+			return err
+		}
+		// Backwards compatibility: if the failure has a cause, unwrap it to maintain the behavior as older servers.
+		if failure.Cause != nil {
+			failure = *failure.Cause
+		}
+		b, err := json.Marshal(failure)
+		if err != nil {
+			return err
+		}
+		request.Body = io.NopCloser(bytes.NewReader(b))
+		// Set the operation state header for backwards compatibility.
+		request.Header.Set(headerOperationState, string(c.Error.State))
+		request.Header.Set("Content-Type", contentTypeJSON)
+	} else {
+		reader, ok := c.Result.(*nexus.Reader)
+		if !ok {
+			content, ok := c.Result.(*nexus.Content)
+			if !ok {
+				var err error
+				content, err = cc.serializer.Serialize(c.Result)
+				if err != nil {
+					return err
+				}
+			}
+			request.ContentLength = int64(len(content.Data))
+			reader = &nexus.Reader{
+				Header:     content.Header,
+				ReadCloser: io.NopCloser(bytes.NewReader(content.Data)),
+			}
+		}
+		if reader.Header != nil {
+			addContentHeaderToHTTPHeader(reader.Header, request.Header)
+		}
+		request.Body = reader.ReadCloser
+		request.Header.Set(headerOperationState, string(nexus.OperationStateSucceeded))
 	}
+
 	if c.Header != nil {
 		addNexusHeaderToHTTPHeader(c.Header, request.Header)
 	}
 	if c.Header.Get(headerUserAgent) == "" {
 		request.Header.Set(headerUserAgent, userAgent)
 	}
-
-	// Set the operation state header for backwards compatibility.
-	request.Header.Set(headerOperationState, string(c.Error.State))
-	request.Header.Set("Content-Type", contentTypeJSON)
-
 	if c.Header.Get(nexus.HeaderOperationToken) == "" && c.OperationToken != "" {
 		request.Header.Set(nexus.HeaderOperationToken, c.OperationToken)
 	}
@@ -234,13 +182,6 @@ func (c *OperationCompletionUnsuccessful) applyToHTTPRequest(cc *CompletionHTTPC
 			return err
 		}
 	}
-
-	b, err := json.Marshal(failure)
-	if err != nil {
-		return err
-	}
-
-	request.Body = io.NopCloser(bytes.NewReader(b))
 	return nil
 }
 

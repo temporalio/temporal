@@ -40,13 +40,13 @@ type mockNexusCompletionGetterComponent struct {
 
 	Empty *emptypb.Empty
 
-	completion nexusrpc.OperationCompletion
+	completion nexusrpc.CompleteOperationOptions
 	err        error
 
 	Callback chasm.Field[*Callback]
 }
 
-func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.completion, m.err
 }
 
@@ -210,7 +210,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Create completion
-			completion := &nexusrpc.OperationCompletionSuccessful{}
+			completion := nexusrpc.CompleteOperationOptions{}
 
 			// Set up the CompletionSource field to return our mock completion
 			root.SetRootComponent(&mockNexusCompletionGetterComponent{
@@ -370,7 +370,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 	cases := []struct {
 		name               string
 		setupHistoryClient func(*testing.T, *gomock.Controller) resource.HistoryClient
-		completion         nexusrpc.OperationCompletion
+		completion         nexusrpc.CompleteOperationOptions
 		headerValue        string
 		assertOutcome      func(*testing.T, *Callback, error)
 	}{
@@ -396,8 +396,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				})
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result:    createPayloadBytes([]byte("result-data")),
 					CloseTime: dummyTime,
 				}
@@ -424,8 +424,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				})
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionUnsuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Error: &nexus.OperationError{
 						State: nexus.OperationStateFailed,
 						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
@@ -449,8 +449,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				).Return(nil, status.Error(codes.Unavailable, "service unavailable"))
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayloadBytes([]byte("result-data")),
 				}
 			}(),
@@ -470,8 +470,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				).Return(nil, status.Error(codes.InvalidArgument, "invalid request"))
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayloadBytes([]byte("result-data")),
 				}
 			}(),
@@ -487,8 +487,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				// No RPC call expected
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayloadBytes([]byte("result-data")),
 				}
 			}(),
@@ -504,8 +504,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				// No RPC call expected
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				return &nexusrpc.OperationCompletionSuccessful{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
 					Result: createPayloadBytes([]byte("result-data")),
 				}
 			}(),
