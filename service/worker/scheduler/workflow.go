@@ -1002,13 +1002,15 @@ func (s *scheduler) executeMigration() error {
 		workflowInfo.Memo,
 		s.now(),
 	)
-	// inc the sequence number to prevent to invalidate signals to
-	// this workflow after the migration has started.
-	// they should target the chasm scheduler after this point
-	s.incSeqNo()
-
+	migrateOptions := workflow.LocalActivityOptions{
+		ScheduleToCloseTimeout: 60 * time.Second,
+		StartToCloseTimeout:    5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			MaximumAttempts: 1,
+		},
+	}
 	return workflow.ExecuteLocalActivity(
-		workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions),
+		workflow.WithLocalActivityOptions(s.ctx, migrateOptions),
 		s.a.MigrateSchedule,
 		req).
 		Get(s.ctx, nil)

@@ -2269,3 +2269,94 @@ func (s *workflowSuite) TestCANBySignal() {
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
+
+func (s *workflowSuite) TestMigrateSuccess() {
+	// Mock MigrateSchedule activity to succeed.
+	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().Return(nil)
+
+	// Send migrate signal after the first iteration.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameMigrate, nil)
+	}, 1*time.Second)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	// Workflow should complete successfully (not CAN) after migration.
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+}
+
+func (s *workflowSuite) TestMigrateFailure() {
+	// Mock MigrateSchedule activity to fail.
+	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+		Return(errors.New("migration failed"))
+
+	// Send migrate signal after the first iteration.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameMigrate, nil)
+	}, 1*time.Second)
+
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(1 * time.Hour),
+			}},
+		},
+	}, 3)
+
+	// Verify the workflow continued running after the migration failure
+	// rather than terminating (returning nil) like it does on success.
+	// The test harness forces CAN after 3 iterations, so a CAN error
+	// here proves the workflow kept going.
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestMigrateFailureThenSignal() {
+	// Mock MigrateSchedule activity to fail.
+	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+		Return(errors.New("migration failed"))
+
+	// Send migrate signal, then after it fails, send a pause patch.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameMigrate, nil)
+	}, 1*time.Second)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+			Pause: "paused after failed migration",
+		})
+	}, 2*time.Second)
+	s.env.RegisterDelayedCallback(func() {
+		// Verify the pause signal was processed after the failed migration.
+		desc := s.describe()
+		s.True(desc.Schedule.State.Paused)
+		s.Equal("paused after failed migration", desc.Schedule.State.Notes)
+		// Send force-CAN to unblock the workflow (paused with no timer).
+		s.env.SignalWorkflow(SignalNameForceCAN, nil)
+	}, 3*time.Second)
+
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(1 * time.Hour),
+			}},
+		},
+	}, 5)
+}
