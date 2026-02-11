@@ -2397,8 +2397,8 @@ func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
 func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSendTargetVersionChanged bool) {
-	if enableSendTargetVersionChanged {
-		s.OverrideDynamicConfig(dynamicconfig.EnableSendTargetVersionChanged, true)
+	if !enableSendTargetVersionChanged {
+		s.OverrideDynamicConfig(dynamicconfig.EnableSendTargetVersionChanged, false)
 	}
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)

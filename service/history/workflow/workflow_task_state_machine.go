@@ -491,16 +491,16 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	// checking whether targetDeploymentVersion == nil means that we won't send the CaN recommendation to workflows
-	// that are about to transition to the target version. This is good, because if their transition succeeds, they
-	// don't need to CaN to start using the new version.
+	// checking whether targetDeploymentVersion == nil means that we won't send the targetDeploymentVersionChanged=true
+	// to workflows that are about to transition to the target version. This is good because if their transition succeeds,
+	// they don't need to CaN-with-upgrade to start using the new version.
 	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
 		targetDeploymentVersion != nil {
 		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
-			(currentDeploymentVersion.GetBuildId() != targetDeploymentVersion.GetBuildId() ||
-				currentDeploymentVersion.GetSeriesName() != targetDeploymentVersion.GetDeploymentName()) {
+			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
+				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
 			targetDeploymentVersionChanged = true
 		}
 	}
