@@ -302,6 +302,13 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	return &matchingservice.CancelOutstandingPollResponse{}, err
 }
 
+// CancelOutstandingWorkerPolls cancels all outstanding polls for a given worker instance key.
+func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CancelOutstandingWorkerPolls(ctx, request)
+}
+
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the
 // pollers which polled this task queue in last few minutes. If includeTaskQueueStatus field is true,
 // it will also return status of task queue's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).

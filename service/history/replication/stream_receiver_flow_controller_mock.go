@@ -41,10 +41,10 @@ func (m *MockReceiverFlowController) EXPECT() *MockReceiverFlowControllerMockRec
 }
 
 // GetFlowControlInfo mocks base method.
-func (m *MockReceiverFlowController) GetFlowControlInfo(priority enums.TaskPriority) enums.ReplicationFlowControlCommand {
+func (m *MockReceiverFlowController) GetFlowControlInfo(priority enums.TaskPriority) FlowControlInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetFlowControlInfo", priority)
-	ret0, _ := ret[0].(enums.ReplicationFlowControlCommand)
+	ret0, _ := ret[0].(FlowControlInfo)
 	return ret0
 }
 

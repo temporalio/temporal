@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -481,9 +482,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wt.StartedEventID = event.GetEventId()
@@ -493,6 +495,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -501,11 +504,20 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnCompleted() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetResponse().GetQueryRejected().GetStatus())
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 }
 
 func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
@@ -515,9 +527,10 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	event := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	wt.StartedEventID = event.GetEventId()
@@ -527,6 +540,7 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 	gweResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -535,12 +549,23 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, resp.GetResponse().GetQueryRejected().GetStatus())
 
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
+
+	// Second query with different reject condition
+	ctx2 := contextutil.WithMetadataContext(context.Background())
 	request = &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -549,11 +574,20 @@ func (s *engineSuite) TestQueryWorkflow_RejectBasedOnFailed() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_COMPLETED_CLEANLY,
 		},
 	}
-	resp, err = s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err = s.historyEngine.QueryWorkflow(ctx2, request)
 	s.NoError(err)
 	s.Nil(resp.GetResponse().QueryResult)
 	s.NotNil(resp.GetResponse().QueryRejected)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, resp.GetResponse().GetQueryRejected().GetStatus())
+
+	// Verify context metadata was set for second query
+	contextWorkflowType, ok = contextutil.ContextMetadataGet(ctx2, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok = contextutil.ContextMetadataGet(ctx2, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 }
 
 func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
@@ -563,9 +597,10 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -575,6 +610,8 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 	s.mockMatchingClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(&matchingservice.QueryWorkflowResponse{QueryResult: payloads.EncodeBytes([]byte{1, 2, 3})}, nil)
 	s.historyEngine.matchingClient = s.mockMatchingClient
+
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -584,7 +621,7 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 			QueryRejectCondition: enumspb.QUERY_REJECT_CONDITION_NOT_OPEN,
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.NoError(err)
 	s.NotNil(resp.GetResponse().QueryResult)
 	s.Nil(resp.GetResponse().QueryRejected)
@@ -593,6 +630,15 @@ func (s *engineSuite) TestQueryWorkflow_DirectlyThroughMatching() {
 	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 }
 
 func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
@@ -602,8 +648,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -625,12 +672,22 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
+	var capturedWorkflowType interface{}
+	var capturedWorkflowTypeOk bool
+	var capturedTaskQueue interface{}
+	var capturedTaskQueueOk bool
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
+		metadataCtx := contextutil.WithMetadataContext(context.Background())
+		ctx, cancel := context.WithTimeout(metadataCtx, time.Second*2)
 		defer cancel()
 		resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 		s.Error(err)
 		s.Nil(resp)
+
+		// Capture context metadata to verify after goroutine completes
+		capturedWorkflowType, capturedWorkflowTypeOk = contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowType)
+		capturedTaskQueue, capturedTaskQueueOk = contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowTaskQueue)
+
 		wg.Done()
 	}()
 
@@ -643,6 +700,12 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	s.False(qr.HasUnblockedQuery())
 	s.False(qr.HasFailedQuery())
 	wg.Wait()
+
+	// Verify context metadata was set even though query timed out
+	s.True(capturedWorkflowTypeOk, "context workflow type must be set")
+	s.Equal(workflowType, capturedWorkflowType)
+	s.True(capturedTaskQueueOk, "context task queue must be set")
+	s.Equal(taskqueue, capturedTaskQueue)
 	s.False(qr.HasBufferedQuery())
 	s.False(qr.HasCompletedQuery())
 	s.False(qr.HasUnblockedQuery())
@@ -656,8 +719,9 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -685,6 +749,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	loadedMS.(*workflow.MutableStateImpl).QueryRegistry = qr
 	release(nil)
 
+	metadataCtx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -692,9 +757,18 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 			Query:     &querypb.WorkflowQuery{},
 		},
 	}
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(metadataCtx, request)
 	s.Nil(resp)
 	s.Equal(consts.ErrConsistentQueryBufferExceeded, err)
+
+	// Verify context metadata was set even though query failed
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 
 	// verify that after last query error, the previous pending query is still in the buffer
 	pendingBufferedQueries := qr.GetBufferedIDs()
@@ -709,8 +783,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -747,6 +822,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 		}
 	}
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -756,7 +832,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
 	start := time.Now().UTC()
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.NoError(err)
 
@@ -764,6 +840,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Complete() {
 	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 
 	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
@@ -780,8 +865,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	}
 	taskqueue := "testTaskQueue"
 	identity := "testIdentity"
+	workflowType := "wType"
 	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.eventsCache, tests.LocalNamespaceEntry, execution.GetWorkflowId(), execution.GetRunId(), log.NewTestLogger())
-	addWorkflowExecutionStartedEvent(ms, &execution, "wType", taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEvent(ms, &execution, workflowType, taskqueue, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	wt := addWorkflowTaskScheduledEvent(ms)
 	startedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, taskqueue, identity)
 	addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, startedEvent.EventId, identity)
@@ -810,6 +896,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 		}
 	}
 
+	ctx := contextutil.WithMetadataContext(context.Background())
 	request := &historyservice.QueryWorkflowRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		Request: &workflowservice.QueryWorkflowRequest{
@@ -819,7 +906,7 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	}
 	go asyncQueryUpdate(time.Second*2, []byte{1, 2, 3})
 	start := time.Now().UTC()
-	resp, err := s.historyEngine.QueryWorkflow(context.Background(), request)
+	resp, err := s.historyEngine.QueryWorkflow(ctx, request)
 	s.True(time.Now().UTC().After(start.Add(time.Second)))
 	s.NoError(err)
 
@@ -827,6 +914,15 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Unblocked() {
 	err = payloads.Decode(resp.GetResponse().GetQueryResult(), &queryResult)
 	s.NoError(err)
 	s.Equal([]byte{1, 2, 3}, queryResult)
+
+	// Verify context metadata was set
+	contextWorkflowType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok, "context workflow type must be set")
+	s.Equal(workflowType, contextWorkflowType)
+
+	contextTaskQueue, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok, "context task queue must be set")
+	s.Equal(taskqueue, contextTaskQueue)
 
 	ms1 := s.getMutableState(tests.NamespaceID, &execution)
 	s.NotNil(ms1)
