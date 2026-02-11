@@ -2515,8 +2515,10 @@ type ActivityInfo struct {
 	StartVersion    int64 `protobuf:"varint,50,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	// Unique identifier of the worker that is this activity.
 	WorkerInstanceKey string `protobuf:"bytes,51,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The task queue on which the server will send control tasks to the worker running this activity.
+	WorkerControlTaskQueue string `protobuf:"bytes,52,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ActivityInfo) Reset() {
@@ -2892,6 +2894,13 @@ func (x *ActivityInfo) GetStartVersion() int64 {
 func (x *ActivityInfo) GetWorkerInstanceKey() string {
 	if x != nil {
 		return x.WorkerInstanceKey
+	}
+	return ""
+}
+
+func (x *ActivityInfo) GetWorkerControlTaskQueue() string {
+	if x != nil {
+		return x.WorkerControlTaskQueue
 	}
 	return ""
 }
@@ -4840,7 +4849,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xce\x1b\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\x89\x1c\n" +
 	"\fActivityInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\x12A\n" +
@@ -4894,7 +4903,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x0eactivity_reset\x18/ \x01(\bR\ractivityReset\x12)\n" +
 	"\x10reset_heartbeats\x180 \x01(\bR\x0fresetHeartbeats\x12#\n" +
 	"\rstart_version\x182 \x01(\x03R\fstartVersion\x12.\n" +
-	"\x13worker_instance_key\x183 \x01(\tR\x11workerInstanceKey\x1ay\n" +
+	"\x13worker_instance_key\x183 \x01(\tR\x11workerInstanceKey\x129\n" +
+	"\x19worker_control_task_queue\x184 \x01(\tR\x16workerControlTaskQueue\x1ay\n" +
 	"\x16UseWorkflowBuildIdInfo\x12+\n" +
 	"\x12last_used_build_id\x18\x01 \x01(\tR\x0flastUsedBuildId\x122\n" +
 	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\x89\x02\n" +

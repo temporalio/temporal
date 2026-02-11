@@ -389,6 +389,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		workflowTaskHandler := newWorkflowTaskCompletedHandler(
 			request.GetIdentity(),
+			request.GetWorkerInstanceKey(),
+			request.GetWorkerControlTaskQueue(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
 			ms,
 			updateRegistry,

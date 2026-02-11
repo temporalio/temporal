@@ -633,6 +633,9 @@ message ActivityInfo {
 
     // Unique identifier of the worker that is this activity.
     string worker_instance_key = 51;
+
+    // The task queue on which the server will send control tasks to the worker running this activity.
+    string worker_control_task_queue = 52;
 }
 
 // timer_map column
