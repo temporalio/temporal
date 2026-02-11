@@ -64,21 +64,23 @@ func TestFlowControlTestSuite(t *testing.T) {
 
 func (f *flowControlTestSuite) TestLowPriorityWithinLimit() {
 	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, actual.Command)
+	f.Empty(actual.Cause)
 }
 
 func (f *flowControlTestSuite) TestHighPriorityExceedsLimit() {
 	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH)
-	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, actual.Command)
+	f.NotEmpty(actual.Cause)
+	f.Contains(actual.Cause, "150")
+	f.Contains(actual.Cause, "50")
 }
 
 func (f *flowControlTestSuite) TestUnknownPriority() {
 	unknownPriority := enumsspb.TaskPriority(999) // Assuming 999 is an unknown priority
 	actual := f.controller.GetFlowControlInfo(unknownPriority)
-	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, actual.Command)
+	f.Empty(actual.Cause)
 }
 
 func (f *flowControlTestSuite) TestBoundaryCondition() {
@@ -96,8 +98,8 @@ func (f *flowControlTestSuite) TestBoundaryCondition() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, actual.Command)
+	f.Empty(actual.Cause)
 
 	boundarySignal = func() *FlowControlSignal {
 		return &FlowControlSignal{
@@ -113,8 +115,8 @@ func (f *flowControlTestSuite) TestBoundaryCondition() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual = f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected = enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, actual.Command)
+	f.NotEmpty(actual.Cause)
 }
 
 func (f *flowControlTestSuite) TestSubmitLatency() {
@@ -139,8 +141,9 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual := f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected := enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, actual.Command)
+	f.NotEmpty(actual.Cause)
+	f.Contains(actual.Cause, "slow")
 
 	// Test that no slow submission (zero time) doesn't trigger pause
 	signalWithNoSlowSubmit := func() *FlowControlSignal {
@@ -157,8 +160,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual = f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected = enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, actual.Command)
+	f.Empty(actual.Cause)
 
 	// Test that slow submission outside window doesn't trigger pause
 	signalWithStaleSlowSubmit := func() *FlowControlSignal {
@@ -175,8 +178,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual = f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected = enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, actual.Command)
+	f.Empty(actual.Cause)
 
 	// Test that task tracking count and submit latency are checked independently
 	// Both within limits - should resume
@@ -194,8 +197,8 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual = f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected = enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME, actual.Command)
+	f.Empty(actual.Cause)
 
 	// Task tracking count exceeds limit - should pause (even though no slow submission)
 	signalTaskTrackingExceeds := func() *FlowControlSignal {
@@ -212,6 +215,6 @@ func (f *flowControlTestSuite) TestSubmitLatency() {
 	f.controller = NewReceiverFlowControl(signals, f.config)
 
 	actual = f.controller.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
-	expected = enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
-	f.Equal(expected, actual)
+	f.Equal(enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE, actual.Command)
+	f.NotEmpty(actual.Cause)
 }
