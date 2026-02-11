@@ -10,7 +10,7 @@ import (
 type EventScheduled struct {
 }
 
-var transitionScheduled = chasm.NewTransition(
+var TransitionScheduled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{nexusoperationpb.OPERATION_STATUS_UNSPECIFIED},
 	nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 	func(o *Operation, ctx chasm.MutableContext, event EventScheduled) error {
@@ -95,7 +95,7 @@ var transitionFailed = chasm.NewTransition(
 type EventCanceled struct {
 }
 
-var transitionCanceled = chasm.NewTransition(
+var TransitionCanceled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,

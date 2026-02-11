@@ -15,8 +15,8 @@ type Cancellation struct {
 	*nexusoperationpb.CancellationState
 }
 
-func NewCancellation() *Cancellation {
-	return &Cancellation{}
+func NewCancellation(state *nexusoperationpb.CancellationState) *Cancellation {
+	return &Cancellation{CancellationState: state}
 }
 
 func (o *Cancellation) LifecycleState(_ chasm.Context) chasm.LifecycleState {

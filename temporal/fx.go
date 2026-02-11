@@ -22,8 +22,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -152,9 +154,11 @@ var (
 
 	ChasmLibraryOptions = fx.Options(
 		chasm.Module,
+		chasmcommand.Module,
 		chasmworkflow.Module,
 		chasmscheduler.Module,
 		chasmcallback.Module,
+		chasmnexusworkflow.Module,
 	)
 )
 
