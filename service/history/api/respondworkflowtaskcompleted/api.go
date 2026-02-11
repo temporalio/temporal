@@ -188,7 +188,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			}
 		}
 
-
 		workflowLease.GetReleaseFn()(errForRelease)
 	}()
 

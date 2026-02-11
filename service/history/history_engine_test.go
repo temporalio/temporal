@@ -672,6 +672,10 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
+	var capturedWorkflowType interface{}
+	var capturedWorkflowTypeOk bool
+	var capturedTaskQueue interface{}
+	var capturedTaskQueueOk bool
 	go func() {
 		metadataCtx := contextutil.WithMetadataContext(context.Background())
 		ctx, cancel := context.WithTimeout(metadataCtx, time.Second*2)
@@ -680,14 +684,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 		s.Error(err)
 		s.Nil(resp)
 
-		// Verify context metadata was set even though query timed out
-		contextWorkflowType, ok := contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowType)
-		s.True(ok, "context workflow type must be set")
-		s.Equal(workflowType, contextWorkflowType)
-
-		contextTaskQueue, ok := contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowTaskQueue)
-		s.True(ok, "context task queue must be set")
-		s.Equal(taskqueue, contextTaskQueue)
+		// Capture context metadata to verify after goroutine completes
+		capturedWorkflowType, capturedWorkflowTypeOk = contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowType)
+		capturedTaskQueue, capturedTaskQueueOk = contextutil.ContextMetadataGet(metadataCtx, contextutil.MetadataKeyWorkflowTaskQueue)
 
 		wg.Done()
 	}()
@@ -701,6 +700,12 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 	s.False(qr.HasUnblockedQuery())
 	s.False(qr.HasFailedQuery())
 	wg.Wait()
+
+	// Verify context metadata was set even though query timed out
+	s.True(capturedWorkflowTypeOk, "context workflow type must be set")
+	s.Equal(workflowType, capturedWorkflowType)
+	s.True(capturedTaskQueueOk, "context task queue must be set")
+	s.Equal(taskqueue, capturedTaskQueue)
 	s.False(qr.HasBufferedQuery())
 	s.False(qr.HasCompletedQuery())
 	s.False(qr.HasUnblockedQuery())
