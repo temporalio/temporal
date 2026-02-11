@@ -3,8 +3,9 @@ package scheduler_test
 import (
 	"errors"
 	"testing"
+	"time"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -16,52 +17,60 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type generatorTasksSuite struct {
-	schedulerSuite
-	executor *scheduler.GeneratorTaskExecutor
-}
-
-func TestGeneratorTasksSuite(t *testing.T) {
-	suite.Run(t, &generatorTasksSuite{})
-}
-
-func (s *generatorTasksSuite) SetupTest() {
-	s.schedulerSuite.SetupTest()
-	s.executor = scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
+func newGeneratorExecutor(env *testEnv) *scheduler.GeneratorTaskExecutor {
+	return scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
-		BaseLogger:     s.logger,
-		SpecProcessor:  s.specProcessor,
+		BaseLogger:     env.Logger,
+		SpecProcessor:  env.SpecProcessor,
 		SpecBuilder:    legacyscheduler.NewSpecBuilder(),
 	})
 }
 
-func (s *generatorTasksSuite) TestExecute_ProcessTimeRangeFails() {
-	sched := s.scheduler
-	ctx := s.newMutableContext()
+func TestGeneratorTask_Execute_ProcessTimeRangeFails(t *testing.T) {
+	// Create a custom mock spec processor that fails on ProcessTimeRange.
+	ctrl := gomock.NewController(t)
+	specProcessor := scheduler.NewMockSpecProcessor(ctrl)
+	now := time.Now()
 
-	// If ProcessTimeRange fails, we should fail the task as an internal error.
-	s.specProcessor.EXPECT().ProcessTimeRange(
+	// First call during newTestEnv's CloseTransaction should succeed.
+	specProcessor.EXPECT().ProcessTimeRange(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(&scheduler.ProcessedTimeRange{
+		NextWakeupTime: now.Add(defaultInterval),
+		LastActionTime: now,
+	}, nil).Times(1)
+
+	// Second call during test should fail.
+	specProcessor.EXPECT().ProcessTimeRange(
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 	).Return(nil, errors.New("processTimeRange bug"))
 
-	// Execute the generate task.
-	generator := sched.Generator.Get(ctx)
-	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	specProcessor.EXPECT().NextTime(gomock.Any(), gomock.Any()).Return(legacyscheduler.GetNextTimeResult{
+		Next:    now.Add(defaultInterval),
+		Nominal: now.Add(defaultInterval),
+	}, nil).AnyTimes()
+
+	env := newTestEnv(t, withSpecProcessor(specProcessor))
+	executor := newGeneratorExecutor(env)
+
+	ctx := env.MutableContext()
+	generator := env.Scheduler.Generator.Get(ctx)
+
+	// If ProcessTimeRange fails, we should fail the task as an internal error.
+	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
 	var target *queueerrors.UnprocessableTaskError
-	s.ErrorAs(err, &target)
-	s.Equal("failed to process a time range: processTimeRange bug", target.Message)
+	require.ErrorAs(t, err, &target)
+	require.Equal(t, "failed to process a time range: processTimeRange bug", target.Message)
 }
 
-func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
+func TestGeneratorTask_ExecuteBufferTask_Basic(t *testing.T) {
+	env := newTestEnv(t)
+	executor := newGeneratorExecutor(env)
 
+	ctx := env.MutableContext()
+	sched := env.Scheduler
 	generator := sched.Generator.Get(ctx)
-
-	// Use a real SpecProcessor implementation.
-	specProcessor := newTestSpecProcessor(s.controller)
-	s.executor.SpecProcessor = specProcessor
 
 	// Move high water mark back in time (Generator always compares high water mark
 	// against system time) to generate buffered actions.
@@ -69,76 +78,78 @@ func (s *generatorTasksSuite) TestExecuteBufferTask_Basic() {
 	generator.LastProcessedTime = timestamppb.New(highWatermark)
 
 	// Execute the generate task.
-	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.NoError(err)
+	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
 
 	// We expect 5 buffered starts.
 	invoker := sched.Invoker.Get(ctx)
-	s.Equal(5, len(invoker.BufferedStarts))
+	require.Len(t, invoker.BufferedStarts, 5)
 
-	// Validate RequestId -> WorkflowId mapping
+	// Validate RequestId -> WorkflowId mapping.
 	for _, start := range invoker.BufferedStarts {
-		s.Equal(start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
+		require.Equal(t, start.WorkflowId, invoker.RunningWorkflowID(start.RequestId))
 	}
 
 	// Generator's high water mark should have advanced.
 	newHighWatermark := generator.LastProcessedTime.AsTime()
-	s.True(newHighWatermark.After(highWatermark))
+	require.True(t, newHighWatermark.After(highWatermark))
 
 	// Ensure we scheduled a physical side-effect task on the tree at immediate time.
 	// The InvokerExecuteTask is a side-effect task that starts workflows.
 	// The InvokerProcessBufferTask (pure) executes inline during CloseTransaction.
-	_, err = s.node.CloseTransaction()
-	s.NoError(err)
-	s.True(s.hasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate))
+	require.NoError(t, env.CloseTransaction())
+	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate))
 }
 
-func (s *generatorTasksSuite) TestUpdateFutureActionTimes_UnlimitedActions() {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
-	generator := sched.Generator.Get(ctx)
+func TestGeneratorTask_UpdateFutureActionTimes_UnlimitedActions(t *testing.T) {
+	env := newTestEnv(t)
+	executor := newGeneratorExecutor(env)
 
-	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
+	ctx := env.MutableContext()
+	generator := env.Scheduler.Generator.Get(ctx)
 
-	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.NoError(err)
+	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
 
-	s.NotEmpty(generator.FutureActionTimes)
-	s.Require().Len(generator.FutureActionTimes, 10)
+	require.NotEmpty(t, generator.FutureActionTimes)
+	require.Len(t, generator.FutureActionTimes, 10)
 }
 
-func (s *generatorTasksSuite) TestUpdateFutureActionTimes_LimitedActions() {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
+func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
+	env := newTestEnv(t)
+	executor := newGeneratorExecutor(env)
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
 	generator := sched.Generator.Get(ctx)
 
 	sched.Schedule.State.LimitedActions = true
 	sched.Schedule.State.RemainingActions = 2
-	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
 
-	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.NoError(err)
+	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
 
-	s.Len(generator.FutureActionTimes, 2)
+	require.Len(t, generator.FutureActionTimes, 2)
 }
 
-func (s *generatorTasksSuite) TestUpdateFutureActionTimes_SkipsBeforeUpdateTime() {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
-	generator := sched.Generator.Get(ctx)
+func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
+	env := newTestEnv(t)
+	executor := newGeneratorExecutor(env)
 
-	s.executor.SpecProcessor = newTestSpecProcessor(s.controller)
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
 
 	// UpdateTime acts as a floor - action times at or before it are skipped.
 	baseTime := ctx.Now(generator).UTC()
 	updateTime := baseTime.Add(defaultInterval / 2)
 	sched.Info.UpdateTime = timestamppb.New(updateTime)
 
-	err := s.executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
-	s.NoError(err)
+	err := executor.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
 
-	s.Require().NotEmpty(generator.FutureActionTimes)
+	require.NotEmpty(t, generator.FutureActionTimes)
 	for _, futureTime := range generator.FutureActionTimes {
-		s.True(futureTime.AsTime().After(updateTime))
+		require.True(t, futureTime.AsTime().After(updateTime))
 	}
 }
