@@ -177,7 +177,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
 	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
 	if args.endpointID == "" {
-		handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+		handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 		return e.saveResult(ctx, env, ref, nil, handlerError)
 	}
 
@@ -185,7 +185,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
-			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+			handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 			return e.saveResult(ctx, env, ref, nil, handlerError)
 		}
 		return err
@@ -629,7 +629,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
-			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+			handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveCancelationResult(ctx, env, ref, handlerError, args.scheduledEventID)
@@ -929,10 +929,6 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			nf = *handlerErr.OriginalFailure
 		} else {
 			var err error
-			// Ensure the error message is set to prevent the Nexus failure converter from unwrapping the cause.
-			if handlerErr.Message == "" {
-				handlerErr.Message = "handler error"
-			}
 			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
 			if err != nil {
 				return nil, err

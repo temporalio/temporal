@@ -74,6 +74,66 @@ func newUnexpectedResponseError(message string, response *http.Response, body []
 	}
 }
 
+type baseHTTPClient struct {
+	// A function for making HTTP requests.
+	// Defaults to [http.DefaultClient.Do].
+	httpCaller func(*http.Request) (*http.Response, error)
+	// A [serializer] to customize client serialization behavior.
+	// By default the client handles JSONables, byte slices, and nil.
+	serializer nexus.Serializer
+	// A [failureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
+	// [DefaultFailureConverter].
+	failureConverter FailureConverter
+}
+
+func (c *baseHTTPClient) failureFromResponse(response *http.Response, body []byte) (nexus.Failure, error) {
+	if !isMediaTypeJSON(response.Header.Get("Content-Type")) {
+		return nexus.Failure{}, newUnexpectedResponseError(fmt.Sprintf("invalid response content type: %q", response.Header.Get("Content-Type")), response, body)
+	}
+	var failure nexus.Failure
+	err := json.Unmarshal(body, &failure)
+	return failure, err
+}
+
+func (c *baseHTTPClient) defaultErrorFromResponse(response *http.Response, body []byte, cause error) error {
+	errorType, err := httpStatusCodeToHandlerErrorType(response)
+	if err != nil {
+		// TODO(bergundy): optimization - use the provided cause, it's already a deserialized failure.
+		return newUnexpectedResponseError(err.Error(), response, body)
+	}
+	handlerErr := &nexus.HandlerError{
+		Type: errorType,
+		// For compatibility with older servers.
+		RetryBehavior: retryBehaviorFromHeader(response.Header),
+		Cause:         cause,
+	}
+
+	// Ensure we the original failure is available, the calling code expects it.
+	originalFailure, err := c.failureConverter.ErrorToFailure(handlerErr)
+	if err != nil {
+		return newUnexpectedResponseError("failed to construct handler error from response: "+err.Error(), response, body)
+	}
+	handlerErr.OriginalFailure = &originalFailure
+	return handlerErr
+}
+
+// BestEffortHandlerErrorFromResponse attempts to read a handler error from the response, but falls back to a default error.
+// This method is exposed as a workaround because the functionality is required for completion.
+func (c *baseHTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
+	failure, err := c.failureFromResponse(response, body)
+	if err != nil {
+		return c.defaultErrorFromResponse(response, body, nil)
+	}
+	convErr, err := c.failureConverter.FailureToError(failure)
+	if err != nil {
+		return newUnexpectedResponseError(fmt.Sprintf("failed to convert Failure to error: %s", err.Error()), response, body)
+	}
+	if _, ok := convErr.(*nexus.HandlerError); !ok {
+		convErr = c.defaultErrorFromResponse(response, body, convErr)
+	}
+	return convErr
+}
+
 // An HTTPClient makes Nexus service requests as defined in the [Nexus HTTP API].
 //
 // It can start a new operation and get an [OperationHandle] to an existing, asynchronous operation.
@@ -85,8 +145,8 @@ func newUnexpectedResponseError(message string, response *http.Response, body []
 //
 // [Nexus HTTP API]: https://github.com/nexus-rpc/api
 type HTTPClient struct {
-	// The options this client was created with after applying defaults.
-	options        HTTPClientOptions
+	baseHTTPClient
+	service        string
 	serviceBaseURL *url.URL
 }
 
@@ -119,8 +179,13 @@ func NewHTTPClient(options HTTPClientOptions) (*HTTPClient, error) {
 	}
 
 	return &HTTPClient{
-		options:        options,
+		baseHTTPClient: baseHTTPClient{
+			serializer:       options.Serializer,
+			failureConverter: options.FailureConverter,
+			httpCaller:       options.HTTPCaller,
+		},
 		serviceBaseURL: baseURL,
+		service:        options.Service,
 	}, nil
 }
 
@@ -174,7 +239,7 @@ func (c *HTTPClient) StartOperation(
 		content, ok := input.(*nexus.Content)
 		if !ok {
 			var err error
-			content, err = c.options.Serializer.Serialize(input)
+			content, err = c.serializer.Serialize(input)
 			if err != nil {
 				return nil, err
 			}
@@ -192,7 +257,7 @@ func (c *HTTPClient) StartOperation(
 		}
 	}
 
-	url := c.serviceBaseURL.JoinPath(url.PathEscape(c.options.Service), url.PathEscape(operation))
+	url := c.serviceBaseURL.JoinPath(url.PathEscape(c.service), url.PathEscape(operation))
 
 	if options.CallbackURL != "" {
 		q := url.Query()
@@ -222,7 +287,7 @@ func (c *HTTPClient) StartOperation(
 	// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
 	request.Header.Set("temporal-nexus-failure-support", "true")
 
-	response, err := c.options.HTTPCaller(request)
+	response, err := c.httpCaller(request)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +314,7 @@ func (c *HTTPClient) StartOperation(
 	if response.StatusCode == http.StatusOK {
 		return &ClientStartOperationResponse[*nexus.LazyValue]{
 			Successful: nexus.NewLazyValue(
-				c.options.Serializer,
+				c.serializer,
 				&nexus.Reader{
 					ReadCloser: response.Body,
 					Header:     prefixStrippedHTTPHeaderToNexusHeader(response.Header, "content-"),
@@ -282,13 +347,13 @@ func (c *HTTPClient) StartOperation(
 			Pending: handle,
 			Links:   links,
 		}, nil
-	case statusOperationFailed:
+	case statusOperationUnsuccessful:
 		failure, err := c.failureFromResponse(response, body)
 		if err != nil {
 			return nil, err
 		}
 
-		wireErr, err := c.options.FailureConverter.FailureToError(failure)
+		wireErr, err := c.failureConverter.FailureToError(failure)
 		if err != nil {
 			return nil, err
 		}
@@ -304,15 +369,9 @@ func (c *HTTPClient) StartOperation(
 				Message: "nexus operation completed unsuccessfully",
 				Cause:   wireErr,
 			}
-			// Ensure we the original failure is available, the calling code expects it.
-			originalFailure, err := c.options.FailureConverter.ErrorToFailure(opErr)
-			if err != nil {
-				return nil, err
+			if err := MarkAsWrapperError(c.failureConverter, opErr); err != nil {
+				return nil, fmt.Errorf("failed to mark operation error as wrapper error: %w", err)
 			}
-			// Special header to signal that this error should be unwrapped by the completion handler as old servers will send
-			// back empty wrappers for underlying causes.
-			originalFailure.Metadata["unwrap-error"] = "true"
-			opErr.OriginalFailure = &originalFailure
 			wireErr = opErr
 		}
 
@@ -365,54 +424,6 @@ func operationInfoFromResponse(response *http.Response, body []byte) (*nexus.Ope
 		return nil, err
 	}
 	return &info, nil
-}
-
-func (c *HTTPClient) failureFromResponse(response *http.Response, body []byte) (nexus.Failure, error) {
-	if !isMediaTypeJSON(response.Header.Get("Content-Type")) {
-		return nexus.Failure{}, newUnexpectedResponseError(fmt.Sprintf("invalid response content type: %q", response.Header.Get("Content-Type")), response, body)
-	}
-	var failure nexus.Failure
-	err := json.Unmarshal(body, &failure)
-	return failure, err
-}
-
-func (c *HTTPClient) defaultErrorFromResponse(response *http.Response, body []byte, cause error) error {
-	errorType, err := httpStatusCodeToHandlerErrorType(response)
-	if err != nil {
-		// TODO(bergundy): optimization - use the provided cause, it's already a deserialized failure.
-		return newUnexpectedResponseError(err.Error(), response, body)
-	}
-	statusText := strings.TrimPrefix(response.Status, fmt.Sprintf("%d ", response.StatusCode))
-	handlerErr := &nexus.HandlerError{
-		Type:    errorType,
-		Message: statusText,
-		// For compatibility with older servers.
-		RetryBehavior: retryBehaviorFromHeader(response.Header),
-		Cause:         cause,
-	}
-
-	// Ensure we the original failure is available, the calling code expects it.
-	originalFailure, err := c.options.FailureConverter.ErrorToFailure(handlerErr)
-	if err != nil {
-		return newUnexpectedResponseError("failed to construct handler error from response: "+err.Error(), response, body)
-	}
-	handlerErr.OriginalFailure = &originalFailure
-	return handlerErr
-}
-
-func (c *HTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
-	failure, err := c.failureFromResponse(response, body)
-	if err != nil {
-		return c.defaultErrorFromResponse(response, body, nil)
-	}
-	convErr, err := c.options.FailureConverter.FailureToError(failure)
-	if err != nil {
-		return newUnexpectedResponseError(fmt.Sprintf("failed to convert Failure to error: %s", err.Error()), response, body)
-	}
-	if _, ok := convErr.(*nexus.HandlerError); !ok {
-		convErr = c.defaultErrorFromResponse(response, body, convErr)
-	}
-	return convErr
 }
 
 func httpStatusCodeToHandlerErrorType(response *http.Response) (nexus.HandlerErrorType, error) {

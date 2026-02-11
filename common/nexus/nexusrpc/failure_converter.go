@@ -35,9 +35,8 @@ func (e serializedHandlerError) RetryBehavior() nexus.HandlerErrorRetryBehavior 
 	}
 	if *e.RetryableOverride {
 		return nexus.HandlerErrorRetryBehaviorRetryable
-	} else {
-		return nexus.HandlerErrorRetryBehaviorNonRetryable
 	}
+	return nexus.HandlerErrorRetryBehaviorNonRetryable
 }
 
 type serializedOperationError struct {
@@ -45,6 +44,7 @@ type serializedOperationError struct {
 }
 
 // ErrorToFailure implements FailureConverter.
+// nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
 func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, error) {
 	if err == nil {
 		return nexus.Failure{}, nil
@@ -65,10 +65,6 @@ func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, er
 	case *nexus.HandlerError:
 		if typedErr.OriginalFailure != nil {
 			return *typedErr.OriginalFailure, nil
-		}
-		// Temporary workaround for compatibility with old SDKs that don't support handler error messages.
-		if typedErr.Message == "" && typedErr.Cause != nil {
-			return e.ErrorToFailure(typedErr.Cause)
 		}
 		data := serializedHandlerError{
 			Type:              string(typedErr.Type),
@@ -99,10 +95,6 @@ func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, er
 	case *nexus.OperationError:
 		if typedErr.OriginalFailure != nil {
 			return *typedErr.OriginalFailure, nil
-		}
-		// Temporary workaround for compatibility with old SDKs that don't support operation error messages.
-		if typedErr.Message == "" && typedErr.Cause != nil {
-			return e.ErrorToFailure(typedErr.Cause)
 		}
 		data := serializedOperationError{
 			State: string(typedErr.State),
@@ -136,6 +128,7 @@ func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, er
 }
 
 // FailureToError implements FailureConverter.
+// nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
 func (e knownErrorFailureConverter) FailureToError(f nexus.Failure) (error, error) {
 	if f.Metadata != nil {
 		switch f.Metadata["type"] {
@@ -204,7 +197,8 @@ func DefaultFailureConverter() FailureConverter {
 	return defaultFailureConverter
 }
 
-func retryBehaviorAsOptionalBool(e *nexus.HandlerError)  *bool {
+func retryBehaviorAsOptionalBool(e *nexus.HandlerError) *bool {
+	// nolint:exhaustive // this is a simple optional boolean.
 	switch e.RetryBehavior {
 	case nexus.HandlerErrorRetryBehaviorRetryable:
 		ret := true
@@ -215,4 +209,3 @@ func retryBehaviorAsOptionalBool(e *nexus.HandlerError)  *bool {
 	}
 	return nil
 }
-

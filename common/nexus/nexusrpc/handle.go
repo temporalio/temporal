@@ -22,7 +22,7 @@ type OperationHandle[T any] struct {
 //
 // Cancelation is asynchronous and may be not be respected by the operation's implementation.
 func (h *OperationHandle[T]) Cancel(ctx context.Context, options nexus.CancelOperationOptions) error {
-	u := h.client.serviceBaseURL.JoinPath(url.PathEscape(h.client.options.Service), url.PathEscape(h.Operation), "cancel")
+	u := h.client.serviceBaseURL.JoinPath(url.PathEscape(h.client.service), url.PathEscape(h.Operation), "cancel")
 	request, err := http.NewRequestWithContext(ctx, "POST", u.String(), nil)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func (h *OperationHandle[T]) Cancel(ctx context.Context, options nexus.CancelOpe
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	request.Header.Set(headerUserAgent, userAgent)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
-	response, err := h.client.options.HTTPCaller(request)
+	response, err := h.client.httpCaller(request)
 	if err != nil {
 		return err
 	}

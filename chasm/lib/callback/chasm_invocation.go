@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -137,20 +136,12 @@ func (c chasmInvocation) getHistoryRequest(
 
 	switch op := c.completion.(type) {
 	case *nexusrpc.OperationCompletionSuccessful:
-		payloadBody, err := io.ReadAll(op.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read payload: %v", err)
-		}
-
 		var payload *commonpb.Payload
-		if payloadBody != nil {
-			content := &nexus.Content{
-				Header: op.Reader.Header,
-				Data:   payloadBody,
-			}
-			err := commonnexus.PayloadSerializer.Deserialize(content, &payload)
-			if err != nil {
-				return nil, fmt.Errorf("failed to deserialize payload: %v", err)
+		if op.Result != nil {
+			var ok bool
+			payload, ok = op.Result.(*commonpb.Payload)
+			if !ok {
+				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", op.Result)
 			}
 		}
 
@@ -162,9 +153,17 @@ func (c chasmInvocation) getHistoryRequest(
 			Completion: completion,
 		}
 	case *nexusrpc.OperationCompletionUnsuccessful:
-		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(op.Failure)
+		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(op.Error)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %v", err)
+			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
+		}
+		// Unwrap the operation error since it's not meant to be sent for Temporal->Temporal completions.
+		if failure.Cause != nil {
+			failure = *failure.Cause
+		}
+		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert failure type: %w", err)
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{

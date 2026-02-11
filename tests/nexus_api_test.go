@@ -203,7 +203,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, nexus.HandlerErrorRetryBehaviorUnspecified, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
-				require.Equal(t, "Internal Server Error", handlerErr.Message)
+				require.Empty(t, handlerErr.Message)
 				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
@@ -225,7 +225,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, nexus.HandlerErrorRetryBehaviorNonRetryable, handlerErr.RetryBehavior)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
-				require.Equal(t, "Internal Server Error", handlerErr.Message)
+				require.Empty(t, handlerErr.Message)
 				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
@@ -375,7 +375,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Na
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 	// I wish we'd never put periods in error messages :(
-	s.Equal("Namespace length exceeds limit.", handlerErr.Cause.Error())
+	s.Equal("Namespace length exceeds limit.", handlerErr.Message)
 
 	snap := capture.Snapshot()
 
@@ -461,13 +461,13 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Forbidden() {
 			name: "deny with exposed error",
 			onAuthorize: func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 				if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
-					return authorization.Result{}, nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "exposed error")
+					return authorization.Result{}, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "exposed error")
 				}
 				if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
 					if ct.NexusEndpointName != testEndpoint.Spec.Name {
 						panic("expected nexus endpoint name")
 					}
-					return authorization.Result{}, nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "exposed error")
+					return authorization.Result{}, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "exposed error")
 				}
 				return authorization.Result{Decision: authorization.DecisionAllow}, nil
 			},
@@ -553,7 +553,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerErr.Type)
-				require.Equal(t, "Unauthorized", handlerErr.Message)
+				require.Equal(t, "unauthorized", handlerErr.Message)
 				require.Equal(t, 1, len(snap["nexus_request_preprocess_errors"]))
 			},
 		},
@@ -602,21 +602,12 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 			go s.nexusTaskPoller(ctx, taskQueue, tc.handler)
 		}
 
-		var result *nexusrpc.ClientStartOperationResponse[string]
-		var snap map[string][]*metricstest.CapturedRecording
-
-		// Wait until the endpoint is loaded into the registry.
-		s.Eventually(func() bool {
-			capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-			defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
-
-			result, err = nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
-				Header: tc.header,
-			})
-			snap = capture.Snapshot()
-			var handlerErr *nexus.HandlerError
-			return err == nil || !(errors.As(err, &handlerErr) && handlerErr.Type == nexus.HandlerErrorTypeNotFound)
-		}, 10*time.Second, 1*time.Second)
+		capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+		result, err := nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{
+			Header: tc.header,
+		})
+		snap := capture.Snapshot()
+		s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 
 		tc.assertion(t, result, err, snap)
 	}
@@ -726,7 +717,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 				require.Equal(t, "worker", headers.Get("Temporal-Nexus-Failure-Source"))
-				require.Equal(t, "Internal Server Error", handlerErr.Message)
+				require.Empty(t, handlerErr.Message)
 				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 			},
@@ -984,7 +975,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound(
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	s.Equal("nexus endpoint not found", handlerErr.Cause.Error())
+	s.Equal("nexus endpoint not found", handlerErr.Message)
 	snap := capture.Snapshot()
 	s.Equal(1, len(snap["nexus_request_preprocess_errors"]))
 }

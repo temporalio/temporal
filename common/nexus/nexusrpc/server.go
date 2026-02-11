@@ -18,10 +18,10 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 )
 
-func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer http.ResponseWriter, handler *httpHandler) {
+func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer http.ResponseWriter, request *http.Request, handler *httpHandler) {
 	switch r := r.(type) {
 	case interface{ ValueAsAny() any }:
-		handler.writeResult(writer, r.ValueAsAny())
+		handler.writeResult(writer, request, r.ValueAsAny())
 	case *nexus.HandlerStartOperationResultAsync:
 		info := nexus.OperationInfo{
 			Token: r.OperationToken,
@@ -29,7 +29,7 @@ func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer 
 		}
 		b, err := json.Marshal(info)
 		if err != nil {
-			handler.logger.Error("failed to serialize operation info", "error", err)
+			handler.Logger.Error("failed to serialize operation info", "error", err)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -37,22 +37,22 @@ func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer 
 		writer.Header().Set("Content-Type", contentTypeJSON)
 		writer.WriteHeader(http.StatusCreated)
 		if _, err := writer.Write(b); err != nil {
-			handler.logger.Error("failed to write response body", "error", err)
+			handler.Logger.Error("failed to write response body", "error", err)
 		}
 	}
 }
 
-type baseHTTPHandler struct {
-	logger           *slog.Logger
-	failureConverter FailureConverter
+type BaseHTTPHandler struct {
+	Logger           *slog.Logger
+	FailureConverter FailureConverter
 }
 
 type httpHandler struct {
-	baseHTTPHandler
+	BaseHTTPHandler
 	options HandlerOptions
 }
 
-func (h *httpHandler) writeResult(writer http.ResponseWriter, result any) {
+func (h *httpHandler) writeResult(writer http.ResponseWriter, request *http.Request, result any) {
 	var reader *nexus.Reader
 	if r, ok := result.(*nexus.Reader); ok {
 		// Close the request body in case we error before sending the HTTP request (which may double close but
@@ -66,7 +66,7 @@ func (h *httpHandler) writeResult(writer http.ResponseWriter, result any) {
 			var err error
 			content, err = h.options.Serializer.Serialize(result)
 			if err != nil {
-				h.writeFailure(writer, fmt.Errorf("failed to serialize handler result: %w", err))
+				h.WriteFailure(writer, request, fmt.Errorf("failed to serialize handler result: %w", err))
 				return
 			}
 		}
@@ -85,11 +85,14 @@ func (h *httpHandler) writeResult(writer http.ResponseWriter, result any) {
 		return
 	}
 	if _, err := io.Copy(writer, reader); err != nil {
-		h.logger.Error("failed to write response body", "error", err)
+		h.Logger.Error("failed to write response body", "error", err)
 	}
 }
 
-func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
+// WriteFailure writes the given error to the response, converting it to a Failure if possible. It also sets the HTTP
+// status code based on the type of error.
+// nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
+func (h *BaseHTTPHandler) WriteFailure(writer http.ResponseWriter, r *http.Request, err error) {
 	var failure nexus.Failure
 	var failureError *nexus.FailureError
 	var opError *nexus.OperationError
@@ -100,27 +103,36 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 	if errors.As(err, &opError) {
 		operationState = opError.State
 		var convErr error
-		failure, convErr = h.failureConverter.ErrorToFailure(opError)
+		failure, convErr = h.FailureConverter.ErrorToFailure(opError)
 		if convErr != nil {
-			h.logger.Error("failed to convert operation error to failure", "error", convErr)
+			h.Logger.Error("failed to convert operation error to failure", "error", convErr)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		statusCode = statusOperationFailed
+		// Backward compatibility, unwrap the failure cause.
+		if r.Header.Get("temporal-nexus-failure-support") != "true" && failure.Cause != nil {
+			failure = *failure.Cause
+		}
+
+		statusCode = statusOperationUnsuccessful
 
 		if operationState != nexus.OperationStateFailed && operationState != nexus.OperationStateCanceled {
-			h.logger.Error("unexpected operation state", "state", operationState)
+			h.Logger.Error("unexpected operation state", "state", operationState)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		writer.Header().Set(headerOperationState, string(operationState))
 	} else if errors.As(err, &handlerError) {
 		var convErr error
-		failure, convErr = h.failureConverter.ErrorToFailure(handlerError)
+		failure, convErr = h.FailureConverter.ErrorToFailure(handlerError)
 		if convErr != nil {
-			h.logger.Error("failed to convert handler error to failure", "error", convErr)
+			h.Logger.Error("failed to convert handler error to failure", "error", convErr)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
+		}
+		// Backward compatibility, unwrap the failure cause.
+		if r.Header.Get("temporal-nexus-failure-support") != "true" && failure.Cause != nil {
+			failure = *failure.Cause
 		}
 		switch handlerError.Type {
 		case nexus.HandlerErrorTypeBadRequest:
@@ -146,7 +158,7 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 		case nexus.HandlerErrorTypeUpstreamTimeout:
 			statusCode = nexus.StatusUpstreamTimeout
 		default:
-			h.logger.Error("unexpected handler error type", "type", handlerError.Type)
+			h.Logger.Error("unexpected handler error type", "type", handlerError.Type)
 		}
 	} else if errors.As(err, &failureError) {
 		failure = failureError.Failure
@@ -154,12 +166,12 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 		failure = nexus.Failure{
 			Message: "internal server error",
 		}
-		h.logger.Error("handler failed", "error", err)
+		h.Logger.Error("handler failed", "error", err)
 	}
 
 	b, err := json.Marshal(failure)
 	if err != nil {
-		h.logger.Error("failed to marshal failure", "error", err)
+		h.Logger.Error("failed to marshal failure", "error", err)
 		writer.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -181,14 +193,14 @@ func (h *baseHTTPHandler) writeFailure(writer http.ResponseWriter, err error) {
 	writer.WriteHeader(statusCode)
 
 	if _, err := writer.Write(b); err != nil {
-		h.logger.Error("failed to write response body", "error", err)
+		h.Logger.Error("failed to write response body", "error", err)
 	}
 }
 
 func (h *httpHandler) startOperation(service, operation string, writer http.ResponseWriter, request *http.Request) {
 	links, err := getLinksFromHeader(request.Header)
 	if err != nil {
-		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid %q header", headerLink))
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid %q header", headerLink))
 		return
 	}
 	options := nexus.StartOperationOptions{
@@ -219,16 +231,16 @@ func (h *httpHandler) startOperation(service, operation string, writer http.Resp
 	})
 	response, err := h.options.Handler.StartOperation(ctx, service, operation, value, options)
 	if err != nil {
-		h.writeFailure(writer, err)
+		h.WriteFailure(writer, request, err)
 	} else {
 		if err := addLinksToHTTPHeader(nexus.HandlerLinks(ctx), writer.Header()); err != nil {
-			h.logger.Error("failed to serialize links into header", "error", err)
+			h.Logger.Error("failed to serialize links into header", "error", err)
 			// clear any previous links already written to the header
 			writer.Header().Del(headerLink)
 			writer.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		applyResultToHTTPResponse(response, writer, h)
+		applyResultToHTTPResponse(response, writer, request, h)
 	}
 }
 
@@ -247,7 +259,7 @@ func (h *httpHandler) cancelOperation(service, operation, token string, writer h
 		Header:    options.Header,
 	})
 	if err := h.options.Handler.CancelOperation(ctx, service, operation, token, options); err != nil {
-		h.writeFailure(writer, err)
+		h.WriteFailure(writer, request, err)
 		return
 	}
 
@@ -262,8 +274,8 @@ func (h *httpHandler) parseRequestTimeoutHeader(writer http.ResponseWriter, requ
 	if timeoutStr != "" {
 		timeoutDuration, err := ParseDuration(timeoutStr)
 		if err != nil {
-			h.logger.Warn("invalid request timeout header", "timeout", timeoutStr)
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request timeout header"))
+			h.Logger.Warn("invalid request timeout header", "timeout", timeoutStr)
+			h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request timeout header"))
 			return 0, false
 		}
 		return timeoutDuration, true
@@ -307,23 +319,23 @@ type HandlerOptions struct {
 
 func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Request) {
 	if request.Method != "POST" {
-		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request method: expected POST, got %q", request.Method))
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request method: expected POST, got %q", request.Method))
 		return
 	}
 	parts := strings.Split(request.URL.EscapedPath(), "/")
 	// First part is empty (due to leading /)
 	if len(parts) < 3 {
-		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
 		return
 	}
 	service, err := url.PathUnescape(parts[1])
 	if err != nil {
-		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
 		return
 	}
 	operation, err := url.PathUnescape(parts[2])
 	if err != nil {
-		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
 		return
 	}
 
@@ -338,7 +350,7 @@ func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Re
 	if len(parts) == 5 && parts[4] == "cancel" {
 		token, err := url.PathUnescape(parts[3])
 		if err != nil {
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
+			h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to parse URL path"))
 			return
 		}
 
@@ -347,7 +359,7 @@ func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Re
 	}
 
 	if len(parts) != 4 || parts[3] != "cancel" {
-		h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
+		h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "not found"))
 		return
 	}
 
@@ -355,7 +367,7 @@ func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Re
 	if token == "" {
 		token = request.URL.Query().Get("token")
 		if token == "" {
-			h.writeFailure(writer, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "missing operation token"))
+			h.WriteFailure(writer, request, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "missing operation token"))
 			return
 		}
 	} else {
@@ -381,9 +393,9 @@ func NewHTTPHandler(options HandlerOptions) http.Handler {
 		options.FailureConverter = DefaultFailureConverter()
 	}
 	handler := &httpHandler{
-		baseHTTPHandler: baseHTTPHandler{
-			logger:           options.Logger,
-			failureConverter: options.FailureConverter,
+		BaseHTTPHandler: BaseHTTPHandler{
+			Logger:           options.Logger,
+			FailureConverter: options.FailureConverter,
 		},
 		options: options,
 	}

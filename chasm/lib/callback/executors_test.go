@@ -81,7 +81,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
-			expectedMetricOutcome: "status:200",
+			expectedMetricOutcome: "success",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
@@ -104,7 +104,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
-			expectedMetricOutcome: "status:500",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -116,7 +116,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
-			expectedMetricOutcome: "status:400",
+			expectedMetricOutcome: "handler-error:BAD_REQUEST",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
@@ -210,8 +210,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Create completion
-			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
-			require.NoError(t, err)
+			completion := &nexusrpc.OperationCompletionSuccessful{}
 
 			// Set up the CompletionSource field to return our mock completion
 			root.SetRootComponent(&mockNexusCompletionGetterComponent{
@@ -398,15 +397,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return client
 			},
 			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-						CloseTime:  dummyTime,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+				return &nexusrpc.OperationCompletionSuccessful{
+					Result:    createPayloadBytes([]byte("result-data")),
+					CloseTime: dummyTime,
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -431,17 +425,13 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return client
 			},
 			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionUnsuccessful(
-					&nexus.OperationError{
+				return &nexusrpc.OperationCompletionUnsuccessful{
+					Error: &nexus.OperationError{
 						State: nexus.OperationStateFailed,
 						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
 					},
-					nexusrpc.OperationCompletionUnsuccessfulOptions{
-						CloseTime: dummyTime,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+					CloseTime: dummyTime,
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -460,14 +450,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return client
 			},
 			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+				return &nexusrpc.OperationCompletionSuccessful{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -486,14 +471,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return client
 			},
 			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+				return &nexusrpc.OperationCompletionSuccessful{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -508,14 +488,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
 			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+				return &nexusrpc.OperationCompletionSuccessful{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: "invalid-base64!!!",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -530,14 +505,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
 			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+				return &nexusrpc.OperationCompletionSuccessful{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {

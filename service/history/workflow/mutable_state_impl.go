@@ -767,33 +767,31 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexusrpc.NewOperationCompletionSuccessful(p, nexusrpc.OperationCompletionSuccessfulOptions{
-			Serializer: commonnexus.PayloadSerializer,
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			CloseTime:  ce.GetEventTime().AsTime(),
-			Links:      []nexus.Link{startLink},
-		})
-		if err != nil {
-			return nil, serviceerror.NewInternalf("failed to construct Nexus completion: %v", err)
-		}
-		return completion, nil
+		return &nexusrpc.OperationCompletionSuccessful{
+			Result:    p,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		f, err := commonnexus.TemporalFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
 		if err != nil {
 			return nil, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{
-				State: nexus.OperationStateFailed,
-				Cause: &nexus.FailureError{Failure: f},
-				// Store the original failure to bypass the Nexus failure converter.
-				OriginalFailure: &f,
-			},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			Message: "operation failed",
+			State:   nexus.OperationStateFailed,
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nil, err
+		}
+		return &nexusrpc.OperationCompletionUnsuccessful{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation canceled",
@@ -806,18 +804,20 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{
-				State: nexus.OperationStateCanceled,
-				Cause: &nexus.FailureError{Failure: f},
-				// Store the original failure to bypass the Nexus failure converter.
-				OriginalFailure: &f,
-			},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			State:   nexus.OperationStateCanceled,
+			Message: "operation canceled",
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nil, err
+		}
+		return &nexusrpc.OperationCompletionUnsuccessful{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation terminated",
@@ -828,19 +828,20 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			// NOTE: Not setting a message for compatibility with older servers than don't support both cause and message.
-			&nexus.OperationError{
-				State: nexus.OperationStateFailed,
-				Cause: &nexus.FailureError{Failure: f},
-				// Store the original failure to bypass the Nexus failure converter.
-				OriginalFailure: &f,
-			},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			State:   nexus.OperationStateFailed,
+			Message: "operation failed",
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nil, err
+		}
+		return &nexusrpc.OperationCompletionUnsuccessful{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation exceeded internal timeout",
@@ -854,18 +855,20 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		if err != nil {
 			return nil, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{
-				State: nexus.OperationStateFailed,
-				Cause: &nexus.FailureError{Failure: f},
-				// Store the original failure to bypass the Nexus failure converter.
-				OriginalFailure: &f,
-			},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			State:   nexus.OperationStateFailed,
+			Message: "operation failed",
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nil, err
+		}
+		return &nexusrpc.OperationCompletionUnsuccessful{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	}
 	return nil, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
 }

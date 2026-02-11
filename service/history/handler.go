@@ -2167,19 +2167,13 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		var ok bool
 		if opErr, ok = recvdErr.(*nexus.OperationError); !ok {
 			opErr = &nexus.OperationError{
-				State: nexus.OperationState(request.GetState()),
-				// Setting a message here will bypass the Nexus SDK's failure converter backward compatibility logic.
+				State:   nexus.OperationState(request.GetState()),
 				Message: "nexus operation completed unsuccessfully",
 				Cause:   recvdErr,
 			}
-			origFailure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
-			if err != nil {
+			if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
 				return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
 			}
-			// Special header to signal that this error should be unwrapped by the completion handler as old servers will send
-			// back empty wrappers for underlying causes.
-			origFailure.Metadata["unwrap-error"] = "true"
-			opErr.OriginalFailure = &origFailure
 		}
 	}
 	err = nexusoperations.CompletionHandler(

@@ -3,7 +3,6 @@ package nexusoperations_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -155,23 +154,23 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				// Also use this test case to check the input and options provided.
 				if service != "service" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation name")
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation name")
 				}
 				if operation != "operation" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation name")
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation name")
 				}
 				if options.CallbackHeader.Get("temporal-callback-token") == "" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "empty callback token")
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "empty callback token")
 				}
 				if options.CallbackURL != "http://localhost/callback" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback URL")
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback URL")
 				}
 				if options.Header.Get(nexus.HeaderOperationTimeout) != "1ms" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
 				}
 				var v string
 				if err := input.Consume(&v); err != nil || v != "input" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 				}
 				return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 			},
@@ -310,7 +309,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: true,
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -346,7 +345,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				opTimeout, err := time.ParseDuration(options.Header.Get(nexus.HeaderOperationTimeout))
 				if err != nil || opTimeout > 10*time.Millisecond {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
 				}
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
@@ -366,7 +365,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				if options.Header.Get(nexus.HeaderOperationTimeout) != "" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation timeout header should not be set, got: %s", options.Header.Get(nexus.HeaderOperationTimeout))
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation timeout header should not be set, got: %s", options.Header.Get(nexus.HeaderOperationTimeout))
 				}
 				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
@@ -386,7 +385,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			expectedMetricOutcome: "pending",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 				if options.Header.Get(nexus.HeaderOperationTimeout) != "60000ms" {
-					return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation timeout header: %s", options.Header.Get(nexus.HeaderOperationTimeout))
 				}
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
@@ -818,7 +817,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				// Check non retryable internal error.
 				return &nexus.HandlerError{
 					Type:          nexus.HandlerErrorTypeInternal,
-					Cause:         errors.New("operation not found"),
+					Message:       "operation not found",
 					RetryBehavior: nexus.HandlerErrorRetryBehaviorNonRetryable,
 				}
 			},
@@ -826,9 +825,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED, c.State())
 				require.Equal(t, string(nexus.HandlerErrorTypeInternal), c.LastAttemptFailure.GetNexusHandlerFailureInfo().GetType())
-				require.Equal(t, "Internal Server Error", c.LastAttemptFailure.Message)
-				require.NotNil(t, c.LastAttemptFailure.Cause)
-				require.Equal(t, "operation not found", c.LastAttemptFailure.Cause.Message)
+				require.Equal(t, "operation not found", c.LastAttemptFailure.Message)
 			},
 		},
 		{
@@ -851,7 +848,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			header:          map[string]string{"key": "value"},
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				if options.Header["key"] != "value" {
-					return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
 				}
 				return nil
 			},
@@ -866,7 +863,7 @@ func TestProcessCancelationTask(t *testing.T) {
 			requestTimeout:  time.Hour,
 			destinationDown: true,
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
-				return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
+				return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal server error")
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
 			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {

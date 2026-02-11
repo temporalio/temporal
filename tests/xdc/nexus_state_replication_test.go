@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -715,40 +714,26 @@ func (s *NexusStateReplicationSuite) waitCallback(
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
-	completion, err := nexusrpc.NewOperationCompletionSuccessful(s.mustToPayload(result), nexusrpc.OperationCompletionSuccessfulOptions{
+	completion := &nexusrpc.OperationCompletionSuccessful{
+		Result: s.mustToPayload(result),
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+	}
+	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: commonnexus.PayloadSerializer,
 	})
+	err := client.CompleteOperation(ctx, callbackUrl, completion)
 	s.NoError(err)
-	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
-	s.NoError(err)
-	if callbackToken != "" {
-		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
-	}
-
-	res, err := http.DefaultClient.Do(req)
-	s.NoError(err)
-	defer res.Body.Close()
-	_, err = io.ReadAll(res.Body)
-	s.NoError(err)
-	s.Equal(http.StatusOK, res.StatusCode)
 }
 
 func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, callbackUrl, callbackToken string) {
-	completion, err := nexusrpc.NewOperationCompletionUnsuccessful(
-		nexus.NewOperationCanceledError("operation canceled"),
-		nexusrpc.OperationCompletionUnsuccessfulOptions{},
-	)
-	s.NoError(err)
-	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, callbackUrl, completion)
-	s.NoError(err)
-	if callbackToken != "" {
-		req.Header.Add(commonnexus.CallbackTokenHeader, callbackToken)
+	completion := &nexusrpc.OperationCompletionUnsuccessful{
+		Error: nexus.NewOperationCanceledErrorf("operation canceled"),
 	}
-
-	res, err := http.DefaultClient.Do(req)
+	if callbackToken != "" {
+		completion.SetHeader(commonnexus.CallbackTokenHeader, callbackToken)
+	}
+	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	}).CompleteOperation(ctx, callbackUrl, completion)
 	s.NoError(err)
-	defer res.Body.Close()
-	_, err = io.ReadAll(res.Body)
-	s.NoError(err)
-	s.Equal(http.StatusOK, res.StatusCode)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -332,16 +331,16 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 			errMessage = "bad request"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeBadRequest,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeBadRequest,
+			Message: errMessage,
 		}
 	case codes.Aborted, codes.Unavailable:
 		if !exposeDetails {
 			errMessage = "service unavailable"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeUnavailable,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeUnavailable,
+			Message: errMessage,
 		}
 	case codes.Canceled:
 		// TODO: This should have a different status code (e.g. 499 which is semi standard but not supported by nexus).
@@ -350,72 +349,72 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 			errMessage = "canceled"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeInternal,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeInternal,
+			Message: errMessage,
 		}
 	case codes.DataLoss, codes.Internal, codes.Unknown:
 		if !exposeDetails {
 			errMessage = "internal error"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeInternal,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeInternal,
+			Message: errMessage,
 		}
 	case codes.Unauthenticated:
 		if !exposeDetails {
 			errMessage = "authentication failed"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeUnauthenticated,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeUnauthenticated,
+			Message: errMessage,
 		}
 	case codes.PermissionDenied:
 		if !exposeDetails {
 			errMessage = "permission denied"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeUnauthorized,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeUnauthorized,
+			Message: errMessage,
 		}
 	case codes.NotFound:
 		if !exposeDetails {
 			errMessage = "not found"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeNotFound,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeNotFound,
+			Message: errMessage,
 		}
 	case codes.ResourceExhausted:
 		if !exposeDetails {
 			errMessage = "resource exhausted"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeResourceExhausted,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeResourceExhausted,
+			Message: errMessage,
 		}
 	case codes.Unimplemented:
 		if !exposeDetails {
 			errMessage = "not implemented"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeNotImplemented,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeNotImplemented,
+			Message: errMessage,
 		}
 	case codes.DeadlineExceeded:
 		if !exposeDetails {
 			errMessage = "request timeout"
 		}
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeUpstreamTimeout,
-			Cause: errors.New(errMessage),
+			Type:    nexus.HandlerErrorTypeUpstreamTimeout,
+			Message: errMessage,
 		}
 	case codes.OK:
 		return nil
 	}
 	if !exposeDetails {
 		return &nexus.HandlerError{
-			Type:  nexus.HandlerErrorTypeInternal,
-			Cause: errors.New("internal error"),
+			Type:    nexus.HandlerErrorTypeInternal,
+			Message: "internal error",
 		}
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
@@ -424,32 +423,7 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 
 func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) error {
 	if permissionDeniedError.Reason != "" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
-	return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
-}
-
-func HandlerErrorTypeFromHTTPStatus(statusCode int) nexus.HandlerErrorType {
-	switch statusCode {
-	case http.StatusBadRequest:
-		return nexus.HandlerErrorTypeBadRequest
-	case http.StatusUnauthorized:
-		return nexus.HandlerErrorTypeUnauthenticated
-	case http.StatusForbidden:
-		return nexus.HandlerErrorTypeUnauthorized
-	case http.StatusNotFound:
-		return nexus.HandlerErrorTypeNotFound
-	case http.StatusTooManyRequests:
-		return nexus.HandlerErrorTypeResourceExhausted
-	case http.StatusInternalServerError:
-		return nexus.HandlerErrorTypeInternal
-	case http.StatusNotImplemented:
-		return nexus.HandlerErrorTypeNotImplemented
-	case http.StatusServiceUnavailable:
-		return nexus.HandlerErrorTypeUnavailable
-	case nexus.StatusUpstreamTimeout:
-		return nexus.HandlerErrorTypeUpstreamTimeout
-	default:
-		return nexus.HandlerErrorTypeInternal
-	}
+	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
 }

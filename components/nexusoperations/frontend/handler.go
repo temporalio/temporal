@@ -1,13 +1,9 @@
 package frontend
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"mime"
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
@@ -21,6 +17,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -91,18 +88,18 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	startTime := time.Now()
 	if !h.Config.Enabled() {
 		h.preProcessErrorsCounter.Record(1)
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "Nexus APIs are disabled")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "Nexus APIs are disabled")
 	}
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
 		h.Logger.Error("failed to decode callback token", tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 
 	completion, err := h.CallbackTokenGenerator.DecodeCompletion(token)
 	if err != nil {
 		h.Logger.Error("failed to decode completion from token", tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 	}
 	ns, err := h.NamespaceRegistry.GetNamespaceByID(namespace.ID(completion.NamespaceId))
 	if err != nil {
@@ -110,7 +107,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		h.preProcessErrorsCounter.Record(1)
 		var nfe *serviceerror.NamespaceNotFound
 		if errors.As(err, &nfe) {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.NamespaceId)
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", completion.NamespaceId)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
 	}
@@ -143,7 +140,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		if err != nil {
 			h.Logger.Error("failed to extract namespace from request", tag.Error(err))
 			h.preProcessErrorsCounter.Record(1)
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
 		}
 		if nsName != ns.Name().String() {
 			logger.Error(
@@ -152,7 +149,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 				tag.Error(err),
 				tag.String("completion-namespace-id", completion.GetNamespaceId()),
 			)
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
 	}
 
@@ -165,7 +162,7 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	}
 	tokenLimit := h.Config.MaxOperationTokenLength(ns.Name().String())
 	if len(r.OperationToken) > tokenLimit {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
 	var links []*commonpb.Link
@@ -208,11 +205,11 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 		var result *commonpb.Payload
 		if err := r.Result.Consume(&result); err != nil {
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.PayloadSizeLimit(ns.Name().String()) {
 			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
 			Success: result,
@@ -220,14 +217,14 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
 		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 	_, err = h.HistoryClient.CompleteNexusOperation(ctx, hr)
 	if err != nil {
 		logger.Error("failed to process nexus completion request", tag.Error(err))
 		var namespaceInactiveErr *serviceerror.NamespaceNotActive
 		if errors.As(err, &namespaceInactiveErr) {
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 		}
 		var notFoundErr *serviceerror.NotFound
 		if errors.As(err, &notFoundErr) {
@@ -242,13 +239,13 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 	client, err := h.ForwardingClients.Get(rCtx.namespace.ActiveClusterName(rCtx.workflowID))
 	if err != nil {
 		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.workflowID)))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
 	if err != nil {
 		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(rCtx.namespace.ActiveClusterName(rCtx.workflowID)))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	if h.HTTPTraceProvider != nil {
@@ -264,116 +261,55 @@ func (h *completionHandler) forwardCompleteOperation(ctx context.Context, r *nex
 		}
 	}
 
-	var forwardReq *http.Request
+	var completion nexusrpc.OperationCompletion
+
 	switch r.State {
 	case nexus.OperationStateSucceeded:
-		// For successful operations, the Nexus framework streams the result as a LazyValue, so we can reuse the
-		// incoming request body.
-		forwardReq, err = http.NewRequestWithContext(ctx, r.HTTPRequest.Method, forwardURL, r.HTTPRequest.Body)
-		if err != nil {
-			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+		completion = &nexusrpc.OperationCompletionSuccessful{
+			Result:         r.Result.Reader,
+			OperationToken: r.OperationToken,
+			StartTime:      r.StartTime,
+			CloseTime:      r.CloseTime,
+			Links:          r.Links,
 		}
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// For unsuccessful operations, the Nexus framework reads and closes the original request body to deserialize
 		// the failure, so we must construct a new completion to forward.
-		c := &nexusrpc.OperationCompletionUnsuccessful{
-			State:          r.State,
+		completion = &nexusrpc.OperationCompletionUnsuccessful{
+			Error:          r.Error,
 			OperationToken: r.OperationToken,
 			StartTime:      r.StartTime,
+			CloseTime:      r.CloseTime,
 			Links:          r.Links,
 		}
-		if r.Error != nil && r.Error.OriginalFailure != nil {
-			c.Failure = *r.Error.OriginalFailure
-		}
-		forwardReq, err = nexusrpc.NewCompletionHTTPRequest(ctx, forwardURL, c)
-		if err != nil {
-			h.Logger.Error("failed to construct forwarding HTTP request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-			return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
 	default:
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation state: %q", r.State)
 	}
 
-	forwardReq.Header = rCtx.originalHeaders
-	if forwardReq.Header == nil {
-		forwardReq.Header = make(http.Header, 1)
-	}
-	forwardReq.Header.Set(interceptor.DCRedirectionApiHeaderName, "true")
-
-	resp, err := client.Do(forwardReq)
-	if err != nil {
-		h.Logger.Error("received error from HTTP client when forwarding request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-	}
-
-	// TODO: The following response handling logic is duplicated in the nexus_invocation executor. Eventually it should live in the Nexus SDK.
-	body, err := readAndReplaceBody(resp)
-	if err != nil {
-		h.Logger.Error("unable to read HTTP response for forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-	}
-
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-
-	if !isMediaTypeJSON(resp.Header.Get("Content-Type")) {
-		h.Logger.Error("received invalid content-type header for non-OK HTTP response to forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Value(resp.Header.Get("Content-Type")))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-	}
-
-	var failure nexus.Failure
-	err = json.Unmarshal(body, &failure)
-	if err != nil {
-		h.Logger.Error("failed to deserialize Nexus Failure from HTTP response to forwarded request", tag.Operation(apiName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-	}
-
-	// TODO: Upgrade Nexus SDK in order to reduce HTTP exposure
-	handlerErr := &nexus.HandlerError{
-		Type:  commonnexus.HandlerErrorTypeFromHTTPStatus(resp.StatusCode),
-		Cause: &nexus.FailureError{Failure: failure},
-	}
-
-	if handlerErr.Type == nexus.HandlerErrorTypeInternal && resp.StatusCode != http.StatusInternalServerError {
-		h.Logger.Warn("received unknown status code on Nexus client unexpected response error", tag.Value(resp.StatusCode))
-		handlerErr.Cause = errors.New("internal error")
-	}
-
-	return handlerErr
+	rCtx.originalHeaders.Set(interceptor.DCRedirectionApiHeaderName, "true")
+	cc := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		HTTPCaller: (&forwardingHTTPHeaderWrapper{
+			client:                 client,
+			originalRequestHeaders: rCtx.originalHeaders,
+		}).Do,
+	})
+	return cc.CompleteOperation(ctx, forwardURL, completion)
 }
 
-// readAndReplaceBody reads the response body in its entirety and closes it, and then replaces the original response
-// body with an in-memory buffer.
-// The body is replaced even when there was an error reading the entire body.
-func readAndReplaceBody(response *http.Response) ([]byte, error) {
-	responseBody := response.Body
-	body, err := io.ReadAll(responseBody)
-	_ = responseBody.Close()
-	response.Body = io.NopCloser(bytes.NewReader(body))
-	return body, err
+type forwardingHTTPHeaderWrapper struct {
+	client                 *common.FrontendHTTPClient
+	originalRequestHeaders http.Header
 }
 
-func isMediaTypeJSON(contentType string) bool {
-	if contentType == "" {
-		return false
-	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && mediaType == "application/json"
-}
-
-// Copies HTTP request headers to Nexus headers except those starting with content- since those will be added by the client.
-func httpHeaderToNexusHeader(httpHeader http.Header) nexus.Header {
-	header := nexus.Header{}
-	for k, v := range httpHeader {
-		lowerK := strings.ToLower(k)
-		if !strings.HasPrefix(lowerK, "content-") {
-			// Nexus headers can only have single values, ignore multiple values.
-			header[lowerK] = v[0]
+func (f *forwardingHTTPHeaderWrapper) Do(req *http.Request) (*http.Response, error) {
+	// For forwarded requests, copy the original HTTP headers without sanitization.
+	for k, v := range f.originalRequestHeaders {
+		if req.Header.Get(k) == "" {
+			req.Header.Set(k, v[0])
 		}
 	}
-	return header
+
+	return f.client.Do(req)
 }
 
 type requestContext struct {
@@ -520,7 +456,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 			return serviceerror.NewNamespaceNotActive(c.namespace.Name().String(), c.ClusterMetadata.GetCurrentClusterName(), c.namespace.ActiveClusterName(c.workflowID))
 		}
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_inactive_forwarding_disabled"))
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 
 	c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {

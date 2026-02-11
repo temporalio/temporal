@@ -6,7 +6,6 @@ package workflow_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"testing"
 	"time"
@@ -382,11 +381,10 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
 				success, ok := completion.(*nexusrpc.OperationCompletionSuccessful)
 				require.True(t, ok)
-				require.Equal(t, "application/json", success.Reader.Header.Get("type"))
-				require.Equal(t, "1", success.Reader.Header.Get("length"))
-				buf, err := io.ReadAll(success.Reader)
-				require.NoError(t, err)
-				require.Equal(t, []byte("3"), buf)
+				require.Equal(t, commonpb.Payload{
+					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+					Data:     []byte("3"),
+				}, success.Result)
 				require.Equal(t, event.GetEventTime().AsTime(), success.CloseTime)
 			},
 		},
@@ -402,8 +400,8 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
 				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
 				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.State)
-				require.Equal(t, "workflow failed", failure.Failure.Message)
+				require.Equal(t, nexus.OperationStateFailed, failure.Error.State)
+				require.Equal(t, "workflow failed", failure.Error.Message)
 				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
 			},
 		},
@@ -415,8 +413,8 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
 				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
 				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.State)
-				require.Equal(t, "operation terminated", failure.Failure.Message)
+				require.Equal(t, nexus.OperationStateFailed, failure.Error.State)
+				require.Equal(t, "operation terminated", failure.Error.Message)
 				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
 			},
 		},
@@ -428,8 +426,8 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
 				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
 				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateCanceled, failure.State)
-				require.Equal(t, "operation canceled", failure.Failure.Message)
+				require.Equal(t, nexus.OperationStateCanceled, failure.Error.State)
+				require.Equal(t, "operation canceled", failure.Error.Message)
 				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
 			},
 		},

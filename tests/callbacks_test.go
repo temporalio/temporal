@@ -364,7 +364,7 @@ func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver() {
 					var err error
 					if attempt < numAttempts {
 						// force retry
-						err = nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
+						err = nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional error")
 					}
 					ch.requestCompleteCh <- err
 				}

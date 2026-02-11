@@ -25,29 +25,29 @@ func (h *successHandler) StartOperation(ctx context.Context, service, operation 
 		return nil, err
 	}
 	if service != testService {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected service: %s", service)
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected service: %s", service)
 	}
 	if operation != "i need to/be escaped" {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected operation: %s", operation)
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected operation: %s", operation)
 	}
 	if options.CallbackURL != "http://test/callback" {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected callback URL: %s", options.CallbackURL)
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected callback URL: %s", options.CallbackURL)
 	}
 	if options.CallbackHeader.Get("callback-test") != "ok" {
-		return nil, nexus.HandlerErrorf(
+		return nil, nexus.NewHandlerErrorf(
 			nexus.HandlerErrorTypeBadRequest,
 			"invalid 'callback-test' callback header: %q",
 			options.CallbackHeader.Get("callback-test"),
 		)
 	}
 	if options.Header.Get("test") != "ok" {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'test' header: %q", options.Header.Get("test"))
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'test' header: %q", options.Header.Get("test"))
 	}
 	if options.Header.Get("nexus-callback-callback-test") != "" {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "callback header not omitted from options Header")
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "callback header not omitted from options Header")
 	}
 	if options.Header.Get("User-Agent") != "temporalio/server" {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
 
 	return &nexus.HandlerStartOperationResultSync[any]{Value: body}, nil
@@ -191,7 +191,7 @@ func (h *echoHandler) StartOperation(ctx context.Context, service, operation str
 			Data:   data,
 		}
 	default:
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unknown input-type header")
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unknown input-type header")
 	}
 	nexus.AddHandlerLinks(ctx, options.Links...)
 	return &nexus.HandlerStartOperationResultSync[any]{Value: output}, nil
@@ -377,7 +377,7 @@ func TestStart_NilContentHeaderDoesNotPanic(t *testing.T) {
 
 var numberValidatorOperation = nexus.NewSyncOperation("number-validator", func(ctx context.Context, input int, _ nexus.StartOperationOptions) (int, error) {
 	if input != 3 {
-		return input, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid number: %d", input)
+		return input, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid number: %d", input)
 	}
 	return input, nil
 })

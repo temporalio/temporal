@@ -47,7 +47,7 @@ func TestFailureConverter_FailureError(t *testing.T) {
 
 func TestFailureConverter_HandlerError(t *testing.T) {
 	cause := &nexus.FailureError{Failure: nexus.Failure{Message: "cause"}}
-	he := nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "foo")
+	he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "foo")
 	he.StackTrace = "stack"
 	he.Cause = cause
 	failure, err := defaultFailureConverter.ErrorToFailure(he)
@@ -70,7 +70,7 @@ func TestFailureConverter_HandlerError(t *testing.T) {
 }
 
 func TestFailureConverter_HandlerErrorRetryBehavior(t *testing.T) {
-	he := nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "foo")
+	he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "foo")
 	he.StackTrace = "stack"
 	he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 	failure, err := defaultFailureConverter.ErrorToFailure(he)
@@ -79,15 +79,12 @@ func TestFailureConverter_HandlerErrorRetryBehavior(t *testing.T) {
 	he.OriginalFailure = &failure
 	actual, err := defaultFailureConverter.FailureToError(failure)
 	require.NoError(t, err)
-
-	// Failure is rehydrated as failure error if it has no known type.
-	he.Cause = &nexus.FailureError{Failure: nexus.Failure{Message: "foo"}}
 	require.Equal(t, he, actual)
 }
 
 func TestFailureConverter_OperationError(t *testing.T) {
 	cause := &nexus.FailureError{Failure: nexus.Failure{Message: "cause"}}
-	oe := nexus.NewOperationCanceledError("foo")
+	oe := nexus.NewOperationCanceledErrorf("foo")
 	oe.StackTrace = "stack"
 	oe.Cause = cause
 	failure, err := defaultFailureConverter.ErrorToFailure(oe)
@@ -108,7 +105,6 @@ func TestFailureConverter_OperationError(t *testing.T) {
 	oe.Cause = cause
 	require.Equal(t, oe, actual)
 }
-
 
 func TestDefaultFailureConverterArbitraryError(t *testing.T) {
 	sourceErr := errors.New("test")
