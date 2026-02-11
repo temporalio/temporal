@@ -45,7 +45,7 @@ func registerCommandHandlers(
 	}
 	return registry.Register(
 		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-		handleCancelCommand,
+		h.handleCancelCommand,
 	)
 }
 
@@ -257,13 +257,61 @@ func (ch *commandHandler) handleScheduleCommand(
 	return nil
 }
 
-func handleCancelCommand(
+func (ch *commandHandler) handleCancelCommand(
 	chasmCtx chasm.MutableContext,
-	_ *chasmworkflow.Workflow,
-	validator command.Validator,
+	wf *chasmworkflow.Workflow,
+	_ command.Validator,
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	// TODO: Implement CHASM nexus operation cancellation
-	return serviceerror.NewUnimplemented("CHASM nexus operation cancellation not yet implemented")
+	if !ch.config.Enabled() {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
+			Message: "Nexus operations disabled",
+		}
+	}
+
+	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
+	if attrs == nil {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "empty CancelNexusOperationCommandAttributes",
+		}
+	}
+
+	key := strconv.FormatInt(attrs.ScheduledEventId, 10)
+	opField, ok := wf.Operations[key]
+	if !ok {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+
+	op := opField.Get(chasmCtx)
+	if !nexusoperation.TransitionCanceled.Possible(op) {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+
+	event := chasmCtx.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId:             attrs.ScheduledEventId,
+				WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+			},
+		}
+		he.UserMetadata = cmd.UserMetadata
+	})
+
+	err := op.Cancel(chasmCtx, event.GetEventId())
+	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
+		}
+	}
+	return err
 }

@@ -95,7 +95,7 @@ var transitionFailed = chasm.NewTransition(
 type EventCanceled struct {
 }
 
-var transitionCanceled = chasm.NewTransition(
+var TransitionCanceled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,

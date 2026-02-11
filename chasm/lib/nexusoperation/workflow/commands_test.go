@@ -592,7 +592,6 @@ func TestHandleScheduleCommand(t *testing.T) {
 
 func TestHandleCancelCommand(t *testing.T) {
 	t.Run("feature disabled", func(t *testing.T) {
-		t.Skip("requires CHASM nexus operation cancellation implementation")
 		tcx := newTestContext(t, &nexusoperation.Config{
 			Enabled: dynamicconfig.GetBoolPropertyFn(false),
 		})
@@ -605,7 +604,6 @@ func TestHandleCancelCommand(t *testing.T) {
 	})
 
 	t.Run("empty attributes", func(t *testing.T) {
-		t.Skip("requires CHASM nexus operation cancellation implementation")
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, command.HandlerOptions{WorkflowTaskCompletedEventID: 1})
 		var failWFTErr command.FailWorkflowTaskError
@@ -616,7 +614,6 @@ func TestHandleCancelCommand(t *testing.T) {
 	})
 
 	t.Run("operation not found", func(t *testing.T) {
-		t.Skip("requires CHASM nexus operation cancellation implementation")
 		tcx := newTestContext(t, defaultConfig)
 
 		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
