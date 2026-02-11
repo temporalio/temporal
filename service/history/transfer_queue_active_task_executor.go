@@ -2007,10 +2007,17 @@ func (t *transferQueueActiveTaskExecutor) processCancelActivityNexus(
 
 	// Build task tokens for all activities that still need cancellation
 	var taskTokens [][]byte
+	var controlQueueName string
 	for _, scheduledEventID := range task.ScheduledEventIDs {
 		ai, ok := mutableState.GetActivityInfo(scheduledEventID)
 		if !ok || !ai.CancelRequested || ai.StartedEventId == common.EmptyEventID {
 			continue
+		}
+
+		// Get control queue name from the first valid activity.
+		// All activities in a batch are from the same worker, so they have the same control queue.
+		if controlQueueName == "" {
+			controlQueueName = ai.WorkerControlTaskQueue
 		}
 
 		taskToken := &tokenspb.Task{
@@ -2030,25 +2037,19 @@ func (t *transferQueueActiveTaskExecutor) processCancelActivityNexus(
 		taskTokens = append(taskTokens, taskTokenBytes)
 	}
 
-	if len(taskTokens) == 0 {
+	if len(taskTokens) == 0 || controlQueueName == "" {
 		return nil
 	}
 
-	return t.dispatchActivityCancelToWorker(ctx, task, taskTokens)
+	return t.dispatchActivityCancelToWorker(ctx, task.NamespaceID, controlQueueName, taskTokens)
 }
 
 func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
 	ctx context.Context,
-	task *tasks.CancelActivityNexusTask,
+	namespaceID string,
+	controlQueueName string,
 	taskTokens [][]byte,
 ) error {
-	nsName, err := t.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(task.NamespaceID))
-	if err != nil {
-		return err
-	}
-	// TODO: Fetch control queue name from worker registry.
-	controlQueueName := fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", nsName, task.WorkerInstanceKey)
-
 	cancelPayload := &workerpb.CancelActivitiesRequestPayload{
 		TaskTokens: taskTokens,
 	}
@@ -2074,7 +2075,7 @@ func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
 	}
 
 	resp, err := t.matchingRawClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
-		NamespaceId: task.NamespaceID,
+		NamespaceId: namespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: controlQueueName,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -2083,17 +2084,14 @@ func (t *transferQueueActiveTaskExecutor) dispatchActivityCancelToWorker(
 	})
 	if err != nil {
 		t.logger.Warn("Failed to dispatch activity cancel to worker",
-			tag.WorkflowNamespaceID(task.NamespaceID),
-			tag.WorkflowID(task.WorkflowID),
-			tag.WorkflowRunID(task.RunID),
+			tag.NewStringTag("control_queue", controlQueueName),
 			tag.Error(err))
 		return err
 	}
 
 	if resp.GetRequestTimeout() != nil {
 		t.logger.Warn("No worker polling control queue for activity cancel",
-			tag.WorkflowNamespaceID(task.NamespaceID),
-			tag.WorkflowID(task.WorkflowID))
+			tag.NewStringTag("control_queue", controlQueueName))
 		return serviceerror.NewUnavailable("no worker polling control queue")
 	}
 

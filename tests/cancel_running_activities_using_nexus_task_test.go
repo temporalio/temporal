@@ -89,10 +89,11 @@ func (s *CancelRunningActivitiesUsingNexusTaskSuite) TestDispatchCancelToWorker(
 
 	// Poll for activity task and start running the activity.
 	activityPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace:         s.Namespace().String(),
-		TaskQueue:         tv.TaskQueue(),
-		Identity:          tv.WorkerIdentity(),
-		WorkerInstanceKey: tv.WorkerInstanceKey(),
+		Namespace:              s.Namespace().String(),
+		TaskQueue:              tv.TaskQueue(),
+		Identity:               tv.WorkerIdentity(),
+		WorkerInstanceKey:      tv.WorkerInstanceKey(),
+		WorkerControlTaskQueue: controlQueueName,
 	})
 	s.NoError(err)
 	s.NotNil(activityPollResp)
