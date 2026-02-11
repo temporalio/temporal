@@ -56,6 +56,8 @@ message DescribeMutableStateRequest {
   temporal.api.common.v1.WorkflowExecution execution = 2;
   bool skip_force_reload = 3;
   string archetype = 4;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 5;
 }
 
 message DescribeMutableStateResponse {
@@ -362,6 +364,8 @@ message RefreshWorkflowTasksRequest {
   string namespace_id = 3;
   temporal.api.common.v1.WorkflowExecution execution = 2;
   string archetype = 4;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 5;
 }
 
 message RefreshWorkflowTasksResponse {
@@ -402,6 +406,8 @@ message DeleteWorkflowExecutionRequest {
   string namespace = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
   string archetype = 3;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 4;
 }
 
 message DeleteWorkflowExecutionResponse {
@@ -577,6 +583,8 @@ message GenerateLastHistoryReplicationTasksRequest {
   temporal.api.common.v1.WorkflowExecution execution = 2;
   repeated string target_clusters = 3;
   string archetype = 4;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 5;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {

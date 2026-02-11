@@ -780,7 +780,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -1557,7 +1557,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -1845,7 +1845,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -2310,7 +2310,7 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -2346,7 +2346,35 @@ func (adh *AdminHandler) getDLQWorkflowID(
 	)
 }
 
-func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.ArchetypeID, error) {
+// validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
+// It performs the following checks:
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
+// 2. If both archetypeID and archetype are specified, validates they match each other
+// 3. If only archetype is specified, converts it to an ID
+func (adh *AdminHandler) validateAndResolveArchetypeID(
+	archetype chasm.Archetype,
+	archetypeID uint32,
+) (chasm.ArchetypeID, error) {
+	// If archetypeID is specified, use it
+	if archetypeID != chasm.UnspecifiedArchetypeID {
+		// Validate that the archetypeID is registered in the chasm registry
+		archetypeFqn, ok := adh.chasmRegistry.ComponentFqnByID(archetypeID)
+		if !ok {
+			return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf(
+				"unknown archetype ID: %d", archetypeID)
+		}
+
+		// If both archetype and archetypeID are specified, validate they match
+		if len(archetype) > 0 && archetype != archetypeFqn {
+			return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf(
+				"archetype mismatch: archetypeID (%d) does not match archetype name (%s), registered name %s",
+				archetypeID, archetype, archetypeFqn)
+		}
+
+		return chasm.ArchetypeID(archetypeID), nil
+	}
+
+	// If only archetype is specified, convert it to an ID
 	if len(archetype) == 0 {
 		// For backwards compatibility, default to Workflow
 		return chasm.WorkflowArchetypeID, nil

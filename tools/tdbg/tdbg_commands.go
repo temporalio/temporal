@@ -155,6 +155,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDescribeExecution(c, clientFactory)
@@ -179,6 +183,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
 				},
 				&cli.StringFlag{
 					Name:  FlagVisibilityQuery,
@@ -237,6 +245,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
 				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
+				},
 			},
 			Action: func(c *cli.Context) error {
 				return AdminReplicateWorkflow(c, clientFactory)
@@ -261,6 +273,10 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 					Name:        FlagArchetype,
 					Usage:       "Fully qualified archetype name of the execution",
 					DefaultText: chasm.WorkflowArchetype,
+				},
+				&cli.UintFlag{
+					Name:  FlagArchetypeID,
+					Usage: "Archetype ID (optional, overrides --archetype if specified)",
 				},
 			},
 			Action: func(c *cli.Context) error {
