@@ -2846,18 +2846,14 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 
 	// Cancel outstanding polls (best-effort)
 	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 			wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
-		}()
+		})
 	}
 
 	// Record final heartbeat (best-effort)
 	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		waitGroup.Add(1)
-		go func() {
-			defer waitGroup.Done()
+		waitGroup.Go(func() {
 			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
 				NamespaceId: namespaceID.String(),
 				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
@@ -2871,7 +2867,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 					tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
 					tag.Error(err))
 			}
-		}()
+		})
 	}
 
 	// Unload sticky task queue (required - error fails shutdown)
@@ -2939,9 +2935,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		tq := tqFamily.TaskQueue(taskType)
 		for partitionID := range numPartitions {
 			partition := tq.NormalPartition(partitionID)
-			waitGroup.Add(1)
-			go func() {
-				defer waitGroup.Done()
+			waitGroup.Go(func() {
 				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
 					NamespaceId: namespaceID,
 					TaskQueue: &taskqueuepb.TaskQueue{
@@ -2960,7 +2954,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 				} else {
 					totalCancelled.Add(resp.CancelledCount)
 				}
-			}()
+			})
 		}
 	}
 	waitGroup.Wait()
