@@ -8,6 +8,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func TestNewScheduler_UpdateTimeEqualsCreateTime(t *testing.T) {
+	scheduler, _, _ := setupSchedulerForTest(t)
+
+	protorequire.ProtoEqual(t, scheduler.Info.CreateTime, scheduler.Info.UpdateTime)
+	require.False(t, scheduler.Info.UpdateTime.AsTime().IsZero())
+}
+
 func TestListInfo(t *testing.T) {
 	scheduler, ctx, _ := setupSchedulerForTest(t)
 
