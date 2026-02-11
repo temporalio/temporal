@@ -99,6 +99,7 @@ func Invoke(
 					// other case where an activity starts?
 					nil,
 					"", // workerInstanceKey not available for force complete
+					"", // workerControlTaskQueue not available for force complete
 				)
 				if err != nil {
 					return nil, err

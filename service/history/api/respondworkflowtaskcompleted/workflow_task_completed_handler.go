@@ -53,6 +53,8 @@ type (
 
 	workflowTaskCompletedHandler struct {
 		identity                string
+		workerInstanceKey       string
+		workerControlTaskQueue  string
 		workflowTaskCompletedID int64
 
 		// internal state
@@ -104,6 +106,8 @@ type (
 
 func newWorkflowTaskCompletedHandler(
 	identity string,
+	workerInstanceKey string,
+	workerControlTaskQueue string,
 	workflowTaskCompletedID int64,
 	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
@@ -122,7 +126,9 @@ func newWorkflowTaskCompletedHandler(
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
-		identity:                identity,
+		identity:               identity,
+		workerInstanceKey:      workerInstanceKey,
+		workerControlTaskQueue: workerControlTaskQueue,
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
@@ -559,7 +565,8 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		stamp,
 		nil,
 		nil,
-		"", // workerInstanceKey not available for eager dispatch
+		handler.workerInstanceKey,
+		handler.workerControlTaskQueue,
 	); err != nil {
 		return nil, err
 	}

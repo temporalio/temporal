@@ -2879,6 +2879,7 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 		nil,
 		nil,
 		"",
+		"",
 	)
 	s.NoError(err)
 
@@ -2944,6 +2945,7 @@ func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 		nil,
 		nil,
 		nil,
+		"",
 		"",
 	)
 	s.NoError(err)
@@ -6206,8 +6208,9 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerInstanceK
 	s.NoError(err)
 	s.Empty(activityInfo.WorkerInstanceKey, "WorkerInstanceKey should be empty before activity starts")
 
-	// Start activity with workerInstanceKey
+	// Start activity with workerInstanceKey and workerControlTaskQueue
 	expectedWorkerInstanceKey := "test-worker-instance-key-12345"
+	expectedWorkerControlTaskQueue := "test-control-queue"
 	_, err = s.mutableState.AddActivityTaskStartedEvent(
 		activityInfo,
 		activityInfo.ScheduledEventId,
@@ -6217,11 +6220,13 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerInstanceK
 		nil,
 		nil,
 		expectedWorkerInstanceKey,
+		expectedWorkerControlTaskQueue,
 	)
 	s.NoError(err)
 
-	// Verify workerInstanceKey is stored
+	// Verify workerInstanceKey and workerControlTaskQueue are stored
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	s.Equal(expectedWorkerInstanceKey, updatedActivityInfo.WorkerInstanceKey)
+	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
 }

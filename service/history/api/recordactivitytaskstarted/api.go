@@ -243,6 +243,7 @@ func recordActivityTaskStarted(
 		ai, scheduledEventID, requestID, request.PollRequest.GetIdentity(),
 		versioningStamp, pollerDeployment, request.GetBuildIdRedirectInfo(),
 		request.PollRequest.GetWorkerInstanceKey(),
+		request.PollRequest.GetWorkerControlTaskQueue(),
 	); err != nil {
 		return nil, rejectCodeUndefined, err
 	}
