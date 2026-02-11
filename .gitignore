@@ -44,3 +44,6 @@
 
 **/.venv/
 **/.ruff_cache/
+
+# we want to ignore the .agents folder
+.agents/

@@ -303,8 +303,8 @@ func (h *historyArchiver) getHighestVersion(ctx context.Context, URI archiver.UR
 
 		if highestVersion == nil || version > *highestVersion {
 			highestVersion = &version
-			highestVersionPart = new(int)
-			lowestVersionPart = new(int)
+			highestVersionPart = &partVersionID
+			lowestVersionPart = &partVersionID
 		}
 
 		if *highestVersion == version {

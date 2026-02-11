@@ -198,7 +198,7 @@ func (v *visibilityArchiver) queryAll(
 		pageSize:      request.PageSize,
 		nextPageToken: request.NextPageToken,
 		parsedQuery:   &parsedQuery{},
-	}, saTypeMap, request.NamespaceID)
+	}, saTypeMap, constructVisibilityFilenamePrefix(request.NamespaceID, indexKeyCloseTimeout))
 }
 
 func (v *visibilityArchiver) queryPrefix(ctx context.Context, uri archiver.URI, request *queryVisibilityRequest, saTypeMap searchattribute.NameTypeMap, prefix string) (*archiver.QueryVisibilityResponse, error) {

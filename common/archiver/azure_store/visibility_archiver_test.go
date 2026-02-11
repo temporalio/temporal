@@ -186,3 +186,30 @@ func (s *visibilityArchiverSuite) TestQuery_Success() {
 	s.NotNil(response)
 	s.Len(response.Executions, 1)
 }
+
+func (s *visibilityArchiverSuite) TestQueryAll_Success_NoDuplicates() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("azblob://my-container/path")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+
+	// Mock QueryWithFilters to return only one file, even if others exist (this test verifies the prefix passed to QueryWithFilters)
+	expectedPrefix := testNamespaceID + "/" + indexKeyCloseTimeout
+	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, expectedPrefix, 10, 0, gomock.Any()).Return([]string{testNamespaceID + "/closeTimeout_2020-02-05T09:56:14Z_test-wf-id_wf-type_test-run-id.visibility"}, true, 1, nil)
+	storageWrapper.EXPECT().Get(gomock.Any(), URI, testNamespaceID+"/closeTimeout_2020-02-05T09:56:14Z_test-wf-id_wf-type_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+
+	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+	s.NoError(err)
+
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "", // Empty query triggers queryAll
+	}
+
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
+	s.NoError(err)
+	s.NotNil(response)
+	s.Len(response.Executions, 1)
+}
