@@ -2418,7 +2418,9 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 	if request.GetTarget() != adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
 		return nil, serviceerror.NewUnimplemented("Only migration to CHASM is currently supported.")
 	}
-	// TODO: do we need to validate identity?
+	if request.GetIdentity() == "" {
+		return nil, errIdentityNotSet
+	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
