@@ -2,21 +2,29 @@ package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
 
 var _ chasm.Component = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
+
+type OperationStore interface {
+	// TODO
+}
 
 type Operation struct {
 	chasm.UnimplementedComponent
 
 	// Persisted internal state
 	*nexusoperationpb.OperationState
+
+	// Pointer to an implementation of the "store". For a workflow-based Nexus operation
+	// this is a parent pointer back to the workflow. For a standalone Nexus operation this is nil.
+	Store chasm.ParentPtr[OperationStore]
 }
 
-func NewOperation() *Operation {
-	return &Operation{}
+func NewOperation(state *nexusoperationpb.OperationState) *Operation {
+	return &Operation{OperationState: state}
 }
 
 func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {

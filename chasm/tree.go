@@ -13,6 +13,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -185,11 +187,13 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
@@ -401,7 +405,7 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	validationContext := NewContext(chasmContext.getContext(), node)
+	validationContext := NewContext(chasmContext.GetContext(), node)
 	if err := node.prepareComponentValue(validationContext); err != nil {
 		return nil, err
 	}
@@ -438,7 +442,7 @@ func (n *Node) Component(
 // the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
 func (n *Node) validateAccess(ctx Context) error {
-	intent := operationIntentFromContext(ctx.getContext())
+	intent := operationIntentFromContext(ctx.GetContext())
 	if intent != OperationIntentProgress {
 		// Read-only operations are always allowed.
 		return nil
