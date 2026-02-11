@@ -5692,3 +5692,97 @@ func useFairness(config *Config) {
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
 }
+
+func TestCancelOutstandingWorkerPolls(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unknown worker key succeeds", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "unknown-worker",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.CancelledCount)
+	})
+
+	t.Run("cancels all polls for worker", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		workerKey := "test-worker"
+		cancelledCount := 0
+
+		// Set up 3 pollers for this worker
+		engine.workerInstancePollers.Add(workerKey, "poller-0", func() { cancelledCount++ })
+		engine.workerInstancePollers.Add(workerKey, "poller-1", func() { cancelledCount++ })
+		engine.workerInstancePollers.Add(workerKey, "poller-2", func() { cancelledCount++ })
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(3), resp.CancelledCount)
+		require.Equal(t, 3, cancelledCount)
+	})
+
+	t.Run("does not affect other workers", func(t *testing.T) {
+		t.Parallel()
+		worker1Cancelled := false
+		worker2Cancelled := false
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		// Set up pollers for worker1 and worker2
+		engine.workerInstancePollers.Add("worker-1", "poller-1", func() { worker1Cancelled = true })
+		engine.workerInstancePollers.Add("worker-2", "poller-2", func() { worker2Cancelled = true })
+
+		// Cancel worker1's polls only
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "worker-1",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(1), resp.CancelledCount)
+		require.True(t, worker1Cancelled)
+		require.False(t, worker2Cancelled)
+	})
+
+	t.Run("cancels forwarded polls with same pollerID on different partitions", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		workerKey := "test-worker"
+		pollerID := "same-poller-id"
+		childCancelled := false
+		parentCancelled := false
+
+		// Simulate forwarding: same pollerID registered on child and parent partitions.
+		// The key includes partition name to prevent parent from overwriting child.
+		engine.workerInstancePollers.Add(workerKey, "/_sys/test-queue/1:"+pollerID, func() { childCancelled = true })
+		engine.workerInstancePollers.Add(workerKey, "test-queue:"+pollerID, func() { parentCancelled = true })
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp.CancelledCount)
+		require.True(t, childCancelled, "child partition poll should be cancelled")
+		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
+}

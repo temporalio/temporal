@@ -57,5 +57,5 @@ Outside: {
 
 Outside.Worker -> Cluster.Server.Frontend: Poll Tasks
 Cluster.Server.Frontend -> Cluster.Server.Matching: Poll Tasks
-Cluster.Server.History -> Cluster.Server.Matching: Add Tasks
+Cluster.Server.History <-> Cluster.Server.Matching: Add Tasks \n Record Start
 Cluster.Server.Matching <-> Cluster.Database.Database
