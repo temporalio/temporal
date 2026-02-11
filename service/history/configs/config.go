@@ -122,12 +122,11 @@ type Config struct {
 
 	// WorkflowQueueScheduler settings for sequential per-workflow task processing
 	TaskSchedulerEnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
-	// TaskSchedulerWorkflowQueueSchedulerQueueSize requires restart to take effect
-	TaskSchedulerWorkflowQueueSchedulerQueueSize dynamicconfig.IntPropertyFn
 	// TaskSchedulerWorkflowQueueSchedulerMaxQueues requires restart to take effect
 	TaskSchedulerWorkflowQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
 	// TaskSchedulerWorkflowQueueSchedulerQueueTTL requires restart to take effect
 	TaskSchedulerWorkflowQueueSchedulerQueueTTL dynamicconfig.DurationPropertyFn
+	TaskSchedulerWorkflowQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
 
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
@@ -526,9 +525,9 @@ func NewConfig(
 		TaskSchedulerGlobalNamespaceMaxQPS:            dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
 		TaskSchedulerInactiveChannelDeletionDelay:    dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
 		TaskSchedulerEnableWorkflowQueueScheduler:    dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Get(dc),
-		TaskSchedulerWorkflowQueueSchedulerQueueSize: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Get(dc),
 		TaskSchedulerWorkflowQueueSchedulerMaxQueues: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerMaxQueues.Get(dc),
-		TaskSchedulerWorkflowQueueSchedulerQueueTTL:  dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueTTL.Get(dc),
+		TaskSchedulerWorkflowQueueSchedulerQueueTTL:         dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueTTL.Get(dc),
+		TaskSchedulerWorkflowQueueSchedulerQueueConcurrency: dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueConcurrency.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),

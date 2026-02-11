@@ -28,8 +28,7 @@ func TestWorkflowQueueSchedulerTestSuite(t *testing.T) {
 
 func (s *WorkflowQueueSchedulerTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():    true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key(): 1000,
+		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -171,7 +170,10 @@ func (s *WorkflowQueueSchedulerTestSuite) TestSignalBurstComparison() {
 		wg.Add(1)
 		go func(num int) {
 			defer wg.Done()
-			_ = s.SdkClient().SignalWorkflow(testcore.NewContext(), workflowID, run.GetRunID(), signalName, num)
+			err := s.SdkClient().SignalWorkflow(testcore.NewContext(), workflowID, run.GetRunID(), signalName, num)
+			if err != nil {
+				s.Logger.Warn("Signal failed", tag.Error(err), tag.Counter(num))
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -269,7 +271,7 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) SetupSuite() {
 		// Use same settings as enabled contention test for fair comparison
 		dynamicconfig.NumPendingActivitiesLimitError.Key():            5000,
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():     50,
-		dynamicconfig.HistoryCacheNonUserContextLockTimeout.Key():     5 * time.Millisecond,
+		dynamicconfig.HistoryCacheNonUserContextLockTimeout.Key():     2 * time.Millisecond,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -317,7 +319,10 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) TestSignalBurstWithFeatureDisa
 		wg.Add(1)
 		go func(num int) {
 			defer wg.Done()
-			_ = s.SdkClient().SignalWorkflow(testcore.NewContext(), workflowID, run.GetRunID(), signalName, num)
+			err := s.SdkClient().SignalWorkflow(testcore.NewContext(), workflowID, run.GetRunID(), signalName, num)
+			if err != nil {
+				s.Logger.Warn("Signal failed", tag.Error(err), tag.Counter(num))
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -448,8 +453,7 @@ func TestWorkflowQueueSchedulerActivityTestSuite(t *testing.T) {
 
 func (s *WorkflowQueueSchedulerActivityTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():    true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key(): 1000,
+		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -468,15 +472,15 @@ func TestWorkflowQueueSchedulerContentionTestSuite(t *testing.T) {
 func (s *WorkflowQueueSchedulerContentionTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		// Enable WorkflowQueueScheduler
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key():    true,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueSize.Key(): 500,
+		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): true,
 		// Increase pending activities limit to allow more parallel activities
 		dynamicconfig.NumPendingActivitiesLimitError.Key(): 5000,
 		// Set FIFO worker count to 50 to increase contention
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key(): 50,
 		// Use very short lock timeout to trigger contention - tasks waiting for the lock
 		// will fail with ErrResourceExhaustedBusyWorkflow and get routed to WorkflowQueueScheduler
-		dynamicconfig.HistoryCacheNonUserContextLockTimeout.Key(): 5 * time.Millisecond,
+		dynamicconfig.HistoryCacheNonUserContextLockTimeout.Key():                      2 * time.Millisecond,
+		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueConcurrency.Key():        2,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }

@@ -38,14 +38,16 @@ var _ Scheduler[Task] = (*WorkflowQueueScheduler[Task])(nil)
 
 type (
 	// WorkflowQueueSchedulerOptions contains configuration for the WorkflowQueueScheduler.
+	// Both fields are functions so they respond to dynamic config changes at runtime.
 	WorkflowQueueSchedulerOptions struct {
-		// QueueSize is the buffer size for each queue's task channel.
-		QueueSize int
 		// MaxQueues is the maximum number of concurrent workflow queues.
 		// When this limit is reached, TrySubmit will reject new queues.
-		MaxQueues int
-		// QueueTTL is how long a queue goroutine waits idle before exiting.
-		QueueTTL time.Duration
+		MaxQueues func() int
+		// QueueTTL is how long an idle queue stays in the map before being swept.
+		QueueTTL func() time.Duration
+		// QueueConcurrency is the max number of worker goroutines per queue.
+		// Defaults to 1 (strictly sequential) if nil or returns <= 0.
+		QueueConcurrency func() int
 	}
 
 	// QueueKeyFn extracts a workflow key from a task for queue routing.
@@ -57,9 +59,13 @@ type (
 		submitTime time.Time
 	}
 
-	// workflowQueue represents a single workflow's task queue with its dedicated goroutine.
+	// workflowQueue represents a single workflow's task queue.
+	// Tasks are stored in a slice protected by the scheduler's mutex.
+	// Worker goroutines pop tasks and execute them (up to QueueConcurrency workers).
 	workflowQueue[T Task] struct {
-		taskCh chan taskEntry[T]
+		tasks         []taskEntry[T]
+		activeWorkers int
+		lastActive    time.Time
 	}
 
 	// WorkflowQueueScheduler is a scheduler that ensures sequential task execution
@@ -67,8 +73,9 @@ type (
 	//
 	// Key characteristics:
 	// - Tasks for the same workflow are executed sequentially
-	// - Each workflow gets its own goroutine that processes tasks from a channel
-	// - Goroutines self-terminate after being idle for QueueTTL
+	// - Each workflow gets its own goroutine that processes tasks from a slice
+	// - Worker goroutines exit when the queue is empty; a background sweeper
+	//   removes idle queue entries after QueueTTL
 	// - Maximum number of concurrent queues is capped at MaxQueues
 	WorkflowQueueScheduler[T Task] struct {
 		status       atomic.Int32
@@ -81,13 +88,11 @@ type (
 		metricsHandler metrics.Handler
 		timeSource     clock.TimeSource
 
-		// mu protects the queues map
-		mu     sync.RWMutex
-		queues map[any]*workflowQueue[T]
-
-		// queueRemovedCh is signaled when a queue is removed, allowing blocked
-		// Submit() calls to retry creating a queue when at max capacity
-		queueRemovedCh chan struct{}
+		// mu protects the queues map, sweeperRunning, and all workflowQueue fields.
+		// All task submissions and worker pops are serialized through this lock.
+		mu             sync.Mutex
+		queues         map[any]*workflowQueue[T]
+		sweeperRunning bool
 	}
 )
 
@@ -107,7 +112,6 @@ func NewWorkflowQueueScheduler[T Task](
 		metricsHandler: metricsHandler,
 		timeSource:     timeSource,
 		queues:         make(map[any]*workflowQueue[T]),
-		queueRemovedCh: make(chan struct{}, 1),
 	}
 	s.status.Store(common.DaemonStatusInitialized)
 	return s
@@ -127,20 +131,9 @@ func (s *WorkflowQueueScheduler[T]) Stop() {
 
 	close(s.shutdownChan)
 
-	// Wake up any Submit() calls waiting for queue capacity (non-blocking)
-	select {
-	case s.queueRemovedCh <- struct{}{}:
-	default:
-	}
-
-	// Wait for all queue goroutines to finish.
-	// Note: we intentionally do NOT close queue channels here. Closing
-	// channels while Submit()/TrySubmit() may be concurrently sending
-	// causes a panic (send on closed channel). Workers detect shutdown
-	// via shutdownChan instead.
 	go func() {
 		if success := common.AwaitWaitGroup(&s.shutdownWG, time.Minute); !success {
-			s.logger.Warn("workflow queue scheduler timed out waiting for queue goroutines")
+			s.logger.Warn("workflow queue scheduler timed out waiting for goroutines")
 		}
 	}()
 
@@ -150,14 +143,13 @@ func (s *WorkflowQueueScheduler[T]) Stop() {
 // HasQueue returns true if a queue exists for the given workflow key.
 // This is used by other schedulers to check if they should route tasks here.
 func (s *WorkflowQueueScheduler[T]) HasQueue(key any) bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	_, exists := s.queues[key]
 	return exists
 }
 
-// Submit adds a task to its workflow's queue. This is a blocking call
-// that blocks until the task is accepted or the scheduler stops.
+// Submit adds a task to its workflow's queue. Creates a new queue if needed.
 func (s *WorkflowQueueScheduler[T]) Submit(task T) {
 	if s.isStopped() {
 		task.Abort()
@@ -168,37 +160,20 @@ func (s *WorkflowQueueScheduler[T]) Submit(task T) {
 	key := s.queueKeyFn(task)
 	entry := taskEntry[T]{task: task, submitTime: s.timeSource.Now()}
 
-	// Try to get existing queue or create new one
-	q, created := s.getOrCreateQueue(key)
-	for q == nil {
-		// Failed to create queue (at max capacity), wait for capacity
-		select {
-		case <-s.shutdownChan:
-			task.Abort()
-			metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
-			return
-		case <-s.queueRemovedCh:
-			// Queue removed, retry
-			q, created = s.getOrCreateQueue(key)
-		}
-	}
-
-	if created {
-		metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(s.queueCount()))
-	}
-
-	// Send task to queue (blocking)
-	select {
-	case q.taskCh <- entry:
-		metrics.WorkflowQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
-	case <-s.shutdownChan:
+	s.mu.Lock()
+	if s.isStopped() {
+		s.mu.Unlock()
 		task.Abort()
 		metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+		return
 	}
+	s.appendTaskLocked(key, entry)
+	s.mu.Unlock()
+	metrics.WorkflowQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
 }
 
 // TrySubmit adds a task to its workflow's queue without blocking.
-// Returns true if the task was accepted, false if the queue is full or at max capacity.
+// Returns true if the task was accepted, false if at max queue capacity for new queues.
 func (s *WorkflowQueueScheduler[T]) TrySubmit(task T) bool {
 	if s.isStopped() {
 		task.Abort()
@@ -209,156 +184,131 @@ func (s *WorkflowQueueScheduler[T]) TrySubmit(task T) bool {
 	key := s.queueKeyFn(task)
 	entry := taskEntry[T]{task: task, submitTime: s.timeSource.Now()}
 
-	q, created := s.getOrCreateQueue(key)
-	if q == nil {
-		// At max queue capacity
-		metrics.WorkflowQueueSchedulerSubmitRejected.With(s.metricsHandler).Record(1)
-		return false
-	}
-
-	if created {
-		metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(s.queueCount()))
-	}
-
-	// Try to send task without blocking
-	select {
-	case q.taskCh <- entry:
-		metrics.WorkflowQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
+	s.mu.Lock()
+	if s.isStopped() {
+		s.mu.Unlock()
+		task.Abort()
+		metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
 		return true
-	default:
-		// Queue channel is full
+	}
+
+	if _, exists := s.queues[key]; !exists && len(s.queues) >= s.options.MaxQueues() {
+		s.mu.Unlock()
 		metrics.WorkflowQueueSchedulerSubmitRejected.With(s.metricsHandler).Record(1)
 		return false
+	}
+	s.appendTaskLocked(key, entry)
+	s.mu.Unlock()
+	metrics.WorkflowQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
+	return true
+}
+
+// appendTaskLocked appends a task to the queue for the given key, creating the
+// queue and spawning a worker if needed. Must be called with s.mu held.
+func (s *WorkflowQueueScheduler[T]) appendTaskLocked(key any, entry taskEntry[T]) {
+	q, exists := s.queues[key]
+	if !exists {
+		q = &workflowQueue[T]{}
+		s.queues[key] = q
+		metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
+	}
+	q.tasks = append(q.tasks, entry)
+	if q.activeWorkers < s.queueConcurrency() {
+		q.activeWorkers++
+		s.shutdownWG.Add(1)
+		go s.runWorker(q)
+	}
+	if !s.sweeperRunning {
+		s.sweeperRunning = true
+		s.shutdownWG.Add(1)
+		go s.runSweeper()
 	}
 }
 
-// getOrCreateQueue returns the queue for the given key, creating it if necessary.
-// Returns (nil, false) if at max capacity and queue doesn't exist.
-func (s *WorkflowQueueScheduler[T]) getOrCreateQueue(key any) (*workflowQueue[T], bool) {
-	// Fast path: check if queue exists
-	s.mu.RLock()
-	if q, exists := s.queues[key]; exists {
-		s.mu.RUnlock()
-		return q, false
-	}
-	s.mu.RUnlock()
+// runWorker is the goroutine that processes tasks for a single workflow queue.
+// It pops tasks from the slice under the lock and executes them without the lock.
+// When the queue is empty, the worker marks itself inactive and exits.
+// A new worker is spawned by Submit/TrySubmit when tasks arrive for an inactive queue.
+func (s *WorkflowQueueScheduler[T]) runWorker(q *workflowQueue[T]) {
+	defer s.shutdownWG.Done()
 
-	// Slow path: need to create queue
+	for {
+		s.mu.Lock()
+		if s.isStopped() {
+			// Abort all remaining tasks.
+			tasks := q.tasks
+			q.tasks = nil
+			q.activeWorkers--
+			s.mu.Unlock()
+			for _, entry := range tasks {
+				entry.task.Abort()
+			}
+			if len(tasks) > 0 {
+				metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(int64(len(tasks)))
+			}
+			return
+		}
+		if len(q.tasks) == 0 {
+			q.activeWorkers--
+			if q.activeWorkers == 0 {
+				q.lastActive = s.timeSource.Now()
+			}
+			s.mu.Unlock()
+			return
+		}
+		entry := q.tasks[0]
+		var zero taskEntry[T]
+		q.tasks[0] = zero // clear reference for GC
+		q.tasks = q.tasks[1:]
+		s.mu.Unlock()
+
+		queueWaitTime := s.timeSource.Now().Sub(entry.submitTime)
+		metrics.WorkflowQueueSchedulerQueueWaitTime.With(s.metricsHandler).Record(queueWaitTime)
+		s.executeTask(entry.task, entry.submitTime)
+	}
+}
+
+// runSweeper periodically removes idle queue entries from the map.
+func (s *WorkflowQueueScheduler[T]) runSweeper() {
+	defer s.shutdownWG.Done()
+
+	ticker := time.NewTicker(s.options.QueueTTL())
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if s.sweepIdleQueues() {
+				return
+			}
+		case <-s.shutdownChan:
+			return
+		}
+	}
+}
+
+// sweepIdleQueues removes queues that have been idle for longer than QueueTTL.
+// Returns true if no queues remain (sweeper should exit).
+func (s *WorkflowQueueScheduler[T]) sweepIdleQueues() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Check if scheduler is stopped - prevents creating queues during shutdown
-	// which could cause WaitGroup misuse and delayed shutdown
-	if s.isStopped() {
-		return nil, false
-	}
-
-	// Double-check after acquiring write lock
-	if q, exists := s.queues[key]; exists {
-		return q, false
-	}
-
-	// Check if at max capacity
-	if len(s.queues) >= s.options.MaxQueues {
-		return nil, false
-	}
-
-	// Create new queue
-	q := &workflowQueue[T]{
-		taskCh: make(chan taskEntry[T], s.options.QueueSize),
-	}
-	s.queues[key] = q
-
-	// Start the queue's goroutine
-	s.shutdownWG.Add(1)
-	go s.runQueueWorker(key, q)
-
-	return q, true
-}
-
-// runQueueWorker is the goroutine that processes tasks for a single workflow queue.
-// It exits when the queue is idle for longer than QueueTTL or when shutdown occurs.
-func (s *WorkflowQueueScheduler[T]) runQueueWorker(key any, q *workflowQueue[T]) {
-	defer s.shutdownWG.Done()
-	defer s.removeQueue(key)
-
-	idleTimer := time.NewTimer(s.options.QueueTTL)
-	defer idleTimer.Stop()
-
-	for {
-		select {
-		case entry := <-q.taskCh:
-			// Reset idle timer since we got a task
-			if !idleTimer.Stop() {
-				select {
-				case <-idleTimer.C:
-				default:
-				}
-			}
-			idleTimer.Reset(s.options.QueueTTL)
-
-			// Record queue wait time
-			queueWaitTime := s.timeSource.Now().Sub(entry.submitTime)
-			metrics.WorkflowQueueSchedulerQueueWaitTime.With(s.metricsHandler).Record(queueWaitTime)
-
-			// Execute the task
-			s.executeTask(entry.task, entry.submitTime)
-
-		case <-idleTimer.C:
-			// Queue has been idle for TTL - exit
-			// But first check if there are pending tasks (race condition)
-			select {
-			case entry := <-q.taskCh:
-				// Got a task, reset timer and process it
-				idleTimer.Reset(s.options.QueueTTL)
-				queueWaitTime := s.timeSource.Now().Sub(entry.submitTime)
-				metrics.WorkflowQueueSchedulerQueueWaitTime.With(s.metricsHandler).Record(queueWaitTime)
-				s.executeTask(entry.task, entry.submitTime)
-			default:
-				// Queue is truly idle - exit
-				return
-			}
-
-		case <-s.shutdownChan:
-			// Shutdown signaled - drain buffered tasks and exit
-			s.drainQueue(q)
-			return
+	now := s.timeSource.Now()
+	swept := false
+	for key, q := range s.queues {
+		if q.activeWorkers == 0 && len(q.tasks) == 0 && now.Sub(q.lastActive) > s.options.QueueTTL() {
+			delete(s.queues, key)
+			swept = true
 		}
 	}
-}
-
-// removeQueue removes a queue from the map and signals waiting Submit() calls.
-func (s *WorkflowQueueScheduler[T]) removeQueue(key any) {
-	s.mu.Lock()
-	delete(s.queues, key)
-	queueCount := len(s.queues)
-	s.mu.Unlock()
-
-	// Signal any Submit() calls waiting for queue capacity (non-blocking)
-	select {
-	case s.queueRemovedCh <- struct{}{}:
-	default:
+	if swept {
+		metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
 	}
-
-	metrics.WorkflowQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(queueCount))
-}
-
-// drainQueue aborts all remaining buffered tasks in a queue's channel.
-// Uses non-blocking receives since the channel is never closed.
-func (s *WorkflowQueueScheduler[T]) drainQueue(q *workflowQueue[T]) {
-	abortedCount := 0
-	for {
-		select {
-		case entry := <-q.taskCh:
-			entry.task.Abort()
-			abortedCount++
-		default:
-			if abortedCount > 0 {
-				metrics.WorkflowQueueSchedulerTasksAborted.With(s.metricsHandler).Record(int64(abortedCount))
-			}
-			return
-		}
+	if len(s.queues) == 0 {
+		s.sweeperRunning = false
+		return true
 	}
+	return false
 }
 
 func (s *WorkflowQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
@@ -407,12 +357,16 @@ func (s *WorkflowQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
 	metrics.WorkflowQueueSchedulerTaskLatency.With(s.metricsHandler).Record(taskLatency)
 }
 
-func (s *WorkflowQueueScheduler[T]) isStopped() bool {
-	return s.status.Load() == common.DaemonStatusStopped
+func (s *WorkflowQueueScheduler[T]) queueConcurrency() int {
+	if s.options.QueueConcurrency == nil {
+		return 1
+	}
+	if c := s.options.QueueConcurrency(); c > 0 {
+		return c
+	}
+	return 1
 }
 
-func (s *WorkflowQueueScheduler[T]) queueCount() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.queues)
+func (s *WorkflowQueueScheduler[T]) isStopped() bool {
+	return s.status.Load() == common.DaemonStatusStopped
 }

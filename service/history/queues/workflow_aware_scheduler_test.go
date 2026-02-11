@@ -77,7 +77,6 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_DefaultQueue
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerQueueSize: func() int { return 1000 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -96,7 +95,6 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueS
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 500 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -166,7 +164,6 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -184,12 +181,14 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 	// Use channels to control execution timing
 	execStarted := make(chan struct{})
 	execContinue := make(chan struct{})
+	var completionWG sync.WaitGroup
+	completionWG.Add(3) // 3 tasks total
 	mockExec1.EXPECT().Execute().DoAndReturn(func() error {
 		close(execStarted)
 		<-execContinue
 		return nil
 	}).Times(1)
-	mockExec1.EXPECT().Ack().Times(1)
+	mockExec1.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 
 	// First, route to WorkflowQueueScheduler via HandleBusyWorkflow
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
@@ -202,7 +201,7 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 	mockExec2 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec2.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec2.EXPECT().Execute().Return(nil).Times(1)
-	mockExec2.EXPECT().Ack().Times(1)
+	mockExec2.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 
 	// HandleBusyWorkflow instead of Submit since we want to add to workflow queue
 	// (Submit checks HasQueue which may not return true if timing is wrong)
@@ -216,12 +215,12 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 	mockExec4 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec4.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec4.EXPECT().Execute().Return(nil).Times(1)
-	mockExec4.EXPECT().Ack().Times(1)
+	mockExec4.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 	scheduler.Submit(mockExec4) // Should route to WorkflowQueueScheduler because queue exists
 
 	// Let tasks complete
 	close(execContinue)
-	time.Sleep(100 * time.Millisecond) // Give time for tasks to complete
+	completionWG.Wait()
 }
 
 // =============================================================================
@@ -240,7 +239,6 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenWorkflowQ
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -266,7 +264,6 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueu
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -291,7 +288,6 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -307,12 +303,14 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 	mockExec1.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	execStarted := make(chan struct{})
 	execContinue := make(chan struct{})
+	var completionWG sync.WaitGroup
+	completionWG.Add(3)
 	mockExec1.EXPECT().Execute().DoAndReturn(func() error {
 		close(execStarted)
 		<-execContinue
 		return nil
 	}).Times(1)
-	mockExec1.EXPECT().Ack().Times(1)
+	mockExec1.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
 
 	// Wait for first task to start executing
@@ -322,21 +320,72 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 	mockExec2 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec2.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec2.EXPECT().Execute().Return(nil).Times(1)
-	mockExec2.EXPECT().Ack().Times(1)
+	mockExec2.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 	scheduler.HandleBusyWorkflow(mockExec2)
 
 	// TrySubmit for wf1 which has an active queue - should add to existing queue and succeed
 	mockExec3 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec3.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec3.EXPECT().Execute().Return(nil).Times(1)
-	mockExec3.EXPECT().Ack().Times(1)
+	mockExec3.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 
 	// TrySubmit should return true because task was added to existing queue
 	s.True(scheduler.TrySubmit(mockExec3))
 
 	// Cleanup
 	close(execContinue)
-	time.Sleep(100 * time.Millisecond)
+	completionWG.Wait()
+}
+
+func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenMaxQueuesReached() {
+	// When WQS is at max capacity and TrySubmit is called for a workflow
+	// without an active queue, it should route to the base (FIFO) scheduler.
+	mockBaseScheduler := s.createMockBaseScheduler()
+	mockBaseScheduler.EXPECT().Start().Times(1)
+	mockBaseScheduler.EXPECT().Stop().Times(1)
+
+	// MaxQueues=1 so only one workflow can have a WQS queue
+	scheduler := NewWorkflowAwareScheduler(
+		mockBaseScheduler,
+		WorkflowAwareSchedulerOptions{
+			EnableWorkflowQueueScheduler:    func() bool { return true },
+			WorkflowQueueSchedulerMaxQueues: func() int { return 1 },
+			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		},
+		s.logger,
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	// First task blocks execution — fills the single WQS slot
+	blockCh := make(chan struct{})
+	execStarted := make(chan struct{})
+	var completionWG sync.WaitGroup
+	completionWG.Add(1)
+	mockExec1 := s.createMockExecutable("ns1", "wf1", "run1")
+	mockExec1.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
+	mockExec1.EXPECT().Execute().DoAndReturn(func() error {
+		close(execStarted)
+		<-blockCh
+		return nil
+	}).MaxTimes(1)
+	mockExec1.EXPECT().Ack().Do(func() { completionWG.Done() }).MaxTimes(1)
+	mockExec1.EXPECT().Abort().MaxTimes(1)
+	s.True(scheduler.HandleBusyWorkflow(mockExec1))
+
+	// Wait for worker to pick up task
+	<-execStarted
+
+	// TrySubmit for a different workflow — WQS is full, should go to base scheduler
+	mockExec2 := s.createMockExecutable("ns1", "wf2", "run2")
+	mockBaseScheduler.EXPECT().TrySubmit(mockExec2).Return(true).Times(1)
+	s.True(scheduler.TrySubmit(mockExec2))
+
+	// Cleanup
+	close(blockCh)
+	completionWG.Wait()
 }
 
 // =============================================================================
@@ -351,7 +400,6 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDis
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -371,7 +419,6 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQu
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -382,27 +429,28 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQu
 	scheduler.Start()
 	defer scheduler.Stop()
 
+	var completionWG sync.WaitGroup
+	completionWG.Add(1)
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec.EXPECT().Execute().Return(nil).Times(1)
-	mockExec.EXPECT().Ack().Times(1)
+	mockExec.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 
 	s.True(scheduler.HandleBusyWorkflow(mockExec))
-	time.Sleep(50 * time.Millisecond) // Give time for task to complete
+	completionWG.Wait()
 }
 
-func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSchedulerWhenFull() {
+func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSchedulerWhenMaxQueues() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	// Use very small queue size
+	// Use MaxQueues=1 so the second workflow can't get a queue
 	scheduler := NewWorkflowAwareScheduler(
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:    func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 1 }, // Small buffer
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
+			WorkflowQueueSchedulerMaxQueues: func() int { return 1 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
@@ -414,35 +462,31 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSche
 
 	// First task blocks execution so queue stays occupied
 	blockCh := make(chan struct{})
+	execStarted := make(chan struct{})
+	var completionWG sync.WaitGroup
+	completionWG.Add(1)
 	mockExec1 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec1.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec1.EXPECT().Execute().DoAndReturn(func() error {
+		close(execStarted)
 		<-blockCh
 		return nil
 	}).MaxTimes(1)
-	mockExec1.EXPECT().Ack().MaxTimes(1)
+	mockExec1.EXPECT().Ack().Do(func() { completionWG.Done() }).MaxTimes(1)
 	mockExec1.EXPECT().Abort().MaxTimes(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
 
 	// Wait for goroutine to pick up first task
-	time.Sleep(10 * time.Millisecond)
+	<-execStarted
 
-	// Second task fills the buffer (same workflow)
-	mockExec2 := s.createMockExecutable("ns1", "wf1", "run1")
-	mockExec2.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
-	mockExec2.EXPECT().Execute().Return(nil).MaxTimes(1)
-	mockExec2.EXPECT().Ack().MaxTimes(1)
-	mockExec2.EXPECT().Abort().MaxTimes(1)
+	// Second task for a DIFFERENT workflow should fall back to base scheduler (MaxQueues reached)
+	mockExec2 := s.createMockExecutable("ns1", "wf2", "run2")
+	mockBaseScheduler.EXPECT().TrySubmit(mockExec2).Return(true).Times(1)
 	s.True(scheduler.HandleBusyWorkflow(mockExec2))
-
-	// Third task to same workflow should fall back to base scheduler (queue full)
-	mockExec3 := s.createMockExecutable("ns1", "wf1", "run1")
-	mockBaseScheduler.EXPECT().TrySubmit(mockExec3).Return(true).Times(1)
-	s.True(scheduler.HandleBusyWorkflow(mockExec3))
 
 	// Cleanup
 	close(blockCh)
-	time.Sleep(50 * time.Millisecond)
+	completionWG.Wait()
 }
 
 // =============================================================================
@@ -457,7 +501,6 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenDisab
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -477,7 +520,6 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQue
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -501,7 +543,6 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -519,12 +560,14 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 	// Block execution so queue stays active
 	execStarted := make(chan struct{})
 	execContinue := make(chan struct{})
+	var completionWG sync.WaitGroup
+	completionWG.Add(2)
 	mockExec1.EXPECT().Execute().DoAndReturn(func() error {
 		close(execStarted)
 		<-execContinue
 		return nil
 	}).Times(1)
-	mockExec1.EXPECT().Ack().Times(1)
+	mockExec1.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 
 	scheduler.HandleBusyWorkflow(mockExec1)
 	<-execStarted
@@ -533,7 +576,7 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 	mockExec2 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec2.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec2.EXPECT().Execute().Return(nil).Times(1)
-	mockExec2.EXPECT().Ack().Times(1)
+	mockExec2.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 	scheduler.HandleBusyWorkflow(mockExec2)
 
 	// Check that queue exists for this workflow
@@ -545,7 +588,7 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 	s.False(scheduler.HasWorkflowQueue(mockExec4))
 
 	close(execContinue)
-	time.Sleep(50 * time.Millisecond)
+	completionWG.Wait()
 }
 
 // =============================================================================
@@ -586,7 +629,6 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 1000 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -613,7 +655,6 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 	}
 
 	wg.Wait()
-	time.Sleep(200 * time.Millisecond) // Give time for tasks to complete
 }
 
 func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
@@ -625,7 +666,6 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 		mockBaseScheduler,
 		WorkflowAwareSchedulerOptions{
 			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerQueueSize: func() int { return 1000 },
 			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
@@ -636,24 +676,26 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 	scheduler.Start()
 	defer scheduler.Stop()
 
-	var wg sync.WaitGroup
+	var submitWG sync.WaitGroup
+	var completionWG sync.WaitGroup
 	numTasks := 50
-	wg.Add(numTasks)
+	submitWG.Add(numTasks)
+	completionWG.Add(numTasks)
 
 	for range numTasks {
 		go func() {
-			defer wg.Done()
+			defer submitWG.Done()
 			mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 			mockExec.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 			mockExec.EXPECT().Execute().Return(nil).MaxTimes(1)
-			mockExec.EXPECT().Ack().MaxTimes(1)
-			mockExec.EXPECT().Abort().MaxTimes(1)
+			mockExec.EXPECT().Ack().Do(func() { completionWG.Done() }).MaxTimes(1)
+			mockExec.EXPECT().Abort().Do(func() { completionWG.Done() }).MaxTimes(1)
 			scheduler.HandleBusyWorkflow(mockExec)
 		}()
 	}
 
-	wg.Wait()
-	time.Sleep(100 * time.Millisecond) // Give time for tasks to complete
+	submitWG.Wait()
+	completionWG.Wait()
 }
 
 // =============================================================================
@@ -672,7 +714,6 @@ func (s *workflowAwareSchedulerSuite) createMockExecutable(namespaceID, workflow
 func (s *workflowAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) WorkflowAwareSchedulerOptions {
 	return WorkflowAwareSchedulerOptions{
 		EnableWorkflowQueueScheduler:    func() bool { return enabled },
-		WorkflowQueueSchedulerQueueSize: func() int { return 100 },
 		WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
 		WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 	}

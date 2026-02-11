@@ -84,9 +84,10 @@ func (s *scheduledQueueSuite) SetupTest() {
 			ActiveNamespaceWeights:  s.mockShard.GetConfig().TimerProcessorSchedulerActiveRoundRobinWeights,
 			StandbyNamespaceWeights: s.mockShard.GetConfig().TimerProcessorSchedulerStandbyRoundRobinWeights,
 			WorkflowAwareSchedulerOptions: WorkflowAwareSchedulerOptions{
-				EnableWorkflowQueueScheduler:      func() bool { return false },
-				WorkflowQueueSchedulerQueueSize:   func() int { return 100 },
-							},
+				EnableWorkflowQueueScheduler:    func() bool { return false },
+				WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
+				WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+			},
 		},
 		s.mockShard.GetNamespaceRegistry(),
 		logger,

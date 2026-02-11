@@ -47,12 +47,13 @@ type (
 	WorkflowAwareSchedulerOptions struct {
 		// EnableWorkflowQueueScheduler controls whether the WorkflowQueueScheduler is enabled.
 		EnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
-		// WorkflowQueueSchedulerQueueSize is the buffer size for each workflow queue's task channel.
-		WorkflowQueueSchedulerQueueSize dynamicconfig.IntPropertyFn
 		// WorkflowQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues.
 		WorkflowQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
 		// WorkflowQueueSchedulerQueueTTL is how long a queue goroutine waits idle before exiting.
 		WorkflowQueueSchedulerQueueTTL dynamicconfig.DurationPropertyFn
+		// WorkflowQueueSchedulerQueueConcurrency is the max workers per queue.
+		// Defaults to 1 (sequential) if nil.
+		WorkflowQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
 	}
 
 	// WorkflowAwareScheduler is a scheduler that wraps a base FIFO scheduler and adds
@@ -87,9 +88,9 @@ func NewWorkflowAwareScheduler(
 ) *WorkflowAwareScheduler {
 	workflowQueueScheduler := tasks.NewWorkflowQueueScheduler(
 		&tasks.WorkflowQueueSchedulerOptions{
-			QueueSize: options.WorkflowQueueSchedulerQueueSize(),
-			MaxQueues: options.WorkflowQueueSchedulerMaxQueues(),
-			QueueTTL:  options.WorkflowQueueSchedulerQueueTTL(),
+			MaxQueues:        options.WorkflowQueueSchedulerMaxQueues,
+			QueueTTL:         options.WorkflowQueueSchedulerQueueTTL,
+			QueueConcurrency: options.WorkflowQueueSchedulerQueueConcurrency,
 		},
 		executableQueueKeyFn,
 		logger,

@@ -1785,12 +1785,6 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		`TaskSchedulerEnableWorkflowQueueScheduler enables the workflow queue scheduler
 that processes tasks for contended workflows sequentially to avoid busy workflow errors`,
 	)
-	TaskSchedulerWorkflowQueueSchedulerQueueSize = NewGlobalIntSetting(
-		"history.taskSchedulerWorkflowQueueSchedulerQueueSize",
-		500,
-		`TaskSchedulerWorkflowQueueSchedulerQueueSize is the buffer size for each workflow's task channel in the workflow queue scheduler.
-Changes to this value require a restart to take effect.`,
-	)
 	TaskSchedulerWorkflowQueueSchedulerMaxQueues = NewGlobalIntSetting(
 		"history.taskSchedulerWorkflowQueueSchedulerMaxQueues",
 		500,
@@ -1802,6 +1796,13 @@ When this limit is reached, new workflows will fall back to the base FIFO schedu
 		5*time.Second,
 		`TaskSchedulerWorkflowQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.
 Changes to this value require a restart to take effect.`,
+	)
+
+	TaskSchedulerWorkflowQueueSchedulerQueueConcurrency = NewGlobalIntSetting(
+		"history.taskSchedulerWorkflowQueueSchedulerQueueConcurrency",
+		1,
+		`TaskSchedulerWorkflowQueueSchedulerQueueConcurrency is the max number of worker goroutines per workflow queue.
+Defaults to 1 (strictly sequential). Higher values allow limited parallelism per workflow.`,
 	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(

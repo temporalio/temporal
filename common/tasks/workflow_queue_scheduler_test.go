@@ -43,7 +43,7 @@ func (s *workflowQueueSchedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.retryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond)
-	s.scheduler = s.newScheduler(100)
+	s.scheduler = s.newScheduler()
 	s.scheduler.Start()
 }
 
@@ -133,7 +133,7 @@ func (s *workflowQueueSchedulerSuite) TestSubmit_RetryThenSuccess() {
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) TestSequentialExecution_SameWorkflow() {
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -170,7 +170,7 @@ func (s *workflowQueueSchedulerSuite) TestSequentialExecution_SameWorkflow() {
 }
 
 func (s *workflowQueueSchedulerSuite) TestSequentialExecution_DifferentWorkflows() {
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -241,11 +241,12 @@ func (s *workflowQueueSchedulerSuite) TestTrySubmit_Success() {
 
 func (s *workflowQueueSchedulerSuite) TestTrySubmit_ExistingQueue() {
 	// Create a scheduler that blocks task execution so we can add to existing queue
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
 	blockCh := make(chan struct{})
+	blockStarted := make(chan struct{})
 	testWG := sync.WaitGroup{}
 	testWG.Add(2)
 
@@ -253,6 +254,7 @@ func (s *workflowQueueSchedulerSuite) TestTrySubmit_ExistingQueue() {
 	mockTask1 := NewMockTask(s.controller)
 	mockTask1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 	mockTask1.EXPECT().Execute().DoAndReturn(func() error {
+		close(blockStarted)
 		<-blockCh // Block until signaled
 		return nil
 	}).Times(1)
@@ -268,8 +270,8 @@ func (s *workflowQueueSchedulerSuite) TestTrySubmit_ExistingQueue() {
 	result1 := scheduler.TrySubmit(&testTaskWithID{MockTask: mockTask1, workflowID: 1})
 	s.True(result1)
 
-	// Wait a bit for the first task to start executing
-	time.Sleep(10 * time.Millisecond)
+	// Wait for first task to start executing
+	<-blockStarted
 
 	// Submit second task to same workflow - should succeed (existing queue)
 	result2 := scheduler.TrySubmit(&testTaskWithID{MockTask: mockTask2, workflowID: 1})
@@ -284,53 +286,13 @@ func (s *workflowQueueSchedulerSuite) TestTrySubmit_ExistingQueue() {
 	testWG.Wait()
 }
 
-func (s *workflowQueueSchedulerSuite) TestTrySubmit_ChannelFull() {
-	// Create scheduler with very small queue
-	scheduler := s.newSchedulerWithWorkflowIDAndOptions(1, 1, time.Hour) // queue size 1, long TTL
-	scheduler.Start()
-
-	// First submit should succeed and create queue
-	blockCh := make(chan struct{})
-	mockTask1 := NewMockTask(s.controller)
-	mockTask1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTask1.EXPECT().Execute().DoAndReturn(func() error {
-		<-blockCh
-		return nil
-	}).MaxTimes(1)
-	mockTask1.EXPECT().Ack().MaxTimes(1)
-	mockTask1.EXPECT().Abort().MaxTimes(1)
-	result1 := scheduler.TrySubmit(&testTaskWithID{MockTask: mockTask1, workflowID: 1})
-	s.True(result1)
-
-	// Wait for goroutine to start processing
-	time.Sleep(10 * time.Millisecond)
-
-	// Fill the queue (buffer size is 1)
-	mockTask2 := NewMockTask(s.controller)
-	mockTask2.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTask2.EXPECT().Execute().Return(nil).MaxTimes(1)
-	mockTask2.EXPECT().Ack().MaxTimes(1)
-	mockTask2.EXPECT().Abort().MaxTimes(1)
-	result2 := scheduler.TrySubmit(&testTaskWithID{MockTask: mockTask2, workflowID: 1})
-	s.True(result2)
-
-	// Third submit should fail (channel full)
-	mockTask3 := NewMockTask(s.controller)
-	result3 := scheduler.TrySubmit(&testTaskWithID{MockTask: mockTask3, workflowID: 1})
-	s.False(result3)
-
-	// Clean up
-	close(blockCh)
-	scheduler.Stop()
-}
-
 // =============================================================================
 // Shutdown Tests
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) TestShutdown_DrainTasks() {
 	// Test that tasks submitted after Stop() are aborted
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 
 	testWG := sync.WaitGroup{}
@@ -354,7 +316,7 @@ func (s *workflowQueueSchedulerSuite) TestShutdown_DrainTasks() {
 }
 
 func (s *workflowQueueSchedulerSuite) TestSubmit_AfterShutdown() {
-	scheduler := s.newScheduler(100)
+	scheduler := s.newScheduler()
 	scheduler.Start()
 	scheduler.Stop()
 
@@ -369,7 +331,7 @@ func (s *workflowQueueSchedulerSuite) TestSubmit_AfterShutdown() {
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) TestHasQueue() {
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -408,7 +370,7 @@ func (s *workflowQueueSchedulerSuite) TestHasQueue() {
 }
 
 func (s *workflowQueueSchedulerSuite) TestHasQueue_MultipleTasksInQueue() {
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -459,8 +421,11 @@ func (s *workflowQueueSchedulerSuite) TestHasQueue_MultipleTasksInQueue() {
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) TestQueueTTL_ExpiresAfterIdle() {
-	// Use very short TTL for testing
-	scheduler := s.newSchedulerWithWorkflowIDAndOptions(100, 500, 50*time.Millisecond)
+	// Use very short TTL for testing.
+	// The background sweeper runs every QueueTTL, so a queue may linger
+	// up to 2x QueueTTL after becoming idle.
+	ttl := 50 * time.Millisecond
+	scheduler := s.newSchedulerWithWorkflowIDAndOptions(500, ttl)
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -478,11 +443,61 @@ func (s *workflowQueueSchedulerSuite) TestQueueTTL_ExpiresAfterIdle() {
 	// Queue exists immediately after task completes
 	s.True(scheduler.HasQueue(1))
 
-	// Wait for TTL to expire
-	time.Sleep(100 * time.Millisecond)
+	// Wait for sweeper to remove the idle queue
+	s.Eventually(func() bool {
+		return !scheduler.HasQueue(1)
+	}, 5*time.Second, 10*time.Millisecond, "Queue should be removed after TTL")
+}
 
-	// Queue should be gone after TTL
-	s.False(scheduler.HasQueue(1))
+func (s *workflowQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
+	// Regression test for Issue #3: tasks submitted near TTL expiry must not be orphaned.
+	// Uses a very short TTL and repeatedly submits tasks right as queues expire,
+	// verifying that every submitted task is eventually executed (Ack'd).
+	ttl := 20 * time.Millisecond
+	scheduler := s.newSchedulerWithWorkflowIDAndOptions(500, ttl)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	const iterations = 50
+	var processedCount int32
+	testWG := sync.WaitGroup{}
+
+	for i := 0; i < iterations; i++ {
+		testWG.Add(1)
+
+		mockTask := NewMockTask(s.controller)
+		mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+		mockTask.EXPECT().Execute().Return(nil).Times(1)
+		mockTask.EXPECT().Ack().Do(func() {
+			atomic.AddInt32(&processedCount, 1)
+			testWG.Done()
+		}).Times(1)
+
+		// Submit, then wait ~TTL to let the queue expire before next submit.
+		// This maximizes the chance of hitting the TTL expiry race.
+		scheduler.Submit(&testTaskWithID{MockTask: mockTask, workflowID: 1})
+
+		// Wait for TTL to expire (queue removed) before next iteration
+		time.Sleep(ttl + 10*time.Millisecond)
+	}
+
+	// All tasks must be processed — no orphaning allowed
+	done := make(chan struct{})
+	go func() {
+		testWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Success
+	case <-time.After(30 * time.Second):
+		s.Fail("Timed out waiting for tasks — possible task orphaning",
+			"processed %d/%d tasks", atomic.LoadInt32(&processedCount), iterations)
+	}
+
+	s.Equal(int32(iterations), atomic.LoadInt32(&processedCount),
+		"All tasks must be processed, none orphaned")
 }
 
 // =============================================================================
@@ -493,9 +508,8 @@ func (s *workflowQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 	// Create scheduler with max 2 queues
 	scheduler := NewWorkflowQueueScheduler(
 		&WorkflowQueueSchedulerOptions{
-			QueueSize: 100,
-			MaxQueues: 2,
-			QueueTTL:  time.Hour,
+			MaxQueues: func() int { return 2 },
+			QueueTTL:  func() time.Duration { return time.Hour },
 		},
 		func(task *testTaskWithID) any { return task.workflowID },
 		log.NewNoopLogger(),
@@ -534,7 +548,7 @@ func (s *workflowQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) TestParallelSubmit_DifferentWorkflows() {
-	scheduler := s.newSchedulerWithWorkflowID(1000)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -580,7 +594,7 @@ func (s *workflowQueueSchedulerSuite) TestParallelSubmit_DifferentWorkflows() {
 }
 
 func (s *workflowQueueSchedulerSuite) TestParallelSubmit_SameWorkflow() {
-	scheduler := s.newSchedulerWithWorkflowID(1000)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -631,7 +645,7 @@ func (s *workflowQueueSchedulerSuite) TestParallelSubmit_SameWorkflow() {
 }
 
 func (s *workflowQueueSchedulerSuite) TestParallelTrySubmit() {
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -696,7 +710,7 @@ func (s *workflowQueueSchedulerSuite) TestParallelTrySubmit() {
 // =============================================================================
 
 func (s *workflowQueueSchedulerSuite) TestMultipleTasksSameWorkflow_AllProcessed() {
-	scheduler := s.newSchedulerWithWorkflowID(100)
+	scheduler := s.newSchedulerWithWorkflowID()
 	scheduler.Start()
 	defer scheduler.Stop()
 
@@ -726,12 +740,11 @@ func (s *workflowQueueSchedulerSuite) TestMultipleTasksSameWorkflow_AllProcessed
 // Helper Functions
 // =============================================================================
 
-func (s *workflowQueueSchedulerSuite) newScheduler(queueSize int) *WorkflowQueueScheduler[*MockTask] {
-	return NewWorkflowQueueScheduler[*MockTask](
+func (s *workflowQueueSchedulerSuite) newScheduler() *WorkflowQueueScheduler[*MockTask] {
+	return NewWorkflowQueueScheduler(
 		&WorkflowQueueSchedulerOptions{
-			QueueSize: queueSize,
-			MaxQueues: 500,
-			QueueTTL:  5 * time.Second,
+			MaxQueues: func() int { return 500 },
+			QueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		func(task *MockTask) any { return 1 }, // All tasks to same key
 		log.NewNoopLogger(),
@@ -740,12 +753,11 @@ func (s *workflowQueueSchedulerSuite) newScheduler(queueSize int) *WorkflowQueue
 	)
 }
 
-func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID(queueSize int) *WorkflowQueueScheduler[*testTaskWithID] {
-	return NewWorkflowQueueScheduler[*testTaskWithID](
+func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID() *WorkflowQueueScheduler[*testTaskWithID] {
+	return NewWorkflowQueueScheduler(
 		&WorkflowQueueSchedulerOptions{
-			QueueSize: queueSize,
-			MaxQueues: 500,
-			QueueTTL:  5 * time.Second,
+			MaxQueues: func() int { return 500 },
+			QueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		func(task *testTaskWithID) any { return task.workflowID }, // Key by workflow ID
 		log.NewNoopLogger(),
@@ -754,12 +766,11 @@ func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowID(queueSize int) 
 	)
 }
 
-func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowIDAndOptions(queueSize, maxQueues int, queueTTL time.Duration) *WorkflowQueueScheduler[*testTaskWithID] {
-	return NewWorkflowQueueScheduler[*testTaskWithID](
+func (s *workflowQueueSchedulerSuite) newSchedulerWithWorkflowIDAndOptions(maxQueues int, queueTTL time.Duration) *WorkflowQueueScheduler[*testTaskWithID] {
+	return NewWorkflowQueueScheduler(
 		&WorkflowQueueSchedulerOptions{
-			QueueSize: queueSize,
-			MaxQueues: maxQueues,
-			QueueTTL:  queueTTL,
+			MaxQueues: func() int { return maxQueues },
+			QueueTTL:  func() time.Duration { return queueTTL },
 		},
 		func(task *testTaskWithID) any { return task.workflowID }, // Key by workflow ID
 		log.NewNoopLogger(),
