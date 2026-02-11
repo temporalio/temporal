@@ -42,14 +42,14 @@ func (m *MockNodeBackend) GetExecutionState() *persistencespb.WorkflowExecutionS
 	if m.HandleGetExecutionState != nil {
 		return m.HandleGetExecutionState()
 	}
-	return nil
+	return &persistencespb.WorkflowExecutionState{}
 }
 
 func (m *MockNodeBackend) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
 	if m.HandleGetExecutionInfo != nil {
 		return m.HandleGetExecutionInfo()
 	}
-	return nil
+	return &persistencespb.WorkflowExecutionInfo{}
 }
 
 func (m *MockNodeBackend) GetCurrentVersion() int64 {
