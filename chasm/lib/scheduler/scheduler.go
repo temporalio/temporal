@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"strings"
 	"time"
@@ -66,6 +65,7 @@ var (
 )
 
 var executionStatusSearchAttribute = chasm.NewSearchAttributeKeyword("ExecutionStatus", chasm.SearchAttributeFieldLowCardinalityKeyword01)
+var initialSerializedConflictToken = serializeConflictToken(scheduler.InitialConflictToken)
 
 const (
 	// How many recent actions to keep on the Info.RecentActions list.
@@ -172,7 +172,7 @@ func (s *Scheduler) handlePatch(ctx chasm.MutableContext, patch *schedulepb.Sche
 func CreateScheduler(
 	ctx chasm.MutableContext,
 	req *schedulerpb.CreateScheduleRequest,
-) (*Scheduler, *schedulerpb.CreateScheduleResponse, error) {
+) (*Scheduler, error) {
 	sched, err := NewScheduler(
 		ctx,
 		req.FrontendRequest.Namespace,
@@ -182,7 +182,7 @@ func CreateScheduler(
 		req.FrontendRequest.InitialPatch,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Update visibility with custom attributes.
@@ -190,11 +190,7 @@ func CreateScheduler(
 	visibility.MergeCustomSearchAttributes(ctx, req.FrontendRequest.GetSearchAttributes().GetIndexedFields())
 	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
-	return sched, &schedulerpb.CreateScheduleResponse{
-		FrontendResponse: &workflowservice.CreateScheduleResponse{
-			ConflictToken: sched.generateConflictToken(),
-		},
-	}, nil
+	return sched, nil
 }
 
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
@@ -670,9 +666,7 @@ func (s *Scheduler) Patch(
 }
 
 func (s *Scheduler) generateConflictToken() []byte {
-	token := make([]byte, 8)
-	binary.LittleEndian.PutUint64(token, uint64(s.ConflictToken))
-	return token
+	return serializeConflictToken(s.ConflictToken)
 }
 
 func (s *Scheduler) validateConflictToken(token []byte) bool {

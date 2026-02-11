@@ -19,6 +19,7 @@ type (
 		QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest, opMetrics metrics.Handler) error
 		CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) error
+		CancelOutstandingWorkerPolls(ctx context.Context, request *matchingservice.CancelOutstandingWorkerPollsRequest) (*matchingservice.CancelOutstandingWorkerPollsResponse, error)
 		DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error)
 		DescribeTaskQueuePartition(ctx context.Context, request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)

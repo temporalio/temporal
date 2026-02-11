@@ -2951,8 +2951,8 @@ because executions scanner support for SQL is not yet implemented.`,
 	HistoryScannerVerifyRetention = NewGlobalBoolSetting(
 		"worker.historyScannerVerifyRetention",
 		true,
-		`HistoryScannerVerifyRetention indicates the history scanner verify data retention.
-If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.`,
+		`HistoryScannerVerifyRetention indicates if the history scavenger should verify data retention.
+When enabled, the scavenger will delete completed workflow execution data that are older than the namespace retention period plus worker.executionDataDurationBuffer.`,
 	)
 	EnableBatcherNamespace = NewNamespaceBoolSetting(
 		"worker.enableNamespaceBatcher",
@@ -3084,6 +3084,14 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerHeartbeatsEnabled",
 		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
+	)
+
+	EnableCancelWorkerPollsOnShutdown = NewNamespaceBoolSetting(
+		"frontend.enableCancelWorkerPollsOnShutdown",
+		false,
+		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
+		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
+		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(

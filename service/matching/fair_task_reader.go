@@ -316,7 +316,9 @@ func (tr *fairTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 	// - versioning wants to re-spool the task on a different queue and that failed
 	// - versioning says StickyWorkerUnavailable
 	if errors.Is(err, errTaskQueueClosed) || common.IsContextCanceledErr(err) {
-		return false, false
+		// maybe we tried to add a task to a versioned queue as it was unloading, and have to
+		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
+		return false, true
 	}
 	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
 	if errors.As(err, &stickyUnavailable) {
