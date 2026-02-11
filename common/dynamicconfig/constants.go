@@ -1779,29 +1779,29 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		time.Hour,
 		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
 	)
-	TaskSchedulerEnableWorkflowQueueScheduler = NewGlobalBoolSetting(
-		"history.taskSchedulerEnableWorkflowQueueScheduler",
+	TaskSchedulerEnableExecutionQueueScheduler = NewGlobalBoolSetting(
+		"history.taskSchedulerEnableExecutionQueueScheduler",
 		false,
-		`TaskSchedulerEnableWorkflowQueueScheduler enables the workflow queue scheduler
+		`TaskSchedulerEnableExecutionQueueScheduler enables the execution queue scheduler
 that processes tasks for contended workflows sequentially to avoid busy workflow errors`,
 	)
-	TaskSchedulerWorkflowQueueSchedulerMaxQueues = NewGlobalIntSetting(
-		"history.taskSchedulerWorkflowQueueSchedulerMaxQueues",
+	TaskSchedulerExecutionQueueSchedulerMaxQueues = NewGlobalIntSetting(
+		"history.taskSchedulerExecutionQueueSchedulerMaxQueues",
 		500,
-		`TaskSchedulerWorkflowQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues in the workflow queue scheduler.
+		`TaskSchedulerExecutionQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues in the execution queue scheduler.
 When this limit is reached, new workflows will fall back to the base FIFO scheduler. Changes to this value require a restart to take effect.`,
 	)
-	TaskSchedulerWorkflowQueueSchedulerQueueTTL = NewGlobalDurationSetting(
-		"history.taskSchedulerWorkflowQueueSchedulerQueueTTL",
+	TaskSchedulerExecutionQueueSchedulerQueueTTL = NewGlobalDurationSetting(
+		"history.taskSchedulerExecutionQueueSchedulerQueueTTL",
 		5*time.Second,
-		`TaskSchedulerWorkflowQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.
+		`TaskSchedulerExecutionQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.
 Changes to this value require a restart to take effect.`,
 	)
 
-	TaskSchedulerWorkflowQueueSchedulerQueueConcurrency = NewGlobalIntSetting(
-		"history.taskSchedulerWorkflowQueueSchedulerQueueConcurrency",
+	TaskSchedulerExecutionQueueSchedulerQueueConcurrency = NewGlobalIntSetting(
+		"history.taskSchedulerExecutionQueueSchedulerQueueConcurrency",
 		1,
-		`TaskSchedulerWorkflowQueueSchedulerQueueConcurrency is the max number of worker goroutines per workflow queue.
+		`TaskSchedulerExecutionQueueSchedulerQueueConcurrency is the max number of worker goroutines per workflow queue.
 Defaults to 1 (strictly sequential). Higher values allow limited parallelism per workflow.`,
 	)
 

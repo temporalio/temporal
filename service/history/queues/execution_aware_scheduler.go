@@ -31,66 +31,66 @@ import (
 	"go.temporal.io/server/common/tasks"
 )
 
-var _ tasks.Scheduler[Executable] = (*WorkflowAwareScheduler)(nil)
+var _ tasks.Scheduler[Executable] = (*ExecutionAwareScheduler)(nil)
 
 type (
 	// BusyWorkflowHandler is an interface for schedulers that can handle busy workflow errors
-	// by routing tasks to a WorkflowQueueScheduler.
+	// by routing tasks to a ExecutionQueueScheduler.
 	BusyWorkflowHandler interface {
 		// HandleBusyWorkflow is called when a task encounters a busy workflow error.
-		// It routes the task to the WorkflowQueueScheduler for sequential processing.
+		// It routes the task to the ExecutionQueueScheduler for sequential processing.
 		// Returns true if the task was handled, false if the caller should handle it.
 		HandleBusyWorkflow(Executable) bool
 	}
 
-	// WorkflowAwareSchedulerOptions contains configuration for the WorkflowAwareScheduler.
-	WorkflowAwareSchedulerOptions struct {
-		// EnableWorkflowQueueScheduler controls whether the WorkflowQueueScheduler is enabled.
-		EnableWorkflowQueueScheduler dynamicconfig.BoolPropertyFn
-		// WorkflowQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues.
-		WorkflowQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
-		// WorkflowQueueSchedulerQueueTTL is how long a queue goroutine waits idle before exiting.
-		WorkflowQueueSchedulerQueueTTL dynamicconfig.DurationPropertyFn
-		// WorkflowQueueSchedulerQueueConcurrency is the max workers per queue.
+	// ExecutionAwareSchedulerOptions contains configuration for the ExecutionAwareScheduler.
+	ExecutionAwareSchedulerOptions struct {
+		// EnableExecutionQueueScheduler controls whether the ExecutionQueueScheduler is enabled.
+		EnableExecutionQueueScheduler dynamicconfig.BoolPropertyFn
+		// ExecutionQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues.
+		ExecutionQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
+		// ExecutionQueueSchedulerQueueTTL is how long a queue goroutine waits idle before exiting.
+		ExecutionQueueSchedulerQueueTTL dynamicconfig.DurationPropertyFn
+		// ExecutionQueueSchedulerQueueConcurrency is the max workers per queue.
 		// Defaults to 1 (sequential) if nil.
-		WorkflowQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
+		ExecutionQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
 	}
 
-	// WorkflowAwareScheduler is a scheduler that wraps a base FIFO scheduler and adds
-	// a WorkflowQueueScheduler for handling workflow contention.
+	// ExecutionAwareScheduler is a scheduler that wraps a base FIFO scheduler and adds
+	// a ExecutionQueueScheduler for handling workflow contention.
 	//
 	// This scheduler implements tasks.Scheduler[Executable] and is designed to be
 	// passed to the InterleavedWeightedRoundRobinScheduler as the underlying processor.
 	//
 	// By default, tasks are processed by the base FIFO scheduler. When a workflow experiences
-	// contention (busy workflow error), it gets routed to the WorkflowQueueScheduler which
+	// contention (busy workflow error), it gets routed to the ExecutionQueueScheduler which
 	// ensures tasks are processed one at a time per workflow.
-	WorkflowAwareScheduler struct {
+	ExecutionAwareScheduler struct {
 		baseScheduler          tasks.Scheduler[Executable]
-		workflowQueueScheduler *tasks.WorkflowQueueScheduler[Executable]
+		executionQueueScheduler *tasks.ExecutionQueueScheduler[Executable]
 
-		options WorkflowAwareSchedulerOptions
+		options ExecutionAwareSchedulerOptions
 		logger  log.Logger
 	}
 )
 
-// NewWorkflowAwareScheduler creates a new WorkflowAwareScheduler that wraps a base FIFO scheduler
-// and adds a WorkflowQueueScheduler for handling workflow contention.
+// NewExecutionAwareScheduler creates a new ExecutionAwareScheduler that wraps a base FIFO scheduler
+// and adds a ExecutionQueueScheduler for handling workflow contention.
 //
 // This returns a tasks.Scheduler[Executable] that can be passed to
 // InterleavedWeightedRoundRobinScheduler.
-func NewWorkflowAwareScheduler(
+func NewExecutionAwareScheduler(
 	baseScheduler tasks.Scheduler[Executable],
-	options WorkflowAwareSchedulerOptions,
+	options ExecutionAwareSchedulerOptions,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
-) *WorkflowAwareScheduler {
-	workflowQueueScheduler := tasks.NewWorkflowQueueScheduler(
-		&tasks.WorkflowQueueSchedulerOptions{
-			MaxQueues:        options.WorkflowQueueSchedulerMaxQueues,
-			QueueTTL:         options.WorkflowQueueSchedulerQueueTTL,
-			QueueConcurrency: options.WorkflowQueueSchedulerQueueConcurrency,
+) *ExecutionAwareScheduler {
+	executionQueueScheduler := tasks.NewExecutionQueueScheduler(
+		&tasks.ExecutionQueueSchedulerOptions{
+			MaxQueues:        options.ExecutionQueueSchedulerMaxQueues,
+			QueueTTL:         options.ExecutionQueueSchedulerQueueTTL,
+			QueueConcurrency: options.ExecutionQueueSchedulerQueueConcurrency,
 		},
 		executableQueueKeyFn,
 		logger,
@@ -98,9 +98,9 @@ func NewWorkflowAwareScheduler(
 		timeSource,
 	)
 
-	s := &WorkflowAwareScheduler{
+	s := &ExecutionAwareScheduler{
 		baseScheduler:          baseScheduler,
-		workflowQueueScheduler: workflowQueueScheduler,
+		executionQueueScheduler: executionQueueScheduler,
 		options:                options,
 		logger:                 logger,
 	}
@@ -108,69 +108,69 @@ func NewWorkflowAwareScheduler(
 	return s
 }
 
-func (s *WorkflowAwareScheduler) Start() {
+func (s *ExecutionAwareScheduler) Start() {
 	s.baseScheduler.Start()
-	// Always start the WorkflowQueueScheduler regardless of current config.
-	// The EnableWorkflowQueueScheduler check gates task routing, so an idle
+	// Always start the ExecutionQueueScheduler regardless of current config.
+	// The EnableExecutionQueueScheduler check gates task routing, so an idle
 	// scheduler has minimal overhead. This ensures if the dynamic config changes
 	// from disabled to enabled, tasks will be processed correctly.
-	s.workflowQueueScheduler.Start()
+	s.executionQueueScheduler.Start()
 }
 
-func (s *WorkflowAwareScheduler) Stop() {
+func (s *ExecutionAwareScheduler) Stop() {
 	s.baseScheduler.Stop()
-	s.workflowQueueScheduler.Stop()
+	s.executionQueueScheduler.Stop()
 }
 
-func (s *WorkflowAwareScheduler) Submit(executable Executable) {
-	if s.shouldRouteToWorkflowQueueScheduler(executable) {
-		s.workflowQueueScheduler.Submit(executable)
+func (s *ExecutionAwareScheduler) Submit(executable Executable) {
+	if s.shouldRouteToExecutionQueueScheduler(executable) {
+		s.executionQueueScheduler.Submit(executable)
 		return
 	}
 	s.baseScheduler.Submit(executable)
 }
 
-func (s *WorkflowAwareScheduler) TrySubmit(executable Executable) bool {
-	if s.shouldRouteToWorkflowQueueScheduler(executable) {
-		if s.workflowQueueScheduler.TrySubmit(executable) {
+func (s *ExecutionAwareScheduler) TrySubmit(executable Executable) bool {
+	if s.shouldRouteToExecutionQueueScheduler(executable) {
+		if s.executionQueueScheduler.TrySubmit(executable) {
 			return true
 		}
-		// WorkflowQueueScheduler is full, fall through to base scheduler.
+		// ExecutionQueueScheduler is full, fall through to base scheduler.
 	}
 	return s.baseScheduler.TrySubmit(executable)
 }
 
 // HandleBusyWorkflow implements BusyWorkflowHandler.
-// It routes a task to the WorkflowQueueScheduler when it encounters a busy workflow error.
+// It routes a task to the ExecutionQueueScheduler when it encounters a busy workflow error.
 // Returns true if the task was handled (submitted to a scheduler), false if caller should handle it.
-func (s *WorkflowAwareScheduler) HandleBusyWorkflow(executable Executable) bool {
-	if !s.options.EnableWorkflowQueueScheduler() {
-		// WorkflowQueueScheduler not enabled, let caller handle it
+func (s *ExecutionAwareScheduler) HandleBusyWorkflow(executable Executable) bool {
+	if !s.options.EnableExecutionQueueScheduler() {
+		// ExecutionQueueScheduler not enabled, let caller handle it
 		return false
 	}
 
-	if s.workflowQueueScheduler.TrySubmit(executable) {
+	if s.executionQueueScheduler.TrySubmit(executable) {
 		return true
 	}
-	// WorkflowQueueScheduler is full, fall back to base scheduler.
+	// ExecutionQueueScheduler is full, fall back to base scheduler.
 	return s.baseScheduler.TrySubmit(executable)
 }
 
-// HasWorkflowQueue returns true if the workflow has an active queue in the WorkflowQueueScheduler.
-func (s *WorkflowAwareScheduler) HasWorkflowQueue(executable Executable) bool {
-	if !s.options.EnableWorkflowQueueScheduler() {
+// HasExecutionQueue returns true if the workflow has an active queue in the ExecutionQueueScheduler.
+func (s *ExecutionAwareScheduler) HasExecutionQueue(executable Executable) bool {
+	if !s.options.EnableExecutionQueueScheduler() {
 		return false
 	}
 	key := getWorkflowKey(executable)
-	return s.workflowQueueScheduler.HasQueue(key)
+	return s.executionQueueScheduler.HasQueue(key)
 }
 
-func (s *WorkflowAwareScheduler) shouldRouteToWorkflowQueueScheduler(executable Executable) bool {
-	if !s.options.EnableWorkflowQueueScheduler() {
+func (s *ExecutionAwareScheduler) shouldRouteToExecutionQueueScheduler(executable Executable) bool {
+	if !s.options.EnableExecutionQueueScheduler() {
 		return false
 	}
 	key := getWorkflowKey(executable)
-	return s.workflowQueueScheduler.HasQueue(key)
+	return s.executionQueueScheduler.HasQueue(key)
 }
 
 // getWorkflowKey extracts the workflow key from an executable for queue lookups.

@@ -39,7 +39,7 @@ import (
 )
 
 type (
-	workflowAwareSchedulerSuite struct {
+	executionAwareSchedulerSuite struct {
 		*require.Assertions
 		suite.Suite
 
@@ -48,22 +48,22 @@ type (
 	}
 )
 
-func TestWorkflowAwareSchedulerSuite(t *testing.T) {
-	s := new(workflowAwareSchedulerSuite)
+func TestExecutionAwareSchedulerSuite(t *testing.T) {
+	s := new(executionAwareSchedulerSuite)
 	suite.Run(t, s)
 }
 
-func (s *workflowAwareSchedulerSuite) SetupTest() {
+func (s *executionAwareSchedulerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewNoopLogger()
 }
 
-func (s *workflowAwareSchedulerSuite) TearDownTest() {
+func (s *executionAwareSchedulerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *workflowAwareSchedulerSuite) createMockBaseScheduler() *tasks.MockScheduler[Executable] {
+func (s *executionAwareSchedulerSuite) createMockBaseScheduler() *tasks.MockScheduler[Executable] {
 	return tasks.NewMockScheduler[Executable](s.controller)
 }
 
@@ -71,32 +71,32 @@ func (s *workflowAwareSchedulerSuite) createMockBaseScheduler() *tasks.MockSched
 // Constructor Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_DefaultQueueSize() {
+func (s *executionAwareSchedulerSuite) TestNewExecutionAwareScheduler_DefaultQueueSize() {
 	mockBaseScheduler := s.createMockBaseScheduler()
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return false },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
 	)
 	s.NotNil(scheduler)
-	s.NotNil(scheduler.workflowQueueScheduler)
+	s.NotNil(scheduler.executionQueueScheduler)
 	s.NotNil(scheduler.baseScheduler)
 }
 
-func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueSize() {
+func (s *executionAwareSchedulerSuite) TestNewExecutionAwareScheduler_CustomQueueSize() {
 	mockBaseScheduler := s.createMockBaseScheduler()
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -109,21 +109,21 @@ func (s *workflowAwareSchedulerSuite) TestNewWorkflowAwareScheduler_CustomQueueS
 // Start/Stop Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestStart_WithWorkflowQueueSchedulerEnabled() {
+func (s *executionAwareSchedulerSuite) TestStart_WithExecutionQueueSchedulerEnabled() {
 	scheduler, _ := s.createSchedulerWithMock(true)
 	scheduler.Start()
 	scheduler.Stop()
 }
 
-func (s *workflowAwareSchedulerSuite) TestStart_AlwaysStartsWorkflowQueueScheduler() {
-	// Even when EnableWorkflowQueueScheduler returns false, the WorkflowQueueScheduler
+func (s *executionAwareSchedulerSuite) TestStart_AlwaysStartsExecutionQueueScheduler() {
+	// Even when EnableExecutionQueueScheduler returns false, the ExecutionQueueScheduler
 	// is always started to handle dynamic config changes from disabled to enabled.
 	scheduler, _ := s.createSchedulerWithMock(false)
 	scheduler.Start()
 	scheduler.Stop()
 }
 
-func (s *workflowAwareSchedulerSuite) TestStop_StopsBothSchedulers() {
+func (s *executionAwareSchedulerSuite) TestStop_StopsBothSchedulers() {
 	scheduler, _ := s.createSchedulerWithMock(true)
 	scheduler.Start()
 	scheduler.Stop()
@@ -133,7 +133,7 @@ func (s *workflowAwareSchedulerSuite) TestStop_StopsBothSchedulers() {
 // Submit Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestSubmit_DelegatesToBaseWhenWorkflowQueueSchedulerDisabled() {
+func (s *executionAwareSchedulerSuite) TestSubmit_DelegatesToBaseWhenExecutionQueueSchedulerDisabled() {
 	scheduler, mockBaseScheduler := s.createSchedulerWithMock(false)
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 	mockBaseScheduler.EXPECT().Submit(mockExec).Times(1)
@@ -144,7 +144,7 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_DelegatesToBaseWhenWorkflowQueu
 	scheduler.Submit(mockExec)
 }
 
-func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToBaseWhenNoActiveQueue() {
+func (s *executionAwareSchedulerSuite) TestSubmit_RoutesToBaseWhenNoActiveQueue() {
 	scheduler, mockBaseScheduler := s.createSchedulerWithMock(true)
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 	mockBaseScheduler.EXPECT().Submit(mockExec).Times(1)
@@ -155,17 +155,17 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToBaseWhenNoActiveQueue()
 	scheduler.Submit(mockExec)
 }
 
-func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerWhenActiveQueue() {
+func (s *executionAwareSchedulerSuite) TestSubmit_RoutesToExecutionQueueSchedulerWhenActiveQueue() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -190,13 +190,13 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 	}).Times(1)
 	mockExec1.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
 
-	// First, route to WorkflowQueueScheduler via HandleBusyWorkflow
+	// First, route to ExecutionQueueScheduler via HandleBusyWorkflow
 	s.True(scheduler.HandleBusyWorkflow(mockExec1))
 
 	// Wait for execution to start
 	<-execStarted
 
-	// Now there's an active queue, subsequent submit should route to WorkflowQueueScheduler
+	// Now there's an active queue, subsequent submit should route to ExecutionQueueScheduler
 	// Add task 2 which will be queued behind task 1
 	mockExec2 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec2.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
@@ -209,14 +209,14 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 
 	// Verify queue exists for this workflow before task1 completes
 	mockExec3 := s.createMockExecutable("ns1", "wf1", "run1")
-	s.True(scheduler.HasWorkflowQueue(mockExec3))
+	s.True(scheduler.HasExecutionQueue(mockExec3))
 
-	// Add a third task via Submit - should route to WorkflowQueueScheduler since queue exists
+	// Add a third task via Submit - should route to ExecutionQueueScheduler since queue exists
 	mockExec4 := s.createMockExecutable("ns1", "wf1", "run1")
 	mockExec4.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	mockExec4.EXPECT().Execute().Return(nil).Times(1)
 	mockExec4.EXPECT().Ack().Do(func() { completionWG.Done() }).Times(1)
-	scheduler.Submit(mockExec4) // Should route to WorkflowQueueScheduler because queue exists
+	scheduler.Submit(mockExec4) // Should route to ExecutionQueueScheduler because queue exists
 
 	// Let tasks complete
 	close(execContinue)
@@ -227,7 +227,7 @@ func (s *workflowAwareSchedulerSuite) TestSubmit_RoutesToWorkflowQueueSchedulerW
 // TrySubmit Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenWorkflowQueueSchedulerDisabled() {
+func (s *executionAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenExecutionQueueSchedulerDisabled() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 
@@ -235,12 +235,12 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenWorkflowQ
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 	mockBaseScheduler.EXPECT().TrySubmit(mockExec).Return(true).Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return false },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -252,7 +252,7 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_DelegatesToBaseWhenWorkflowQ
 	s.True(scheduler.TrySubmit(mockExec))
 }
 
-func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueue() {
+func (s *executionAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueue() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 
@@ -260,12 +260,12 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueu
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 	mockBaseScheduler.EXPECT().TrySubmit(mockExec).Return(true).Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -277,19 +277,19 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenNoActiveQueu
 	s.True(scheduler.TrySubmit(mockExec))
 }
 
-func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfully() {
+func (s *executionAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfully() {
 	// When TrySubmit is called for a workflow with an active queue,
-	// it should route to WorkflowQueueScheduler and add to the existing queue (returning true)
+	// it should route to ExecutionQueueScheduler and add to the existing queue (returning true)
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -337,7 +337,7 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_AddsToExistingQueueSuccessfu
 	completionWG.Wait()
 }
 
-func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenMaxQueuesReached() {
+func (s *executionAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenMaxQueuesReached() {
 	// When WQS is at max capacity and TrySubmit is called for a workflow
 	// without an active queue, it should route to the base (FIFO) scheduler.
 	mockBaseScheduler := s.createMockBaseScheduler()
@@ -345,12 +345,12 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenMaxQueuesRea
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	// MaxQueues=1 so only one workflow can have a WQS queue
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:    func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 1 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:    func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 1 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -392,16 +392,16 @@ func (s *workflowAwareSchedulerSuite) TestTrySubmit_RoutesToBaseWhenMaxQueuesRea
 // HandleBusyWorkflow Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDisabled() {
+func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDisabled() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockExec := NewMockExecutable(s.controller)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return false },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -410,17 +410,17 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenDis
 	s.False(scheduler.HandleBusyWorkflow(mockExec))
 }
 
-func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQueueScheduler() {
+func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToExecutionQueueScheduler() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -440,18 +440,18 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToWorkflowQu
 	completionWG.Wait()
 }
 
-func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSchedulerWhenMaxQueues() {
+func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSchedulerWhenMaxQueues() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	// Use MaxQueues=1 so the second workflow can't get a queue
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:    func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 1 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:    func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 1 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -490,38 +490,38 @@ func (s *workflowAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSche
 }
 
 // =============================================================================
-// HasWorkflowQueue Tests
+// HasExecutionQueue Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenDisabled() {
+func (s *executionAwareSchedulerSuite) TestHasExecutionQueue_ReturnsFalseWhenDisabled() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockExec := NewMockExecutable(s.controller)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return false },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return false },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
 	)
-	s.False(scheduler.HasWorkflowQueue(mockExec))
+	s.False(scheduler.HasExecutionQueue(mockExec))
 }
 
-func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQueue() {
+func (s *executionAwareSchedulerSuite) TestHasExecutionQueue_ReturnsFalseWhenNoQueue() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -531,20 +531,20 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsFalseWhenNoQue
 	defer scheduler.Stop()
 
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
-	s.False(scheduler.HasWorkflowQueue(mockExec))
+	s.False(scheduler.HasExecutionQueue(mockExec))
 }
 
-func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueExists() {
+func (s *executionAwareSchedulerSuite) TestHasExecutionQueue_ReturnsTrueWhenQueueExists() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -581,11 +581,11 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 
 	// Check that queue exists for this workflow
 	mockExec3 := s.createMockExecutable("ns1", "wf1", "run1")
-	s.True(scheduler.HasWorkflowQueue(mockExec3))
+	s.True(scheduler.HasExecutionQueue(mockExec3))
 
 	// Check that queue doesn't exist for different workflow
 	mockExec4 := s.createMockExecutable("ns1", "wf2", "run2")
-	s.False(scheduler.HasWorkflowQueue(mockExec4))
+	s.False(scheduler.HasExecutionQueue(mockExec4))
 
 	close(execContinue)
 	completionWG.Wait()
@@ -595,7 +595,7 @@ func (s *workflowAwareSchedulerSuite) TestHasWorkflowQueue_ReturnsTrueWhenQueueE
 // Helper Functions Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestGetWorkflowKey() {
+func (s *executionAwareSchedulerSuite) TestGetWorkflowKey() {
 	mockExec := NewMockExecutable(s.controller)
 	mockExec.EXPECT().GetNamespaceID().Return("ns1").Times(1)
 	mockExec.EXPECT().GetWorkflowID().Return("wf1").Times(1)
@@ -607,7 +607,7 @@ func (s *workflowAwareSchedulerSuite) TestGetWorkflowKey() {
 	s.Equal("run1", key.RunID)
 }
 
-func (s *workflowAwareSchedulerSuite) TestExecutableQueueKeyFn() {
+func (s *executionAwareSchedulerSuite) TestExecutableQueueKeyFn() {
 	mockExec := s.createMockExecutable("ns1", "wf1", "run1")
 
 	key := executableQueueKeyFn(mockExec)
@@ -618,19 +618,19 @@ func (s *workflowAwareSchedulerSuite) TestExecutableQueueKeyFn() {
 // Concurrent Tests
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
+func (s *executionAwareSchedulerSuite) TestConcurrentSubmit() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 	// All tasks should be routed to base scheduler (no active queue)
 	mockBaseScheduler.EXPECT().Submit(gomock.Any()).AnyTimes()
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -657,17 +657,17 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentSubmit() {
 	wg.Wait()
 }
 
-func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
+func (s *executionAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
-		WorkflowAwareSchedulerOptions{
-			EnableWorkflowQueueScheduler:      func() bool { return true },
-			WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-			WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+		ExecutionAwareSchedulerOptions{
+			EnableExecutionQueueScheduler:      func() bool { return true },
+			ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+			ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 		},
 		s.logger,
 		metrics.NoopMetricsHandler,
@@ -702,7 +702,7 @@ func (s *workflowAwareSchedulerSuite) TestConcurrentHandleBusyWorkflow() {
 // Helper Functions
 // =============================================================================
 
-func (s *workflowAwareSchedulerSuite) createMockExecutable(namespaceID, workflowID, runID string) *MockExecutable {
+func (s *executionAwareSchedulerSuite) createMockExecutable(namespaceID, workflowID, runID string) *MockExecutable {
 	mockExec := NewMockExecutable(s.controller)
 	mockExec.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
 	mockExec.EXPECT().GetWorkflowID().Return(workflowID).AnyTimes()
@@ -710,24 +710,24 @@ func (s *workflowAwareSchedulerSuite) createMockExecutable(namespaceID, workflow
 	return mockExec
 }
 
-// defaultSchedulerOptions returns WorkflowAwareSchedulerOptions with common test defaults.
-func (s *workflowAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) WorkflowAwareSchedulerOptions {
-	return WorkflowAwareSchedulerOptions{
-		EnableWorkflowQueueScheduler:    func() bool { return enabled },
-		WorkflowQueueSchedulerMaxQueues: func() int { return 500 },
-		WorkflowQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+// defaultSchedulerOptions returns ExecutionAwareSchedulerOptions with common test defaults.
+func (s *executionAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) ExecutionAwareSchedulerOptions {
+	return ExecutionAwareSchedulerOptions{
+		EnableExecutionQueueScheduler:    func() bool { return enabled },
+		ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
+		ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
 	}
 }
 
-// createSchedulerWithMock creates a WorkflowAwareScheduler with a mock base scheduler
+// createSchedulerWithMock creates a ExecutionAwareScheduler with a mock base scheduler
 // and sets up Start/Stop expectations. Returns both the scheduler and the mock for
 // additional expectation setup.
-func (s *workflowAwareSchedulerSuite) createSchedulerWithMock(enabled bool) (*WorkflowAwareScheduler, *tasks.MockScheduler[Executable]) {
+func (s *executionAwareSchedulerSuite) createSchedulerWithMock(enabled bool) (*ExecutionAwareScheduler, *tasks.MockScheduler[Executable]) {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewWorkflowAwareScheduler(
+	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,
 		s.defaultSchedulerOptions(enabled),
 		s.logger,

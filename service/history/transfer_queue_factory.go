@@ -51,11 +51,11 @@ func NewTransferQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
-					WorkflowAwareSchedulerOptions: queues.WorkflowAwareSchedulerOptions{
-						EnableWorkflowQueueScheduler:           params.Config.TaskSchedulerEnableWorkflowQueueScheduler,
-						WorkflowQueueSchedulerMaxQueues:        params.Config.TaskSchedulerWorkflowQueueSchedulerMaxQueues,
-						WorkflowQueueSchedulerQueueTTL:         params.Config.TaskSchedulerWorkflowQueueSchedulerQueueTTL,
-						WorkflowQueueSchedulerQueueConcurrency: params.Config.TaskSchedulerWorkflowQueueSchedulerQueueConcurrency,
+					ExecutionAwareSchedulerOptions: queues.ExecutionAwareSchedulerOptions{
+						EnableExecutionQueueScheduler:           params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+						ExecutionQueueSchedulerMaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+						ExecutionQueueSchedulerQueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+						ExecutionQueueSchedulerQueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
 					},
 				},
 				params.NamespaceRegistry,

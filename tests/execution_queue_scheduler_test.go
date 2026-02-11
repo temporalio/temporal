@@ -17,31 +17,31 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-type WorkflowQueueSchedulerTestSuite struct {
+type ExecutionQueueSchedulerTestSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestWorkflowQueueSchedulerTestSuite(t *testing.T) {
+func TestExecutionQueueSchedulerTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowQueueSchedulerTestSuite))
+	suite.Run(t, new(ExecutionQueueSchedulerTestSuite))
 }
 
-func (s *WorkflowQueueSchedulerTestSuite) SetupSuite() {
+func (s *ExecutionQueueSchedulerTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): true,
+		dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 // TestSignalBurstProcessing verifies that rapid signal bursts are processed correctly
-// with the WorkflowQueueScheduler feature enabled.
+// with the ExecutionQueueScheduler feature enabled.
 //
 // This is a smoke test that ensures the feature doesn't break normal signal processing.
-// The actual routing of tasks through the WorkflowQueueScheduler only occurs when
+// The actual routing of tasks through the ExecutionQueueScheduler only occurs when
 // ErrResourceExhaustedBusyWorkflow errors happen (lock contention), which requires
 // specific timing conditions that are hard to trigger reliably in functional tests.
-// The unit tests in workflow_aware_scheduler_test.go verify the routing logic directly.
-func (s *WorkflowQueueSchedulerTestSuite) TestSignalBurstProcessing() {
+// The unit tests in execution_aware_scheduler_test.go verify the routing logic directly.
+func (s *ExecutionQueueSchedulerTestSuite) TestSignalBurstProcessing() {
 	const workflowCount = 5
 	const signalsPerWorkflow = 50 // Total: 250 signals across 5 workflows
 	const signalName = "test-signal"
@@ -113,20 +113,20 @@ func (s *WorkflowQueueSchedulerTestSuite) TestSignalBurstProcessing() {
 		s.Equal(signalsPerWorkflow, result, "Workflow %d should process all signals", i)
 	}
 
-	// Log WorkflowQueueScheduler metrics for observability
+	// Log ExecutionQueueScheduler metrics for observability
 	// Note: These will typically be 0 in functional tests because lock contention is hard to trigger
 	snapshot := capture.Snapshot()
-	tasksSubmitted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())
-	tasksCompleted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksCompleted.Name())
+	tasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
+	tasksCompleted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())
 
-	s.Logger.Info("WorkflowQueueScheduler metrics",
+	s.Logger.Info("ExecutionQueueScheduler metrics",
 		tag.NewInt64("tasks_submitted", tasksSubmitted),
 		tag.NewInt64("tasks_completed", tasksCompleted))
 }
 
 // TestSignalBurstComparison runs the same test with the feature enabled
 // to compare behavior and collect metrics.
-func (s *WorkflowQueueSchedulerTestSuite) TestSignalBurstComparison() {
+func (s *ExecutionQueueSchedulerTestSuite) TestSignalBurstComparison() {
 	const signalCount = 50
 	const signalName = "comparison-signal"
 
@@ -185,8 +185,8 @@ func (s *WorkflowQueueSchedulerTestSuite) TestSignalBurstComparison() {
 
 	snapshot := capture.Snapshot()
 	s.Logger.Info("Comparison test metrics",
-		tag.NewInt64("tasks_submitted", sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())),
-		tag.NewInt64("tasks_completed", sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksCompleted.Name())))
+		tag.NewInt64("tasks_submitted", sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())),
+		tag.NewInt64("tasks_completed", sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())))
 }
 
 // sumMetricValues sums all values for a given metric name across all tags.
@@ -254,20 +254,20 @@ func sortDurations(durations []time.Duration) {
 	}
 }
 
-// TestWorkflowQueueSchedulerDisabled verifies behavior when the feature is disabled.
-type WorkflowQueueSchedulerDisabledTestSuite struct {
+// TestExecutionQueueSchedulerDisabled verifies behavior when the feature is disabled.
+type ExecutionQueueSchedulerDisabledTestSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestWorkflowQueueSchedulerDisabledTestSuite(t *testing.T) {
+func TestExecutionQueueSchedulerDisabledTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowQueueSchedulerDisabledTestSuite))
+	suite.Run(t, new(ExecutionQueueSchedulerDisabledTestSuite))
 }
 
-func (s *WorkflowQueueSchedulerDisabledTestSuite) SetupSuite() {
+func (s *ExecutionQueueSchedulerDisabledTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		// DISABLE WorkflowQueueScheduler for comparison
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): false,
+		// DISABLE ExecutionQueueScheduler for comparison
+		dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Key(): false,
 		// Use same settings as enabled contention test for fair comparison
 		dynamicconfig.NumPendingActivitiesLimitError.Key():            5000,
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key():     50,
@@ -276,7 +276,7 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-func (s *WorkflowQueueSchedulerDisabledTestSuite) TestSignalBurstWithFeatureDisabled() {
+func (s *ExecutionQueueSchedulerDisabledTestSuite) TestSignalBurstWithFeatureDisabled() {
 	const signalCount = 50
 	const signalName = "disabled-test-signal"
 
@@ -332,20 +332,20 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) TestSignalBurstWithFeatureDisa
 	s.NoError(err)
 	s.Equal(signalCount, result)
 
-	// With feature disabled, WorkflowQueueScheduler metrics should be zero or minimal
+	// With feature disabled, ExecutionQueueScheduler metrics should be zero or minimal
 	snapshot := capture.Snapshot()
-	tasksSubmitted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())
+	tasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
 
 	s.Logger.Info("Disabled feature test metrics",
 		tag.NewInt64("tasks_submitted", tasksSubmitted))
 
-	// Tasks should not be routed to WorkflowQueueScheduler when disabled
-	s.Equal(int64(0), tasksSubmitted, "No tasks should be submitted to WorkflowQueueScheduler when disabled")
+	// Tasks should not be routed to ExecutionQueueScheduler when disabled
+	s.Equal(int64(0), tasksSubmitted, "No tasks should be submitted to ExecutionQueueScheduler when disabled")
 }
 
 // TestActivityWorkflowWithFeatureDisabled runs the same 2000-activity workload as the enabled test
 // but with WQS disabled, for direct performance comparison.
-func (s *WorkflowQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatureDisabled() {
+func (s *ExecutionQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatureDisabled() {
 	const activityCount = 2000
 
 	// Simple activity that returns immediately
@@ -403,19 +403,19 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatur
 	s.NoError(err)
 	s.Equal(activityCount, result, "Workflow should complete all activities")
 
-	// Check WorkflowQueueScheduler metrics (should be 0 when disabled)
+	// Check ExecutionQueueScheduler metrics (should be 0 when disabled)
 	snapshot := capture.Snapshot()
-	wqsTasksSubmitted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())
-	wqsTasksCompleted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksCompleted.Name())
-	wqsTasksFailed := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksFailed.Name())
-	wqsTasksAborted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksAborted.Name())
-	wqsSubmitRejected := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerSubmitRejected.Name())
+	wqsTasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
+	wqsTasksCompleted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())
+	wqsTasksFailed := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksFailed.Name())
+	wqsTasksAborted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksAborted.Name())
+	wqsSubmitRejected := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerSubmitRejected.Name())
 
 	// Get FIFO scheduler metrics
 	fifoTasksCompleted := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksCompleted.Name())
 	fifoTasksFailed := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksFailed.Name())
 
-	s.Logger.Info("Activity workflow metrics with WorkflowQueueScheduler DISABLED",
+	s.Logger.Info("Activity workflow metrics with ExecutionQueueScheduler DISABLED",
 		tag.NewInt64("wqs_tasks_submitted", wqsTasksSubmitted),
 		tag.NewInt64("wqs_tasks_completed", wqsTasksCompleted),
 		tag.NewInt64("wqs_tasks_failed", wqsTasksFailed),
@@ -437,62 +437,62 @@ func (s *WorkflowQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatur
 		tag.NewDurationTag("p99", taskQueueLatencyP99))
 
 	// Verify no tasks were routed to WQS
-	s.Equal(int64(0), wqsTasksSubmitted, "No tasks should be submitted to WorkflowQueueScheduler when disabled")
+	s.Equal(int64(0), wqsTasksSubmitted, "No tasks should be submitted to ExecutionQueueScheduler when disabled")
 }
 
-// WorkflowQueueSchedulerActivityTestSuite tests that the WorkflowQueueScheduler feature works
+// ExecutionQueueSchedulerActivityTestSuite tests that the ExecutionQueueScheduler feature works
 // correctly with activity-based workflows.
-type WorkflowQueueSchedulerActivityTestSuite struct {
+type ExecutionQueueSchedulerActivityTestSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestWorkflowQueueSchedulerActivityTestSuite(t *testing.T) {
+func TestExecutionQueueSchedulerActivityTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowQueueSchedulerActivityTestSuite))
+	suite.Run(t, new(ExecutionQueueSchedulerActivityTestSuite))
 }
 
-func (s *WorkflowQueueSchedulerActivityTestSuite) SetupSuite() {
+func (s *ExecutionQueueSchedulerActivityTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): true,
+		dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-// WorkflowQueueSchedulerContentionTestSuite tests that tasks are routed to the
-// WorkflowQueueScheduler when lock contention occurs.
-type WorkflowQueueSchedulerContentionTestSuite struct {
+// ExecutionQueueSchedulerContentionTestSuite tests that tasks are routed to the
+// ExecutionQueueScheduler when lock contention occurs.
+type ExecutionQueueSchedulerContentionTestSuite struct {
 	testcore.FunctionalTestBase
 }
 
-func TestWorkflowQueueSchedulerContentionTestSuite(t *testing.T) {
+func TestExecutionQueueSchedulerContentionTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(WorkflowQueueSchedulerContentionTestSuite))
+	suite.Run(t, new(ExecutionQueueSchedulerContentionTestSuite))
 }
 
-func (s *WorkflowQueueSchedulerContentionTestSuite) SetupSuite() {
+func (s *ExecutionQueueSchedulerContentionTestSuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		// Enable WorkflowQueueScheduler
-		dynamicconfig.TaskSchedulerEnableWorkflowQueueScheduler.Key(): true,
+		// Enable ExecutionQueueScheduler
+		dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Key(): true,
 		// Increase pending activities limit to allow more parallel activities
 		dynamicconfig.NumPendingActivitiesLimitError.Key(): 5000,
 		// Set FIFO worker count to 50 to increase contention
 		dynamicconfig.TransferProcessorSchedulerWorkerCount.Key(): 50,
 		// Use very short lock timeout to trigger contention - tasks waiting for the lock
-		// will fail with ErrResourceExhaustedBusyWorkflow and get routed to WorkflowQueueScheduler
+		// will fail with ErrResourceExhaustedBusyWorkflow and get routed to ExecutionQueueScheduler
 		dynamicconfig.HistoryCacheNonUserContextLockTimeout.Key():                      2 * time.Millisecond,
-		dynamicconfig.TaskSchedulerWorkflowQueueSchedulerQueueConcurrency.Key():        2,
+		dynamicconfig.TaskSchedulerExecutionQueueSchedulerQueueConcurrency.Key():        2,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
 // TestActivityWorkflowWithMetricsObservability runs a workflow with many activities
-// and logs WorkflowQueueScheduler metrics for observability.
+// and logs ExecutionQueueScheduler metrics for observability.
 //
 // Note: This is primarily a smoke test. Lock contention that triggers
-// WorkflowQueueScheduler routing depends on very precise timing conditions that
+// ExecutionQueueScheduler routing depends on very precise timing conditions that
 // are hard to reliably trigger in functional tests. The unit tests in
-// workflow_aware_scheduler_test.go verify the routing logic directly.
-func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetricsObservability() {
+// execution_aware_scheduler_test.go verify the routing logic directly.
+func (s *ExecutionQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetricsObservability() {
 	const activityCount = 2000
 
 	// Simple activity that returns immediately
@@ -550,19 +550,19 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetr
 	s.NoError(err)
 	s.Equal(activityCount, result, "Workflow should complete all activities")
 
-	// Check WorkflowQueueScheduler metrics
+	// Check ExecutionQueueScheduler metrics
 	snapshot := capture.Snapshot()
-	wqsTasksSubmitted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())
-	wqsTasksCompleted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksCompleted.Name())
-	wqsTasksFailed := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksFailed.Name())
-	wqsTasksAborted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksAborted.Name())
-	wqsSubmitRejected := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerSubmitRejected.Name())
+	wqsTasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
+	wqsTasksCompleted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())
+	wqsTasksFailed := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksFailed.Name())
+	wqsTasksAborted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksAborted.Name())
+	wqsSubmitRejected := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerSubmitRejected.Name())
 
 	// Get FIFO scheduler metrics
 	fifoTasksCompleted := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksCompleted.Name())
 	fifoTasksFailed := sumMetricValues(snapshot, metrics.FIFOSchedulerTasksFailed.Name())
 
-	s.Logger.Info("Activity workflow metrics with WorkflowQueueScheduler enabled",
+	s.Logger.Info("Activity workflow metrics with ExecutionQueueScheduler enabled",
 		tag.NewInt64("wqs_tasks_submitted", wqsTasksSubmitted),
 		tag.NewInt64("wqs_tasks_completed", wqsTasksCompleted),
 		tag.NewInt64("wqs_tasks_failed", wqsTasksFailed),
@@ -575,11 +575,11 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetr
 	// TaskQueueLatency: End-to-end latency from task generation to completion
 	taskQueueLatencyCount, taskQueueLatencyAvg, taskQueueLatencyMin, taskQueueLatencyMax, taskQueueLatencyP50, taskQueueLatencyP90, taskQueueLatencyP99 := getTimerStats(snapshot, metrics.TaskQueueLatency.Name())
 
-	// WorkflowQueueSchedulerTaskLatency: Latency for tasks processed by WQS
-	wqsLatencyCount, wqsLatencyAvg, wqsLatencyMin, wqsLatencyMax, wqsLatencyP50, wqsLatencyP90, wqsLatencyP99 := getTimerStats(snapshot, metrics.WorkflowQueueSchedulerTaskLatency.Name())
+	// ExecutionQueueSchedulerTaskLatency: Latency for tasks processed by WQS
+	wqsLatencyCount, wqsLatencyAvg, wqsLatencyMin, wqsLatencyMax, wqsLatencyP50, wqsLatencyP90, wqsLatencyP99 := getTimerStats(snapshot, metrics.ExecutionQueueSchedulerTaskLatency.Name())
 
-	// WorkflowQueueSchedulerQueueWaitTime: Time tasks spend waiting in WQS queue
-	wqsWaitCount, wqsWaitAvg, wqsWaitMin, wqsWaitMax, wqsWaitP50, wqsWaitP90, wqsWaitP99 := getTimerStats(snapshot, metrics.WorkflowQueueSchedulerQueueWaitTime.Name())
+	// ExecutionQueueSchedulerQueueWaitTime: Time tasks spend waiting in WQS queue
+	wqsWaitCount, wqsWaitAvg, wqsWaitMin, wqsWaitMax, wqsWaitP50, wqsWaitP90, wqsWaitP99 := getTimerStats(snapshot, metrics.ExecutionQueueSchedulerQueueWaitTime.Name())
 
 	s.Logger.Info("Task end-to-end latency (task_latency_queue)",
 		tag.NewInt("count", taskQueueLatencyCount),
@@ -590,7 +590,7 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetr
 		tag.NewDurationTag("p90", taskQueueLatencyP90),
 		tag.NewDurationTag("p99", taskQueueLatencyP99))
 
-	s.Logger.Info("WQS task latency (workflow_queue_scheduler_task_latency)",
+	s.Logger.Info("WQS task latency (execution_queue_scheduler_task_latency)",
 		tag.NewInt("count", wqsLatencyCount),
 		tag.NewDurationTag("avg", wqsLatencyAvg),
 		tag.NewDurationTag("min", wqsLatencyMin),
@@ -599,7 +599,7 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetr
 		tag.NewDurationTag("p90", wqsLatencyP90),
 		tag.NewDurationTag("p99", wqsLatencyP99))
 
-	s.Logger.Info("WQS queue wait time (workflow_queue_scheduler_queue_wait_time)",
+	s.Logger.Info("WQS queue wait time (execution_queue_scheduler_queue_wait_time)",
 		tag.NewInt("count", wqsWaitCount),
 		tag.NewDurationTag("avg", wqsWaitAvg),
 		tag.NewDurationTag("min", wqsWaitMin),
@@ -613,14 +613,14 @@ func (s *WorkflowQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetr
 }
 
 // TestActivityWorkflowWithFeatureEnabled verifies that workflows with activities work correctly
-// when the WorkflowQueueScheduler feature is enabled.
+// when the ExecutionQueueScheduler feature is enabled.
 //
 // This is a smoke test that ensures the feature doesn't break activity-based workflows.
-// The actual routing of tasks through the WorkflowQueueScheduler only occurs when
+// The actual routing of tasks through the ExecutionQueueScheduler only occurs when
 // ErrResourceExhaustedBusyWorkflow errors happen (lock contention), which requires
 // specific timing conditions that are hard to trigger reliably in functional tests.
-// The unit tests in workflow_aware_scheduler_test.go verify the routing logic directly.
-func (s *WorkflowQueueSchedulerActivityTestSuite) TestActivityWorkflowWithFeatureEnabled() {
+// The unit tests in execution_aware_scheduler_test.go verify the routing logic directly.
+func (s *ExecutionQueueSchedulerActivityTestSuite) TestActivityWorkflowWithFeatureEnabled() {
 	const activityCount = 10
 
 	// Simple activity that does nothing (just returns)
@@ -672,13 +672,13 @@ func (s *WorkflowQueueSchedulerActivityTestSuite) TestActivityWorkflowWithFeatur
 	s.NoError(err)
 	s.Equal(activityCount, result, "Workflow should complete all activities")
 
-	// Log WorkflowQueueScheduler metrics for observability
+	// Log ExecutionQueueScheduler metrics for observability
 	// Note: These will typically be 0 in functional tests because lock contention is hard to trigger
 	snapshot := capture.Snapshot()
-	tasksSubmitted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksSubmitted.Name())
-	tasksCompleted := sumMetricValues(snapshot, metrics.WorkflowQueueSchedulerTasksCompleted.Name())
+	tasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
+	tasksCompleted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())
 
-	s.Logger.Info("Activity test with WorkflowQueueScheduler enabled",
+	s.Logger.Info("Activity test with ExecutionQueueScheduler enabled",
 		tag.NewInt64("tasks_submitted", tasksSubmitted),
 		tag.NewInt64("tasks_completed", tasksCompleted))
 }

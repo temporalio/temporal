@@ -52,8 +52,8 @@ type (
 		StandbyNamespaceWeights        dynamicconfig.MapPropertyFnWithNamespaceFilter
 		InactiveNamespaceDeletionDelay dynamicconfig.DurationPropertyFn
 
-		// WorkflowAwareSchedulerOptions contains options for sequential per-workflow scheduling
-		WorkflowAwareSchedulerOptions
+		// ExecutionAwareSchedulerOptions contains options for sequential per-workflow scheduling
+		ExecutionAwareSchedulerOptions
 	}
 
 	RateLimitedSchedulerOptions struct {
@@ -70,9 +70,9 @@ type (
 		channelWeightFn       ChannelWeightFn
 		channelWeightUpdateCh chan struct{}
 
-		// workflowAwareScheduler holds a reference to the workflow-aware scheduler
+		// executionAwareScheduler holds a reference to the workflow-aware scheduler
 		// for handling busy workflow errors
-		workflowAwareScheduler *WorkflowAwareScheduler
+		executionAwareScheduler *ExecutionAwareScheduler
 	}
 
 	rateLimitedSchedulerImpl struct {
@@ -144,10 +144,10 @@ func NewScheduler(
 		metricsHandler,
 	)
 
-	// Wrap the FIFO scheduler with WorkflowAwareScheduler for sequential per-workflow processing
-	workflowAwareScheduler := NewWorkflowAwareScheduler(
+	// Wrap the FIFO scheduler with ExecutionAwareScheduler for sequential per-workflow processing
+	executionAwareScheduler := NewExecutionAwareScheduler(
 		fifoScheduler,
-		options.WorkflowAwareSchedulerOptions,
+		options.ExecutionAwareSchedulerOptions,
 		logger,
 		metricsHandler,
 		timeSource,
@@ -160,7 +160,7 @@ func NewScheduler(
 			ChannelWeightUpdateCh:        channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
 		},
-		workflowAwareScheduler,
+		executionAwareScheduler,
 		logger,
 	)
 
@@ -170,7 +170,7 @@ func NewScheduler(
 		taskChannelKeyFn:       taskChannelKeyFn,
 		channelWeightFn:        channelWeightFn,
 		channelWeightUpdateCh:  channelWeightUpdateCh,
-		workflowAwareScheduler: workflowAwareScheduler,
+		executionAwareScheduler: executionAwareScheduler,
 	}
 }
 
@@ -206,13 +206,13 @@ func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 }
 
 // HandleBusyWorkflow implements BusyWorkflowHandler by delegating to the
-// underlying WorkflowAwareScheduler. This is called when a task encounters
+// underlying ExecutionAwareScheduler. This is called when a task encounters
 // a busy workflow error and needs to be routed to the sequential scheduler.
 func (s *schedulerImpl) HandleBusyWorkflow(executable Executable) bool {
-	if s.workflowAwareScheduler == nil {
+	if s.executionAwareScheduler == nil {
 		return false
 	}
-	return s.workflowAwareScheduler.HandleBusyWorkflow(executable)
+	return s.executionAwareScheduler.HandleBusyWorkflow(executable)
 }
 
 // CommonSchedulerWrapper is an adapter that converts a common [task.Scheduler] to a [Scheduler] with an injectable
