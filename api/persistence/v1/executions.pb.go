@@ -4138,9 +4138,10 @@ func (x *TransferTaskInfo_CloseExecutionTaskDetails) GetCanSkipVisibilityArchiva
 	return false
 }
 
+// Details for a Nexus task that cancels activities belonging to a specific worker.
 type TransferTaskInfo_CancelActivityNexusTaskDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Scheduled event IDs of activities to cancel (batched by worker).
+	// Scheduled event IDs of activities to cancel.
 	ScheduledEventIds []int64 `protobuf:"varint,1,rep,packed,name=scheduled_event_ids,json=scheduledEventIds,proto3" json:"scheduled_event_ids,omitempty"`
 	WorkerInstanceKey string  `protobuf:"bytes,2,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
 	unknownFields     protoimpl.UnknownFields
