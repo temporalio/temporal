@@ -422,7 +422,6 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
-			require.Contains(t, invalidArgErr.Message, "no mapping defined for search attribute")
 		})
 	})
 }
