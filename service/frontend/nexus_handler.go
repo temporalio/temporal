@@ -506,8 +506,10 @@ func (h *nexusHandler) StartOperation(
 			oc.setFailureSource(commonnexus.FailureSourceWorker)
 			opErr := &nexus.OperationError{
 				Message: "operation error",
-				State:   nexus.OperationState(t.OperationError.GetOperationState()),
+				// nolint:staticcheck // Deprecated function still in use for backward compatibility.
+				State: nexus.OperationState(t.OperationError.GetOperationState()),
 				Cause: &nexus.FailureError{
+					// nolint:staticcheck // Deprecated function still in use for backward compatibility.
 					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
 				},
 			}
