@@ -2472,11 +2472,13 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
-						s.False(attr.GetSuggestContinueAsNew())
-						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 						if i == len(wfTaskStartedEvents)-1 { // last event
+							s.False(attr.GetSuggestContinueAsNew())
+							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 							s.True(attr.GetTargetWorkerDeploymentVersionChanged())
 						} else { // earlier events
+							s.False(attr.GetSuggestContinueAsNew())
+							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
 							s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 						}
 					}
