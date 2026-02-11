@@ -908,7 +908,7 @@ and deployment interaction in matching and history.`,
 		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
 	)
 	EnableSendTargetVersionChanged = NewNamespaceBoolSetting(
-		"system.EnableSendTargetVersionChanged",
+		"system.enableSendTargetVersionChanged",
 		true,
 		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)

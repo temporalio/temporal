@@ -1474,8 +1474,8 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.HistorySizeBytes,
 			nil,
 			wt.BuildIdRedirectCounter,
-			nil,
-			false,
+			wt.SuggestContinueAsNewReasons,
+			wt.TargetWorkerDeploymentVersionChanged,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
