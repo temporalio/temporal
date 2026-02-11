@@ -94,6 +94,7 @@ type (
 		conditions                *matchingservice.PollConditions
 		forwardedFrom             string
 		localPollStartTime        time.Time
+		workerInstanceKey         string
 	}
 
 	userDataUpdate struct {
@@ -107,6 +108,14 @@ type (
 		loadedTaskQueuePartitionCount map[taskQueueCounterKey]int
 		loadedPhysicalTaskQueueCount  map[taskQueueCounterKey]int
 		lock                          sync.Mutex
+	}
+
+	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
+	// during worker shutdown. Thread-safe via internal mutex.
+	// The inner map uses a UUID key (not pollerID) because pollerID is reused when forwarded.
+	workerPollerTracker struct {
+		lock    sync.Mutex
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> pollerTrackerKey -> cancel
 	}
 
 	// Implements matching.Engine
@@ -154,6 +163,8 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
+		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
+		workerInstancePollers workerPollerTracker
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -166,6 +177,34 @@ type (
 		rateLimiter TaskDispatchRateLimiter
 	}
 )
+
+// Add registers a poller for a worker instance. Thread-safe.
+func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	util.GetOrSetMap(t.pollers, workerKey)[pollerID] = cancel
+}
+
+// Remove unregisters a poller. Cleans up empty worker entries to prevent memory leak. Thread-safe.
+func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	util.DeleteFromMap(t.pollers, workerKey, pollerID)
+}
+
+// CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
+func (t *workerPollerTracker) CancelAll(workerKey string) int32 {
+	t.lock.Lock()
+	pollerCancels := t.pollers[workerKey]
+	delete(t.pollers, workerKey)
+	t.lock.Unlock()
+
+	// Cancel all pollers for the worker.
+	for _, cancel := range pollerCancels {
+		cancel()
+	}
+	return int32(len(pollerCancels))
+}
 
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
@@ -253,6 +292,7 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
+		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -638,6 +678,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -942,6 +983,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1164,6 +1206,14 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 		cancel()
 	}
 	return nil
+}
+
+func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
+	_ context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueue(
@@ -2501,6 +2551,7 @@ pollLoop:
 			deploymentOptions:         request.DeploymentOptions,
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
+			workerInstanceKey:         request.WorkerInstanceKey,
 		}
 		task, _, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -2528,6 +2579,9 @@ pollLoop:
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 
 		nexusReq := task.nexus.request.GetRequest()
+		if nexusReq.Header == nil {
+			nexusReq.Header = make(map[string]string)
+		}
 		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
 		// Java SDK currently expects the header in this form. We should be able to remove this duplication sometime mid 2025.
 		nexusReq.Header["Request-Timeout"] = time.Until(task.nexus.deadline).String()
@@ -2773,7 +2827,21 @@ func (e *matchingEngineImpl) pollTask(
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-		defer e.outstandingPollers.Delete(pollerID)
+
+		// Also track by worker instance key for bulk cancellation during shutdown.
+		// Use UUID (not pollerID) because pollerID is reused when forwarded.
+		workerInstanceKey := pollMetadata.workerInstanceKey
+		pollerTrackerKey := uuid.NewString()
+		if workerInstanceKey != "" {
+			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		}
+
+		defer func() {
+			e.outstandingPollers.Delete(pollerID)
+			if workerInstanceKey != "" {
+				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+			}
+		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }

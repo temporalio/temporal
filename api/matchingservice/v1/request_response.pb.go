@@ -1528,6 +1528,120 @@ func (*CancelOutstandingPollResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{14}
 }
 
+// CancelOutstandingWorkerPollsRequest cancels all outstanding polls for a given worker instance key.
+type CancelOutstandingWorkerPollsRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	TaskQueue         *v14.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueueType     v19.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	WorkerInstanceKey string                 `protobuf:"bytes,4,opt,name=worker_instance_key,json=workerInstanceKey,proto3" json:"worker_instance_key,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *CancelOutstandingWorkerPollsRequest) Reset() {
+	*x = CancelOutstandingWorkerPollsRequest{}
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelOutstandingWorkerPollsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelOutstandingWorkerPollsRequest) ProtoMessage() {}
+
+func (x *CancelOutstandingWorkerPollsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelOutstandingWorkerPollsRequest.ProtoReflect.Descriptor instead.
+func (*CancelOutstandingWorkerPollsRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *CancelOutstandingWorkerPollsRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *CancelOutstandingWorkerPollsRequest) GetTaskQueue() *v14.TaskQueue {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return nil
+}
+
+func (x *CancelOutstandingWorkerPollsRequest) GetTaskQueueType() v19.TaskQueueType {
+	if x != nil {
+		return x.TaskQueueType
+	}
+	return v19.TaskQueueType(0)
+}
+
+func (x *CancelOutstandingWorkerPollsRequest) GetWorkerInstanceKey() string {
+	if x != nil {
+		return x.WorkerInstanceKey
+	}
+	return ""
+}
+
+type CancelOutstandingWorkerPollsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Used for debugging.
+	CancelledCount int32 `protobuf:"varint,1,opt,name=cancelled_count,json=cancelledCount,proto3" json:"cancelled_count,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CancelOutstandingWorkerPollsResponse) Reset() {
+	*x = CancelOutstandingWorkerPollsResponse{}
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelOutstandingWorkerPollsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelOutstandingWorkerPollsResponse) ProtoMessage() {}
+
+func (x *CancelOutstandingWorkerPollsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelOutstandingWorkerPollsResponse.ProtoReflect.Descriptor instead.
+func (*CancelOutstandingWorkerPollsResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CancelOutstandingWorkerPollsResponse) GetCancelledCount() int32 {
+	if x != nil {
+		return x.CancelledCount
+	}
+	return 0
+}
+
 type DescribeTaskQueueRequest struct {
 	state         protoimpl.MessageState        `protogen:"open.v1"`
 	NamespaceId   string                        `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
@@ -1539,7 +1653,7 @@ type DescribeTaskQueueRequest struct {
 
 func (x *DescribeTaskQueueRequest) Reset() {
 	*x = DescribeTaskQueueRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[15]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1551,7 +1665,7 @@ func (x *DescribeTaskQueueRequest) String() string {
 func (*DescribeTaskQueueRequest) ProtoMessage() {}
 
 func (x *DescribeTaskQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[15]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1564,7 +1678,7 @@ func (x *DescribeTaskQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeTaskQueueRequest.ProtoReflect.Descriptor instead.
 func (*DescribeTaskQueueRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{15}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DescribeTaskQueueRequest) GetNamespaceId() string {
@@ -1597,7 +1711,7 @@ type DescribeTaskQueueResponse struct {
 
 func (x *DescribeTaskQueueResponse) Reset() {
 	*x = DescribeTaskQueueResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[16]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +1723,7 @@ func (x *DescribeTaskQueueResponse) String() string {
 func (*DescribeTaskQueueResponse) ProtoMessage() {}
 
 func (x *DescribeTaskQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[16]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +1736,7 @@ func (x *DescribeTaskQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeTaskQueueResponse.ProtoReflect.Descriptor instead.
 func (*DescribeTaskQueueResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{16}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DescribeTaskQueueResponse) GetDescResponse() *v1.DescribeTaskQueueResponse {
@@ -1647,7 +1761,7 @@ type DescribeVersionedTaskQueuesRequest struct {
 
 func (x *DescribeVersionedTaskQueuesRequest) Reset() {
 	*x = DescribeVersionedTaskQueuesRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[17]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1659,7 +1773,7 @@ func (x *DescribeVersionedTaskQueuesRequest) String() string {
 func (*DescribeVersionedTaskQueuesRequest) ProtoMessage() {}
 
 func (x *DescribeVersionedTaskQueuesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[17]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1672,7 +1786,7 @@ func (x *DescribeVersionedTaskQueuesRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use DescribeVersionedTaskQueuesRequest.ProtoReflect.Descriptor instead.
 func (*DescribeVersionedTaskQueuesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{17}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DescribeVersionedTaskQueuesRequest) GetNamespaceId() string {
@@ -1719,7 +1833,7 @@ type DescribeVersionedTaskQueuesResponse struct {
 
 func (x *DescribeVersionedTaskQueuesResponse) Reset() {
 	*x = DescribeVersionedTaskQueuesResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[18]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1845,7 @@ func (x *DescribeVersionedTaskQueuesResponse) String() string {
 func (*DescribeVersionedTaskQueuesResponse) ProtoMessage() {}
 
 func (x *DescribeVersionedTaskQueuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[18]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1858,7 @@ func (x *DescribeVersionedTaskQueuesResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use DescribeVersionedTaskQueuesResponse.ProtoReflect.Descriptor instead.
 func (*DescribeVersionedTaskQueuesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{18}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *DescribeVersionedTaskQueuesResponse) GetVersionTaskQueues() []*DescribeVersionedTaskQueuesResponse_VersionTaskQueue {
@@ -1770,7 +1884,7 @@ type DescribeTaskQueuePartitionRequest struct {
 
 func (x *DescribeTaskQueuePartitionRequest) Reset() {
 	*x = DescribeTaskQueuePartitionRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[19]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1782,7 +1896,7 @@ func (x *DescribeTaskQueuePartitionRequest) String() string {
 func (*DescribeTaskQueuePartitionRequest) ProtoMessage() {}
 
 func (x *DescribeTaskQueuePartitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[19]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1795,7 +1909,7 @@ func (x *DescribeTaskQueuePartitionRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DescribeTaskQueuePartitionRequest.ProtoReflect.Descriptor instead.
 func (*DescribeTaskQueuePartitionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{19}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *DescribeTaskQueuePartitionRequest) GetNamespaceId() string {
@@ -1849,7 +1963,7 @@ type DescribeTaskQueuePartitionResponse struct {
 
 func (x *DescribeTaskQueuePartitionResponse) Reset() {
 	*x = DescribeTaskQueuePartitionResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1861,7 +1975,7 @@ func (x *DescribeTaskQueuePartitionResponse) String() string {
 func (*DescribeTaskQueuePartitionResponse) ProtoMessage() {}
 
 func (x *DescribeTaskQueuePartitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[20]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1874,7 +1988,7 @@ func (x *DescribeTaskQueuePartitionResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use DescribeTaskQueuePartitionResponse.ProtoReflect.Descriptor instead.
 func (*DescribeTaskQueuePartitionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{20}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *DescribeTaskQueuePartitionResponse) GetVersionsInfoInternal() map[string]*v18.TaskQueueVersionInfoInternal {
@@ -1895,7 +2009,7 @@ type ListTaskQueuePartitionsRequest struct {
 
 func (x *ListTaskQueuePartitionsRequest) Reset() {
 	*x = ListTaskQueuePartitionsRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1907,7 +2021,7 @@ func (x *ListTaskQueuePartitionsRequest) String() string {
 func (*ListTaskQueuePartitionsRequest) ProtoMessage() {}
 
 func (x *ListTaskQueuePartitionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[21]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1920,7 +2034,7 @@ func (x *ListTaskQueuePartitionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTaskQueuePartitionsRequest.ProtoReflect.Descriptor instead.
 func (*ListTaskQueuePartitionsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{21}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ListTaskQueuePartitionsRequest) GetNamespace() string {
@@ -1954,7 +2068,7 @@ type ListTaskQueuePartitionsResponse struct {
 
 func (x *ListTaskQueuePartitionsResponse) Reset() {
 	*x = ListTaskQueuePartitionsResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1966,7 +2080,7 @@ func (x *ListTaskQueuePartitionsResponse) String() string {
 func (*ListTaskQueuePartitionsResponse) ProtoMessage() {}
 
 func (x *ListTaskQueuePartitionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[22]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1979,7 +2093,7 @@ func (x *ListTaskQueuePartitionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListTaskQueuePartitionsResponse.ProtoReflect.Descriptor instead.
 func (*ListTaskQueuePartitionsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{22}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListTaskQueuePartitionsResponse) GetActivityTaskQueuePartitions() []*v14.TaskQueuePartitionMetadata {
@@ -2019,7 +2133,7 @@ type UpdateWorkerBuildIdCompatibilityRequest struct {
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest) Reset() {
 	*x = UpdateWorkerBuildIdCompatibilityRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2031,7 +2145,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest) String() string {
 func (*UpdateWorkerBuildIdCompatibilityRequest) ProtoMessage() {}
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2044,7 +2158,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use UpdateWorkerBuildIdCompatibilityRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWorkerBuildIdCompatibilityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{23}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest) GetNamespaceId() string {
@@ -2128,7 +2242,7 @@ type UpdateWorkerBuildIdCompatibilityResponse struct {
 
 func (x *UpdateWorkerBuildIdCompatibilityResponse) Reset() {
 	*x = UpdateWorkerBuildIdCompatibilityResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2140,7 +2254,7 @@ func (x *UpdateWorkerBuildIdCompatibilityResponse) String() string {
 func (*UpdateWorkerBuildIdCompatibilityResponse) ProtoMessage() {}
 
 func (x *UpdateWorkerBuildIdCompatibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[24]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2153,7 +2267,7 @@ func (x *UpdateWorkerBuildIdCompatibilityResponse) ProtoReflect() protoreflect.M
 
 // Deprecated: Use UpdateWorkerBuildIdCompatibilityResponse.ProtoReflect.Descriptor instead.
 func (*UpdateWorkerBuildIdCompatibilityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{24}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{26}
 }
 
 type GetWorkerVersioningRulesRequest struct {
@@ -2170,7 +2284,7 @@ type GetWorkerVersioningRulesRequest struct {
 
 func (x *GetWorkerVersioningRulesRequest) Reset() {
 	*x = GetWorkerVersioningRulesRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2182,7 +2296,7 @@ func (x *GetWorkerVersioningRulesRequest) String() string {
 func (*GetWorkerVersioningRulesRequest) ProtoMessage() {}
 
 func (x *GetWorkerVersioningRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2195,7 +2309,7 @@ func (x *GetWorkerVersioningRulesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkerVersioningRulesRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkerVersioningRulesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{25}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetWorkerVersioningRulesRequest) GetNamespaceId() string {
@@ -2247,7 +2361,7 @@ type GetWorkerVersioningRulesResponse struct {
 
 func (x *GetWorkerVersioningRulesResponse) Reset() {
 	*x = GetWorkerVersioningRulesResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2259,7 +2373,7 @@ func (x *GetWorkerVersioningRulesResponse) String() string {
 func (*GetWorkerVersioningRulesResponse) ProtoMessage() {}
 
 func (x *GetWorkerVersioningRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[26]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2272,7 +2386,7 @@ func (x *GetWorkerVersioningRulesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkerVersioningRulesResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkerVersioningRulesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{26}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetWorkerVersioningRulesResponse) GetResponse() *v1.GetWorkerVersioningRulesResponse {
@@ -2303,7 +2417,7 @@ type UpdateWorkerVersioningRulesRequest struct {
 
 func (x *UpdateWorkerVersioningRulesRequest) Reset() {
 	*x = UpdateWorkerVersioningRulesRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2315,7 +2429,7 @@ func (x *UpdateWorkerVersioningRulesRequest) String() string {
 func (*UpdateWorkerVersioningRulesRequest) ProtoMessage() {}
 
 func (x *UpdateWorkerVersioningRulesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2328,7 +2442,7 @@ func (x *UpdateWorkerVersioningRulesRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use UpdateWorkerVersioningRulesRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWorkerVersioningRulesRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{27}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *UpdateWorkerVersioningRulesRequest) GetNamespaceId() string {
@@ -2380,7 +2494,7 @@ type UpdateWorkerVersioningRulesResponse struct {
 
 func (x *UpdateWorkerVersioningRulesResponse) Reset() {
 	*x = UpdateWorkerVersioningRulesResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2392,7 +2506,7 @@ func (x *UpdateWorkerVersioningRulesResponse) String() string {
 func (*UpdateWorkerVersioningRulesResponse) ProtoMessage() {}
 
 func (x *UpdateWorkerVersioningRulesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[28]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2405,7 +2519,7 @@ func (x *UpdateWorkerVersioningRulesResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use UpdateWorkerVersioningRulesResponse.ProtoReflect.Descriptor instead.
 func (*UpdateWorkerVersioningRulesResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{28}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *UpdateWorkerVersioningRulesResponse) GetResponse() *v1.UpdateWorkerVersioningRulesResponse {
@@ -2425,7 +2539,7 @@ type GetWorkerBuildIdCompatibilityRequest struct {
 
 func (x *GetWorkerBuildIdCompatibilityRequest) Reset() {
 	*x = GetWorkerBuildIdCompatibilityRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2437,7 +2551,7 @@ func (x *GetWorkerBuildIdCompatibilityRequest) String() string {
 func (*GetWorkerBuildIdCompatibilityRequest) ProtoMessage() {}
 
 func (x *GetWorkerBuildIdCompatibilityRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2450,7 +2564,7 @@ func (x *GetWorkerBuildIdCompatibilityRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use GetWorkerBuildIdCompatibilityRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkerBuildIdCompatibilityRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{29}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetWorkerBuildIdCompatibilityRequest) GetNamespaceId() string {
@@ -2476,7 +2590,7 @@ type GetWorkerBuildIdCompatibilityResponse struct {
 
 func (x *GetWorkerBuildIdCompatibilityResponse) Reset() {
 	*x = GetWorkerBuildIdCompatibilityResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2488,7 +2602,7 @@ func (x *GetWorkerBuildIdCompatibilityResponse) String() string {
 func (*GetWorkerBuildIdCompatibilityResponse) ProtoMessage() {}
 
 func (x *GetWorkerBuildIdCompatibilityResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[30]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2501,7 +2615,7 @@ func (x *GetWorkerBuildIdCompatibilityResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use GetWorkerBuildIdCompatibilityResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkerBuildIdCompatibilityResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{30}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetWorkerBuildIdCompatibilityResponse) GetResponse() *v1.GetWorkerBuildIdCompatibilityResponse {
@@ -2535,7 +2649,7 @@ type GetTaskQueueUserDataRequest struct {
 
 func (x *GetTaskQueueUserDataRequest) Reset() {
 	*x = GetTaskQueueUserDataRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2547,7 +2661,7 @@ func (x *GetTaskQueueUserDataRequest) String() string {
 func (*GetTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *GetTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[31]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2560,7 +2674,7 @@ func (x *GetTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*GetTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{31}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -2624,7 +2738,7 @@ type GetTaskQueueUserDataResponse struct {
 
 func (x *GetTaskQueueUserDataResponse) Reset() {
 	*x = GetTaskQueueUserDataResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2636,7 +2750,7 @@ func (x *GetTaskQueueUserDataResponse) String() string {
 func (*GetTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *GetTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[32]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2649,7 +2763,7 @@ func (x *GetTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*GetTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{32}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *GetTaskQueueUserDataResponse) GetUserData() *v111.VersionedTaskQueueUserData {
@@ -2698,7 +2812,7 @@ type SyncDeploymentUserDataRequest struct {
 
 func (x *SyncDeploymentUserDataRequest) Reset() {
 	*x = SyncDeploymentUserDataRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2710,7 +2824,7 @@ func (x *SyncDeploymentUserDataRequest) String() string {
 func (*SyncDeploymentUserDataRequest) ProtoMessage() {}
 
 func (x *SyncDeploymentUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2723,7 +2837,7 @@ func (x *SyncDeploymentUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentUserDataRequest.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{33}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SyncDeploymentUserDataRequest) GetNamespaceId() string {
@@ -2839,7 +2953,7 @@ type SyncDeploymentUserDataResponse struct {
 
 func (x *SyncDeploymentUserDataResponse) Reset() {
 	*x = SyncDeploymentUserDataResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2851,7 +2965,7 @@ func (x *SyncDeploymentUserDataResponse) String() string {
 func (*SyncDeploymentUserDataResponse) ProtoMessage() {}
 
 func (x *SyncDeploymentUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[34]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2864,7 +2978,7 @@ func (x *SyncDeploymentUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncDeploymentUserDataResponse.ProtoReflect.Descriptor instead.
 func (*SyncDeploymentUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{34}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SyncDeploymentUserDataResponse) GetVersion() int64 {
@@ -2893,7 +3007,7 @@ type ApplyTaskQueueUserDataReplicationEventRequest struct {
 
 func (x *ApplyTaskQueueUserDataReplicationEventRequest) Reset() {
 	*x = ApplyTaskQueueUserDataReplicationEventRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2905,7 +3019,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventRequest) String() string {
 func (*ApplyTaskQueueUserDataReplicationEventRequest) ProtoMessage() {}
 
 func (x *ApplyTaskQueueUserDataReplicationEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2918,7 +3032,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventRequest) ProtoReflect() protorefl
 
 // Deprecated: Use ApplyTaskQueueUserDataReplicationEventRequest.ProtoReflect.Descriptor instead.
 func (*ApplyTaskQueueUserDataReplicationEventRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{35}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ApplyTaskQueueUserDataReplicationEventRequest) GetNamespaceId() string {
@@ -2950,7 +3064,7 @@ type ApplyTaskQueueUserDataReplicationEventResponse struct {
 
 func (x *ApplyTaskQueueUserDataReplicationEventResponse) Reset() {
 	*x = ApplyTaskQueueUserDataReplicationEventResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2962,7 +3076,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventResponse) String() string {
 func (*ApplyTaskQueueUserDataReplicationEventResponse) ProtoMessage() {}
 
 func (x *ApplyTaskQueueUserDataReplicationEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[36]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2975,7 +3089,7 @@ func (x *ApplyTaskQueueUserDataReplicationEventResponse) ProtoReflect() protoref
 
 // Deprecated: Use ApplyTaskQueueUserDataReplicationEventResponse.ProtoReflect.Descriptor instead.
 func (*ApplyTaskQueueUserDataReplicationEventResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{36}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{38}
 }
 
 type GetBuildIdTaskQueueMappingRequest struct {
@@ -2988,7 +3102,7 @@ type GetBuildIdTaskQueueMappingRequest struct {
 
 func (x *GetBuildIdTaskQueueMappingRequest) Reset() {
 	*x = GetBuildIdTaskQueueMappingRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3000,7 +3114,7 @@ func (x *GetBuildIdTaskQueueMappingRequest) String() string {
 func (*GetBuildIdTaskQueueMappingRequest) ProtoMessage() {}
 
 func (x *GetBuildIdTaskQueueMappingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[37]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3013,7 +3127,7 @@ func (x *GetBuildIdTaskQueueMappingRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetBuildIdTaskQueueMappingRequest.ProtoReflect.Descriptor instead.
 func (*GetBuildIdTaskQueueMappingRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{37}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *GetBuildIdTaskQueueMappingRequest) GetNamespaceId() string {
@@ -3039,7 +3153,7 @@ type GetBuildIdTaskQueueMappingResponse struct {
 
 func (x *GetBuildIdTaskQueueMappingResponse) Reset() {
 	*x = GetBuildIdTaskQueueMappingResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[38]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3051,7 +3165,7 @@ func (x *GetBuildIdTaskQueueMappingResponse) String() string {
 func (*GetBuildIdTaskQueueMappingResponse) ProtoMessage() {}
 
 func (x *GetBuildIdTaskQueueMappingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[38]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3064,7 +3178,7 @@ func (x *GetBuildIdTaskQueueMappingResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetBuildIdTaskQueueMappingResponse.ProtoReflect.Descriptor instead.
 func (*GetBuildIdTaskQueueMappingResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{38}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetBuildIdTaskQueueMappingResponse) GetTaskQueues() []string {
@@ -3084,7 +3198,7 @@ type ForceLoadTaskQueuePartitionRequest struct {
 
 func (x *ForceLoadTaskQueuePartitionRequest) Reset() {
 	*x = ForceLoadTaskQueuePartitionRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3096,7 +3210,7 @@ func (x *ForceLoadTaskQueuePartitionRequest) String() string {
 func (*ForceLoadTaskQueuePartitionRequest) ProtoMessage() {}
 
 func (x *ForceLoadTaskQueuePartitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[39]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3109,7 +3223,7 @@ func (x *ForceLoadTaskQueuePartitionRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ForceLoadTaskQueuePartitionRequest.ProtoReflect.Descriptor instead.
 func (*ForceLoadTaskQueuePartitionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{39}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *ForceLoadTaskQueuePartitionRequest) GetNamespaceId() string {
@@ -3135,7 +3249,7 @@ type ForceLoadTaskQueuePartitionResponse struct {
 
 func (x *ForceLoadTaskQueuePartitionResponse) Reset() {
 	*x = ForceLoadTaskQueuePartitionResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3147,7 +3261,7 @@ func (x *ForceLoadTaskQueuePartitionResponse) String() string {
 func (*ForceLoadTaskQueuePartitionResponse) ProtoMessage() {}
 
 func (x *ForceLoadTaskQueuePartitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[40]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3160,7 +3274,7 @@ func (x *ForceLoadTaskQueuePartitionResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use ForceLoadTaskQueuePartitionResponse.ProtoReflect.Descriptor instead.
 func (*ForceLoadTaskQueuePartitionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{40}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *ForceLoadTaskQueuePartitionResponse) GetWasUnloaded() bool {
@@ -3182,7 +3296,7 @@ type ForceUnloadTaskQueueRequest struct {
 
 func (x *ForceUnloadTaskQueueRequest) Reset() {
 	*x = ForceUnloadTaskQueueRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[41]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3194,7 +3308,7 @@ func (x *ForceUnloadTaskQueueRequest) String() string {
 func (*ForceUnloadTaskQueueRequest) ProtoMessage() {}
 
 func (x *ForceUnloadTaskQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[41]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3207,7 +3321,7 @@ func (x *ForceUnloadTaskQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForceUnloadTaskQueueRequest.ProtoReflect.Descriptor instead.
 func (*ForceUnloadTaskQueueRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{41}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ForceUnloadTaskQueueRequest) GetNamespaceId() string {
@@ -3241,7 +3355,7 @@ type ForceUnloadTaskQueueResponse struct {
 
 func (x *ForceUnloadTaskQueueResponse) Reset() {
 	*x = ForceUnloadTaskQueueResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3253,7 +3367,7 @@ func (x *ForceUnloadTaskQueueResponse) String() string {
 func (*ForceUnloadTaskQueueResponse) ProtoMessage() {}
 
 func (x *ForceUnloadTaskQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[42]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3266,7 +3380,7 @@ func (x *ForceUnloadTaskQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ForceUnloadTaskQueueResponse.ProtoReflect.Descriptor instead.
 func (*ForceUnloadTaskQueueResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{42}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ForceUnloadTaskQueueResponse) GetWasLoaded() bool {
@@ -3286,7 +3400,7 @@ type ForceUnloadTaskQueuePartitionRequest struct {
 
 func (x *ForceUnloadTaskQueuePartitionRequest) Reset() {
 	*x = ForceUnloadTaskQueuePartitionRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3298,7 +3412,7 @@ func (x *ForceUnloadTaskQueuePartitionRequest) String() string {
 func (*ForceUnloadTaskQueuePartitionRequest) ProtoMessage() {}
 
 func (x *ForceUnloadTaskQueuePartitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[43]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3311,7 +3425,7 @@ func (x *ForceUnloadTaskQueuePartitionRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use ForceUnloadTaskQueuePartitionRequest.ProtoReflect.Descriptor instead.
 func (*ForceUnloadTaskQueuePartitionRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{43}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ForceUnloadTaskQueuePartitionRequest) GetNamespaceId() string {
@@ -3337,7 +3451,7 @@ type ForceUnloadTaskQueuePartitionResponse struct {
 
 func (x *ForceUnloadTaskQueuePartitionResponse) Reset() {
 	*x = ForceUnloadTaskQueuePartitionResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3349,7 +3463,7 @@ func (x *ForceUnloadTaskQueuePartitionResponse) String() string {
 func (*ForceUnloadTaskQueuePartitionResponse) ProtoMessage() {}
 
 func (x *ForceUnloadTaskQueuePartitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[44]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3362,7 +3476,7 @@ func (x *ForceUnloadTaskQueuePartitionResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ForceUnloadTaskQueuePartitionResponse.ProtoReflect.Descriptor instead.
 func (*ForceUnloadTaskQueuePartitionResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{44}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ForceUnloadTaskQueuePartitionResponse) GetWasLoaded() bool {
@@ -3396,7 +3510,7 @@ type UpdateTaskQueueUserDataRequest struct {
 
 func (x *UpdateTaskQueueUserDataRequest) Reset() {
 	*x = UpdateTaskQueueUserDataRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3408,7 +3522,7 @@ func (x *UpdateTaskQueueUserDataRequest) String() string {
 func (*UpdateTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *UpdateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[45]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3421,7 +3535,7 @@ func (x *UpdateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{45}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *UpdateTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -3467,7 +3581,7 @@ type UpdateTaskQueueUserDataResponse struct {
 
 func (x *UpdateTaskQueueUserDataResponse) Reset() {
 	*x = UpdateTaskQueueUserDataResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3479,7 +3593,7 @@ func (x *UpdateTaskQueueUserDataResponse) String() string {
 func (*UpdateTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *UpdateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[46]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3492,7 +3606,7 @@ func (x *UpdateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{46}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{48}
 }
 
 type ReplicateTaskQueueUserDataRequest struct {
@@ -3506,7 +3620,7 @@ type ReplicateTaskQueueUserDataRequest struct {
 
 func (x *ReplicateTaskQueueUserDataRequest) Reset() {
 	*x = ReplicateTaskQueueUserDataRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3518,7 +3632,7 @@ func (x *ReplicateTaskQueueUserDataRequest) String() string {
 func (*ReplicateTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *ReplicateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[47]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3531,7 +3645,7 @@ func (x *ReplicateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ReplicateTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*ReplicateTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{47}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ReplicateTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -3563,7 +3677,7 @@ type ReplicateTaskQueueUserDataResponse struct {
 
 func (x *ReplicateTaskQueueUserDataResponse) Reset() {
 	*x = ReplicateTaskQueueUserDataResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[48]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3575,7 +3689,7 @@ func (x *ReplicateTaskQueueUserDataResponse) String() string {
 func (*ReplicateTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *ReplicateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[48]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3588,7 +3702,7 @@ func (x *ReplicateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use ReplicateTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*ReplicateTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{48}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{50}
 }
 
 type CheckTaskQueueUserDataPropagationRequest struct {
@@ -3602,7 +3716,7 @@ type CheckTaskQueueUserDataPropagationRequest struct {
 
 func (x *CheckTaskQueueUserDataPropagationRequest) Reset() {
 	*x = CheckTaskQueueUserDataPropagationRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3614,7 +3728,7 @@ func (x *CheckTaskQueueUserDataPropagationRequest) String() string {
 func (*CheckTaskQueueUserDataPropagationRequest) ProtoMessage() {}
 
 func (x *CheckTaskQueueUserDataPropagationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[49]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3627,7 +3741,7 @@ func (x *CheckTaskQueueUserDataPropagationRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use CheckTaskQueueUserDataPropagationRequest.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueueUserDataPropagationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{49}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *CheckTaskQueueUserDataPropagationRequest) GetNamespaceId() string {
@@ -3659,7 +3773,7 @@ type CheckTaskQueueUserDataPropagationResponse struct {
 
 func (x *CheckTaskQueueUserDataPropagationResponse) Reset() {
 	*x = CheckTaskQueueUserDataPropagationResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[50]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3671,7 +3785,7 @@ func (x *CheckTaskQueueUserDataPropagationResponse) String() string {
 func (*CheckTaskQueueUserDataPropagationResponse) ProtoMessage() {}
 
 func (x *CheckTaskQueueUserDataPropagationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[50]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3684,7 +3798,7 @@ func (x *CheckTaskQueueUserDataPropagationResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use CheckTaskQueueUserDataPropagationResponse.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueueUserDataPropagationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{50}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{52}
 }
 
 type DispatchNexusTaskRequest struct {
@@ -3700,7 +3814,7 @@ type DispatchNexusTaskRequest struct {
 
 func (x *DispatchNexusTaskRequest) Reset() {
 	*x = DispatchNexusTaskRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[51]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3712,7 +3826,7 @@ func (x *DispatchNexusTaskRequest) String() string {
 func (*DispatchNexusTaskRequest) ProtoMessage() {}
 
 func (x *DispatchNexusTaskRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[51]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3725,7 +3839,7 @@ func (x *DispatchNexusTaskRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DispatchNexusTaskRequest.ProtoReflect.Descriptor instead.
 func (*DispatchNexusTaskRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{51}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *DispatchNexusTaskRequest) GetNamespaceId() string {
@@ -3771,7 +3885,7 @@ type DispatchNexusTaskResponse struct {
 
 func (x *DispatchNexusTaskResponse) Reset() {
 	*x = DispatchNexusTaskResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[52]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3783,7 +3897,7 @@ func (x *DispatchNexusTaskResponse) String() string {
 func (*DispatchNexusTaskResponse) ProtoMessage() {}
 
 func (x *DispatchNexusTaskResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[52]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3796,7 +3910,7 @@ func (x *DispatchNexusTaskResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DispatchNexusTaskResponse.ProtoReflect.Descriptor instead.
 func (*DispatchNexusTaskResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{52}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *DispatchNexusTaskResponse) GetOutcome() isDispatchNexusTaskResponse_Outcome {
@@ -3893,7 +4007,7 @@ type PollNexusTaskQueueRequest struct {
 
 func (x *PollNexusTaskQueueRequest) Reset() {
 	*x = PollNexusTaskQueueRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[53]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3905,7 +4019,7 @@ func (x *PollNexusTaskQueueRequest) String() string {
 func (*PollNexusTaskQueueRequest) ProtoMessage() {}
 
 func (x *PollNexusTaskQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[53]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3918,7 +4032,7 @@ func (x *PollNexusTaskQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollNexusTaskQueueRequest.ProtoReflect.Descriptor instead.
 func (*PollNexusTaskQueueRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{53}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *PollNexusTaskQueueRequest) GetNamespaceId() string {
@@ -3966,7 +4080,7 @@ type PollNexusTaskQueueResponse struct {
 
 func (x *PollNexusTaskQueueResponse) Reset() {
 	*x = PollNexusTaskQueueResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[54]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3978,7 +4092,7 @@ func (x *PollNexusTaskQueueResponse) String() string {
 func (*PollNexusTaskQueueResponse) ProtoMessage() {}
 
 func (x *PollNexusTaskQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[54]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3991,7 +4105,7 @@ func (x *PollNexusTaskQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollNexusTaskQueueResponse.ProtoReflect.Descriptor instead.
 func (*PollNexusTaskQueueResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{54}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *PollNexusTaskQueueResponse) GetResponse() *v1.PollNexusTaskQueueResponse {
@@ -4015,7 +4129,7 @@ type RespondNexusTaskCompletedRequest struct {
 
 func (x *RespondNexusTaskCompletedRequest) Reset() {
 	*x = RespondNexusTaskCompletedRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[55]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4027,7 +4141,7 @@ func (x *RespondNexusTaskCompletedRequest) String() string {
 func (*RespondNexusTaskCompletedRequest) ProtoMessage() {}
 
 func (x *RespondNexusTaskCompletedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[55]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4040,7 +4154,7 @@ func (x *RespondNexusTaskCompletedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondNexusTaskCompletedRequest.ProtoReflect.Descriptor instead.
 func (*RespondNexusTaskCompletedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{55}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *RespondNexusTaskCompletedRequest) GetNamespaceId() string {
@@ -4079,7 +4193,7 @@ type RespondNexusTaskCompletedResponse struct {
 
 func (x *RespondNexusTaskCompletedResponse) Reset() {
 	*x = RespondNexusTaskCompletedResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[56]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4091,7 +4205,7 @@ func (x *RespondNexusTaskCompletedResponse) String() string {
 func (*RespondNexusTaskCompletedResponse) ProtoMessage() {}
 
 func (x *RespondNexusTaskCompletedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[56]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4104,7 +4218,7 @@ func (x *RespondNexusTaskCompletedResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use RespondNexusTaskCompletedResponse.ProtoReflect.Descriptor instead.
 func (*RespondNexusTaskCompletedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{56}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{58}
 }
 
 type RespondNexusTaskFailedRequest struct {
@@ -4121,7 +4235,7 @@ type RespondNexusTaskFailedRequest struct {
 
 func (x *RespondNexusTaskFailedRequest) Reset() {
 	*x = RespondNexusTaskFailedRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[57]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4133,7 +4247,7 @@ func (x *RespondNexusTaskFailedRequest) String() string {
 func (*RespondNexusTaskFailedRequest) ProtoMessage() {}
 
 func (x *RespondNexusTaskFailedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[57]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4146,7 +4260,7 @@ func (x *RespondNexusTaskFailedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondNexusTaskFailedRequest.ProtoReflect.Descriptor instead.
 func (*RespondNexusTaskFailedRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{57}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *RespondNexusTaskFailedRequest) GetNamespaceId() string {
@@ -4185,7 +4299,7 @@ type RespondNexusTaskFailedResponse struct {
 
 func (x *RespondNexusTaskFailedResponse) Reset() {
 	*x = RespondNexusTaskFailedResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[58]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4197,7 +4311,7 @@ func (x *RespondNexusTaskFailedResponse) String() string {
 func (*RespondNexusTaskFailedResponse) ProtoMessage() {}
 
 func (x *RespondNexusTaskFailedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[58]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4210,7 +4324,7 @@ func (x *RespondNexusTaskFailedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RespondNexusTaskFailedResponse.ProtoReflect.Descriptor instead.
 func (*RespondNexusTaskFailedResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{58}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{60}
 }
 
 // (-- api-linter: core::0133::request-unknown-fields=disabled
@@ -4233,7 +4347,7 @@ type CreateNexusEndpointRequest struct {
 
 func (x *CreateNexusEndpointRequest) Reset() {
 	*x = CreateNexusEndpointRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[59]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4245,7 +4359,7 @@ func (x *CreateNexusEndpointRequest) String() string {
 func (*CreateNexusEndpointRequest) ProtoMessage() {}
 
 func (x *CreateNexusEndpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[59]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4258,7 +4372,7 @@ func (x *CreateNexusEndpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNexusEndpointRequest.ProtoReflect.Descriptor instead.
 func (*CreateNexusEndpointRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{59}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *CreateNexusEndpointRequest) GetSpec() *v111.NexusEndpointSpec {
@@ -4277,7 +4391,7 @@ type CreateNexusEndpointResponse struct {
 
 func (x *CreateNexusEndpointResponse) Reset() {
 	*x = CreateNexusEndpointResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[60]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4289,7 +4403,7 @@ func (x *CreateNexusEndpointResponse) String() string {
 func (*CreateNexusEndpointResponse) ProtoMessage() {}
 
 func (x *CreateNexusEndpointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[60]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4302,7 +4416,7 @@ func (x *CreateNexusEndpointResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateNexusEndpointResponse.ProtoReflect.Descriptor instead.
 func (*CreateNexusEndpointResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{60}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *CreateNexusEndpointResponse) GetEntry() *v111.NexusEndpointEntry {
@@ -4333,7 +4447,7 @@ type UpdateNexusEndpointRequest struct {
 
 func (x *UpdateNexusEndpointRequest) Reset() {
 	*x = UpdateNexusEndpointRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[61]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4345,7 +4459,7 @@ func (x *UpdateNexusEndpointRequest) String() string {
 func (*UpdateNexusEndpointRequest) ProtoMessage() {}
 
 func (x *UpdateNexusEndpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[61]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4358,7 +4472,7 @@ func (x *UpdateNexusEndpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateNexusEndpointRequest.ProtoReflect.Descriptor instead.
 func (*UpdateNexusEndpointRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{61}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *UpdateNexusEndpointRequest) GetId() string {
@@ -4391,7 +4505,7 @@ type UpdateNexusEndpointResponse struct {
 
 func (x *UpdateNexusEndpointResponse) Reset() {
 	*x = UpdateNexusEndpointResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[62]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4403,7 +4517,7 @@ func (x *UpdateNexusEndpointResponse) String() string {
 func (*UpdateNexusEndpointResponse) ProtoMessage() {}
 
 func (x *UpdateNexusEndpointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[62]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4416,7 +4530,7 @@ func (x *UpdateNexusEndpointResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateNexusEndpointResponse.ProtoReflect.Descriptor instead.
 func (*UpdateNexusEndpointResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{62}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *UpdateNexusEndpointResponse) GetEntry() *v111.NexusEndpointEntry {
@@ -4443,7 +4557,7 @@ type DeleteNexusEndpointRequest struct {
 
 func (x *DeleteNexusEndpointRequest) Reset() {
 	*x = DeleteNexusEndpointRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[63]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4455,7 +4569,7 @@ func (x *DeleteNexusEndpointRequest) String() string {
 func (*DeleteNexusEndpointRequest) ProtoMessage() {}
 
 func (x *DeleteNexusEndpointRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[63]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4468,7 +4582,7 @@ func (x *DeleteNexusEndpointRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNexusEndpointRequest.ProtoReflect.Descriptor instead.
 func (*DeleteNexusEndpointRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{63}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *DeleteNexusEndpointRequest) GetId() string {
@@ -4486,7 +4600,7 @@ type DeleteNexusEndpointResponse struct {
 
 func (x *DeleteNexusEndpointResponse) Reset() {
 	*x = DeleteNexusEndpointResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[64]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4498,7 +4612,7 @@ func (x *DeleteNexusEndpointResponse) String() string {
 func (*DeleteNexusEndpointResponse) ProtoMessage() {}
 
 func (x *DeleteNexusEndpointResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[64]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4511,7 +4625,7 @@ func (x *DeleteNexusEndpointResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteNexusEndpointResponse.ProtoReflect.Descriptor instead.
 func (*DeleteNexusEndpointResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{64}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{66}
 }
 
 type ListNexusEndpointsRequest struct {
@@ -4537,7 +4651,7 @@ type ListNexusEndpointsRequest struct {
 
 func (x *ListNexusEndpointsRequest) Reset() {
 	*x = ListNexusEndpointsRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[65]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4549,7 +4663,7 @@ func (x *ListNexusEndpointsRequest) String() string {
 func (*ListNexusEndpointsRequest) ProtoMessage() {}
 
 func (x *ListNexusEndpointsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[65]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4562,7 +4676,7 @@ func (x *ListNexusEndpointsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNexusEndpointsRequest.ProtoReflect.Descriptor instead.
 func (*ListNexusEndpointsRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{65}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ListNexusEndpointsRequest) GetNextPageToken() []byte {
@@ -4605,7 +4719,7 @@ type ListNexusEndpointsResponse struct {
 
 func (x *ListNexusEndpointsResponse) Reset() {
 	*x = ListNexusEndpointsResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[66]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4617,7 +4731,7 @@ func (x *ListNexusEndpointsResponse) String() string {
 func (*ListNexusEndpointsResponse) ProtoMessage() {}
 
 func (x *ListNexusEndpointsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[66]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4630,7 +4744,7 @@ func (x *ListNexusEndpointsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNexusEndpointsResponse.ProtoReflect.Descriptor instead.
 func (*ListNexusEndpointsResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{66}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *ListNexusEndpointsResponse) GetNextPageToken() []byte {
@@ -4664,7 +4778,7 @@ type RecordWorkerHeartbeatRequest struct {
 
 func (x *RecordWorkerHeartbeatRequest) Reset() {
 	*x = RecordWorkerHeartbeatRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[67]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4676,7 +4790,7 @@ func (x *RecordWorkerHeartbeatRequest) String() string {
 func (*RecordWorkerHeartbeatRequest) ProtoMessage() {}
 
 func (x *RecordWorkerHeartbeatRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[67]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4689,7 +4803,7 @@ func (x *RecordWorkerHeartbeatRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordWorkerHeartbeatRequest.ProtoReflect.Descriptor instead.
 func (*RecordWorkerHeartbeatRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{67}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *RecordWorkerHeartbeatRequest) GetNamespaceId() string {
@@ -4714,7 +4828,7 @@ type RecordWorkerHeartbeatResponse struct {
 
 func (x *RecordWorkerHeartbeatResponse) Reset() {
 	*x = RecordWorkerHeartbeatResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[68]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4726,7 +4840,7 @@ func (x *RecordWorkerHeartbeatResponse) String() string {
 func (*RecordWorkerHeartbeatResponse) ProtoMessage() {}
 
 func (x *RecordWorkerHeartbeatResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[68]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4739,7 +4853,7 @@ func (x *RecordWorkerHeartbeatResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordWorkerHeartbeatResponse.ProtoReflect.Descriptor instead.
 func (*RecordWorkerHeartbeatResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{68}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{70}
 }
 
 type ListWorkersRequest struct {
@@ -4752,7 +4866,7 @@ type ListWorkersRequest struct {
 
 func (x *ListWorkersRequest) Reset() {
 	*x = ListWorkersRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[69]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4764,7 +4878,7 @@ func (x *ListWorkersRequest) String() string {
 func (*ListWorkersRequest) ProtoMessage() {}
 
 func (x *ListWorkersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[69]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4777,7 +4891,7 @@ func (x *ListWorkersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkersRequest.ProtoReflect.Descriptor instead.
 func (*ListWorkersRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{69}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ListWorkersRequest) GetNamespaceId() string {
@@ -4804,7 +4918,7 @@ type ListWorkersResponse struct {
 
 func (x *ListWorkersResponse) Reset() {
 	*x = ListWorkersResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[70]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4816,7 +4930,7 @@ func (x *ListWorkersResponse) String() string {
 func (*ListWorkersResponse) ProtoMessage() {}
 
 func (x *ListWorkersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[70]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4829,7 +4943,7 @@ func (x *ListWorkersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWorkersResponse.ProtoReflect.Descriptor instead.
 func (*ListWorkersResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{70}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *ListWorkersResponse) GetWorkersInfo() []*v115.WorkerInfo {
@@ -4867,7 +4981,7 @@ type UpdateTaskQueueConfigRequest struct {
 
 func (x *UpdateTaskQueueConfigRequest) Reset() {
 	*x = UpdateTaskQueueConfigRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[71]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4879,7 +4993,7 @@ func (x *UpdateTaskQueueConfigRequest) String() string {
 func (*UpdateTaskQueueConfigRequest) ProtoMessage() {}
 
 func (x *UpdateTaskQueueConfigRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[71]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4892,7 +5006,7 @@ func (x *UpdateTaskQueueConfigRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskQueueConfigRequest.ProtoReflect.Descriptor instead.
 func (*UpdateTaskQueueConfigRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{71}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *UpdateTaskQueueConfigRequest) GetNamespaceId() string {
@@ -4918,7 +5032,7 @@ type UpdateTaskQueueConfigResponse struct {
 
 func (x *UpdateTaskQueueConfigResponse) Reset() {
 	*x = UpdateTaskQueueConfigResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[72]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4930,7 +5044,7 @@ func (x *UpdateTaskQueueConfigResponse) String() string {
 func (*UpdateTaskQueueConfigResponse) ProtoMessage() {}
 
 func (x *UpdateTaskQueueConfigResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[72]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4943,7 +5057,7 @@ func (x *UpdateTaskQueueConfigResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateTaskQueueConfigResponse.ProtoReflect.Descriptor instead.
 func (*UpdateTaskQueueConfigResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{72}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *UpdateTaskQueueConfigResponse) GetUpdatedTaskqueueConfig() *v14.TaskQueueConfig {
@@ -4963,7 +5077,7 @@ type DescribeWorkerRequest struct {
 
 func (x *DescribeWorkerRequest) Reset() {
 	*x = DescribeWorkerRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[73]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4975,7 +5089,7 @@ func (x *DescribeWorkerRequest) String() string {
 func (*DescribeWorkerRequest) ProtoMessage() {}
 
 func (x *DescribeWorkerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[73]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4988,7 +5102,7 @@ func (x *DescribeWorkerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeWorkerRequest.ProtoReflect.Descriptor instead.
 func (*DescribeWorkerRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{73}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *DescribeWorkerRequest) GetNamespaceId() string {
@@ -5014,7 +5128,7 @@ type DescribeWorkerResponse struct {
 
 func (x *DescribeWorkerResponse) Reset() {
 	*x = DescribeWorkerResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[74]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5026,7 +5140,7 @@ func (x *DescribeWorkerResponse) String() string {
 func (*DescribeWorkerResponse) ProtoMessage() {}
 
 func (x *DescribeWorkerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[74]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5039,7 +5153,7 @@ func (x *DescribeWorkerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeWorkerResponse.ProtoReflect.Descriptor instead.
 func (*DescribeWorkerResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{74}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *DescribeWorkerResponse) GetWorkerInfo() *v115.WorkerInfo {
@@ -5072,7 +5186,7 @@ type UpdateFairnessStateRequest struct {
 
 func (x *UpdateFairnessStateRequest) Reset() {
 	*x = UpdateFairnessStateRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[75]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5084,7 +5198,7 @@ func (x *UpdateFairnessStateRequest) String() string {
 func (*UpdateFairnessStateRequest) ProtoMessage() {}
 
 func (x *UpdateFairnessStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[75]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5097,7 +5211,7 @@ func (x *UpdateFairnessStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFairnessStateRequest.ProtoReflect.Descriptor instead.
 func (*UpdateFairnessStateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{75}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *UpdateFairnessStateRequest) GetNamespaceId() string {
@@ -5136,7 +5250,7 @@ type UpdateFairnessStateResponse struct {
 
 func (x *UpdateFairnessStateResponse) Reset() {
 	*x = UpdateFairnessStateResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[76]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5148,7 +5262,7 @@ func (x *UpdateFairnessStateResponse) String() string {
 func (*UpdateFairnessStateResponse) ProtoMessage() {}
 
 func (x *UpdateFairnessStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[76]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5161,7 +5275,7 @@ func (x *UpdateFairnessStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFairnessStateResponse.ProtoReflect.Descriptor instead.
 func (*UpdateFairnessStateResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{76}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{78}
 }
 
 type CheckTaskQueueVersionMembershipRequest struct {
@@ -5176,7 +5290,7 @@ type CheckTaskQueueVersionMembershipRequest struct {
 
 func (x *CheckTaskQueueVersionMembershipRequest) Reset() {
 	*x = CheckTaskQueueVersionMembershipRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[77]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5188,7 +5302,7 @@ func (x *CheckTaskQueueVersionMembershipRequest) String() string {
 func (*CheckTaskQueueVersionMembershipRequest) ProtoMessage() {}
 
 func (x *CheckTaskQueueVersionMembershipRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[77]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5201,7 +5315,7 @@ func (x *CheckTaskQueueVersionMembershipRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use CheckTaskQueueVersionMembershipRequest.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueueVersionMembershipRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{77}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *CheckTaskQueueVersionMembershipRequest) GetNamespaceId() string {
@@ -5241,7 +5355,7 @@ type CheckTaskQueueVersionMembershipResponse struct {
 
 func (x *CheckTaskQueueVersionMembershipResponse) Reset() {
 	*x = CheckTaskQueueVersionMembershipResponse{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[78]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5253,7 +5367,7 @@ func (x *CheckTaskQueueVersionMembershipResponse) String() string {
 func (*CheckTaskQueueVersionMembershipResponse) ProtoMessage() {}
 
 func (x *CheckTaskQueueVersionMembershipResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[78]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5266,7 +5380,7 @@ func (x *CheckTaskQueueVersionMembershipResponse) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use CheckTaskQueueVersionMembershipResponse.ProtoReflect.Descriptor instead.
 func (*CheckTaskQueueVersionMembershipResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{78}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *CheckTaskQueueVersionMembershipResponse) GetIsMember() bool {
@@ -5293,7 +5407,7 @@ type PollConditions struct {
 
 func (x *PollConditions) Reset() {
 	*x = PollConditions{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[79]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5305,7 +5419,7 @@ func (x *PollConditions) String() string {
 func (*PollConditions) ProtoMessage() {}
 
 func (x *PollConditions) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[79]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5318,7 +5432,7 @@ func (x *PollConditions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollConditions.ProtoReflect.Descriptor instead.
 func (*PollConditions) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{79}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *PollConditions) GetMinPriority() int32 {
@@ -5346,7 +5460,7 @@ type DescribeVersionedTaskQueuesRequest_VersionTaskQueue struct {
 
 func (x *DescribeVersionedTaskQueuesRequest_VersionTaskQueue) Reset() {
 	*x = DescribeVersionedTaskQueuesRequest_VersionTaskQueue{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[82]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5358,7 +5472,7 @@ func (x *DescribeVersionedTaskQueuesRequest_VersionTaskQueue) String() string {
 func (*DescribeVersionedTaskQueuesRequest_VersionTaskQueue) ProtoMessage() {}
 
 func (x *DescribeVersionedTaskQueuesRequest_VersionTaskQueue) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[82]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5371,7 +5485,7 @@ func (x *DescribeVersionedTaskQueuesRequest_VersionTaskQueue) ProtoReflect() pro
 
 // Deprecated: Use DescribeVersionedTaskQueuesRequest_VersionTaskQueue.ProtoReflect.Descriptor instead.
 func (*DescribeVersionedTaskQueuesRequest_VersionTaskQueue) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{17, 0}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{19, 0}
 }
 
 func (x *DescribeVersionedTaskQueuesRequest_VersionTaskQueue) GetName() string {
@@ -5404,7 +5518,7 @@ type DescribeVersionedTaskQueuesResponse_VersionTaskQueue struct {
 
 func (x *DescribeVersionedTaskQueuesResponse_VersionTaskQueue) Reset() {
 	*x = DescribeVersionedTaskQueuesResponse_VersionTaskQueue{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[83]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5416,7 +5530,7 @@ func (x *DescribeVersionedTaskQueuesResponse_VersionTaskQueue) String() string {
 func (*DescribeVersionedTaskQueuesResponse_VersionTaskQueue) ProtoMessage() {}
 
 func (x *DescribeVersionedTaskQueuesResponse_VersionTaskQueue) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[83]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5429,7 +5543,7 @@ func (x *DescribeVersionedTaskQueuesResponse_VersionTaskQueue) ProtoReflect() pr
 
 // Deprecated: Use DescribeVersionedTaskQueuesResponse_VersionTaskQueue.ProtoReflect.Descriptor instead.
 func (*DescribeVersionedTaskQueuesResponse_VersionTaskQueue) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{18, 0}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{20, 0}
 }
 
 func (x *DescribeVersionedTaskQueuesResponse_VersionTaskQueue) GetName() string {
@@ -5470,7 +5584,7 @@ type UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest struct {
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) Reset() {
 	*x = UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[86]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5482,7 +5596,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) String() st
 func (*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) ProtoMessage() {}
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[86]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5495,7 +5609,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) ProtoReflec
 
 // Deprecated: Use UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{23, 0}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{25, 0}
 }
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest) GetRequest() *v1.UpdateWorkerBuildIdCompatibilityRequest {
@@ -5518,7 +5632,7 @@ type UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds struct {
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) Reset() {
 	*x = UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[87]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5530,7 +5644,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) String() string
 func (*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) ProtoMessage() {}
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[87]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5543,7 +5657,7 @@ func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) ProtoReflect() 
 
 // Deprecated: Use UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds.ProtoReflect.Descriptor instead.
 func (*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{23, 1}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{25, 1}
 }
 
 func (x *UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds) GetKnownUserDataVersion() int64 {
@@ -5568,7 +5682,7 @@ type DispatchNexusTaskResponse_Timeout struct {
 
 func (x *DispatchNexusTaskResponse_Timeout) Reset() {
 	*x = DispatchNexusTaskResponse_Timeout{}
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[89]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5580,7 +5694,7 @@ func (x *DispatchNexusTaskResponse_Timeout) String() string {
 func (*DispatchNexusTaskResponse_Timeout) ProtoMessage() {}
 
 func (x *DispatchNexusTaskResponse_Timeout) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[89]
+	mi := &file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5593,7 +5707,7 @@ func (x *DispatchNexusTaskResponse_Timeout) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DispatchNexusTaskResponse_Timeout.ProtoReflect.Descriptor instead.
 func (*DispatchNexusTaskResponse_Timeout) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{52, 0}
+	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{54, 0}
 }
 
 var File_temporal_server_api_matchingservice_v1_request_response_proto protoreflect.FileDescriptor
@@ -5753,7 +5867,15 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\n" +
 	"task_queue\x18\x03 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x12\x1b\n" +
 	"\tpoller_id\x18\x04 \x01(\tR\bpollerId\"\x1f\n" +
-	"\x1dCancelOutstandingPollResponse\"\xf1\x01\n" +
+	"\x1dCancelOutstandingPollResponse\"\x8b\x02\n" +
+	"#CancelOutstandingWorkerPollsRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12C\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\ttaskQueue\x12L\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12.\n" +
+	"\x13worker_instance_key\x18\x04 \x01(\tR\x11workerInstanceKey\"O\n" +
+	"$CancelOutstandingWorkerPollsResponse\x12'\n" +
+	"\x0fcancelled_count\x18\x01 \x01(\x05R\x0ecancelledCount\"\xf1\x01\n" +
 	"\x18DescribeTaskQueueRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\\\n" +
 	"\fdesc_request\x18\x02 \x01(\v29.temporal.api.workflowservice.v1.DescribeTaskQueueRequestR\vdescRequest\x12T\n" +
@@ -6028,7 +6150,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescG
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 90)
+var file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 92)
 var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes = []any{
 	(*PollWorkflowTaskQueueRequest)(nil),                         // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest
 	(*PollWorkflowTaskQueueResponse)(nil),                        // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse
@@ -6045,293 +6167,297 @@ var file_temporal_server_api_matchingservice_v1_request_response_proto_goTypes =
 	(*RespondQueryTaskCompletedResponse)(nil),                    // 12: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedResponse
 	(*CancelOutstandingPollRequest)(nil),                         // 13: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest
 	(*CancelOutstandingPollResponse)(nil),                        // 14: temporal.server.api.matchingservice.v1.CancelOutstandingPollResponse
-	(*DescribeTaskQueueRequest)(nil),                             // 15: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest
-	(*DescribeTaskQueueResponse)(nil),                            // 16: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
-	(*DescribeVersionedTaskQueuesRequest)(nil),                   // 17: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest
-	(*DescribeVersionedTaskQueuesResponse)(nil),                  // 18: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse
-	(*DescribeTaskQueuePartitionRequest)(nil),                    // 19: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest
-	(*DescribeTaskQueuePartitionResponse)(nil),                   // 20: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse
-	(*ListTaskQueuePartitionsRequest)(nil),                       // 21: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest
-	(*ListTaskQueuePartitionsResponse)(nil),                      // 22: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
-	(*UpdateWorkerBuildIdCompatibilityRequest)(nil),              // 23: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest
-	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),             // 24: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
-	(*GetWorkerVersioningRulesRequest)(nil),                      // 25: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest
-	(*GetWorkerVersioningRulesResponse)(nil),                     // 26: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse
-	(*UpdateWorkerVersioningRulesRequest)(nil),                   // 27: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest
-	(*UpdateWorkerVersioningRulesResponse)(nil),                  // 28: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
-	(*GetWorkerBuildIdCompatibilityRequest)(nil),                 // 29: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest
-	(*GetWorkerBuildIdCompatibilityResponse)(nil),                // 30: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
-	(*GetTaskQueueUserDataRequest)(nil),                          // 31: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest
-	(*GetTaskQueueUserDataResponse)(nil),                         // 32: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
-	(*SyncDeploymentUserDataRequest)(nil),                        // 33: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest
-	(*SyncDeploymentUserDataResponse)(nil),                       // 34: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse
-	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),        // 35: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
-	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil),       // 36: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
-	(*GetBuildIdTaskQueueMappingRequest)(nil),                    // 37: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
-	(*GetBuildIdTaskQueueMappingResponse)(nil),                   // 38: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
-	(*ForceLoadTaskQueuePartitionRequest)(nil),                   // 39: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest
-	(*ForceLoadTaskQueuePartitionResponse)(nil),                  // 40: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse
-	(*ForceUnloadTaskQueueRequest)(nil),                          // 41: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
-	(*ForceUnloadTaskQueueResponse)(nil),                         // 42: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
-	(*ForceUnloadTaskQueuePartitionRequest)(nil),                 // 43: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest
-	(*ForceUnloadTaskQueuePartitionResponse)(nil),                // 44: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse
-	(*UpdateTaskQueueUserDataRequest)(nil),                       // 45: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
-	(*UpdateTaskQueueUserDataResponse)(nil),                      // 46: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
-	(*ReplicateTaskQueueUserDataRequest)(nil),                    // 47: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
-	(*ReplicateTaskQueueUserDataResponse)(nil),                   // 48: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
-	(*CheckTaskQueueUserDataPropagationRequest)(nil),             // 49: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest
-	(*CheckTaskQueueUserDataPropagationResponse)(nil),            // 50: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse
-	(*DispatchNexusTaskRequest)(nil),                             // 51: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest
-	(*DispatchNexusTaskResponse)(nil),                            // 52: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
-	(*PollNexusTaskQueueRequest)(nil),                            // 53: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest
-	(*PollNexusTaskQueueResponse)(nil),                           // 54: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
-	(*RespondNexusTaskCompletedRequest)(nil),                     // 55: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest
-	(*RespondNexusTaskCompletedResponse)(nil),                    // 56: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
-	(*RespondNexusTaskFailedRequest)(nil),                        // 57: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest
-	(*RespondNexusTaskFailedResponse)(nil),                       // 58: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
-	(*CreateNexusEndpointRequest)(nil),                           // 59: temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest
-	(*CreateNexusEndpointResponse)(nil),                          // 60: temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse
-	(*UpdateNexusEndpointRequest)(nil),                           // 61: temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest
-	(*UpdateNexusEndpointResponse)(nil),                          // 62: temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse
-	(*DeleteNexusEndpointRequest)(nil),                           // 63: temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest
-	(*DeleteNexusEndpointResponse)(nil),                          // 64: temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse
-	(*ListNexusEndpointsRequest)(nil),                            // 65: temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
-	(*ListNexusEndpointsResponse)(nil),                           // 66: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
-	(*RecordWorkerHeartbeatRequest)(nil),                         // 67: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest
-	(*RecordWorkerHeartbeatResponse)(nil),                        // 68: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse
-	(*ListWorkersRequest)(nil),                                   // 69: temporal.server.api.matchingservice.v1.ListWorkersRequest
-	(*ListWorkersResponse)(nil),                                  // 70: temporal.server.api.matchingservice.v1.ListWorkersResponse
-	(*UpdateTaskQueueConfigRequest)(nil),                         // 71: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
-	(*UpdateTaskQueueConfigResponse)(nil),                        // 72: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
-	(*DescribeWorkerRequest)(nil),                                // 73: temporal.server.api.matchingservice.v1.DescribeWorkerRequest
-	(*DescribeWorkerResponse)(nil),                               // 74: temporal.server.api.matchingservice.v1.DescribeWorkerResponse
-	(*UpdateFairnessStateRequest)(nil),                           // 75: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest
-	(*UpdateFairnessStateResponse)(nil),                          // 76: temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse
-	(*CheckTaskQueueVersionMembershipRequest)(nil),               // 77: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest
-	(*CheckTaskQueueVersionMembershipResponse)(nil),              // 78: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipResponse
-	(*PollConditions)(nil),                                       // 79: temporal.server.api.matchingservice.v1.PollConditions
-	nil,                                                          // 80: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
-	nil,                                                          // 81: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.QueriesEntry
-	(*DescribeVersionedTaskQueuesRequest_VersionTaskQueue)(nil),  // 82: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue
-	(*DescribeVersionedTaskQueuesResponse_VersionTaskQueue)(nil), // 83: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue
-	nil, // 84: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntry
-	nil, // 85: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
-	(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest)(nil), // 86: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
-	(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds)(nil),     // 87: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
-	nil, // 88: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry
-	(*DispatchNexusTaskResponse_Timeout)(nil),          // 89: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.Timeout
-	(*v1.PollWorkflowTaskQueueRequest)(nil),            // 90: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
-	(*v11.WorkflowExecution)(nil),                      // 91: temporal.api.common.v1.WorkflowExecution
-	(*v11.WorkflowType)(nil),                           // 92: temporal.api.common.v1.WorkflowType
-	(*v12.WorkflowQuery)(nil),                          // 93: temporal.api.query.v1.WorkflowQuery
-	(*v13.TransientWorkflowTaskInfo)(nil),              // 94: temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	(*v14.TaskQueue)(nil),                              // 95: temporal.api.taskqueue.v1.TaskQueue
-	(*timestamppb.Timestamp)(nil),                      // 96: google.protobuf.Timestamp
-	(*v15.Message)(nil),                                // 97: temporal.api.protocol.v1.Message
-	(*v16.History)(nil),                                // 98: temporal.api.history.v1.History
-	(*v14.PollerScalingDecision)(nil),                  // 99: temporal.api.taskqueue.v1.PollerScalingDecision
-	(*v1.PollActivityTaskQueueRequest)(nil),            // 100: temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
-	(*v11.ActivityType)(nil),                           // 101: temporal.api.common.v1.ActivityType
-	(*v11.Payloads)(nil),                               // 102: temporal.api.common.v1.Payloads
-	(*durationpb.Duration)(nil),                        // 103: google.protobuf.Duration
-	(*v11.Header)(nil),                                 // 104: temporal.api.common.v1.Header
-	(*v11.Priority)(nil),                               // 105: temporal.api.common.v1.Priority
-	(*v11.RetryPolicy)(nil),                            // 106: temporal.api.common.v1.RetryPolicy
-	(*v17.VectorClock)(nil),                            // 107: temporal.server.api.clock.v1.VectorClock
-	(*v18.TaskVersionDirective)(nil),                   // 108: temporal.server.api.taskqueue.v1.TaskVersionDirective
-	(*v18.TaskForwardInfo)(nil),                        // 109: temporal.server.api.taskqueue.v1.TaskForwardInfo
-	(*v1.QueryWorkflowRequest)(nil),                    // 110: temporal.api.workflowservice.v1.QueryWorkflowRequest
-	(*v12.QueryRejected)(nil),                          // 111: temporal.api.query.v1.QueryRejected
-	(*v1.RespondQueryTaskCompletedRequest)(nil),        // 112: temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
-	(v19.TaskQueueType)(0),                             // 113: temporal.api.enums.v1.TaskQueueType
-	(*v1.DescribeTaskQueueRequest)(nil),                // 114: temporal.api.workflowservice.v1.DescribeTaskQueueRequest
-	(*v110.WorkerDeploymentVersion)(nil),               // 115: temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	(*v1.DescribeTaskQueueResponse)(nil),               // 116: temporal.api.workflowservice.v1.DescribeTaskQueueResponse
-	(*v18.TaskQueuePartition)(nil),                     // 117: temporal.server.api.taskqueue.v1.TaskQueuePartition
-	(*v14.TaskQueueVersionSelection)(nil),              // 118: temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	(*v14.TaskQueuePartitionMetadata)(nil),             // 119: temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
-	(*v1.GetWorkerVersioningRulesRequest)(nil),         // 120: temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest
-	(*v1.GetWorkerVersioningRulesResponse)(nil),        // 121: temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse
-	(*v1.UpdateWorkerVersioningRulesRequest)(nil),      // 122: temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest
-	(*v1.UpdateWorkerVersioningRulesResponse)(nil),     // 123: temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse
-	(*v1.GetWorkerBuildIdCompatibilityRequest)(nil),    // 124: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
-	(*v1.GetWorkerBuildIdCompatibilityResponse)(nil),   // 125: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
-	(*v111.VersionedTaskQueueUserData)(nil),            // 126: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	(*v18.VersionedEphemeralData)(nil),                 // 127: temporal.server.api.taskqueue.v1.VersionedEphemeralData
-	(*v110.DeploymentVersionData)(nil),                 // 128: temporal.server.api.deployment.v1.DeploymentVersionData
-	(*v112.RoutingConfig)(nil),                         // 129: temporal.api.deployment.v1.RoutingConfig
-	(*v111.TaskQueueUserData)(nil),                     // 130: temporal.server.api.persistence.v1.TaskQueueUserData
-	(*v113.Request)(nil),                               // 131: temporal.api.nexus.v1.Request
-	(*v113.HandlerError)(nil),                          // 132: temporal.api.nexus.v1.HandlerError
-	(*v113.Response)(nil),                              // 133: temporal.api.nexus.v1.Response
-	(*v114.Failure)(nil),                               // 134: temporal.api.failure.v1.Failure
-	(*v1.PollNexusTaskQueueRequest)(nil),               // 135: temporal.api.workflowservice.v1.PollNexusTaskQueueRequest
-	(*v1.PollNexusTaskQueueResponse)(nil),              // 136: temporal.api.workflowservice.v1.PollNexusTaskQueueResponse
-	(*v1.RespondNexusTaskCompletedRequest)(nil),        // 137: temporal.api.workflowservice.v1.RespondNexusTaskCompletedRequest
-	(*v1.RespondNexusTaskFailedRequest)(nil),           // 138: temporal.api.workflowservice.v1.RespondNexusTaskFailedRequest
-	(*v111.NexusEndpointSpec)(nil),                     // 139: temporal.server.api.persistence.v1.NexusEndpointSpec
-	(*v111.NexusEndpointEntry)(nil),                    // 140: temporal.server.api.persistence.v1.NexusEndpointEntry
-	(*v1.RecordWorkerHeartbeatRequest)(nil),            // 141: temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
-	(*v1.ListWorkersRequest)(nil),                      // 142: temporal.api.workflowservice.v1.ListWorkersRequest
-	(*v115.WorkerInfo)(nil),                            // 143: temporal.api.worker.v1.WorkerInfo
-	(*v1.UpdateTaskQueueConfigRequest)(nil),            // 144: temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
-	(*v14.TaskQueueConfig)(nil),                        // 145: temporal.api.taskqueue.v1.TaskQueueConfig
-	(*v1.DescribeWorkerRequest)(nil),                   // 146: temporal.api.workflowservice.v1.DescribeWorkerRequest
-	(v116.FairnessState)(0),                            // 147: temporal.server.api.enums.v1.FairnessState
-	(*v14.TaskQueueStats)(nil),                         // 148: temporal.api.taskqueue.v1.TaskQueueStats
-	(*v18.TaskQueueVersionInfoInternal)(nil),           // 149: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	(*v1.UpdateWorkerBuildIdCompatibilityRequest)(nil), // 150: temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
-	(*v110.WorkerDeploymentVersionData)(nil),           // 151: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
+	(*CancelOutstandingWorkerPollsRequest)(nil),                  // 15: temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest
+	(*CancelOutstandingWorkerPollsResponse)(nil),                 // 16: temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsResponse
+	(*DescribeTaskQueueRequest)(nil),                             // 17: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest
+	(*DescribeTaskQueueResponse)(nil),                            // 18: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse
+	(*DescribeVersionedTaskQueuesRequest)(nil),                   // 19: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest
+	(*DescribeVersionedTaskQueuesResponse)(nil),                  // 20: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse
+	(*DescribeTaskQueuePartitionRequest)(nil),                    // 21: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest
+	(*DescribeTaskQueuePartitionResponse)(nil),                   // 22: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse
+	(*ListTaskQueuePartitionsRequest)(nil),                       // 23: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest
+	(*ListTaskQueuePartitionsResponse)(nil),                      // 24: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse
+	(*UpdateWorkerBuildIdCompatibilityRequest)(nil),              // 25: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	(*UpdateWorkerBuildIdCompatibilityResponse)(nil),             // 26: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityResponse
+	(*GetWorkerVersioningRulesRequest)(nil),                      // 27: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest
+	(*GetWorkerVersioningRulesResponse)(nil),                     // 28: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse
+	(*UpdateWorkerVersioningRulesRequest)(nil),                   // 29: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest
+	(*UpdateWorkerVersioningRulesResponse)(nil),                  // 30: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse
+	(*GetWorkerBuildIdCompatibilityRequest)(nil),                 // 31: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest
+	(*GetWorkerBuildIdCompatibilityResponse)(nil),                // 32: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse
+	(*GetTaskQueueUserDataRequest)(nil),                          // 33: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest
+	(*GetTaskQueueUserDataResponse)(nil),                         // 34: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse
+	(*SyncDeploymentUserDataRequest)(nil),                        // 35: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest
+	(*SyncDeploymentUserDataResponse)(nil),                       // 36: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataResponse
+	(*ApplyTaskQueueUserDataReplicationEventRequest)(nil),        // 37: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest
+	(*ApplyTaskQueueUserDataReplicationEventResponse)(nil),       // 38: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventResponse
+	(*GetBuildIdTaskQueueMappingRequest)(nil),                    // 39: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingRequest
+	(*GetBuildIdTaskQueueMappingResponse)(nil),                   // 40: temporal.server.api.matchingservice.v1.GetBuildIdTaskQueueMappingResponse
+	(*ForceLoadTaskQueuePartitionRequest)(nil),                   // 41: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest
+	(*ForceLoadTaskQueuePartitionResponse)(nil),                  // 42: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionResponse
+	(*ForceUnloadTaskQueueRequest)(nil),                          // 43: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest
+	(*ForceUnloadTaskQueueResponse)(nil),                         // 44: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueResponse
+	(*ForceUnloadTaskQueuePartitionRequest)(nil),                 // 45: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest
+	(*ForceUnloadTaskQueuePartitionResponse)(nil),                // 46: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionResponse
+	(*UpdateTaskQueueUserDataRequest)(nil),                       // 47: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest
+	(*UpdateTaskQueueUserDataResponse)(nil),                      // 48: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataResponse
+	(*ReplicateTaskQueueUserDataRequest)(nil),                    // 49: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest
+	(*ReplicateTaskQueueUserDataResponse)(nil),                   // 50: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataResponse
+	(*CheckTaskQueueUserDataPropagationRequest)(nil),             // 51: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationRequest
+	(*CheckTaskQueueUserDataPropagationResponse)(nil),            // 52: temporal.server.api.matchingservice.v1.CheckTaskQueueUserDataPropagationResponse
+	(*DispatchNexusTaskRequest)(nil),                             // 53: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest
+	(*DispatchNexusTaskResponse)(nil),                            // 54: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse
+	(*PollNexusTaskQueueRequest)(nil),                            // 55: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest
+	(*PollNexusTaskQueueResponse)(nil),                           // 56: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse
+	(*RespondNexusTaskCompletedRequest)(nil),                     // 57: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest
+	(*RespondNexusTaskCompletedResponse)(nil),                    // 58: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedResponse
+	(*RespondNexusTaskFailedRequest)(nil),                        // 59: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest
+	(*RespondNexusTaskFailedResponse)(nil),                       // 60: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedResponse
+	(*CreateNexusEndpointRequest)(nil),                           // 61: temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest
+	(*CreateNexusEndpointResponse)(nil),                          // 62: temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse
+	(*UpdateNexusEndpointRequest)(nil),                           // 63: temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest
+	(*UpdateNexusEndpointResponse)(nil),                          // 64: temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse
+	(*DeleteNexusEndpointRequest)(nil),                           // 65: temporal.server.api.matchingservice.v1.DeleteNexusEndpointRequest
+	(*DeleteNexusEndpointResponse)(nil),                          // 66: temporal.server.api.matchingservice.v1.DeleteNexusEndpointResponse
+	(*ListNexusEndpointsRequest)(nil),                            // 67: temporal.server.api.matchingservice.v1.ListNexusEndpointsRequest
+	(*ListNexusEndpointsResponse)(nil),                           // 68: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse
+	(*RecordWorkerHeartbeatRequest)(nil),                         // 69: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest
+	(*RecordWorkerHeartbeatResponse)(nil),                        // 70: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatResponse
+	(*ListWorkersRequest)(nil),                                   // 71: temporal.server.api.matchingservice.v1.ListWorkersRequest
+	(*ListWorkersResponse)(nil),                                  // 72: temporal.server.api.matchingservice.v1.ListWorkersResponse
+	(*UpdateTaskQueueConfigRequest)(nil),                         // 73: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest
+	(*UpdateTaskQueueConfigResponse)(nil),                        // 74: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse
+	(*DescribeWorkerRequest)(nil),                                // 75: temporal.server.api.matchingservice.v1.DescribeWorkerRequest
+	(*DescribeWorkerResponse)(nil),                               // 76: temporal.server.api.matchingservice.v1.DescribeWorkerResponse
+	(*UpdateFairnessStateRequest)(nil),                           // 77: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest
+	(*UpdateFairnessStateResponse)(nil),                          // 78: temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse
+	(*CheckTaskQueueVersionMembershipRequest)(nil),               // 79: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest
+	(*CheckTaskQueueVersionMembershipResponse)(nil),              // 80: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipResponse
+	(*PollConditions)(nil),                                       // 81: temporal.server.api.matchingservice.v1.PollConditions
+	nil,                                                          // 82: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
+	nil,                                                          // 83: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.QueriesEntry
+	(*DescribeVersionedTaskQueuesRequest_VersionTaskQueue)(nil),  // 84: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue
+	(*DescribeVersionedTaskQueuesResponse_VersionTaskQueue)(nil), // 85: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue
+	nil, // 86: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntry
+	nil, // 87: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
+	(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest)(nil), // 88: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
+	(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds)(nil),     // 89: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
+	nil, // 90: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry
+	(*DispatchNexusTaskResponse_Timeout)(nil),          // 91: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.Timeout
+	(*v1.PollWorkflowTaskQueueRequest)(nil),            // 92: temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
+	(*v11.WorkflowExecution)(nil),                      // 93: temporal.api.common.v1.WorkflowExecution
+	(*v11.WorkflowType)(nil),                           // 94: temporal.api.common.v1.WorkflowType
+	(*v12.WorkflowQuery)(nil),                          // 95: temporal.api.query.v1.WorkflowQuery
+	(*v13.TransientWorkflowTaskInfo)(nil),              // 96: temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	(*v14.TaskQueue)(nil),                              // 97: temporal.api.taskqueue.v1.TaskQueue
+	(*timestamppb.Timestamp)(nil),                      // 98: google.protobuf.Timestamp
+	(*v15.Message)(nil),                                // 99: temporal.api.protocol.v1.Message
+	(*v16.History)(nil),                                // 100: temporal.api.history.v1.History
+	(*v14.PollerScalingDecision)(nil),                  // 101: temporal.api.taskqueue.v1.PollerScalingDecision
+	(*v1.PollActivityTaskQueueRequest)(nil),            // 102: temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
+	(*v11.ActivityType)(nil),                           // 103: temporal.api.common.v1.ActivityType
+	(*v11.Payloads)(nil),                               // 104: temporal.api.common.v1.Payloads
+	(*durationpb.Duration)(nil),                        // 105: google.protobuf.Duration
+	(*v11.Header)(nil),                                 // 106: temporal.api.common.v1.Header
+	(*v11.Priority)(nil),                               // 107: temporal.api.common.v1.Priority
+	(*v11.RetryPolicy)(nil),                            // 108: temporal.api.common.v1.RetryPolicy
+	(*v17.VectorClock)(nil),                            // 109: temporal.server.api.clock.v1.VectorClock
+	(*v18.TaskVersionDirective)(nil),                   // 110: temporal.server.api.taskqueue.v1.TaskVersionDirective
+	(*v18.TaskForwardInfo)(nil),                        // 111: temporal.server.api.taskqueue.v1.TaskForwardInfo
+	(*v1.QueryWorkflowRequest)(nil),                    // 112: temporal.api.workflowservice.v1.QueryWorkflowRequest
+	(*v12.QueryRejected)(nil),                          // 113: temporal.api.query.v1.QueryRejected
+	(*v1.RespondQueryTaskCompletedRequest)(nil),        // 114: temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
+	(v19.TaskQueueType)(0),                             // 115: temporal.api.enums.v1.TaskQueueType
+	(*v1.DescribeTaskQueueRequest)(nil),                // 116: temporal.api.workflowservice.v1.DescribeTaskQueueRequest
+	(*v110.WorkerDeploymentVersion)(nil),               // 117: temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	(*v1.DescribeTaskQueueResponse)(nil),               // 118: temporal.api.workflowservice.v1.DescribeTaskQueueResponse
+	(*v18.TaskQueuePartition)(nil),                     // 119: temporal.server.api.taskqueue.v1.TaskQueuePartition
+	(*v14.TaskQueueVersionSelection)(nil),              // 120: temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	(*v14.TaskQueuePartitionMetadata)(nil),             // 121: temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
+	(*v1.GetWorkerVersioningRulesRequest)(nil),         // 122: temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest
+	(*v1.GetWorkerVersioningRulesResponse)(nil),        // 123: temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse
+	(*v1.UpdateWorkerVersioningRulesRequest)(nil),      // 124: temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest
+	(*v1.UpdateWorkerVersioningRulesResponse)(nil),     // 125: temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse
+	(*v1.GetWorkerBuildIdCompatibilityRequest)(nil),    // 126: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
+	(*v1.GetWorkerBuildIdCompatibilityResponse)(nil),   // 127: temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
+	(*v111.VersionedTaskQueueUserData)(nil),            // 128: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	(*v18.VersionedEphemeralData)(nil),                 // 129: temporal.server.api.taskqueue.v1.VersionedEphemeralData
+	(*v110.DeploymentVersionData)(nil),                 // 130: temporal.server.api.deployment.v1.DeploymentVersionData
+	(*v112.RoutingConfig)(nil),                         // 131: temporal.api.deployment.v1.RoutingConfig
+	(*v111.TaskQueueUserData)(nil),                     // 132: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*v113.Request)(nil),                               // 133: temporal.api.nexus.v1.Request
+	(*v113.HandlerError)(nil),                          // 134: temporal.api.nexus.v1.HandlerError
+	(*v113.Response)(nil),                              // 135: temporal.api.nexus.v1.Response
+	(*v114.Failure)(nil),                               // 136: temporal.api.failure.v1.Failure
+	(*v1.PollNexusTaskQueueRequest)(nil),               // 137: temporal.api.workflowservice.v1.PollNexusTaskQueueRequest
+	(*v1.PollNexusTaskQueueResponse)(nil),              // 138: temporal.api.workflowservice.v1.PollNexusTaskQueueResponse
+	(*v1.RespondNexusTaskCompletedRequest)(nil),        // 139: temporal.api.workflowservice.v1.RespondNexusTaskCompletedRequest
+	(*v1.RespondNexusTaskFailedRequest)(nil),           // 140: temporal.api.workflowservice.v1.RespondNexusTaskFailedRequest
+	(*v111.NexusEndpointSpec)(nil),                     // 141: temporal.server.api.persistence.v1.NexusEndpointSpec
+	(*v111.NexusEndpointEntry)(nil),                    // 142: temporal.server.api.persistence.v1.NexusEndpointEntry
+	(*v1.RecordWorkerHeartbeatRequest)(nil),            // 143: temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
+	(*v1.ListWorkersRequest)(nil),                      // 144: temporal.api.workflowservice.v1.ListWorkersRequest
+	(*v115.WorkerInfo)(nil),                            // 145: temporal.api.worker.v1.WorkerInfo
+	(*v1.UpdateTaskQueueConfigRequest)(nil),            // 146: temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
+	(*v14.TaskQueueConfig)(nil),                        // 147: temporal.api.taskqueue.v1.TaskQueueConfig
+	(*v1.DescribeWorkerRequest)(nil),                   // 148: temporal.api.workflowservice.v1.DescribeWorkerRequest
+	(v116.FairnessState)(0),                            // 149: temporal.server.api.enums.v1.FairnessState
+	(*v14.TaskQueueStats)(nil),                         // 150: temporal.api.taskqueue.v1.TaskQueueStats
+	(*v18.TaskQueueVersionInfoInternal)(nil),           // 151: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	(*v1.UpdateWorkerBuildIdCompatibilityRequest)(nil), // 152: temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	(*v110.WorkerDeploymentVersionData)(nil),           // 153: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
 }
 var file_temporal_server_api_matchingservice_v1_request_response_proto_depIdxs = []int32{
-	90,  // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
-	79,  // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest.conditions:type_name -> temporal.server.api.matchingservice.v1.PollConditions
-	91,  // 2: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	92,  // 3: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	93,  // 4: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.query:type_name -> temporal.api.query.v1.WorkflowQuery
-	94,  // 5: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	95,  // 6: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	96,  // 7: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
-	96,  // 8: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
-	80,  // 9: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.queries:type_name -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
-	97,  // 10: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.messages:type_name -> temporal.api.protocol.v1.Message
-	98,  // 11: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.history:type_name -> temporal.api.history.v1.History
-	99,  // 12: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.poller_scaling_decision:type_name -> temporal.api.taskqueue.v1.PollerScalingDecision
-	98,  // 13: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.raw_history:type_name -> temporal.api.history.v1.History
-	91,  // 14: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	92,  // 15: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	93,  // 16: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.query:type_name -> temporal.api.query.v1.WorkflowQuery
-	94,  // 17: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	95,  // 18: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	96,  // 19: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.scheduled_time:type_name -> google.protobuf.Timestamp
-	96,  // 20: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.started_time:type_name -> google.protobuf.Timestamp
-	81,  // 21: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.queries:type_name -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.QueriesEntry
-	97,  // 22: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.messages:type_name -> temporal.api.protocol.v1.Message
-	98,  // 23: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.history:type_name -> temporal.api.history.v1.History
-	99,  // 24: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.poller_scaling_decision:type_name -> temporal.api.taskqueue.v1.PollerScalingDecision
-	100, // 25: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
-	79,  // 26: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest.conditions:type_name -> temporal.server.api.matchingservice.v1.PollConditions
-	91,  // 27: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	101, // 28: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.activity_type:type_name -> temporal.api.common.v1.ActivityType
-	102, // 29: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.input:type_name -> temporal.api.common.v1.Payloads
-	96,  // 30: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
-	103, // 31: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	96,  // 32: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
-	103, // 33: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.start_to_close_timeout:type_name -> google.protobuf.Duration
-	103, // 34: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_timeout:type_name -> google.protobuf.Duration
-	96,  // 35: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.current_attempt_scheduled_time:type_name -> google.protobuf.Timestamp
-	102, // 36: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_details:type_name -> temporal.api.common.v1.Payloads
-	92,  // 37: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
-	104, // 38: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.header:type_name -> temporal.api.common.v1.Header
-	99,  // 39: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.poller_scaling_decision:type_name -> temporal.api.taskqueue.v1.PollerScalingDecision
-	105, // 40: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.priority:type_name -> temporal.api.common.v1.Priority
-	106, // 41: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
-	91,  // 42: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	95,  // 43: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	103, // 44: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	107, // 45: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	108, // 46: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	109, // 47: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
-	105, // 48: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.priority:type_name -> temporal.api.common.v1.Priority
-	91,  // 49: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	95,  // 50: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	103, // 51: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	107, // 52: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	108, // 53: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	109, // 54: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
-	105, // 55: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.priority:type_name -> temporal.api.common.v1.Priority
-	95,  // 56: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	110, // 57: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.query_request:type_name -> temporal.api.workflowservice.v1.QueryWorkflowRequest
-	108, // 58: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
-	109, // 59: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
-	105, // 60: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.priority:type_name -> temporal.api.common.v1.Priority
-	102, // 61: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_result:type_name -> temporal.api.common.v1.Payloads
-	111, // 62: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_rejected:type_name -> temporal.api.query.v1.QueryRejected
-	95,  // 63: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	112, // 64: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.completed_request:type_name -> temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
-	113, // 65: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	95,  // 66: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	114, // 67: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest.desc_request:type_name -> temporal.api.workflowservice.v1.DescribeTaskQueueRequest
-	115, // 68: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	116, // 69: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse.desc_response:type_name -> temporal.api.workflowservice.v1.DescribeTaskQueueResponse
-	113, // 70: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	95,  // 71: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	115, // 72: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	82,  // 73: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.version_task_queues:type_name -> temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue
-	83,  // 74: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.version_task_queues:type_name -> temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue
-	117, // 75: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	118, // 76: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest.versions:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	85,  // 77: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
-	95,  // 78: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	119, // 79: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.activity_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
-	119, // 80: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.workflow_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
-	86,  // 81: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.apply_public_request:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
-	87,  // 82: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.remove_build_ids:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
-	120, // 83: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest
-	121, // 84: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse
-	122, // 85: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest
-	123, // 86: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse
-	124, // 87: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
-	125, // 88: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
-	113, // 89: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	126, // 90: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	127, // 91: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse.ephemeral_data:type_name -> temporal.server.api.taskqueue.v1.VersionedEphemeralData
-	113, // 92: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.task_queue_types:type_name -> temporal.api.enums.v1.TaskQueueType
-	128, // 93: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.update_version_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
-	115, // 94: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.forget_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	129, // 95: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.update_routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
-	88,  // 96: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.upsert_versions_data:type_name -> temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry
-	130, // 97: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	117, // 98: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	113, // 99: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	117, // 100: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	126, // 101: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	130, // 102: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	95,  // 103: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	131, // 104: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest.request:type_name -> temporal.api.nexus.v1.Request
-	109, // 105: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
-	132, // 106: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.handler_error:type_name -> temporal.api.nexus.v1.HandlerError
-	133, // 107: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.response:type_name -> temporal.api.nexus.v1.Response
-	89,  // 108: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.request_timeout:type_name -> temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.Timeout
-	134, // 109: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.failure:type_name -> temporal.api.failure.v1.Failure
-	135, // 110: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest.request:type_name -> temporal.api.workflowservice.v1.PollNexusTaskQueueRequest
-	79,  // 111: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest.conditions:type_name -> temporal.server.api.matchingservice.v1.PollConditions
-	136, // 112: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse.response:type_name -> temporal.api.workflowservice.v1.PollNexusTaskQueueResponse
-	95,  // 113: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	137, // 114: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest.request:type_name -> temporal.api.workflowservice.v1.RespondNexusTaskCompletedRequest
-	95,  // 115: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
-	138, // 116: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest.request:type_name -> temporal.api.workflowservice.v1.RespondNexusTaskFailedRequest
-	139, // 117: temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest.spec:type_name -> temporal.server.api.persistence.v1.NexusEndpointSpec
-	140, // 118: temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse.entry:type_name -> temporal.server.api.persistence.v1.NexusEndpointEntry
-	139, // 119: temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest.spec:type_name -> temporal.server.api.persistence.v1.NexusEndpointSpec
-	140, // 120: temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse.entry:type_name -> temporal.server.api.persistence.v1.NexusEndpointEntry
-	140, // 121: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse.entries:type_name -> temporal.server.api.persistence.v1.NexusEndpointEntry
-	141, // 122: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest.heartbeart_request:type_name -> temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
-	142, // 123: temporal.server.api.matchingservice.v1.ListWorkersRequest.list_request:type_name -> temporal.api.workflowservice.v1.ListWorkersRequest
-	143, // 124: temporal.server.api.matchingservice.v1.ListWorkersResponse.workers_info:type_name -> temporal.api.worker.v1.WorkerInfo
-	144, // 125: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
-	145, // 126: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
-	146, // 127: temporal.server.api.matchingservice.v1.DescribeWorkerRequest.request:type_name -> temporal.api.workflowservice.v1.DescribeWorkerRequest
-	143, // 128: temporal.server.api.matchingservice.v1.DescribeWorkerResponse.worker_info:type_name -> temporal.api.worker.v1.WorkerInfo
-	113, // 129: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	147, // 130: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.fairness_state:type_name -> temporal.server.api.enums.v1.FairnessState
-	113, // 131: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	115, // 132: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
-	93,  // 133: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	93,  // 134: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	113, // 135: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	113, // 136: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
-	148, // 137: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	84,  // 138: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.stats_by_priority_key:type_name -> temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntry
-	148, // 139: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntry.value:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
-	149, // 140: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	150, // 141: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
-	151, // 142: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionData
-	143, // [143:143] is the sub-list for method output_type
-	143, // [143:143] is the sub-list for method input_type
-	143, // [143:143] is the sub-list for extension type_name
-	143, // [143:143] is the sub-list for extension extendee
-	0,   // [0:143] is the sub-list for field type_name
+	92,  // 0: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest
+	81,  // 1: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest.conditions:type_name -> temporal.server.api.matchingservice.v1.PollConditions
+	93,  // 2: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	94,  // 3: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	95,  // 4: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.query:type_name -> temporal.api.query.v1.WorkflowQuery
+	96,  // 5: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	97,  // 6: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	98,  // 7: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
+	98,  // 8: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
+	82,  // 9: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.queries:type_name -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry
+	99,  // 10: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.messages:type_name -> temporal.api.protocol.v1.Message
+	100, // 11: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.history:type_name -> temporal.api.history.v1.History
+	101, // 12: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.poller_scaling_decision:type_name -> temporal.api.taskqueue.v1.PollerScalingDecision
+	100, // 13: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.raw_history:type_name -> temporal.api.history.v1.History
+	93,  // 14: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	94,  // 15: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	95,  // 16: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.query:type_name -> temporal.api.query.v1.WorkflowQuery
+	96,  // 17: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
+	97,  // 18: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.workflow_execution_task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	98,  // 19: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.scheduled_time:type_name -> google.protobuf.Timestamp
+	98,  // 20: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.started_time:type_name -> google.protobuf.Timestamp
+	83,  // 21: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.queries:type_name -> temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.QueriesEntry
+	99,  // 22: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.messages:type_name -> temporal.api.protocol.v1.Message
+	100, // 23: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.history:type_name -> temporal.api.history.v1.History
+	101, // 24: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.poller_scaling_decision:type_name -> temporal.api.taskqueue.v1.PollerScalingDecision
+	102, // 25: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest.poll_request:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueRequest
+	81,  // 26: temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest.conditions:type_name -> temporal.server.api.matchingservice.v1.PollConditions
+	93,  // 27: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	103, // 28: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.activity_type:type_name -> temporal.api.common.v1.ActivityType
+	104, // 29: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.input:type_name -> temporal.api.common.v1.Payloads
+	98,  // 30: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.scheduled_time:type_name -> google.protobuf.Timestamp
+	105, // 31: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	98,  // 32: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.started_time:type_name -> google.protobuf.Timestamp
+	105, // 33: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.start_to_close_timeout:type_name -> google.protobuf.Duration
+	105, // 34: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_timeout:type_name -> google.protobuf.Duration
+	98,  // 35: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.current_attempt_scheduled_time:type_name -> google.protobuf.Timestamp
+	104, // 36: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.heartbeat_details:type_name -> temporal.api.common.v1.Payloads
+	94,  // 37: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.workflow_type:type_name -> temporal.api.common.v1.WorkflowType
+	106, // 38: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.header:type_name -> temporal.api.common.v1.Header
+	101, // 39: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.poller_scaling_decision:type_name -> temporal.api.taskqueue.v1.PollerScalingDecision
+	107, // 40: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.priority:type_name -> temporal.api.common.v1.Priority
+	108, // 41: temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
+	93,  // 42: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	97,  // 43: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	105, // 44: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	109, // 45: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	110, // 46: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	111, // 47: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
+	107, // 48: temporal.server.api.matchingservice.v1.AddWorkflowTaskRequest.priority:type_name -> temporal.api.common.v1.Priority
+	93,  // 49: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	97,  // 50: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	105, // 51: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	109, // 52: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	110, // 53: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	111, // 54: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
+	107, // 55: temporal.server.api.matchingservice.v1.AddActivityTaskRequest.priority:type_name -> temporal.api.common.v1.Priority
+	97,  // 56: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	112, // 57: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.query_request:type_name -> temporal.api.workflowservice.v1.QueryWorkflowRequest
+	110, // 58: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.version_directive:type_name -> temporal.server.api.taskqueue.v1.TaskVersionDirective
+	111, // 59: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
+	107, // 60: temporal.server.api.matchingservice.v1.QueryWorkflowRequest.priority:type_name -> temporal.api.common.v1.Priority
+	104, // 61: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_result:type_name -> temporal.api.common.v1.Payloads
+	113, // 62: temporal.server.api.matchingservice.v1.QueryWorkflowResponse.query_rejected:type_name -> temporal.api.query.v1.QueryRejected
+	97,  // 63: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	114, // 64: temporal.server.api.matchingservice.v1.RespondQueryTaskCompletedRequest.completed_request:type_name -> temporal.api.workflowservice.v1.RespondQueryTaskCompletedRequest
+	115, // 65: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	97,  // 66: temporal.server.api.matchingservice.v1.CancelOutstandingPollRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	97,  // 67: temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	115, // 68: temporal.server.api.matchingservice.v1.CancelOutstandingWorkerPollsRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	116, // 69: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest.desc_request:type_name -> temporal.api.workflowservice.v1.DescribeTaskQueueRequest
+	117, // 70: temporal.server.api.matchingservice.v1.DescribeTaskQueueRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	118, // 71: temporal.server.api.matchingservice.v1.DescribeTaskQueueResponse.desc_response:type_name -> temporal.api.workflowservice.v1.DescribeTaskQueueResponse
+	115, // 72: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	97,  // 73: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	117, // 74: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	84,  // 75: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.version_task_queues:type_name -> temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue
+	85,  // 76: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.version_task_queues:type_name -> temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue
+	119, // 77: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	120, // 78: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionRequest.versions:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	87,  // 79: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
+	97,  // 80: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	121, // 81: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.activity_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
+	121, // 82: temporal.server.api.matchingservice.v1.ListTaskQueuePartitionsResponse.workflow_task_queue_partitions:type_name -> temporal.api.taskqueue.v1.TaskQueuePartitionMetadata
+	88,  // 83: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.apply_public_request:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest
+	89,  // 84: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.remove_build_ids:type_name -> temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.RemoveBuildIds
+	122, // 85: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkerVersioningRulesRequest
+	123, // 86: temporal.server.api.matchingservice.v1.GetWorkerVersioningRulesResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkerVersioningRulesResponse
+	124, // 87: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesRequest
+	125, // 88: temporal.server.api.matchingservice.v1.UpdateWorkerVersioningRulesResponse.response:type_name -> temporal.api.workflowservice.v1.UpdateWorkerVersioningRulesResponse
+	126, // 89: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityRequest.request:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityRequest
+	127, // 90: temporal.server.api.matchingservice.v1.GetWorkerBuildIdCompatibilityResponse.response:type_name -> temporal.api.workflowservice.v1.GetWorkerBuildIdCompatibilityResponse
+	115, // 91: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	128, // 92: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	129, // 93: temporal.server.api.matchingservice.v1.GetTaskQueueUserDataResponse.ephemeral_data:type_name -> temporal.server.api.taskqueue.v1.VersionedEphemeralData
+	115, // 94: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.task_queue_types:type_name -> temporal.api.enums.v1.TaskQueueType
+	130, // 95: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.update_version_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	117, // 96: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.forget_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	131, // 97: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.update_routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	90,  // 98: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.upsert_versions_data:type_name -> temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry
+	132, // 99: temporal.server.api.matchingservice.v1.ApplyTaskQueueUserDataReplicationEventRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	119, // 100: temporal.server.api.matchingservice.v1.ForceLoadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	115, // 101: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueueRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	119, // 102: temporal.server.api.matchingservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	128, // 103: temporal.server.api.matchingservice.v1.UpdateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	132, // 104: temporal.server.api.matchingservice.v1.ReplicateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
+	97,  // 105: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	133, // 106: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest.request:type_name -> temporal.api.nexus.v1.Request
+	111, // 107: temporal.server.api.matchingservice.v1.DispatchNexusTaskRequest.forward_info:type_name -> temporal.server.api.taskqueue.v1.TaskForwardInfo
+	134, // 108: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.handler_error:type_name -> temporal.api.nexus.v1.HandlerError
+	135, // 109: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.response:type_name -> temporal.api.nexus.v1.Response
+	91,  // 110: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.request_timeout:type_name -> temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.Timeout
+	136, // 111: temporal.server.api.matchingservice.v1.DispatchNexusTaskResponse.failure:type_name -> temporal.api.failure.v1.Failure
+	137, // 112: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest.request:type_name -> temporal.api.workflowservice.v1.PollNexusTaskQueueRequest
+	81,  // 113: temporal.server.api.matchingservice.v1.PollNexusTaskQueueRequest.conditions:type_name -> temporal.server.api.matchingservice.v1.PollConditions
+	138, // 114: temporal.server.api.matchingservice.v1.PollNexusTaskQueueResponse.response:type_name -> temporal.api.workflowservice.v1.PollNexusTaskQueueResponse
+	97,  // 115: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	139, // 116: temporal.server.api.matchingservice.v1.RespondNexusTaskCompletedRequest.request:type_name -> temporal.api.workflowservice.v1.RespondNexusTaskCompletedRequest
+	97,  // 117: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest.task_queue:type_name -> temporal.api.taskqueue.v1.TaskQueue
+	140, // 118: temporal.server.api.matchingservice.v1.RespondNexusTaskFailedRequest.request:type_name -> temporal.api.workflowservice.v1.RespondNexusTaskFailedRequest
+	141, // 119: temporal.server.api.matchingservice.v1.CreateNexusEndpointRequest.spec:type_name -> temporal.server.api.persistence.v1.NexusEndpointSpec
+	142, // 120: temporal.server.api.matchingservice.v1.CreateNexusEndpointResponse.entry:type_name -> temporal.server.api.persistence.v1.NexusEndpointEntry
+	141, // 121: temporal.server.api.matchingservice.v1.UpdateNexusEndpointRequest.spec:type_name -> temporal.server.api.persistence.v1.NexusEndpointSpec
+	142, // 122: temporal.server.api.matchingservice.v1.UpdateNexusEndpointResponse.entry:type_name -> temporal.server.api.persistence.v1.NexusEndpointEntry
+	142, // 123: temporal.server.api.matchingservice.v1.ListNexusEndpointsResponse.entries:type_name -> temporal.server.api.persistence.v1.NexusEndpointEntry
+	143, // 124: temporal.server.api.matchingservice.v1.RecordWorkerHeartbeatRequest.heartbeart_request:type_name -> temporal.api.workflowservice.v1.RecordWorkerHeartbeatRequest
+	144, // 125: temporal.server.api.matchingservice.v1.ListWorkersRequest.list_request:type_name -> temporal.api.workflowservice.v1.ListWorkersRequest
+	145, // 126: temporal.server.api.matchingservice.v1.ListWorkersResponse.workers_info:type_name -> temporal.api.worker.v1.WorkerInfo
+	146, // 127: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
+	147, // 128: temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	148, // 129: temporal.server.api.matchingservice.v1.DescribeWorkerRequest.request:type_name -> temporal.api.workflowservice.v1.DescribeWorkerRequest
+	145, // 130: temporal.server.api.matchingservice.v1.DescribeWorkerResponse.worker_info:type_name -> temporal.api.worker.v1.WorkerInfo
+	115, // 131: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	149, // 132: temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest.fairness_state:type_name -> temporal.server.api.enums.v1.FairnessState
+	115, // 133: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	117, // 134: temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest.version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	95,  // 135: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	95,  // 136: temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	115, // 137: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesRequest.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	115, // 138: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.type:type_name -> temporal.api.enums.v1.TaskQueueType
+	150, // 139: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.stats:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	86,  // 140: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.stats_by_priority_key:type_name -> temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntry
+	150, // 141: temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntry.value:type_name -> temporal.api.taskqueue.v1.TaskQueueStats
+	151, // 142: temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	152, // 143: temporal.server.api.matchingservice.v1.UpdateWorkerBuildIdCompatibilityRequest.ApplyPublicRequest.request:type_name -> temporal.api.workflowservice.v1.UpdateWorkerBuildIdCompatibilityRequest
+	153, // 144: temporal.server.api.matchingservice.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionData
+	145, // [145:145] is the sub-list for method output_type
+	145, // [145:145] is the sub-list for method input_type
+	145, // [145:145] is the sub-list for extension type_name
+	145, // [145:145] is the sub-list for extension extendee
+	0,   // [0:145] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_matchingservice_v1_request_response_proto_init() }
@@ -6339,22 +6465,22 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 	if File_temporal_server_api_matchingservice_v1_request_response_proto != nil {
 		return
 	}
-	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[23].OneofWrappers = []any{
+	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25].OneofWrappers = []any{
 		(*UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_)(nil),
 		(*UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_)(nil),
 		(*UpdateWorkerBuildIdCompatibilityRequest_PersistUnknownBuildId)(nil),
 	}
-	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[25].OneofWrappers = []any{
+	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27].OneofWrappers = []any{
 		(*GetWorkerVersioningRulesRequest_Request)(nil),
 	}
-	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[27].OneofWrappers = []any{
+	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[29].OneofWrappers = []any{
 		(*UpdateWorkerVersioningRulesRequest_Request)(nil),
 	}
-	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[33].OneofWrappers = []any{
+	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[35].OneofWrappers = []any{
 		(*SyncDeploymentUserDataRequest_UpdateVersionData)(nil),
 		(*SyncDeploymentUserDataRequest_ForgetVersion)(nil),
 	}
-	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[52].OneofWrappers = []any{
+	file_temporal_server_api_matchingservice_v1_request_response_proto_msgTypes[54].OneofWrappers = []any{
 		(*DispatchNexusTaskResponse_HandlerError)(nil),
 		(*DispatchNexusTaskResponse_Response)(nil),
 		(*DispatchNexusTaskResponse_RequestTimeout)(nil),
@@ -6366,7 +6492,7 @@ func file_temporal_server_api_matchingservice_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc), len(file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   90,
+			NumMessages:   92,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

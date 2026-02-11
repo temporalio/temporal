@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -144,6 +145,7 @@ type (
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
 		registry                        *chasm.Registry
+		workerDeploymentReadRateLimiter quotas.RequestRateLimiter
 	}
 )
 
@@ -176,6 +178,7 @@ func NewWorkflowHandler(
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
 	registry *chasm.Registry,
+	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		FrontendHandler: activityHandler,
@@ -222,15 +225,16 @@ func NewWorkflowHandler(
 			),
 			config.SuppressErrorSetSystemSearchAttribute,
 		),
-		archivalMetadata:    archivalMetadata,
-		healthServer:        healthServer,
-		overrides:           NewOverrides(),
-		membershipMonitor:   membershipMonitor,
-		healthInterceptor:   healthInterceptor,
-		scheduleSpecBuilder: scheduleSpecBuilder,
-		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
-		httpEnabled:         httpEnabled,
-		registry:            registry,
+		archivalMetadata:                archivalMetadata,
+		healthServer:                    healthServer,
+		overrides:                       NewOverrides(),
+		membershipMonitor:               membershipMonitor,
+		healthInterceptor:               healthInterceptor,
+		scheduleSpecBuilder:             scheduleSpecBuilder,
+		outstandingPollers:              collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
+		httpEnabled:                     httpEnabled,
+		registry:                        registry,
+		workerDeploymentReadRateLimiter: workerDeploymentReadRateLimiter,
 	}
 
 	return handler
@@ -475,7 +479,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -2142,7 +2146,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -3393,7 +3397,8 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errWorkflowTypeTooLong
 	}
 
-	if err := tqid.NormalizeAndValidate(startWorkflow.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	// user cannot start internal workflows through schedule
+	if err := tqid.NormalizeAndValidateUserDefined(startWorkflow.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return err
 	}
 
@@ -3469,6 +3474,10 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
 		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	if err := wh.checkWorkerDeploymentReadRateLimit(ctx, request.GetNamespace(), "DescribeWorkerDeploymentVersion"); err != nil {
+		return nil, err
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3666,6 +3675,18 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 
 	if request == nil {
 		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	if err := wh.checkWorkerDeploymentReadRateLimit(ctx, request.GetNamespace(), "DescribeWorkerDeployment"); err != nil {
+		return nil, err
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -5438,6 +5459,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
+
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
@@ -5694,6 +5716,26 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 	}
 	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Context, namespaceName, apiName string) error {
+	callerInfo := headers.GetCallerInfo(ctx)
+	req := quotas.NewRequest(
+		apiName,
+		1,
+		namespaceName,
+		callerInfo.CallerType,
+		-1,
+		callerInfo.CallOrigin,
+	)
+
+	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now().UTC(), req) {
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
+		)
 	}
 	return nil
 }
