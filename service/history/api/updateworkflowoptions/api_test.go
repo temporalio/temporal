@@ -195,6 +195,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(s.namespaceRegistry)
 	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true)))
+	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
 
 	// mock a mutable state with an existing versioning override
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
