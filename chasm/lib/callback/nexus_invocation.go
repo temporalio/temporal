@@ -71,9 +71,7 @@ func (n nexusInvocation) Invoke(
 	// Make the call and record metrics.
 	startTime := time.Now()
 
-	for k, v := range n.nexus.Header {
-		n.completion.SetHeader(k, v)
-	}
+	n.completion.Header = n.nexus.Header
 	err := client.CompleteOperation(ctx, n.nexus.Url, n.completion)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
@@ -82,15 +80,15 @@ func (n nexusInvocation) Invoke(
 	e.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
 	e.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
 
-	if err == nil {
-		return invocationResultOK{}
+	if err != nil {
+		retryable := isRetryableCallError(err)
+		e.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		if retryable {
+			return invocationResultRetry{err}
+		}
+		return invocationResultFail{err}
 	}
-	retryable := isRetryableCallError(err)
-	e.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
-	if retryable {
-		return invocationResultRetry{err}
-	}
-	return invocationResultFail{err}
+	return invocationResultOK{}
 }
 
 func isRetryableCallError(err error) bool {

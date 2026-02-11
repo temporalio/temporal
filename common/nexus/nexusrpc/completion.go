@@ -108,13 +108,8 @@ type CompleteOperationOptions struct {
 	Result any
 }
 
-func (c CompleteOperationOptions) SetHeader(key, value string) {
-	if c.Header == nil {
-		c.Header = make(nexus.Header, 1)
-	}
-	c.Header[key] = value
-}
-
+// nolint:revive // This method is long but it's more readable to keep the logic in one place since it's all related to
+// constructing the completion request.
 func (c CompleteOperationOptions) applyToHTTPRequest(cc *CompletionHTTPClient, request *http.Request) error {
 	if request.Header == nil {
 		request.Header = make(http.Header)

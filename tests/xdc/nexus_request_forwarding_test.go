@@ -597,7 +597,8 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			}, 5*time.Second, 500*time.Millisecond)
 
 			completion := tc.getCompletionFn()
-			completion.SetHeader(cnexus.CallbackTokenHeader, callbackToken)
+			completion.Header = make(nexus.Header, 1)
+			completion.Header.Set(cnexus.CallbackTokenHeader, callbackToken)
 			snap, err := s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[1], publicCallbackUrl, completion)
 			s.NoError(err)
 			s.Equal(1, len(snap["nexus_completion_requests"]))

@@ -1219,14 +1219,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	ctx := testcore.NewContext()
 
-	commonCompletion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload("result"),
-	}
-
 	s.Run("ConfigDisabled", func() {
 		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
+		completion := nexusrpc.CompleteOperationOptions{
+			Result: s.mustToPayload("result"),
+		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
-		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, commonCompletion)
+		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
@@ -1235,8 +1234,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 	s.Run("ConfigDisabledNoIdentifier", func() {
 		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
+		completion := nexusrpc.CompleteOperationOptions{
+			Result: s.mustToPayload("result"),
+		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
-		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, commonCompletion)
+		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
@@ -1322,10 +1324,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	})
 
 	s.Run("InvalidCallbackToken", func() {
+		completion := nexusrpc.CompleteOperationOptions{
+			Result: s.mustToPayload("result"),
+		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
 		// metrics collection is not initialized before callback validation
 		// Send request without callback token, helper does not add token if blank
-		_, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, commonCompletion)
+		_, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		// Verify we get the correct error response
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -1334,10 +1339,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	})
 
 	s.Run("InvalidCallbackTokenNoIdentifier", func() {
+		completion := nexusrpc.CompleteOperationOptions{
+			Result: s.mustToPayload("result"),
+		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// metrics collection is not initialized before callback validation
 		// Send request without callback token, helper does not add token if blank
-		_, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, commonCompletion)
+		_, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		// Verify we get the correct error response
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)

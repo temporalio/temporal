@@ -380,7 +380,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			},
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.Nil(t, completion.Error)
-				require.Equal(t, commonpb.Payload{
+				require.Equal(t, &commonpb.Payload{
 					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
 					Data:     []byte("3"),
 				}, completion.Result)
@@ -399,7 +399,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.NotNil(t, completion.Error)
 				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
-				require.Equal(t, "workflow failed", completion.Error.Message)
+				require.Equal(t, "workflow failed", completion.Error.Cause.Error())
 				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
@@ -411,7 +411,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.NotNil(t, completion.Error)
 				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
-				require.Equal(t, "operation terminated", completion.Error.Message)
+				require.Equal(t, "operation terminated", completion.Error.Cause.Error())
 				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
@@ -423,7 +423,7 @@ func TestGetNexusCompletion(t *testing.T) {
 			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
 				require.NotNil(t, completion.Error)
 				require.Equal(t, nexus.OperationStateCanceled, completion.Error.State)
-				require.Equal(t, "operation canceled", completion.Error.Message)
+				require.Equal(t, "operation canceled", completion.Error.Cause.Error())
 				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
