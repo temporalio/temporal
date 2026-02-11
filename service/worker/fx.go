@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -26,7 +27,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
-	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"

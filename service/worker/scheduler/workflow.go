@@ -735,7 +735,7 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	forceCAN := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
 	sel.AddReceive(forceCAN, s.handleForceCANSignal)
 
-	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
+	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameMigrate)
 	sel.AddReceive(migrateCh, s.handleMigrateSignal)
 
 	if s.hasMoreAllowAllBackfills() {
@@ -994,7 +994,7 @@ func (s *scheduler) executeMigration() error {
 	workflowInfo := workflow.GetInfo(s.ctx)
 
 	//nolint:staticcheck // SA1019 Migration needs raw proto format, not typed search attributes.
-	req := migration.LegacyToSchedulerMigrationState(
+	req := migration.LegacyToMigrateScheduleRequest(
 		s.Schedule,
 		s.Info,
 		s.State,

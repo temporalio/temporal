@@ -14,8 +14,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LegacyToSchedulerMigrationState converts legacy (workflow-backed) scheduler state to a
-// SchedulerMigrationState proto. This is the primary V1-to-V2 migration function.
+// LegacyToMigrateScheduleRequest converts legacy (workflow-backed) scheduler state to a
+// MigrateScheduleRequest proto. This is the primary V1-to-V2 migration function.
 //
 // The migrationTime parameter is used for initializing timestamps that don't have a
 // direct mapping from V1 state (e.g., StartTime for running workflows).
@@ -34,14 +34,14 @@ import (
 //
 // Note: In V2, RunningWorkflows and RecentActions are computed on-demand from
 // BufferedStarts by the Invoker, rather than being stored separately in ScheduleInfo.
-func LegacyToSchedulerMigrationState(
+func LegacyToMigrateScheduleRequest(
 	schedule *schedulepb.Schedule,
 	info *schedulepb.ScheduleInfo,
 	state *schedulespb.InternalState,
 	searchAttributes *commonpb.SearchAttributes,
 	memo *commonpb.Memo,
 	migrationTime time.Time,
-) *schedulerpb.SchedulerMigrationState {
+) *schedulerpb.MigrateScheduleRequest {
 	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
 	infoClone := common.CloneProto(info)
 	infoClone.RunningWorkflows = nil
@@ -97,14 +97,17 @@ func LegacyToSchedulerMigrationState(
 	backfillers := convertBackfillsLegacyToCHASM(state.OngoingBackfills)
 	lastCompletion := convertLastCompletionLegacyToCHASM(state.LastCompletionResult, state.ContinuedFailure)
 
-	return &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       schedulerState,
-		GeneratorState:       generatorState,
-		InvokerState:         invokerState,
-		Backfillers:          backfillers,
-		LastCompletionResult: lastCompletion,
-		SearchAttributes:     searchAttributes.GetIndexedFields(),
-		Memo:                 memo.GetFields(),
+	return &schedulerpb.MigrateScheduleRequest{
+		NamespaceId: state.NamespaceId,
+		State: &schedulerpb.SchedulerMigrationState{
+			SchedulerState:       schedulerState,
+			GeneratorState:       generatorState,
+			InvokerState:         invokerState,
+			Backfillers:          backfillers,
+			LastCompletionResult: lastCompletion,
+			SearchAttributes:     searchAttributes.GetIndexedFields(),
+			Memo:                 memo.GetFields(),
+		},
 	}
 }
 

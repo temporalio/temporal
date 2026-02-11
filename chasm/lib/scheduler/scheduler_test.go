@@ -93,11 +93,11 @@ func testMigrateScheduleRequest() *schedulerpb.MigrateScheduleRequest {
 }
 
 func TestCreateSchedulerFromMigration_InitializesComponents(t *testing.T) {
-	_, ctx, node := setupSchedulerForTest(t)
+	_, _, node := setupSchedulerForTest(t)
 	req := testMigrateScheduleRequest()
 
 	// Create a new context for the migration (we need a fresh transaction)
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx := chasm.NewMutableContext(context.Background(), node)
 
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
@@ -140,12 +140,12 @@ func TestCreateSchedulerFromMigration_InitializesComponents(t *testing.T) {
 }
 
 func TestCreateSchedulerFromMigration_PreservesConflictToken(t *testing.T) {
-	_, ctx, node := setupSchedulerForTest(t)
+	_, _, node := setupSchedulerForTest(t)
 	req := testMigrateScheduleRequest()
 	req.State.SchedulerState.ConflictToken = 99 // Specific conflict token to verify
 
 	// Create a new context for the migration
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx := chasm.NewMutableContext(context.Background(), node)
 
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestCreateSchedulerFromMigration_PreservesConflictToken(t *testing.T) {
 }
 
 func TestCreateSchedulerFromMigration_ProcessesBufferedStarts(t *testing.T) {
-	_, ctx, node := setupSchedulerForTest(t)
+	_, _, node := setupSchedulerForTest(t)
 	req := testMigrateScheduleRequest()
 
 	// Add multiple buffered starts
@@ -182,7 +182,7 @@ func TestCreateSchedulerFromMigration_ProcessesBufferedStarts(t *testing.T) {
 	}
 
 	// Create a new context for the migration
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx := chasm.NewMutableContext(context.Background(), node)
 
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
@@ -202,7 +202,7 @@ func TestCreateSchedulerFromMigration_ProcessesBufferedStarts(t *testing.T) {
 }
 
 func TestCreateSchedulerFromMigration_HandlesEmptyState(t *testing.T) {
-	_, ctx, node := setupSchedulerForTest(t)
+	_, _, node := setupSchedulerForTest(t)
 
 	// Minimal request with empty optional fields
 	req := &schedulerpb.MigrateScheduleRequest{
@@ -223,7 +223,7 @@ func TestCreateSchedulerFromMigration_HandlesEmptyState(t *testing.T) {
 	}
 
 	// Create a new context for the migration
-	ctx = chasm.NewMutableContext(context.Background(), node)
+	ctx := chasm.NewMutableContext(context.Background(), node)
 
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
