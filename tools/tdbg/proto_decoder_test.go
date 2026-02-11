@@ -195,5 +195,5 @@ func TestDecodePayloadsInJSON(t *testing.T) {
 func TestDecodePayloadsInJSON_InvalidInput(t *testing.T) {
 	invalidJSON := []byte(`not json`)
 	result := decodePayloadsInJSON(invalidJSON)
-	assert.Equal(t, string(invalidJSON), string(result))
+	assert.Equal(t, invalidJSON, result) //nolint:testifylint // input is intentionally not valid JSON
 }
