@@ -156,7 +156,7 @@ func (c chasmInvocation) getHistoryRequest(
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
 		}
-		// Unwrap the operation error since it's not meant to be sent for Temporal->Temporal completions.
+		// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
 		if failure.Cause != nil {
 			failure = *failure.Cause
 		}

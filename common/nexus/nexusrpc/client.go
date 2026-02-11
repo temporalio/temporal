@@ -108,7 +108,7 @@ func (c *baseHTTPClient) defaultErrorFromResponse(response *http.Response, body 
 		Cause:         cause,
 	}
 
-	// Ensure we the original failure is available, the calling code expects it.
+	// Ensure the original failure is available, the calling code expects it.
 	originalFailure, err := c.failureConverter.ErrorToFailure(handlerErr)
 	if err != nil {
 		return newUnexpectedResponseError("failed to construct handler error from response: "+err.Error(), response, body)
@@ -117,8 +117,7 @@ func (c *baseHTTPClient) defaultErrorFromResponse(response *http.Response, body 
 	return handlerErr
 }
 
-// BestEffortHandlerErrorFromResponse attempts to read a handler error from the response, but falls back to a default error.
-// This method is exposed as a workaround because the functionality is required for completion.
+// bestEffortHandlerErrorFromResponse attempts to read a handler error from the response, but falls back to an unexpected response error.
 func (c *baseHTTPClient) bestEffortHandlerErrorFromResponse(response *http.Response, body []byte) error {
 	failure, err := c.failureFromResponse(response, body)
 	if err != nil {

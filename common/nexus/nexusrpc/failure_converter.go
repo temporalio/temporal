@@ -53,7 +53,9 @@ func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, er
 	switch typedErr := err.(type) {
 	case *nexus.FailureError:
 		f := typedErr.Failure
-		// Convert the erorr cause if set and failure cause is not already set.
+		// FailureError is has both a Cause error and an underlying Failure Cause.
+		// When instantiated directly, there are cases where only the Go error cause is set.
+		// Preserve the embedded failure's cause, as the embedded failure is treated similarly to the OriginalFailure field for well-known other error types.
 		if typedErr.Cause != nil && f.Cause == nil {
 			c, err := e.ErrorToFailure(typedErr.Cause)
 			if err != nil {
@@ -187,7 +189,7 @@ func (e knownErrorFailureConverter) FailureToError(f nexus.Failure) (error, erro
 
 var defaultFailureConverter FailureConverter = knownErrorFailureConverter{}
 
-// DefaultFailureConverter returns the SDK's default [FailureConverter] implementation. Translates [HandlerError],
+// DefaultFailureConverter returns the package's default [FailureConverter] implementation. Translates [HandlerError],
 // [OperationError] and [FailureError] to and from [Failure] objects maintaining their cause chain.
 // Arbitrary errors are translated to a [Failure] object with its Message set to the Error() string, losing the cause
 // chain.

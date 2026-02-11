@@ -121,7 +121,7 @@ func (c CompleteOperationOptions) applyToHTTPRequest(cc *CompletionHTTPClient, r
 		if err != nil {
 			return err
 		}
-		// Backwards compatibility: if the failure has a cause, unwrap it to maintain the behavior as older servers.
+		// Backwards compatibility: if the failure has a cause, unwrap it to ensure behavior remains compatible with older servers.
 		if failure.Cause != nil {
 			failure = *failure.Cause
 		}
