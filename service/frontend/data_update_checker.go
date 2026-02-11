@@ -19,10 +19,6 @@ type DataUpdateCheckResult struct {
 
 // NamespaceDataUpdateChecker determines if a namespace update request
 // should be handled as a data-only fast-path update.
-//
-// In OSS, this returns an empty result to use the standard update flow.
-// In SaaS, this deserializes the namespace data to check for MCN config
-// updates and can return modified data to trigger the fast-path.
 type NamespaceDataUpdateChecker interface {
 	// CheckDataOnlyUpdate checks if the update should bypass standard
 	// update logic and only update the namespace data field.

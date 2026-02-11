@@ -269,7 +269,6 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	// Perform conflict-free merge of namespace data (CRDT-style for MCN failover states)
 	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
 	if dataMerged {
 		recordUpdated = true

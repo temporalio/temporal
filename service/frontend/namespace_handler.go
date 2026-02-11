@@ -646,7 +646,6 @@ func (d *namespaceHandler) handleDataOnlyUpdate(
 	// Apply the modified data from checker (already merged/processed by checker)
 	info.Data = modifiedData
 
-	// Persist with incremented configVersion (always increment for cache invalidation)
 	configVersion := getResponse.Namespace.ConfigVersion + 1
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -672,12 +671,12 @@ func (d *namespaceHandler) handleDataOnlyUpdate(
 		info,
 		config,
 		replicationConfig,
-		false, // clusterListChanged
+		false,
 		configVersion,
 		getResponse.Namespace.FailoverVersion,
 		getResponse.IsGlobalNamespace,
 		replicationConfig.FailoverHistory,
-		shouldReplicate, // forceReplicate
+		shouldReplicate,
 	); err != nil {
 		return nil, err
 	}
