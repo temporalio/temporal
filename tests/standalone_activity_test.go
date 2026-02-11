@@ -374,10 +374,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 
 		t.Run("InputTooLarge", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			s.OverrideDynamicConfig(
+			cleanup := s.OverrideDynamicConfig(
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
+			defer cleanup()
 
 			input := payloads.EncodeString(string(make([]byte, blobSizeLimitError+1)))
 
@@ -1476,10 +1477,11 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 		t.Run("ReasonTooLong", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			s.OverrideDynamicConfig(
+			cleanup := s.OverrideDynamicConfig(
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
+			defer cleanup()
 
 			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 				ActivityId: testcore.RandomizeStr(t.Name()),
@@ -1985,10 +1987,11 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 		t.Run("ReasonTooLong", func(t *testing.T) {
 			blobSizeLimitError := 1000
-			s.OverrideDynamicConfig(
+			cleanup := s.OverrideDynamicConfig(
 				dynamicconfig.BlobSizeLimitError,
 				blobSizeLimitError,
 			)
+			defer cleanup()
 
 			_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
 				ActivityId: testcore.RandomizeStr(t.Name()),
@@ -3042,10 +3045,11 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 
 	t.Run("ExceededPageSizeIsCapped", func(t *testing.T) {
 		maxPageSize := int32(1)
-		s.OverrideDynamicConfig(
+		cleanup := s.OverrideDynamicConfig(
 			dynamicconfig.FrontendVisibilityMaxPageSize,
 			maxPageSize,
 		)
+		defer cleanup()
 
 		testActivityType := testcore.RandomizeStr(t.Name())
 
@@ -3300,12 +3304,14 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 	// result with at least buffer remaining before the caller deadline.
 	t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
 		// CallerTimeout - LongPollBuffer is far in the future
-		s.OverrideDynamicConfig(activity.LongPollBuffer, 1*time.Second)
+		cleanup1 := s.OverrideDynamicConfig(activity.LongPollBuffer, 1*time.Second)
+		defer cleanup1()
 		ctx, cancel := context.WithTimeout(ctx, 9999*time.Millisecond)
 		defer cancel()
 
 		// DescribeActivityExecution will return when this long poll timeout expires.
-		s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		cleanup2 := s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		defer cleanup2()
 
 		describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:     s.Namespace().String(),
@@ -3327,9 +3333,11 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 		// will have a 30s deadline that was applied by one of the upstream server layers, so we
 		// still must use a buffer < 30s.
 		ctx := context.Background()
-		s.OverrideDynamicConfig(activity.LongPollBuffer, 29*time.Second)
+		cleanup1 := s.OverrideDynamicConfig(activity.LongPollBuffer, 29*time.Second)
+		defer cleanup1()
 		// DescribeActivityExecution will return when this long poll timeout expires.
-		s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		cleanup2 := s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		defer cleanup2()
 
 		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 			Namespace:     s.Namespace().String(),
