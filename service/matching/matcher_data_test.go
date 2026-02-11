@@ -415,7 +415,7 @@ func (s *MatcherDataSuite) TestOrder() {
 	t1 := s.newBacklogTaskWithPriority(1, 0, nil, &commonpb.Priority{PriorityKey: 1})
 	t2 := s.newBacklogTaskWithPriority(2, 0, nil, &commonpb.Priority{PriorityKey: 2})
 	t3 := s.newBacklogTaskWithPriority(3, 0, nil, &commonpb.Priority{PriorityKey: 3})
-	tf := newPollForwarderTask(pollForwarderPriority, normalPollForwarder)
+	tf := newPollForwarderTask(pollForwarderPriority, parentPollForwarder)
 
 	s.md.EnqueueTaskNoWait(t3)
 	s.md.EnqueueTaskNoWait(tf)
@@ -437,7 +437,7 @@ func (s *MatcherDataSuite) TestPollForwardSuccess() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, parentPollForwarder))
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// forward succeeded, pass back task
@@ -459,7 +459,7 @@ func (s *MatcherDataSuite) TestPollForwardFailed() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, parentPollForwarder))
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
@@ -484,7 +484,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
+		tres := s.md.EnqueueTaskAndWait([]context.Context{ctx}, newPollForwarderTask(pollForwarderPriority, parentPollForwarder))
 		// task is woken up with poller to forward
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
@@ -673,7 +673,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 		{
 			name:                  "queryOnly poller with pollForwarder task - match",
 			allowForwarding:       true,
-			taskPollForwarderType: normalPollForwarder,
+			taskPollForwarderType: parentPollForwarder,
 			pollerQueryOnly:       true,
 			pollerForwardCtx:      true, // poll forwarder needs forwardCtx
 			shouldMatch:           true,
@@ -682,14 +682,14 @@ func (s *MatcherDataSuite) TestFindMatch() {
 		{
 			name:                  "pollForwarder task with poller without forwardCtx - no match",
 			allowForwarding:       true,
-			taskPollForwarderType: normalPollForwarder,
+			taskPollForwarderType: parentPollForwarder,
 			pollerForwardCtx:      false,
 			shouldMatch:           false,
 		},
 		{
 			name:                  "pollForwarder task with poller with forwardCtx - match",
 			allowForwarding:       true,
-			taskPollForwarderType: normalPollForwarder,
+			taskPollForwarderType: parentPollForwarder,
 			pollerForwardCtx:      true,
 			shouldMatch:           true,
 		},
@@ -769,7 +769,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 		{
 			name:                  "normalPollForwarder skipped when !allowForwarding",
 			allowForwarding:       false,
-			taskPollForwarderType: normalPollForwarder,
+			taskPollForwarderType: parentPollForwarder,
 			pollerForwardCtx:      true,
 			shouldMatch:           false,
 		},
@@ -785,7 +785,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 		{
 			name:                    "normal forwarder with normal forwarder",
 			allowForwarding:         true,
-			taskPollForwarderType:   normalPollForwarder,
+			taskPollForwarderType:   parentPollForwarder,
 			pollerTaskForwarderType: parentTaskForwarder,
 			shouldMatch:             false,
 		},
@@ -799,7 +799,7 @@ func (s *MatcherDataSuite) TestFindMatch() {
 		{
 			name:                    "normal poll forwarder with validator task forwarder",
 			allowForwarding:         true,
-			taskPollForwarderType:   normalPollForwarder,
+			taskPollForwarderType:   parentPollForwarder,
 			pollerTaskForwarderType: validatorTaskForwarder,
 			shouldMatch:             false,
 		},
@@ -1080,7 +1080,7 @@ func FuzzMatcherData(f *testing.F) {
 				sleepTime := randms(100)
 				go func() {
 					defer pollForwarders.Add(-1)
-					res := md.EnqueueTaskAndWait(nil, newPollForwarderTask(pollForwarderPriority, normalPollForwarder))
+					res := md.EnqueueTaskAndWait(nil, newPollForwarderTask(pollForwarderPriority, parentPollForwarder))
 					softassert.That(md.logger, res.ctxErr == nil && res.poller != nil, "")
 					ts.Sleep(sleepTime)
 					t := &persistencespb.TaskInfo{

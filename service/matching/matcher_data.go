@@ -25,7 +25,7 @@ type pollForwarderType int32
 
 const (
 	notPollForwarder pollForwarderType = iota
-	normalPollForwarder
+	parentPollForwarder
 	priorityBacklogPollForwarder
 )
 
@@ -411,7 +411,7 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 	for _, task := range d.tasks.heap {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
-		if !allowForwarding && task.pollForwarderType == normalPollForwarder {
+		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
 			continue
 		}
 

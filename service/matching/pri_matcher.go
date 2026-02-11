@@ -142,7 +142,7 @@ func (tm *priTaskMatcher) Start() {
 		degree := tm.config.ForwarderMaxChildrenPerNode()
 		if parent, err := normal.ParentPartition(degree); err == nil {
 			for range tm.config.ForwarderMaxOutstandingPolls() {
-				go tm.forwardPolls(tm.tqCtx, 0, pollForwarderPriority, normalPollForwarder, parent)
+				go tm.forwardPolls(tm.tqCtx, 0, pollForwarderPriority, parentPollForwarder, parent)
 			}
 		}
 	}
