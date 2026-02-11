@@ -17,6 +17,13 @@ type (
 
 var metadataCtxKey = metadataContextKey{}
 
+const (
+	// MetadataKeyWorkflowType is the context metadata key for workflow type
+	MetadataKeyWorkflowType = "workflow-type"
+	// MetadataKeyWorkflowTaskQueue is the context metadata key for workflow task queue
+	MetadataKeyWorkflowTaskQueue = "workflow-task-queue"
+)
+
 // getMetadataContext extracts metadata context from golang context.
 func getMetadataContext(ctx context.Context) *metadataContext {
 	metadataCtx := ctx.Value(metadataCtxKey)
@@ -36,6 +43,12 @@ func WithMetadataContext(ctx context.Context) context.Context {
 		Metadata: make(map[string]any),
 	}
 	return context.WithValue(ctx, metadataCtxKey, metadataCtx)
+}
+
+// ContextHasMetadata returns true if the context has metadata support.
+// This can be used to debug whether a context has been properly initialized with metadata.
+func ContextHasMetadata(ctx context.Context) bool {
+	return getMetadataContext(ctx) != nil
 }
 
 // ContextMetadataSet sets a metadata key-value pair in the context.
