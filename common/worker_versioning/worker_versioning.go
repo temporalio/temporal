@@ -2,6 +2,7 @@ package worker_versioning
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -40,20 +41,43 @@ const (
 	UnversionedSearchAttribute = buildIdSearchAttributePrefixUnversioned
 	UnversionedVersionId       = "__unversioned__"
 
+	// ErrPinnedVersionNotInTaskQueueSubstring is the key substring used to identify
+	// when a pinned version is not present in a task queue. This is used for error
+	// classification in batch operations.
+	ErrPinnedVersionNotInTaskQueueSubstring = "is not present in task queue"
+
 	// WorkerDeploymentVersionIdDelimiterV31 will be deleted once we stop supporting v31 version string fields
 	// in external and internal APIs. Until then, both delimiters are banned in deployment name. All
 	// deprecated version string fields in APIs keep using the old delimiter. Workflow SA uses new delimiter.
 	WorkerDeploymentVersionIDDelimiterV31   = "."
+	WorkerDeploymentVersionDelimiter        = ":"
 	WorkerDeploymentVersionWorkflowIDEscape = "|"
 
 	// Prefixes, Delimeters and Keys that are used in the internal entity workflows backing worker-versioning
 	WorkerDeploymentWorkflowIDPrefix             = "temporal-sys-worker-deployment"
 	WorkerDeploymentVersionWorkflowIDPrefix      = "temporal-sys-worker-deployment-version"
-	WorkerDeploymentVersionWorkflowIDDelimeter   = ":"
-	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionWorkflowIDDelimeter) // 39
+	WorkerDeploymentVersionWorkflowIDInitialSize = len(WorkerDeploymentVersionWorkflowIDPrefix) + len(WorkerDeploymentVersionDelimiter) // 39
 	WorkerDeploymentNameFieldName                = "WorkerDeploymentName"
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 )
+
+// FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
+// is not present in a task queue.
+func FormatPinnedVersionNotInTaskQueueError(deploymentName, buildID, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
+	var tqType string
+	switch taskQueueType {
+	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
+		tqType = "Workflow"
+	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
+		tqType = "Activity"
+	case enumspb.TASK_QUEUE_TYPE_NEXUS:
+		tqType = "Nexus"
+	default:
+		tqType = "Unknown"
+	}
+	return fmt.Sprintf("Pinned version '%s:%s' %s '%s' of type '%s'",
+		deploymentName, buildID, ErrPinnedVersionNotInTaskQueueSubstring, taskQueue, tqType)
+}
 
 // PinnedBuildIdSearchAttribute creates the pinned search attribute for the BuildIds list, used as a visibility optimization.
 // For pinned workflows using WorkerDeployment APIs (ms.GetEffectiveVersioningBehavior() == PINNED &&
@@ -164,9 +188,9 @@ func DeploymentFromCapabilities(capabilities *commonpb.WorkerVersionCapabilities
 		if b == "" {
 			return nil, serviceerror.NewInvalidArgumentf("versioned worker must have build id")
 		}
-		if strings.Contains(d, WorkerDeploymentVersionWorkflowIDDelimeter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
+		if strings.Contains(d, WorkerDeploymentVersionDelimiter) || strings.Contains(d, WorkerDeploymentVersionIDDelimiterV31) {
 			// TODO: allow '.' once we get rid of v31 stuff
-			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31)
+			return nil, serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31)
 		}
 		return &deploymentpb.Deployment{
 			SeriesName: d,
@@ -262,21 +286,88 @@ func MakeDirectiveForWorkflowTask(
 
 type IsWFTaskQueueInVersionDetector = func(ctx context.Context, namespaceID, tq string, version *deploymentpb.WorkerDeploymentVersion) (bool, error)
 
-func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient) IsWFTaskQueueInVersionDetector {
+func GetIsWFTaskQueueInVersionDetector(matchingClient resource.MatchingClient, versionMembershipCache VersionMembershipCache) IsWFTaskQueueInVersionDetector {
 	return func(ctx context.Context,
 		namespaceID, tq string,
 		version *deploymentpb.WorkerDeploymentVersion) (bool, error) {
-		resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
-			NamespaceId:   namespaceID,
-			TaskQueue:     tq,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
-		})
+
+		// Check cache first.
+		if isMember, ok := versionMembershipCache.Get(
+			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			version.GetDeploymentName(), version.GetBuildId(),
+		); ok {
+			return isMember, nil
+		}
+
+		// Cache miss — resolve via matching RPC.
+		isMember, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW, version)
 		if err != nil {
 			return false, err
 		}
-		return resp.GetIsMember(), nil
+
+		// Add result to cache
+		versionMembershipCache.Put(
+			namespaceID, tq, enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			version.GetDeploymentName(), version.GetBuildId(),
+			isMember,
+		)
+		return isMember, nil
 	}
+}
+
+// checkTaskQueueVersionMembership calls matching to check if a task queue belongs to a version,
+// falling back to fetching the full user data if the CheckTaskQueueVersionMembership RPC is not implemented. (this can happen
+// during rolling upgrades of matching and history services where in history would be on a higher version than matching)
+func checkTaskQueueVersionMembership(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID, tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (bool, error) {
+	resp, err := matchingClient.CheckTaskQueueVersionMembership(ctx, &matchingservice.CheckTaskQueueVersionMembershipRequest{
+		NamespaceId:   namespaceID,
+		TaskQueue:     tq,
+		TaskQueueType: tqType,
+		Version:       DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version)),
+	})
+	if err != nil {
+		// If matching is on an older version that doesn't have this RPC,
+		// fall back to fetching full user data and checking version membership based on the received information.
+		var unimplErr *serviceerror.Unimplemented
+		if errors.As(err, &unimplErr) {
+			return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, version)
+		}
+		return false, err
+	}
+	return resp.GetIsMember(), nil
+}
+
+// checkVersionMembershipViaUserData is the fallback for when matching doesn't support
+// CheckTaskQueueVersionMembership (e.g. during rolling deployments). It fetches the full
+// Task Queue User Data and checks version membership based on the receieved information.
+func checkVersionMembershipViaUserData(
+	ctx context.Context,
+	matchingClient resource.MatchingClient,
+	namespaceID string,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	version *deploymentpb.WorkerDeploymentVersion,
+) (bool, error) {
+	resp, err := matchingClient.GetTaskQueueUserData(ctx,
+		&matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:   namespaceID,
+			TaskQueue:     tq,
+			TaskQueueType: tqType,
+		})
+	if err != nil {
+		return false, err
+	}
+	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(tqType)]
+	if !ok {
+		return false, nil
+	}
+	return HasDeploymentVersion(tqData.GetDeploymentData(), DeploymentVersionFromDeployment(DeploymentFromExternalDeploymentVersion(version))), nil
 }
 
 func FindDeploymentVersion(deployments *persistencespb.DeploymentData, v *deploymentspb.WorkerDeploymentVersion) int {
@@ -423,8 +514,8 @@ func ValidateDeployment(deployment *deploymentpb.Deployment) error {
 	}
 	// TODO: remove '.' restriction once the v31 version strings are completely cleaned from external and internal API
 	if strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionIDDelimiterV31) ||
-		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionWorkflowIDDelimeter)
+		strings.Contains(deployment.GetSeriesName(), WorkerDeploymentVersionDelimiter) {
+		return serviceerror.NewInvalidArgumentf("deployment name cannot contain '%s' or '%s'", WorkerDeploymentVersionIDDelimiterV31, WorkerDeploymentVersionDelimiter)
 	}
 	if deployment.GetBuildId() == "" {
 		return serviceerror.NewInvalidArgument("deployment build ID cannot be empty")
@@ -473,8 +564,8 @@ func ValidateDeploymentVersionFields(fieldName string, field string, maxIDLength
 		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionIDDelimiterV31)
 	}
 	// deploymentName cannot have ":"
-	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionWorkflowIDDelimeter) {
-		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionWorkflowIDDelimeter)
+	if fieldName == WorkerDeploymentNameFieldName && strings.Contains(field, WorkerDeploymentVersionDelimiter) {
+		return serviceerror.NewInvalidArgumentf("worker deployment name cannot contain '%s'", WorkerDeploymentVersionDelimiter)
 	}
 
 	// buildID or deployment name cannot start with "__"
@@ -526,7 +617,59 @@ func ExtractVersioningBehaviorFromOverride(override *workflowpb.VersioningOverri
 	return override.GetBehavior()
 }
 
-func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
+func validatePinnedVersionInTaskQueue(ctx context.Context,
+	pinnedVersion *deploymentpb.WorkerDeploymentVersion,
+	matchingClient resource.MatchingClient,
+	versionMembershipCache VersionMembershipCache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
+
+	// Check if we have recently queried matching to validate if this version exists in the task queue.
+	if isMember, ok := versionMembershipCache.Get(
+		namespaceID,
+		tq,
+		tqType,
+		pinnedVersion.DeploymentName,
+		pinnedVersion.BuildId,
+	); ok {
+		if isMember {
+			return nil
+		}
+		return serviceerror.NewFailedPrecondition(
+			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
+		)
+	}
+
+	isMember, err := checkTaskQueueVersionMembership(ctx, matchingClient, namespaceID, tq, tqType, pinnedVersion)
+	if err != nil {
+		return err
+	}
+
+	// Add result to cache
+	versionMembershipCache.Put(
+		namespaceID,
+		tq,
+		tqType,
+		pinnedVersion.DeploymentName,
+		pinnedVersion.BuildId,
+		isMember,
+	)
+	if !isMember {
+		return serviceerror.NewFailedPrecondition(
+			FormatPinnedVersionNotInTaskQueueError(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), tq, tqType),
+		)
+	}
+	return nil
+}
+
+func ValidateVersioningOverride(ctx context.Context,
+	override *workflowpb.VersioningOverride,
+	matchingClient resource.MatchingClient,
+	versionMembershipCache VersionMembershipCache,
+	tq string,
+	tqType enumspb.TaskQueueType,
+	namespaceID string) error {
 	if override == nil {
 		return nil
 	}
@@ -540,7 +683,7 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 		if p.GetBehavior() == workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("must specify pinned override behavior if override is pinned.")
 		}
-		return nil
+		return validatePinnedVersionInTaskQueue(ctx, p.GetVersion(), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
 	}
 
 	//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -550,7 +693,12 @@ func ValidateVersioningOverride(override *workflowpb.VersioningOverride) error {
 			return ValidateDeployment(override.GetDeployment())
 		} else if override.GetPinnedVersion() != "" {
 			_, err := ValidateDeploymentVersionStringV31(override.GetPinnedVersion())
-			return err
+			if err != nil {
+				return err
+			}
+
+			return validatePinnedVersionInTaskQueue(ctx, ExternalWorkerDeploymentVersionFromStringV31(override.GetPinnedVersion()), matchingClient, versionMembershipCache, tq, tqType, namespaceID)
+
 		} else {
 			return serviceerror.NewInvalidArgument("must provide deployment (deprecated) or pinned version if behavior is 'PINNED'")
 		}
@@ -907,18 +1055,18 @@ func WorkerDeploymentVersionToStringV32(v *deploymentspb.WorkerDeploymentVersion
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionDelimiter + v.GetBuildId()
 }
 
 func BuildIDToStringV32(deploymentName, buildID string) string {
-	return deploymentName + WorkerDeploymentVersionWorkflowIDDelimeter + buildID
+	return deploymentName + WorkerDeploymentVersionDelimiter + buildID
 }
 
 func ExternalWorkerDeploymentVersionToString(v *deploymentpb.WorkerDeploymentVersion) string {
 	if v == nil {
 		return ""
 	}
-	return v.GetDeploymentName() + WorkerDeploymentVersionWorkflowIDDelimeter + v.GetBuildId()
+	return v.GetDeploymentName() + WorkerDeploymentVersionDelimiter + v.GetBuildId()
 }
 
 func ExternalWorkerDeploymentVersionToStringV31(v *deploymentpb.WorkerDeploymentVersion) string {
@@ -948,9 +1096,9 @@ func WorkerDeploymentVersionFromStringV31(s string) (*deploymentspb.WorkerDeploy
 	}
 	before, after, found := strings.Cut(s, WorkerDeploymentVersionIDDelimiterV31)
 	// Also try parsing via the v32 delimiter in case user is using an old CLI/SDK but passing new version strings.
-	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
+	before32, after32, found32 := strings.Cut(s, WorkerDeploymentVersionDelimiter)
 	if !found && !found32 {
-		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, WorkerDeploymentVersionIDDelimiterV31, s)
+		return nil, fmt.Errorf("expected delimiter '%s' or '%s' not found in version string %s", WorkerDeploymentVersionDelimiter, WorkerDeploymentVersionIDDelimiterV31, s)
 	}
 	if found && found32 && len(before32) < len(before) {
 		// choose the values based on the delimiter appeared first to ensure that deployment name does not contain any of the banned delimiters
@@ -973,9 +1121,9 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 	if s == UnversionedVersionId {
 		return nil, nil
 	}
-	before, after, found := strings.Cut(s, WorkerDeploymentVersionWorkflowIDDelimeter)
+	before, after, found := strings.Cut(s, WorkerDeploymentVersionDelimiter)
 	if !found {
-		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionWorkflowIDDelimeter, s)
+		return nil, fmt.Errorf("expected delimiter '%s' not found in version string %s", WorkerDeploymentVersionDelimiter, s)
 	}
 	if len(before) == 0 {
 		return nil, fmt.Errorf("deployment name is empty in version string %s", s)

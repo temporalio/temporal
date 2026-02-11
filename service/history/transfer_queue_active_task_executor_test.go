@@ -132,7 +132,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.childNamespaceID = tests.ChildNamespaceID
 	s.childNamespace = tests.ChildNamespace
 	s.childNamespaceEntry = tests.GlobalChildNamespaceEntry
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
@@ -228,6 +228,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
+		nil,
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }
@@ -362,6 +363,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestExecuteChasmSideEffectTransfe
 		s.mockShard.Resource.MatchingClient,
 		s.mockVisibilityManager,
 		s.mockChasmEngine,
+		nil,
 	).(*transferQueueActiveTaskExecutor)
 
 	// Execution should succeed.
@@ -3152,7 +3154,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) newTaskExecutable(

@@ -117,7 +117,18 @@ func newOperationContext(options contextOptions) *operationContext {
 	)
 
 	checker := mockNamespaceChecker(oc.namespace.Name())
-	oc.auth = authorization.NewInterceptor(nil, mockAuthorizer{}, oc.metricsHandler, oc.logger, checker, nil, "", "", dynamicconfig.GetBoolPropertyFn(false))
+	oc.auth = authorization.NewInterceptor(
+		nil,
+		mockAuthorizer{},
+		oc.metricsHandler,
+		oc.logger,
+		checker,
+		nil,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
+		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
+	)
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
 		nil,
 		nil,
@@ -151,6 +162,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.headersBlacklist = dynamicconfig.GetTypedPropertyFn(re)
 	oc.redirectionInterceptor = interceptor.NewRedirection(
 		nil,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		nil,
 		config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
 		oc.logger,

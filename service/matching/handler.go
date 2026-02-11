@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -68,6 +69,7 @@ type (
 		SearchAttributeMapperProvider searchattribute.MapperProvider
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
+		Serializer                    serialization.Serializer
 	}
 )
 
@@ -109,6 +111,7 @@ func NewHandler(
 			params.SearchAttributeProvider,
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
+			params.Serializer,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
@@ -230,7 +233,7 @@ func (h *Handler) PollActivityTaskQueue(
 func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
+) (_ *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -297,6 +300,13 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	defer log.CapturePanic(h.logger, &retError)
 	err := h.engine.CancelOutstandingPoll(ctx, request)
 	return &matchingservice.CancelOutstandingPollResponse{}, err
+}
+
+// CancelOutstandingWorkerPolls cancels all outstanding polls for a given worker instance key.
+func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CancelOutstandingWorkerPolls(ctx, request)
 }
 
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the
@@ -568,20 +578,31 @@ func (h *Handler) ListWorkers(
 	_ context.Context, request *matchingservice.ListWorkersRequest,
 ) (*matchingservice.ListWorkersResponse, error) {
 	nsID := namespace.ID(request.GetNamespaceId())
-	workersHeartbeats, err := h.workersRegistry.ListWorkers(
-		nsID, request.GetListRequest().GetQuery(), request.GetListRequest().GetNextPageToken())
+	listRequest := request.GetListRequest()
+	resp, err := h.workersRegistry.ListWorkers(nsID, workers.ListWorkersParams{
+		Query:         listRequest.GetQuery(),
+		PageSize:      int(listRequest.GetPageSize()),
+		NextPageToken: listRequest.GetNextPageToken(),
+	})
 	if err != nil {
 		return nil, err
 	}
 	var workersInfo []*workerpb.WorkerInfo
-	for _, heartbeat := range workersHeartbeats {
+	for _, heartbeat := range resp.Workers {
 		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
 			WorkerHeartbeat: heartbeat,
 		})
 	}
 	return &matchingservice.ListWorkersResponse{
-		WorkersInfo: workersInfo,
+		WorkersInfo:   workersInfo,
+		NextPageToken: resp.NextPageToken,
 	}, nil
+}
+
+func (h *Handler) UpdateFairnessState(
+	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
+) (*matchingservice.UpdateFairnessStateResponse, error) {
+	return h.engine.UpdateFairnessState(ctx, request)
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

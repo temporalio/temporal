@@ -15,6 +15,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -91,6 +92,12 @@ const (
 )
 
 const numItemsInGarbageInfo = 3
+
+const (
+	NamespaceWatchEventTypeCreate NamespaceWatchEventType = iota
+	NamespaceWatchEventTypeUpdate
+	NamespaceWatchEventTypeDelete
+)
 
 type (
 	// InvalidPersistenceRequestError represents invalid request to persistence
@@ -1076,6 +1083,15 @@ type (
 		ID                    string
 	}
 
+	NamespaceWatchEventType int
+
+	NamespaceWatchEvent struct {
+		Type        NamespaceWatchEventType
+		Response    *GetNamespaceResponse
+		NamespaceID namespace.ID
+		Err         error
+	}
+
 	// Closeable is an interface for any entity that supports a close operation to release resources
 	// TODO: allow this method to return errors
 	Closeable interface {
@@ -1205,6 +1221,7 @@ type (
 		ListNamespaces(ctx context.Context, request *ListNamespacesRequest) (*ListNamespacesResponse, error)
 		GetMetadata(ctx context.Context) (*GetMetadataResponse, error)
 		InitializeSystemNamespaces(ctx context.Context, currentClusterName string) error
+		WatchNamespaces(ctx context.Context) (<-chan *NamespaceWatchEvent, error)
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration

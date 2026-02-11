@@ -24,7 +24,7 @@ import (
 )
 
 type (
-	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState) (interface{}, error)
+	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (interface{}, error)
 	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time

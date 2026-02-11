@@ -128,7 +128,7 @@ func (s *executableTaskSuite) SetupTest() {
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
-		EventSerializer:         s.serializer,
+		Serializer:              s.serializer,
 		RemoteHistoryFetcher:    s.remoteHistoryFetcher,
 	}
 
@@ -1180,4 +1180,73 @@ func (s *executableTaskSuite) TestSyncState() {
 	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
 	s.NoError(err)
 	s.True(doContinue)
+}
+
+func (s *executableTaskSuite) TestSyncState_NotFound() {
+	syncStateErr := &serviceerrors.SyncState{
+		NamespaceId: uuid.NewString(),
+		WorkflowId:  uuid.NewString(),
+		RunId:       uuid.NewString(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: rand.Int63(),
+			TransitionCount:          rand.Int63(),
+		},
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				{
+					BranchToken: []byte("token#1"),
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 102, Version: 1234},
+					},
+				},
+			},
+		},
+	}
+
+	mockRemoteAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+	s.clientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(mockRemoteAdminClient, nil).AnyTimes()
+	mockRemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: syncStateErr.NamespaceId,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: syncStateErr.WorkflowId,
+				RunId:      syncStateErr.RunId,
+			},
+			ArchetypeId:         chasm.WorkflowArchetypeID,
+			VersionedTransition: syncStateErr.VersionedTransition,
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						// BranchToken is removed in the actual implementation
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 102, Version: 1234},
+						},
+					},
+				},
+			},
+			TargetClusterId: int32(s.clusterMetadata.GetAllClusterInfo()[s.clusterMetadata.GetCurrentClusterName()].InitialFailoverVersion),
+		},
+	).Return(nil, serviceerror.NewNotFound("workflow not found")).Times(1)
+
+	shardContext := historyi.NewMockShardContext(s.controller)
+	engine := historyi.NewMockEngine(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(syncStateErr.NamespaceId),
+		syncStateErr.WorkflowId,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetEngine(gomock.Any()).Return(engine, nil).AnyTimes()
+	engine.EXPECT().DeleteWorkflowExecution(gomock.Any(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: syncStateErr.NamespaceId,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: syncStateErr.WorkflowId,
+			RunId:      syncStateErr.RunId,
+		},
+		ClosedWorkflowOnly: false,
+	}).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+
+	doContinue, err := s.task.SyncState(context.Background(), syncStateErr, ResendAttempt)
+	s.NoError(err)
+	s.False(doContinue)
 }

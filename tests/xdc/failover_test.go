@@ -2062,8 +2062,6 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	worker0.Stop() // stop worker0 so cluster0 won't make any progress
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
-	s.waitForClusterSynced()
-
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
@@ -2728,20 +2726,22 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 		case hb1Ch <- struct{}{}:
 		default:
 		}
-		// wait for failover
+		// wait for failover, first attempt will heartbeat timeout here
 		<-allowFailover
 
 		// After failover, verify we can still heartbeat and complete
-		if activity.HasHeartbeatDetails(ctx) {
-			var v int
-			_ = activity.GetHeartbeatDetails(ctx, &v)
-		}
 		activity.RecordHeartbeat(ctx, hb2Val)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		select {
 		case hb2Ch <- struct{}{}:
 		default:
 		}
 		activity.RecordHeartbeat(ctx, hb3Val)
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		select {
 		case hb3Ch <- struct{}{}:
 		default:
@@ -2753,7 +2753,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	testWorkflowFn := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second * 120,
-			HeartbeatTimeout:    time.Second * 10,
+			HeartbeatTimeout:    time.Second * 3,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
 		return workflow.ExecuteActivity(ctx, activityWithMultipleHB).Get(ctx, nil)
@@ -2792,10 +2792,12 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 	}, 10*time.Second, 200*time.Millisecond)
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+	// sleep to trigger heartbeat timeout for first attempt
 	// nolint:forbidigo
 	time.Sleep(time.Second * 4)
 
 	close(allowFailover)
+
 	// Wait for heartbeats from second attempt
 	<-hb2Ch
 	<-hb3Ch

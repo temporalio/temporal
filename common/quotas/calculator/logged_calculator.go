@@ -98,7 +98,7 @@ func (l *quotaLogger[T]) updateQuota(newQuota T) {
 	}
 
 	l.logger.Info("Quota changed",
-		tag.NewAnyTag("current-quota", currentQuota),
-		tag.NewAnyTag("new-quota", newQuota),
+		tag.Any("current-quota", currentQuota),
+		tag.Any("new-quota", newQuota),
 	)
 }

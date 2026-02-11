@@ -7,6 +7,7 @@ import (
 	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -74,6 +75,8 @@ var Module = fx.Options(
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
 	fx.Provide(NamespaceHandoverInterceptorProvider),
+	fx.Provide(interceptor.NewBusinessIDExtractor),
+	fx.Provide(BusinessIDInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
@@ -111,6 +114,7 @@ var Module = fx.Options(
 	fx.Invoke(EndpointRegistryLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	nexusfrontend.Module,
+	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
@@ -163,6 +167,7 @@ func AuthorizationInterceptorProvider(
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
+	dc *dynamicconfig.Collection,
 ) *authorization.Interceptor {
 	return authorization.NewInterceptor(
 		claimMapper,
@@ -174,6 +179,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthHeaderName,
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		serviceConfig.ExposeAuthorizerErrors,
+		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 	)
 }
 
@@ -201,6 +207,7 @@ func GrpcServerOptionsProvider(
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
+	businessIDInterceptor *interceptor.BusinessIDInterceptor,
 	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
@@ -256,6 +263,8 @@ func GrpcServerOptionsProvider(
 		// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
 		// And retry cannot be performed before customInterceptors.
 		namespaceHandoverInterceptor.Intercept,
+		// BusinessID interceptor extracts business ID and adds it to context for use by redirection policy
+		businessIDInterceptor.Intercept,
 		redirectionInterceptor.Intercept,
 		// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
 		telemetryInterceptor.UnaryIntercept,
@@ -346,6 +355,7 @@ func RedirectionInterceptorProvider(
 ) *interceptor.Redirection {
 	return interceptor.NewRedirection(
 		configuration.EnableNamespaceNotActiveAutoForwarding,
+		configuration.ForceNamespaceSelectedAPIAutoForwarding,
 		namespaceCache,
 		policy,
 		logger,
@@ -353,6 +363,18 @@ func RedirectionInterceptorProvider(
 		metricsHandler,
 		timeSource,
 		clusterMetadata,
+	)
+}
+
+func BusinessIDInterceptorProvider(
+	extractor interceptor.BusinessIDExtractor,
+	logger log.Logger,
+) *interceptor.BusinessIDInterceptor {
+	return interceptor.NewBusinessIDInterceptor(
+		[]interceptor.BusinessIDExtractorFunc{
+			interceptor.WorkflowServiceExtractor(extractor),
+		},
+		logger,
 	)
 }
 
@@ -589,6 +611,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -611,6 +634,7 @@ func VisibilityManagerProvider(
 		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
 	)
 }
 
@@ -762,7 +786,16 @@ func HandlerProvider(
 	membershipMonitor membership.Monitor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
+	activityHandler activity.FrontendHandler,
+	registry *chasm.Registry,
+	frontendServiceResolver membership.ServiceResolver,
 ) Handler {
+	workerDeploymentReadRateLimiter := configs.NewGlobalNamespaceRateLimiter(
+		frontendServiceResolver,
+		serviceConfig.GlobalWorkerDeploymentReadRPS,
+		log.With(logger, tag.ComponentRPCHandler, tag.ScopeNamespace),
+	)
+
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
 		namespaceReplicationQueue,
@@ -789,6 +822,9 @@ func HandlerProvider(
 		healthInterceptor,
 		scheduleSpecBuilder,
 		httpEnabled(cfg, serviceName),
+		activityHandler,
+		registry,
+		workerDeploymentReadRateLimiter,
 	)
 	return wfHandler
 }

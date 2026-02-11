@@ -56,20 +56,22 @@ var (
 	SearchAttributeFieldKeywordList01 = newSearchAttributeFieldKeywordList(1)
 	SearchAttributeFieldKeywordList02 = newSearchAttributeFieldKeywordList(2)
 
-	SearchAttributeTemporalChangeVersion              = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
-	SearchAttributeBinaryChecksums                    = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
-	SearchAttributeBuildIds                           = newSearchAttributeKeywordListByField(sadefs.BuildIds)
-	SearchAttributeBatcherNamespace                   = newSearchAttributeKeywordByField(sadefs.BatcherNamespace)
-	SearchAttributeBatcherUser                        = newSearchAttributeKeywordByField(sadefs.BatcherUser)
-	SearchAttributeTemporalScheduledStartTime         = newSearchAttributeDateTimeByField(sadefs.TemporalScheduledStartTime)
-	SearchAttributeTemporalScheduledByID              = newSearchAttributeKeywordByField(sadefs.TemporalScheduledById)
-	SearchAttributeTemporalSchedulePaused             = newSearchAttributeBoolByField(sadefs.TemporalSchedulePaused)
-	SearchAttributeTemporalNamespaceDivision          = newSearchAttributeKeywordByField(sadefs.TemporalNamespaceDivision)
-	SearchAttributeTemporalPauseInfo                  = newSearchAttributeKeywordListByField(sadefs.TemporalPauseInfo)
-	SearchAttributeTemporalReportedProblems           = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)
-	SearchAttributeTemporalWorkerDeploymentVersion    = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
-	SearchAttributeTemporalWorkflowVersioningBehavior = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
-	SearchAttributeTemporalWorkerDeployment           = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
+	SearchAttributeTaskQueue                            = newSearchAttributeKeywordByField(sadefs.TaskQueue)
+	SearchAttributeTemporalChangeVersion                = newSearchAttributeKeywordListByField(sadefs.TemporalChangeVersion)
+	SearchAttributeBinaryChecksums                      = newSearchAttributeKeywordListByField(sadefs.BinaryChecksums)
+	SearchAttributeBuildIds                             = newSearchAttributeKeywordListByField(sadefs.BuildIds)
+	SearchAttributeBatcherNamespace                     = newSearchAttributeKeywordByField(sadefs.BatcherNamespace)
+	SearchAttributeBatcherUser                          = newSearchAttributeKeywordByField(sadefs.BatcherUser)
+	SearchAttributeTemporalScheduledStartTime           = newSearchAttributeDateTimeByField(sadefs.TemporalScheduledStartTime)
+	SearchAttributeTemporalScheduledByID                = newSearchAttributeKeywordByField(sadefs.TemporalScheduledById)
+	SearchAttributeTemporalSchedulePaused               = newSearchAttributeBoolByField(sadefs.TemporalSchedulePaused)
+	SearchAttributeTemporalNamespaceDivision            = newSearchAttributeKeywordByField(sadefs.TemporalNamespaceDivision)
+	SearchAttributeTemporalPauseInfo                    = newSearchAttributeKeywordListByField(sadefs.TemporalPauseInfo)
+	SearchAttributeTemporalReportedProblems             = newSearchAttributeKeywordListByField(sadefs.TemporalReportedProblems)
+	SearchAttributeTemporalWorkerDeploymentVersion      = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeploymentVersion)
+	SearchAttributeTemporalWorkflowVersioningBehavior   = newSearchAttributeKeywordByField(sadefs.TemporalWorkflowVersioningBehavior)
+	SearchAttributeTemporalWorkerDeployment             = newSearchAttributeKeywordByField(sadefs.TemporalWorkerDeployment)
+	SearchAttributeTemporalUsedWorkerDeploymentVersions = newSearchAttributeKeywordListByField(sadefs.TemporalUsedWorkerDeploymentVersions)
 )
 
 var (
@@ -288,16 +290,6 @@ func NewSearchAttributeInt(alias string, intField SearchAttributeFieldInt) Searc
 	}
 }
 
-func newSearchAttributeIntByField(field string) SearchAttributeInt {
-	return SearchAttributeInt{
-		searchAttributeDefinition: searchAttributeDefinition{
-			alias:     field,
-			field:     field,
-			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
-		},
-	}
-}
-
 // Value sets the integer value of the search attribute.
 func (s SearchAttributeInt) Value(value int64) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
@@ -430,11 +422,11 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
-// GetValue returns the value for a given SearchAttribute with compile-time type safety.
+// SearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.
 // The return type T is inferred from the SearchAttribute's type parameter.
 // For example, SearchAttributeBool will return a bool value.
 // If the value is not found or the type does not match, the zero value for the type T is returned and the second return value is false.
-func GetValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
+func SearchAttributeValue[T any](m SearchAttributesMap, sa typedSearchAttribute[T]) (val T, ok bool) {
 	var zero T
 	if len(m.values) == 0 {
 		return zero, false

@@ -198,8 +198,24 @@ func (f *outboundQueueFactory) CreateQueue(
 
 	currentClusterName := f.ClusterMetadata.GetCurrentClusterName()
 
-	rescheduler := queues.NewRescheduler(
+	scheduler := queues.NewRateLimitedScheduler(
 		f.hostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		currentClusterName,
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
+
+	rescheduler := queues.NewRescheduler(
+		scheduler,
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
@@ -236,7 +252,7 @@ func (f *outboundQueueFactory) CreateQueue(
 
 	factory := queues.NewExecutableFactory(
 		executor,
-		f.hostScheduler,
+		scheduler,
 		rescheduler,
 		queues.NewNoopPriorityAssigner(),
 		shardContext.GetTimeSource(),
@@ -256,7 +272,7 @@ func (f *outboundQueueFactory) CreateQueue(
 	return queues.NewImmediateQueue(
 		shardContext,
 		tasks.CategoryOutbound,
-		f.hostScheduler,
+		scheduler,
 		rescheduler,
 		&queues.Options{
 			ReaderOptions: queues.ReaderOptions{

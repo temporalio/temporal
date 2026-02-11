@@ -75,15 +75,15 @@ func NewPayloadStoreHandler(
 	ctx context.Context,
 	request NewPayloadStoreRequest,
 ) (NewPayloadStoreResponse, error) {
-	_, executionKey, _, err := chasm.NewExecution(
+	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: request.NamespaceID.String(),
 			BusinessID:  request.StoreID,
 		},
-		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, any, error) {
+		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, error) {
 			store, err := NewPayloadStore(mutableContext)
-			return store, nil, err
+			return store, err
 		},
 		nil,
 		chasm.WithBusinessIDPolicy(request.IDReusePolicy, request.IDConflictPolicy),
@@ -92,7 +92,7 @@ func NewPayloadStoreHandler(
 		return NewPayloadStoreResponse{}, err
 	}
 	return NewPayloadStoreResponse{
-		RunID: executionKey.RunID,
+		RunID: result.ExecutionKey.RunID,
 	}, nil
 }
 

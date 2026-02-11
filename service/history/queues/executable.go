@@ -359,7 +359,9 @@ func (e *executableImpl) Execute() (retErr error) {
 	if resp.ExecutedAsActive != e.lastActiveness {
 		// namespace did a failover,
 		// reset task attempt since the execution logic used will change
+		// reset task priority since it changes between active/standby
 		e.attempt = 1
+		e.priority = e.priorityAssigner.Assign(e)
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 
@@ -553,7 +555,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		tag.Attempt(int32(e.attempt)),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
-		tag.NewStringTag("task-category", e.GetCategory().Name()),
+		tag.String("task-category", e.GetCategory().Name()),
 	)
 	if e.attempt > taskCriticalLogMetricAttempts {
 		logger.Error("Critical error processing task, retrying.", tag.OperationCritical)

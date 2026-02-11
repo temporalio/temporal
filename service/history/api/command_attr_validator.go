@@ -5,12 +5,14 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	activitypb "go.temporal.io/api/activity/v1"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -93,92 +95,38 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		activityType = attributes.ActivityType.GetName()
 	}
 
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, "", v.maxIDLengthLimit); err != nil {
-		return failedCause, fmt.Errorf("invalid TaskQueue on ScheduleActivityTaskCommand: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
-	}
-
-	if activityID == "" {
-		return failedCause, serviceerror.NewInvalidArgumentf("ActivityId is not set on ScheduleActivityTaskCommand. ActivityType=%s", activityType)
-	}
-	if activityType == "" {
-		return failedCause, serviceerror.NewInvalidArgumentf("ActivityType is not set on ScheduleActivityTaskCommand. ActivityID=%s", activityID)
-	}
 	if attributes.RetryPolicy == nil {
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	if err := v.validateActivityRetryPolicy(namespaceID, attributes.RetryPolicy); err != nil {
-		return failedCause, fmt.Errorf("invalid ActivityRetryPolicy on SechduleActivityTaskCommand: %w. ActivityId=%s ActivityType=%s", err, activityID, activityType)
-	}
-	if len(activityID) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgumentf("ActivityId on ScheduleActivityTaskCommand exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d", activityID, activityType, len(activityID), v.maxIDLengthLimit)
-	}
-	if len(activityType) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgumentf("ActivityType on ScheduleActivityTaskCommand exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d", activityID, activityType, len(activityType), v.maxIDLengthLimit)
-	}
-
-	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
-	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetScheduleToCloseTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
-	}
-	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetScheduleToStartTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
-	}
-	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetStartToCloseTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
-	}
-	if err := timestamp.ValidateAndCapProtoDuration(attributes.GetHeartbeatTimeout()); err != nil {
-		return failedCause, serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout for ScheduleActivityTaskCommand: %v. ActivityId=%s ActivityType=%s", err, activityID, activityType)
+	opts := &activitypb.ActivityOptions{
+		TaskQueue:              attributes.TaskQueue,
+		ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout: attributes.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    attributes.GetStartToCloseTimeout(),
+		HeartbeatTimeout:       attributes.GetHeartbeatTimeout(),
+		RetryPolicy:            attributes.RetryPolicy,
 	}
 
-	if err := priorities.Validate(attributes.Priority); err != nil {
+	err := activity.ValidateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		v.getDefaultActivityRetrySettings,
+		v.maxIDLengthLimit,
+		namespaceID,
+		opts,
+		attributes.GetPriority(),
+		runTimeout)
+
+	if err != nil {
 		return failedCause, err
 	}
 
-	ScheduleToCloseSet := attributes.GetScheduleToCloseTimeout().AsDuration() > 0
-	ScheduleToStartSet := attributes.GetScheduleToStartTimeout().AsDuration() > 0
-	StartToCloseSet := attributes.GetStartToCloseTimeout().AsDuration() > 0
-
-	if ScheduleToCloseSet {
-		if ScheduleToStartSet {
-			attributes.ScheduleToStartTimeout = timestamp.MinDurationPtr(attributes.GetScheduleToStartTimeout(),
-				attributes.GetScheduleToCloseTimeout())
-		} else {
-			attributes.ScheduleToStartTimeout = attributes.GetScheduleToCloseTimeout()
-		}
-		if StartToCloseSet {
-			attributes.StartToCloseTimeout = timestamp.MinDurationPtr(attributes.GetStartToCloseTimeout(),
-				attributes.GetScheduleToCloseTimeout())
-		} else {
-			attributes.StartToCloseTimeout = attributes.GetScheduleToCloseTimeout()
-		}
-	} else if StartToCloseSet {
-		// We are in !validScheduleToClose due to the first if above
-		attributes.ScheduleToCloseTimeout = runTimeout
-		if !ScheduleToStartSet {
-			attributes.ScheduleToStartTimeout = runTimeout
-		}
-	} else {
-		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return failedCause, serviceerror.NewInvalidArgumentf("A valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s", activityID, activityType)
-	}
-	// ensure activity timeout never larger than workflow timeout
-	if runTimeout.AsDuration() > 0 {
-		runTimeoutDur := runTimeout.AsDuration()
-		if attributes.GetScheduleToCloseTimeout().AsDuration() > runTimeoutDur {
-			attributes.ScheduleToCloseTimeout = runTimeout
-		}
-		if attributes.GetScheduleToStartTimeout().AsDuration() > runTimeoutDur {
-			attributes.ScheduleToStartTimeout = runTimeout
-		}
-		if attributes.GetStartToCloseTimeout().AsDuration() > runTimeoutDur {
-			attributes.StartToCloseTimeout = runTimeout
-		}
-		if attributes.GetHeartbeatTimeout().AsDuration() > runTimeoutDur {
-			attributes.HeartbeatTimeout = runTimeout
-		}
-	}
-	attributes.HeartbeatTimeout = timestamp.MinDurationPtr(attributes.GetHeartbeatTimeout(), attributes.GetStartToCloseTimeout())
+	attributes.ScheduleToCloseTimeout = opts.ScheduleToCloseTimeout
+	attributes.ScheduleToStartTimeout = opts.ScheduleToStartTimeout
+	attributes.StartToCloseTimeout = opts.StartToCloseTimeout
+	attributes.HeartbeatTimeout = opts.HeartbeatTimeout
+	attributes.RetryPolicy = opts.RetryPolicy
 
 	return enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, nil
 }
@@ -460,7 +408,8 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, executionInfo.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
@@ -584,7 +533,8 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, parentInfo.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
 	}
 

@@ -6,7 +6,9 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 )
 
 const (
@@ -24,24 +26,33 @@ const (
 	CompleteNexusOperation                          = "/temporal.api.nexusservice.v1.NexusService/CompleteNexusOperation"
 	// PollWorkflowHistoryAPIName is used instead of GetWorkflowExecutionHistory if WaitNewEvent is true in request.
 	PollWorkflowHistoryAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionHistory"
+	// PollActivityExecutionAPIName is used instead of DescribeActivityExecution if LongPollToken is set in request.
+	PollActivityExecutionAPIName = "/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecutionDescription"
 )
 
 var (
-	// ExecutionAPICountLimitOverride determines how many tokens each of these API calls consumes from their
-	// corresponding quota, which is determined by dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If
-	// the value is not set, then the method is not considered a long-running request and the number of concurrent
-	// requests will not be throttled. The Poll* methods here are long-running because they block until there is a task
-	// available. The GetWorkflowExecutionHistory method is blocking only if WaitNewEvent is true, otherwise it is not
-	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because they both block
-	// until a background WFT is complete.
+	// ExecutionAPICountLimitOverride determines how many tokens each of these API calls consumes
+	// from their corresponding quota, which is determined by
+	// dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance. If the value is not set,
+	// then the method is not considered a long-running request and the number of concurrent
+	// requests will not be throttled. The Poll* methods here are long-running because they block
+	// until there is a task available. GetWorkflowExecutionHistory and DescribeActivityExecution
+	// methods are blocking only if WaitNewEvent/LongPollToken are set, otherwise they are not
+	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
+	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
-		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
+
+		// Long-running if activity outcome is not already available
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
+		// Long-running if certain request parameters are set
+		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":   1,
 
 		// potentially long-running, depending on the operations
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
@@ -71,6 +82,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation":            1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CreateSchedule":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/StartBatchOperation":              1,
+		"/temporal.api.workflowservice.v1.WorkflowService/StartActivityExecution":           1,
 		DispatchNexusTaskByNamespaceAndTaskQueueAPIName:                                     1,
 		DispatchNexusTaskByEndpointAPIName:                                                  1,
 
@@ -114,11 +126,15 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowRules":                     2,
 		"/temporal.api.workflowservice.v1.WorkflowService/TriggerWorkflowRule":                   2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":                 2,
+		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelActivityExecution":        2,
+		"/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":            2,
+		"/temporal.api.workflowservice.v1.WorkflowService/DeleteActivityExecution":               2,
 		"/temporal.api.workflowservice.v1.WorkflowService/PauseWorkflowExecution":                2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UnpauseWorkflowExecution":              2,
 
 		// P3: Status Querying APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkflowExecution":       3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueue":               3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerBuildIdCompatibility":   3,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerVersioningRules":        3,
@@ -131,7 +147,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/GetCurrentDeployment":            3, // [cleanup-wv-pre-release]
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeploymentVersion": 3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":        3,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":           3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -143,6 +158,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed":          3,
 
 		// P4: Poll APIs and other low priority APIs
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution":              4, // TODO(saa-preview): should it be 4 or 3?
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":        4,
@@ -154,9 +170,12 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  4,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 4,
 
-		// P5: GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
-		// Treat as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
-		PollWorkflowHistoryAPIName: 5,
+		// P5: Low priority APIs
+		// GetWorkflowExecutionHistory with WaitNewEvent set to true is a long poll API.
+		// Similarly, DescribeActivityExecution is a long poll API if LongPollToken is set.
+		// Treat these as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
+		PollWorkflowHistoryAPIName:   5,
+		PollActivityExecutionAPIName: 5,
 		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,
@@ -173,14 +192,18 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
 
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountSchedules":                    1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         1,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             1,
 	}
 
 	VisibilityAPIPrioritiesOrdered = []int{0, 1}
@@ -361,6 +384,34 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 		}
 		return NamespaceReplicationInducingAPIPrioritiesOrdered[len(NamespaceReplicationInducingAPIPrioritiesOrdered)-1]
 	}, rateLimiters)
+}
+
+// NewGlobalNamespaceRateLimiter creates a namespace-aware rate limiter that uses
+// only a global quota with no per-instance fallback.
+func NewGlobalNamespaceRateLimiter(
+	memberCounter calculator.MemberCounter,
+	globalQuota dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) quotas.RequestRateLimiter {
+	rateFn := calculator.NewLoggedNamespaceCalculator(
+		calculator.ClusterAwareNamespaceQuotaCalculator{
+			MemberCounter:    memberCounter,
+			PerInstanceQuota: func(ns string) int { return 0 },
+			GlobalQuota:      globalQuota,
+		},
+		logger,
+	).GetQuota
+
+	return quotas.NewNamespaceRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDynamicRateLimiter(
+					quotas.NewDefaultIncomingRateBurst(func() float64 { return rateFn(req.Caller) }),
+					time.Minute,
+				),
+			)
+		},
+	)
 }
 
 func IsAPIOperation(apiFullName string) bool {

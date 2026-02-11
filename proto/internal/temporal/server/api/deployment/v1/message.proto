@@ -91,6 +91,11 @@ message VersionLocalState {
 
     // Timestamp when this version first became current or ramping.
     google.protobuf.Timestamp first_activation_time = 12;
+
+    // Timestamp when this version last became current.
+    // Can be used to determine whether a version has ever been Current.
+    google.protobuf.Timestamp last_current_time = 16;
+
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 13;
 
@@ -112,7 +117,10 @@ message VersionLocalState {
     // Arbitrary user-provided metadata attached to this version.
     temporal.api.deployment.v1.VersionMetadata metadata = 8;
 
-    bool started_deployment_workflow = 9;
+  // Deployment workflow should always be running before starting the version workflow.
+  // We should not start the deployment workflow. If we cannot find the deployment workflow when signaling, it means a bug and we should fix it.
+  // Deprecated.
+  bool started_deployment_workflow = 9 [deprecated = true];
 
     // Key: Task Queue Name
     map<string, TaskQueueFamilyData> task_queue_families = 10;
@@ -195,6 +203,11 @@ message WorkerDeploymentVersionSummary {
 
     // Timestamp when this version first became current or ramping.
     google.protobuf.Timestamp first_activation_time = 8;
+
+    // Timestamp when this version last became current.
+    // Can be used to determine whether a version has ever been Current.
+    google.protobuf.Timestamp last_current_time = 11;
+
     // Timestamp when this version last stopped being current or ramping.
     google.protobuf.Timestamp last_deactivation_time = 9;
 
@@ -490,4 +503,18 @@ message WorkerDeploymentSummary {
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary latest_version_summary = 4;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
+}
+
+// Signal input for force-continue-as-new on Deployment workflow
+message ForceCANDeploymentSignalArgs {
+    // If provided, this state will be used instead of the current state
+    // when performing continue-as-new.
+    WorkerDeploymentLocalState override_state = 1;
+}
+
+// Signal input for force-continue-as-new on Version workflow
+message ForceCANVersionSignalArgs {
+    // If provided, this state will be used instead of the current state
+    // when performing continue-as-new.
+    VersionLocalState override_state = 1;
 }

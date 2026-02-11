@@ -27,4 +27,8 @@ service SchedulerService {
     rpc DescribeSchedule(DescribeScheduleRequest) returns (DescribeScheduleResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
+
+    rpc ListScheduleMatchingTimes(ListScheduleMatchingTimesRequest) returns (ListScheduleMatchingTimesResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
+    }
 }

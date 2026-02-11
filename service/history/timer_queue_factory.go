@@ -52,7 +52,10 @@ func NewTimerQueueFactory(
 				params.NamespaceRegistry,
 				params.Logger,
 			),
-			HostPriorityAssigner: queues.NewPriorityAssigner(),
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.NamespaceRegistry,
+				params.ClusterMetadata.GetCurrentClusterName(),
+			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.TimerProcessorMaxPollHostRPS,
@@ -81,23 +84,21 @@ func (f *timerQueueFactory) CreateQueue(
 		f.VisibilityManager,
 	)
 
-	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			currentClusterName,
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			f.ChasmRegistry,
-			logger,
-			metricsHandler,
-		)
-	}
+	shardScheduler := queues.NewRateLimitedScheduler(
+		f.HostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		currentClusterName,
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,

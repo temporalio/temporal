@@ -97,7 +97,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.namespaceID = tests.NamespaceID
 	s.namespaceEntry = tests.GlobalNamespaceEntry
-	s.version = s.namespaceEntry.FailoverVersion()
+	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 
@@ -816,8 +816,10 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			timeoutEvent := request.UpdateWorkflowEvents[0].Events[1]
 			s.Equal(enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT, timeoutEvent.GetEventType())
 			timeoutAttributes := timeoutEvent.GetActivityTaskTimedOutEventAttributes()
-			s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutAttributes.Failure.GetTimeoutFailureInfo().GetTimeoutType())
-			s.Contains(timeoutAttributes.Failure.Message, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String())
+			// The timeout type should match the timer task type (START_TO_CLOSE) since we now preserve
+			// the original timeout type instead of overwriting it to SCHEDULE_TO_CLOSE.
+			s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutAttributes.Failure.GetTimeoutFailureInfo().GetTimeoutType())
+			s.Contains(timeoutAttributes.Failure.Message, enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String())
 			s.Equal(enumspb.RETRY_STATE_TIMEOUT, timeoutAttributes.RetryState)
 			return tests.UpdateWorkflowExecutionResponse, nil
 		})
@@ -2236,7 +2238,7 @@ func (s *timerQueueActiveTaskExecutorSuite) createPersistenceMutableState(
 		lastEventID, lastEventVersion,
 	))
 	s.NoError(err)
-	return workflow.TestCloneToProto(ms)
+	return workflow.TestCloneToProto(context.Background(), ms)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(

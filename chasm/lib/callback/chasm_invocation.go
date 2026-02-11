@@ -46,7 +46,7 @@ func (c chasmInvocation) WrapError(result invocationResult, err error) error {
 // returned. Intended to be used to hide internal errors from end users.
 func logInternalError(logger log.Logger, internalMsg string, internalErr error) error {
 	referenceID := uuid.NewString()
-	logger.Error(internalMsg, tag.Error(internalErr), tag.NewStringTag("reference-id", referenceID))
+	logger.Error(internalMsg, tag.Error(internalErr), tag.String("reference-id", referenceID))
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
@@ -82,13 +82,13 @@ func (c chasmInvocation) Invoke(
 
 	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
-		return invocationResultFail{logInternalError(e.logger, "failed to build history request: %v", err)}
+		return invocationResultFail{logInternalError(e.logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.logger, "failed to complete Nexus operation: %v", err)
+		msg := logInternalError(e.logger, "failed to complete Nexus operation", err)
 		if isRetryableRPCResponse(err) {
 			return invocationResultRetry{err: msg}
 		}

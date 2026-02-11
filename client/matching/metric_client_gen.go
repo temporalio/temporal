@@ -37,6 +37,20 @@ func (c *metricClient) CancelOutstandingPoll(
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
+func (c *metricClient) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientCancelOutstandingWorkerPolls")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CancelOutstandingWorkerPolls(ctx, request, opts...)
+}
+
 func (c *metricClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
@@ -399,6 +413,20 @@ func (c *metricClient) SyncDeploymentUserData(
 	}()
 
 	return c.client.SyncDeploymentUserData(ctx, request, opts...)
+}
+
+func (c *metricClient) UpdateFairnessState(
+	ctx context.Context,
+	request *matchingservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientUpdateFairnessState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateFairnessState(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateNexusEndpoint(

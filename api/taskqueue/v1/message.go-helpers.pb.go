@@ -300,3 +300,77 @@ func (this *TaskForwardInfo) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type EphemeralData to the protobuf v3 wire format
+func (val *EphemeralData) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EphemeralData from the protobuf v3 wire format
+func (val *EphemeralData) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EphemeralData) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EphemeralData values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EphemeralData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EphemeralData
+	switch t := that.(type) {
+	case *EphemeralData:
+		that1 = t
+	case EphemeralData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type VersionedEphemeralData to the protobuf v3 wire format
+func (val *VersionedEphemeralData) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type VersionedEphemeralData from the protobuf v3 wire format
+func (val *VersionedEphemeralData) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *VersionedEphemeralData) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two VersionedEphemeralData values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *VersionedEphemeralData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *VersionedEphemeralData
+	switch t := that.(type) {
+	case *VersionedEphemeralData:
+		that1 = t
+	case VersionedEphemeralData:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

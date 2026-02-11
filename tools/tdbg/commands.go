@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -52,7 +54,6 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	outputFileName := c.String(FlagOutputFilename)
 
 	client := clientFactory.AdminClient(c)
-
 	serializer := serialization.NewSerializer()
 
 	ctx, cancel := newContext(c)
@@ -156,7 +157,6 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	inputFileName := c.String(FlagInputFilename)
 
 	client := clientFactory.AdminClient(c)
-
 	serializer := serialization.NewSerializer()
 
 	ctx, cancel := newContext(c)
@@ -240,23 +240,37 @@ func AdminImportWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	return nil
 }
 
-// AdminDescribeWorkflow describe a new workflow execution for admin
-func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
+// AdminDescribeExecution describes a Temporal execution (CHASM tree or workflow).
+func AdminDescribeExecution(c *cli.Context, clientFactory ClientFactory) error {
 	resp, err := describeMutableState(c, clientFactory)
 	if err != nil {
 		return err
 	}
+	if resp == nil {
+		return errors.New("no mutable state returned")
+	}
 
-	if resp != nil {
-		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintln(c.App.Writer, color.GreenString("Cache mutable state:"))
-		if resp.GetCacheMutableState() != nil {
-			prettyPrintJSONObject(c, resp.GetCacheMutableState())
-		}
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintln(c.App.Writer, color.GreenString("Cache mutable state:"))
+	if resp.GetCacheMutableState() != nil {
+		prettyPrintJSONObject(c, resp.GetCacheMutableState())
+	}
+	if resp.GetDatabaseMutableState() != nil {
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, color.GreenString("Database mutable state:"))
 		prettyPrintJSONObject(c, resp.GetDatabaseMutableState())
+	}
 
+	// CHASM executions also print their tree.
+	if len(resp.GetDatabaseMutableState().GetChasmNodes()) > 0 {
+		err := dumpChasmTree(resp, c)
+		if err != nil {
+			// nolint:errcheck // assuming that write will succeed.
+			fmt.Fprintln(c.App.Writer, color.RedString("Unable to dump CHASM tree:"), err)
+		}
+	}
+
+	if resp.GetDatabaseMutableState() != nil {
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, color.GreenString("Current branch token:"))
 		versionHistories := resp.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
@@ -275,12 +289,36 @@ func AdminDescribeWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 				prettyPrintJSONObject(c, &currentBranchToken)
 			}
 		}
-
-		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
-		// nolint:errcheck // assuming that write will succeed.
-		fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
 	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "History service address: %s\n", resp.GetHistoryAddr())
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Shard Id: %s\n", resp.GetShardId())
+
+	return nil
+}
+
+func dumpChasmTree(resp *adminservice.DescribeMutableStateResponse, c *cli.Context) error {
+	chasmNodes := resp.GetDatabaseMutableState().GetChasmNodes()
+	if len(chasmNodes) == 0 {
+		return nil
+	}
+
+	logger := log.NewNoopLogger()
+	registry, err := newChasmRegistry(logger)
+	if err != nil {
+		return fmt.Errorf("failed to create CHASM registry: %w", err)
+	}
+
+	decodedNodes, err := decodeChasmNodes(chasmNodes, registry)
+	if err != nil {
+		return fmt.Errorf("failed to decode CHASM nodes: %w", err)
+	}
+
+	fmt.Fprintln(c.App.Writer, color.GreenString("CHASM Tree Nodes:")) // nolint:errcheck // assuming that write will succeed.
+	prettyPrintJSONObject(c, decodedNodes)
+
 	return nil
 }
 
@@ -291,7 +329,7 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	if err != nil {
 		return nil, err
 	}
-	wid, err := getRequiredOption(c, FlagWorkflowID)
+	bid, err := getRequiredOption(c, FlagBusinessID)
 	if err != nil {
 		return nil, err
 	}
@@ -303,13 +341,13 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: namespace,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: wid,
+			WorkflowId: bid,
 			RunId:      rid,
 		},
 		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("unable to get Workflow Mutable State: %s", err)
+		return nil, fmt.Errorf("unable to get Mutable State: %s", err)
 	}
 	return resp, nil
 }
@@ -635,6 +673,16 @@ func AdminDescribeHistoryHost(c *cli.Context, clientFactory ClientFactory) error
 	return nil
 }
 
+func adminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	if c.IsSet(FlagVisibilityQuery) && c.IsSet(FlagWorkflowID) && c.IsSet(FlagRunID) {
+		return errors.New("setting parameter visibility query with workflow ID and run ID is not allowed")
+	}
+	if c.IsSet(FlagVisibilityQuery) && !c.IsSet(FlagWorkflowID) && !c.IsSet(FlagRunID) {
+		return AdminBatchRefreshWorkflowTasks(c, clientFactory, prompter)
+	}
+	return AdminRefreshWorkflowTasks(c, clientFactory)
+}
+
 // AdminRefreshWorkflowTasks refreshes all the tasks of a workflow
 func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) error {
 	adminClient := clientFactory.AdminClient(c)
@@ -672,6 +720,66 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
+	return nil
+}
+
+// AdminBatchRefreshWorkflowTasks starts a batch job to refresh workflow tasks for multiple workflows
+func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	adminClient := clientFactory.AdminClient(c)
+	workflowClient := clientFactory.WorkflowClient(c)
+
+	nsName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	query, err := getRequiredOption(c, FlagVisibilityQuery)
+	if err != nil {
+		return err
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
+	if err != nil {
+		return err
+	}
+
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	// Count workflows matching the query to confirm with user
+	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: nsName,
+		Query:     query,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count workflow executions: %w", err)
+	}
+
+	msg := fmt.Sprintf("Will refresh tasks for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
+		countResp.GetCount(), query, nsName)
+	prompter.Prompt(msg)
+
+	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       nsName,
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch refresh workflow tasks: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", jobID)
 	return nil
 }
 

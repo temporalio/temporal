@@ -183,7 +183,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
-	// Create component structure that will simulate NewExecution scenario.
+	// Create component structure that will simulate StartExecution scenario.
 	sc2 := &TestSubComponent2{
 		SubComponent2Data: &protoMessageType{
 			CreateRequestId: "sub-component2-data",

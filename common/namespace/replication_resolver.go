@@ -6,11 +6,12 @@ import (
 )
 
 type ReplicationResolver interface {
-	ActiveClusterName() string
-	ClusterNames() []string
+	ActiveClusterName(businessID string) string
+	ActiveInCluster(clusterName string) bool
+	ClusterNames(businessID string) []string
 	ReplicationState() enumspb.ReplicationState
 	IsGlobalNamespace() bool
-	FailoverVersion() int64
+	FailoverVersion(businessID string) int64
 	FailoverNotificationVersion() int64
 
 	// Mutation methods for modifying resolver state
@@ -44,14 +45,23 @@ func NewDefaultReplicationResolverFactory() ReplicationResolverFactory {
 	}
 }
 
-func (r *defaultReplicationResolver) ActiveClusterName() string {
+func (r *defaultReplicationResolver) ActiveClusterName(businessID string) string {
 	if r.replicationConfig == nil {
 		return ""
 	}
 	return r.replicationConfig.ActiveClusterName
 }
 
-func (r *defaultReplicationResolver) ClusterNames() []string {
+func (r *defaultReplicationResolver) ActiveInCluster(clusterName string) bool {
+	if !r.IsGlobalNamespace() {
+		// namespace is not a global namespace, meaning namespace is always
+		// "active" within each cluster
+		return true
+	}
+	return r.replicationConfig.ActiveClusterName == clusterName
+}
+
+func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {
 	if r.replicationConfig == nil {
 		return nil
 	}
@@ -72,7 +82,7 @@ func (r *defaultReplicationResolver) IsGlobalNamespace() bool {
 	return r.isGlobalNamespace
 }
 
-func (r *defaultReplicationResolver) FailoverVersion() int64 {
+func (r *defaultReplicationResolver) FailoverVersion(businessID string) int64 {
 	return r.failoverVersion
 }
 

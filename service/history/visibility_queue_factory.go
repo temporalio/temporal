@@ -48,7 +48,10 @@ func NewVisibilityQueueFactory(
 				params.NamespaceRegistry,
 				params.Logger,
 			),
-			HostPriorityAssigner: queues.NewPriorityAssigner(),
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.NamespaceRegistry,
+				params.ClusterMetadata.GetCurrentClusterName(),
+			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
@@ -68,23 +71,21 @@ func (f *visibilityQueueFactory) CreateQueue(
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
 
-	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			f.ClusterMetadata.GetCurrentClusterName(),
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			f.ChasmRegistry,
-			logger,
-			metricsHandler,
-		)
-	}
+	shardScheduler := queues.NewRateLimitedScheduler(
+		f.HostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		f.ClusterMetadata.GetCurrentClusterName(),
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
@@ -102,6 +103,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
+		f.Config.ExternalPayloadsEnabled,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)

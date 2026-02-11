@@ -16,6 +16,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask":                        1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask":                        1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll":                  1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls":           1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue":                      1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListTaskQueuePartitions":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue":                  1,
@@ -50,6 +51,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers":                            1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig":                  1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker":                         1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState":                    1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership":        1,
 	}
 
