@@ -732,8 +732,9 @@ func (s *NexusStateReplicationSuite) cancelNexusOperation(ctx context.Context, c
 	if callbackToken != "" {
 		completion.Header = nexus.Header{commonnexus.CallbackTokenHeader: callbackToken}
 	}
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: commonnexus.PayloadSerializer,
-	}).CompleteOperation(ctx, callbackUrl, completion)
+	})
+	err := c.CompleteOperation(ctx, callbackUrl, completion)
 	s.NoError(err)
 }

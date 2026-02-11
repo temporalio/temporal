@@ -92,7 +92,8 @@ func TestSuccessfulCompletion(t *testing.T) {
 		Header: nexus.Header{"foo": "bar"},
 	}
 
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{}).CompleteOperation(ctx, callbackURL, completion)
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{})
+	err := c.CompleteOperation(ctx, callbackURL, completion)
 	require.NoError(t, err)
 }
 
@@ -118,9 +119,10 @@ func TestSuccessfulCompletion_CustomSerializer(t *testing.T) {
 	completion.Header.Set("foo", "bar")
 	completion.Header.Set(nexus.HeaderOperationToken, "test-operation-token")
 
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: serializer,
-	}).CompleteOperation(ctx, callbackURL, completion)
+	})
+	err := c.CompleteOperation(ctx, callbackURL, completion)
 	require.NoError(t, err)
 
 	require.Equal(t, 1, serializer.decoded)
@@ -191,7 +193,8 @@ func TestFailureCompletion(t *testing.T) {
 		}},
 		Header: nexus.Header{"foo": "bar"},
 	}
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{}).CompleteOperation(ctx, callbackURL, completion)
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{})
+	err := c.CompleteOperation(ctx, callbackURL, completion)
 	require.NoError(t, err)
 }
 
@@ -228,9 +231,10 @@ func TestFailureCompletion_CustomFailureConverter(t *testing.T) {
 		}},
 		Header: nexus.Header{"foo": "bar"},
 	}
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		FailureConverter: fc,
-	}).CompleteOperation(ctx, callbackURL, completion)
+	})
+	err := c.CompleteOperation(ctx, callbackURL, completion)
 	require.NoError(t, err)
 }
 
@@ -248,7 +252,8 @@ func TestBadRequestCompletion(t *testing.T) {
 	completion := nexusrpc.CompleteOperationOptions{
 		Result: []byte("success"),
 	}
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{}).CompleteOperation(ctx, callbackURL, completion)
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{})
+	err := c.CompleteOperation(ctx, callbackURL, completion)
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerErr.Type)

@@ -691,9 +691,10 @@ func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
 
-	err := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
 		Serializer: cnexus.PayloadSerializer,
-	}).CompleteOperation(ctx, url, completion)
+	})
+	err := c.CompleteOperation(ctx, url, completion)
 
 	return capture.Snapshot(), err
 }
