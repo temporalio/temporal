@@ -135,6 +135,10 @@ func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 	return w.MSPointer.AddHistoryEvent(t, setAttributes)
 }
 
+func (w *Workflow) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+	return w.MSPointer.HasAnyBufferedEvent(filter)
+}
+
 func (w *Workflow) PendingNexusOperationCount() int {
 	return len(w.Operations)
 }
