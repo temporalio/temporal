@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -163,6 +164,6 @@ func (s *CancelRunningActivitiesUsingNexusTaskSuite) TestDispatchCancelToWorker(
 
 	startOp := nexusPollResp.Request.GetStartOperation()
 	s.NotNil(startOp, "Expected StartOperation in Nexus request")
-	s.Equal("cancel-activities", startOp.Operation, "Expected cancel-activities operation")
+	s.Equal(nexus.CancelActivitiesOperation, startOp.Operation, "Expected cancel-activities operation")
 	s.T().Logf("SUCCESS: Received cancel-activities Nexus request on control queue")
 }
