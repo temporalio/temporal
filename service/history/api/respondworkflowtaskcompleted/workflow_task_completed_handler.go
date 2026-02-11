@@ -126,9 +126,9 @@ func newWorkflowTaskCompletedHandler(
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
-		identity:               identity,
-		workerInstanceKey:      workerInstanceKey,
-		workerControlTaskQueue: workerControlTaskQueue,
+		identity:                identity,
+		workerInstanceKey:       workerInstanceKey,
+		workerControlTaskQueue:  workerControlTaskQueue,
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
