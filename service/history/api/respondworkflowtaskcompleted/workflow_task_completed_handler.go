@@ -378,8 +378,7 @@ func (handler *workflowTaskCompletedHandler) handleMessage(
 				serviceerror.NewNotFoundf("update %s wasn't found on the server. This is most likely a transient error which will be resolved automatically by retries", message.ProtocolInstanceId))
 		}
 
-		namespace := handler.mutableState.GetNamespaceEntry().Name().String()
-		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState), namespace); err != nil {
+		if err := upd.OnProtocolMessage(message, workflow.WithEffects(handler.effects, handler.mutableState), handler.mutableState.GetNamespaceEntry().Name().String()); err != nil {
 			return handler.failWorkflowTaskOnInvalidArgument(
 				enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_UPDATE_WORKFLOW_EXECUTION_MESSAGE, err)
 		}
