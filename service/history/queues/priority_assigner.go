@@ -49,6 +49,7 @@ func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
 		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
 		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,
 		enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION,
+		enumsspb.TASK_TYPE_TRANSFER_CANCEL_ACTIVITY_NEXUS,
 		enumsspb.TASK_TYPE_UNSPECIFIED:
 		// add more task types here if we believe it's ok to delay those tasks
 		// and assign them the same priority as throttled tasks
