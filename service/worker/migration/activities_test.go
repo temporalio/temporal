@@ -181,6 +181,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 
@@ -202,6 +203,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_Success() {
 				RunId:      execution2.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution2.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(r.resp, r.err).Times(1)
 	}
@@ -272,6 +274,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_SkipWorkflowExecution() {
 				RunId:      execution1.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution1.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -328,6 +331,7 @@ func (s *activitiesSuite) TestVerifyReplicationTasks_FailedNotFound() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).AnyTimes()
 
@@ -384,6 +388,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 	result, err := s.a.verifySingleReplicationTask(ctx, &request, s.mockRemoteAdminClient, &testNamespace, request.Executions[0])
@@ -398,6 +403,7 @@ func (s *activitiesSuite) Test_verifySingleReplicationTask() {
 			RunId:      execution2.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution2.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(&adminservice.DescribeMutableStateResponse{}, serviceerror.NewNotFound("")).Times(1)
 
@@ -446,6 +452,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 		case executionNotfound:
@@ -456,6 +463,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 			break Loop
@@ -467,6 +475,7 @@ Loop:
 					RunId:      execution1.RunID,
 				},
 				Archetype:       chasm.WorkflowArchetype,
+				ArchetypeId:     execution1.ArchetypeID,
 				SkipForceReload: true,
 			})).Return(nil, serviceerror.NewInternal("")).Times(1)
 		}
@@ -616,6 +625,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksNoProgress() {
 			RunId:      execution1.RunID,
 		},
 		Archetype:       chasm.WorkflowArchetype,
+		ArchetypeId:     execution1.ArchetypeID,
 		SkipForceReload: true,
 	})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
@@ -661,6 +671,7 @@ func (s *activitiesSuite) Test_verifyReplicationTasksSkipRetention() {
 				RunId:      execution1.RunID,
 			},
 			Archetype:       chasm.WorkflowArchetype,
+			ArchetypeId:     execution1.ArchetypeID,
 			SkipForceReload: true,
 		})).Return(nil, serviceerror.NewNotFound("")).Times(1)
 
