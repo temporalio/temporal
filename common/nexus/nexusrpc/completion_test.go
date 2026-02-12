@@ -60,7 +60,7 @@ func (h *successfulCompletionHandler) CompleteOperation(ctx context.Context, com
 		return err
 	}
 	if result != 666 {
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result: %q", result)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result: %d", result)
 	}
 	return nil
 }
