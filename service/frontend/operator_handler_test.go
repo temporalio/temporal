@@ -476,7 +476,6 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 	}
 }
 
-
 func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	handler := s.handler
 	ctx := context.Background()
