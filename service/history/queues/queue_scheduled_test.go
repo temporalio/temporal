@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
@@ -84,9 +85,11 @@ func (s *scheduledQueueSuite) SetupTest() {
 			ActiveNamespaceWeights:  s.mockShard.GetConfig().TimerProcessorSchedulerActiveRoundRobinWeights,
 			StandbyNamespaceWeights: s.mockShard.GetConfig().TimerProcessorSchedulerStandbyRoundRobinWeights,
 			ExecutionAwareSchedulerOptions: ExecutionAwareSchedulerOptions{
-				EnableExecutionQueueScheduler:    func() bool { return false },
-				ExecutionQueueSchedulerMaxQueues: func() int { return 500 },
-				ExecutionQueueSchedulerQueueTTL:  func() time.Duration { return 5 * time.Second },
+				EnableExecutionQueueScheduler: func() bool { return false },
+				ExecutionQueueSchedulerOptions: ctasks.ExecutionQueueSchedulerOptions{
+					MaxQueues: func() int { return 500 },
+					QueueTTL:  func() time.Duration { return 5 * time.Second },
+				},
 			},
 		},
 		s.mockShard.GetNamespaceRegistry(),

@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -52,10 +53,12 @@ func NewTransferQueueFactory(
 					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
 					ExecutionAwareSchedulerOptions: queues.ExecutionAwareSchedulerOptions{
-						EnableExecutionQueueScheduler:           params.Config.TaskSchedulerEnableExecutionQueueScheduler,
-						ExecutionQueueSchedulerMaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
-						ExecutionQueueSchedulerQueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
-						ExecutionQueueSchedulerQueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+						EnableExecutionQueueScheduler: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+						ExecutionQueueSchedulerOptions: ctasks.ExecutionQueueSchedulerOptions{
+							MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+							QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+							QueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+						},
 					},
 				},
 				params.NamespaceRegistry,

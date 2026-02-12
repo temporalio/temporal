@@ -398,10 +398,12 @@ func (s *executionAwareSchedulerSuite) createMockExecutable(namespaceID, workflo
 
 func (s *executionAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) ExecutionAwareSchedulerOptions {
 	return ExecutionAwareSchedulerOptions{
-		EnableExecutionQueueScheduler:           func() bool { return enabled },
-		ExecutionQueueSchedulerMaxQueues:         func() int { return 500 },
-		ExecutionQueueSchedulerQueueTTL:          func() time.Duration { return 5 * time.Second },
-		ExecutionQueueSchedulerQueueConcurrency: func() int { return 1 },
+		EnableExecutionQueueScheduler: func() bool { return enabled },
+		ExecutionQueueSchedulerOptions: tasks.ExecutionQueueSchedulerOptions{
+			MaxQueues:        func() int { return 500 },
+			QueueTTL:         func() time.Duration { return 5 * time.Second },
+			QueueConcurrency: func() int { return 1 },
+		},
 	}
 }
 
@@ -441,7 +443,7 @@ func (s *executionAwareSchedulerSuite) createSchedulerWithMaxQueues(maxQueues in
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	opts := s.defaultSchedulerOptions(true)
-	opts.ExecutionQueueSchedulerMaxQueues = func() int { return maxQueues }
+	opts.ExecutionQueueSchedulerOptions.MaxQueues = func() int { return maxQueues }
 
 	scheduler := NewExecutionAwareScheduler(
 		mockBaseScheduler,

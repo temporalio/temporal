@@ -25,13 +25,8 @@ type (
 	ExecutionAwareSchedulerOptions struct {
 		// EnableExecutionQueueScheduler controls whether the ExecutionQueueScheduler is enabled.
 		EnableExecutionQueueScheduler dynamicconfig.BoolPropertyFn
-		// ExecutionQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues.
-		ExecutionQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
-		// ExecutionQueueSchedulerQueueTTL is how long a queue goroutine waits idle before exiting.
-		ExecutionQueueSchedulerQueueTTL dynamicconfig.DurationPropertyFn
-		// ExecutionQueueSchedulerQueueConcurrency is the max workers per queue.
-		// Defaults to 1 (sequential) if nil.
-		ExecutionQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
+		// ExecutionQueueSchedulerOptions contains configuration for the ExecutionQueueScheduler.
+		ExecutionQueueSchedulerOptions tasks.ExecutionQueueSchedulerOptions
 	}
 
 	// ExecutionAwareScheduler is a scheduler that wraps a base FIFO scheduler and adds
@@ -63,11 +58,7 @@ func NewExecutionAwareScheduler(
 	return &ExecutionAwareScheduler{
 		baseScheduler: baseScheduler,
 		executionQueueScheduler: tasks.NewExecutionQueueScheduler(
-			&tasks.ExecutionQueueSchedulerOptions{
-				MaxQueues:        options.ExecutionQueueSchedulerMaxQueues,
-				QueueTTL:         options.ExecutionQueueSchedulerQueueTTL,
-				QueueConcurrency: options.ExecutionQueueSchedulerQueueConcurrency,
-			},
+			&options.ExecutionQueueSchedulerOptions,
 			executableQueueKeyFn,
 			logger,
 			metricsHandler,
