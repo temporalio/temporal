@@ -384,3 +384,61 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	require.NoError(t, a.MarshalFrom(pb))
 	return &a
 }
+
+func TestCreateBatchedActivityCancelTasks(t *testing.T) {
+	t.Parallel()
+
+	t.Run("batches activities by control queue", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		// Expect one call to AddCancelActivityNexusTasks with batched IDs
+		ms.EXPECT().AddCancelActivityNexusTasks(
+			[]int64{5, 6, 7},
+			"control-queue-1",
+		).Return(nil).Times(1)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingActivityCancelsByControlQueue: map[string][]int64{
+				"control-queue-1": {5, 6, 7},
+			},
+		}
+
+		handler.createBatchedActivityCancelTasks()
+	})
+
+	t.Run("creates separate tasks for different control queues", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		// Expect two calls, one for each control queue
+		ms.EXPECT().AddCancelActivityNexusTasks(
+			gomock.Any(),
+			gomock.Any(),
+		).Return(nil).Times(2)
+
+		handler := &workflowTaskCompletedHandler{
+			mutableState: ms,
+			pendingActivityCancelsByControlQueue: map[string][]int64{
+				"control-queue-1": {5, 6},
+				"control-queue-2": {7, 8},
+			},
+		}
+
+		handler.createBatchedActivityCancelTasks()
+	})
+
+	t.Run("does nothing when no pending cancels", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		ms := historyi.NewMockMutableState(ctrl)
+
+		// No calls expected
+		handler := &workflowTaskCompletedHandler{
+			mutableState:                         ms,
+			pendingActivityCancelsByControlQueue: nil,
+		}
+
+		handler.createBatchedActivityCancelTasks()
+	})
+}
