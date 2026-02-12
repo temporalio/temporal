@@ -666,6 +666,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			handler.activityNotStartedCancelled = true
 		} else if ai.StartedEventId != common.EmptyEventID {
 			// Activity has started - create cancel task and send to worker via Nexus.
+			// TODO: Batch tasks for the same control queue.
 			if err := handler.mutableState.AddCancelActivityNexusTasks(ai.ScheduledEventId); err != nil {
 				return nil, err
 			}
