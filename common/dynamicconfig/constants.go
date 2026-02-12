@@ -1274,10 +1274,10 @@ This can help reduce effects of task queue movement.`,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
 	)
-	MatchingLogicalBacklogMetricsInterval = NewTaskQueueDurationSetting(
-		"matching.logicalBacklogMetricsInterval",
+	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
+		"matching.backlogMetricsEmitInterval",
 		time.Minute,
-		`How often to emit logical (attributed) backlog metrics.`,
+		`How often to emit attributed backlog metrics.`,
 	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",

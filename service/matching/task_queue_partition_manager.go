@@ -1123,7 +1123,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
 	for {
-		interval := pm.config.LogicalBacklogMetricsInterval()
+		interval := pm.config.BacklogMetricsEmitInterval()
 		if interval == 0 { // disabled
 			_ = util.InterruptibleSleep(ctx, time.Minute)
 			continue
