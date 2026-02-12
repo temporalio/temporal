@@ -178,17 +178,17 @@ func (mr *MockMutableStateMockRecorder) AddActivityTaskTimedOutEvent(arg0, arg1,
 }
 
 // AddCancelActivityNexusTasks mocks base method.
-func (m *MockMutableState) AddCancelActivityNexusTasks(arg0 int64) error {
+func (m *MockMutableState) AddCancelActivityNexusTasks(scheduledEventIDs []int64, controlQueue string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddCancelActivityNexusTasks", arg0)
+	ret := m.ctrl.Call(m, "AddCancelActivityNexusTasks", scheduledEventIDs, controlQueue)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddCancelActivityNexusTasks indicates an expected call of AddCancelActivityNexusTasks.
-func (mr *MockMutableStateMockRecorder) AddCancelActivityNexusTasks(arg0 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) AddCancelActivityNexusTasks(scheduledEventIDs, controlQueue any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCancelActivityNexusTasks", reflect.TypeOf((*MockMutableState)(nil).AddCancelActivityNexusTasks), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddCancelActivityNexusTasks", reflect.TypeOf((*MockMutableState)(nil).AddCancelActivityNexusTasks), scheduledEventIDs, controlQueue)
 }
 
 // AddChildWorkflowExecutionCanceledEvent mocks base method.

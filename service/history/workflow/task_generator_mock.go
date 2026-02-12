@@ -88,17 +88,17 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTimerTasks() *gomock.Ca
 }
 
 // GenerateCancelActivityNexusTasks mocks base method.
-func (m *MockTaskGenerator) GenerateCancelActivityNexusTasks(scheduledEventID int64) error {
+func (m *MockTaskGenerator) GenerateCancelActivityNexusTasks(scheduledEventIDs []int64, controlQueue string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateCancelActivityNexusTasks", scheduledEventID)
+	ret := m.ctrl.Call(m, "GenerateCancelActivityNexusTasks", scheduledEventIDs, controlQueue)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateCancelActivityNexusTasks indicates an expected call of GenerateCancelActivityNexusTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateCancelActivityNexusTasks(scheduledEventID any) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateCancelActivityNexusTasks(scheduledEventIDs, controlQueue any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateCancelActivityNexusTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateCancelActivityNexusTasks), scheduledEventID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateCancelActivityNexusTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateCancelActivityNexusTasks), scheduledEventIDs, controlQueue)
 }
 
 // GenerateChildWorkflowTasks mocks base method.
