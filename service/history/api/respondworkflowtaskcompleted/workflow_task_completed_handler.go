@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/proto"
@@ -665,12 +664,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
-		} else if ai.WorkerControlTaskQueue != "" && handler.config.EnableActivityCancellationNexusTask() {
-			// Activity has started and worker supports Nexus tasks - create cancel task.
-			handler.mutableState.AddTasks(&tasks.CancelActivityNexusTask{
-				WorkflowKey:       handler.mutableState.GetWorkflowKey(),
-				ScheduledEventIDs: []int64{ai.ScheduledEventId},
-			})
+		} else if ai.StartedEventId != common.EmptyEventID {
+			// Activity has started - create cancel task and send to worker via Nexus.
+			if err := handler.mutableState.AddCancelActivityNexusTasks(ai.ScheduledEventId); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return actCancelReqEvent, nil
