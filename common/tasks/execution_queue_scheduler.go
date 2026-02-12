@@ -353,7 +353,6 @@ func (s *ExecutionQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
 	task.Ack()
 	metrics.ExecutionQueueSchedulerTasksCompleted.With(s.metricsHandler).Record(1)
 
-	// Record total task latency (time from submit to completion)
 	taskLatency := s.timeSource.Now().Sub(submitTime)
 	metrics.ExecutionQueueSchedulerTaskLatency.With(s.metricsHandler).Record(taskLatency)
 }

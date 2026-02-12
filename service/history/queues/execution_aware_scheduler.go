@@ -74,11 +74,7 @@ type (
 	}
 )
 
-// NewExecutionAwareScheduler creates a new ExecutionAwareScheduler that wraps a base FIFO scheduler
-// and adds a ExecutionQueueScheduler for handling workflow contention.
-//
-// This returns a tasks.Scheduler[Executable] that can be passed to
-// InterleavedWeightedRoundRobinScheduler.
+// NewExecutionAwareScheduler creates a new ExecutionAwareScheduler.
 func NewExecutionAwareScheduler(
 	baseScheduler tasks.Scheduler[Executable],
 	options ExecutionAwareSchedulerOptions,
@@ -86,26 +82,22 @@ func NewExecutionAwareScheduler(
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 ) *ExecutionAwareScheduler {
-	executionQueueScheduler := tasks.NewExecutionQueueScheduler(
-		&tasks.ExecutionQueueSchedulerOptions{
-			MaxQueues:        options.ExecutionQueueSchedulerMaxQueues,
-			QueueTTL:         options.ExecutionQueueSchedulerQueueTTL,
-			QueueConcurrency: options.ExecutionQueueSchedulerQueueConcurrency,
-		},
-		executableQueueKeyFn,
-		logger,
-		metricsHandler,
-		timeSource,
-	)
-
-	s := &ExecutionAwareScheduler{
-		baseScheduler:          baseScheduler,
-		executionQueueScheduler: executionQueueScheduler,
-		options:                options,
-		logger:                 logger,
+	return &ExecutionAwareScheduler{
+		baseScheduler: baseScheduler,
+		executionQueueScheduler: tasks.NewExecutionQueueScheduler(
+			&tasks.ExecutionQueueSchedulerOptions{
+				MaxQueues:        options.ExecutionQueueSchedulerMaxQueues,
+				QueueTTL:         options.ExecutionQueueSchedulerQueueTTL,
+				QueueConcurrency: options.ExecutionQueueSchedulerQueueConcurrency,
+			},
+			executableQueueKeyFn,
+			logger,
+			metricsHandler,
+			timeSource,
+		),
+		options: options,
+		logger:  logger,
 	}
-
-	return s
 }
 
 func (s *ExecutionAwareScheduler) Start() {
@@ -156,28 +148,21 @@ func (s *ExecutionAwareScheduler) HasExecutionQueue(executable Executable) bool 
 	if !s.options.EnableExecutionQueueScheduler() {
 		return false
 	}
-	key := getWorkflowKey(executable)
-	return s.executionQueueScheduler.HasQueue(key)
+	return s.executionQueueScheduler.HasQueue(executableQueueKeyFn(executable))
 }
 
 func (s *ExecutionAwareScheduler) shouldRouteToExecutionQueueScheduler(executable Executable) bool {
 	if !s.options.EnableExecutionQueueScheduler() {
 		return false
 	}
-	key := getWorkflowKey(executable)
-	return s.executionQueueScheduler.HasQueue(key)
+	return s.executionQueueScheduler.HasQueue(executableQueueKeyFn(executable))
 }
 
-// getWorkflowKey extracts the workflow key from an executable for queue lookups.
-func getWorkflowKey(e Executable) definition.WorkflowKey {
+// executableQueueKeyFn extracts the workflow key from an Executable for queue routing.
+func executableQueueKeyFn(e Executable) any {
 	return definition.NewWorkflowKey(
 		e.GetNamespaceID(),
 		e.GetWorkflowID(),
 		e.GetRunID(),
 	)
-}
-
-// executableQueueKeyFn extracts the workflow key from an Executable for queue routing.
-func executableQueueKeyFn(e Executable) any {
-	return getWorkflowKey(e)
 }
