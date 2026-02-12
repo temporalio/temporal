@@ -350,11 +350,10 @@ message TransferTaskInfo {
         bool can_skip_visibility_archival = 1;
     }
 
-    // Details for a Nexus task that cancels activities belonging to a specific worker.
+    // Details for a Nexus task that cancels activities.
     message CancelActivityNexusTaskDetails {
         // Scheduled event IDs of activities to cancel.
         repeated int64 scheduled_event_ids = 1;
-        string worker_instance_key = 2;
     }
 
     oneof task_details {

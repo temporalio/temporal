@@ -19,7 +19,6 @@ type (
 
 		// ScheduledEventIDs of activities to cancel (batched by worker).
 		ScheduledEventIDs []int64
-		WorkerInstanceKey string
 	}
 )
 
@@ -60,12 +59,11 @@ func (t *CancelActivityNexusTask) GetType() enumsspb.TaskType {
 }
 
 func (t *CancelActivityNexusTask) String() string {
-	return fmt.Sprintf("CancelActivityNexusTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, ScheduledEventIDs: %v, WorkerInstanceKey: %v, Version: %v}",
+	return fmt.Sprintf("CancelActivityNexusTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, ScheduledEventIDs: %v, Version: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
 		t.ScheduledEventIDs,
-		t.WorkerInstanceKey,
 		t.Version,
 	)
 }
