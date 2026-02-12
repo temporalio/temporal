@@ -122,6 +122,26 @@ func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingPoll(ctx, in a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingPoll), varargs...)
 }
 
+// CancelOutstandingWorkerPolls mocks base method.
+func (m *MockMatchingServiceClient) CancelOutstandingWorkerPolls(ctx context.Context, in *matchingservice.CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CancelOutstandingWorkerPolls", varargs...)
+	ret0, _ := ret[0].(*matchingservice.CancelOutstandingWorkerPollsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOutstandingWorkerPolls indicates an expected call of CancelOutstandingWorkerPolls.
+func (mr *MockMatchingServiceClientMockRecorder) CancelOutstandingWorkerPolls(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingWorkerPolls", reflect.TypeOf((*MockMatchingServiceClient)(nil).CancelOutstandingWorkerPolls), varargs...)
+}
+
 // CheckTaskQueueUserDataPropagation mocks base method.
 func (m *MockMatchingServiceClient) CheckTaskQueueUserDataPropagation(ctx context.Context, in *matchingservice.CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error) {
 	m.ctrl.T.Helper()
@@ -904,6 +924,21 @@ func (m *MockMatchingServiceServer) CancelOutstandingPoll(arg0 context.Context, 
 func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingPoll(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingPoll", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingPoll), arg0, arg1)
+}
+
+// CancelOutstandingWorkerPolls mocks base method.
+func (m *MockMatchingServiceServer) CancelOutstandingWorkerPolls(arg0 context.Context, arg1 *matchingservice.CancelOutstandingWorkerPollsRequest) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelOutstandingWorkerPolls", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.CancelOutstandingWorkerPollsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CancelOutstandingWorkerPolls indicates an expected call of CancelOutstandingWorkerPolls.
+func (mr *MockMatchingServiceServerMockRecorder) CancelOutstandingWorkerPolls(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelOutstandingWorkerPolls", reflect.TypeOf((*MockMatchingServiceServer)(nil).CancelOutstandingWorkerPolls), arg0, arg1)
 }
 
 // CheckTaskQueueUserDataPropagation mocks base method.

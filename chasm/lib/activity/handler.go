@@ -67,20 +67,18 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			NamespaceID: req.GetNamespaceId(),
 			BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		},
-		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, *workflowservice.StartActivityExecutionResponse, error) {
+		func(mutableContext chasm.MutableContext, request *workflowservice.StartActivityExecutionRequest) (*Activity, error) {
 			newActivity, err := NewStandaloneActivity(mutableContext, request)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 
 			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 			if err != nil {
-				return nil, nil, err
+				return nil, err
 			}
 
-			return newActivity, &workflowservice.StartActivityExecutionResponse{
-				// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
-			}, nil
+			return newActivity, nil
 		},
 		req.GetFrontendRequest(),
 		chasm.WithRequestID(req.GetFrontendRequest().GetRequestId()),
@@ -96,11 +94,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
-	result.Output.RunId = result.ExecutionKey.RunID
-	result.Output.Started = result.Created
-
 	return &activitypb.StartActivityExecutionResponse{
-		FrontendResponse: result.Output,
+		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
+			RunId:   result.ExecutionKey.RunID,
+			Started: result.Created,
+			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
+		},
 	}, nil
 }
 
@@ -119,12 +118,6 @@ func (h *handler) DescribeActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
@@ -187,12 +180,6 @@ func (h *handler) PollActivityExecution(
 		BusinessID:  req.GetFrontendRequest().GetActivityId(),
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
-	defer func() {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
-			err = serviceerror.NewNotFound("activity execution not found")
-		}
-	}()
 
 	// Below, we send an empty non-error response on context deadline expiry. Here we compute a
 	// deadline that causes us to send that response before the caller's own deadline (see
