@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -245,13 +246,7 @@ func getTimerStats(snapshot map[string][]*metricstest.CapturedRecording, metricN
 
 // sortDurations sorts a slice of durations in ascending order.
 func sortDurations(durations []time.Duration) {
-	for i := 0; i < len(durations)-1; i++ {
-		for j := i + 1; j < len(durations); j++ {
-			if durations[j] < durations[i] {
-				durations[i], durations[j] = durations[j], durations[i]
-			}
-		}
-	}
+	slices.Sort(durations)
 }
 
 // TestExecutionQueueSchedulerDisabled verifies behavior when the feature is disabled.
@@ -486,12 +481,9 @@ func (s *ExecutionQueueSchedulerContentionTestSuite) SetupSuite() {
 }
 
 // TestActivityWorkflowWithMetricsObservability runs a workflow with many activities
-// and logs ExecutionQueueScheduler metrics for observability.
-//
-// Note: This is primarily a smoke test. Lock contention that triggers
-// ExecutionQueueScheduler routing depends on very precise timing conditions that
-// are hard to reliably trigger in functional tests. The unit tests in
-// execution_aware_scheduler_test.go verify the routing logic directly.
+// and verifies that ExecutionQueueScheduler routes tasks under contention.
+// With 2ms lock timeout and 50 concurrent FIFO workers processing 2000 activities,
+// lock contention is reliably triggered, causing tasks to be routed to the EQS.
 func (s *ExecutionQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetricsObservability() {
 	const activityCount = 2000
 
@@ -608,8 +600,10 @@ func (s *ExecutionQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMet
 		tag.NewDurationTag("p90", wqsWaitP90),
 		tag.NewDurationTag("p99", wqsWaitP99))
 
-	// No assertion on contention occurring - that's timing dependent.
-	// The workflow completing successfully proves the feature doesn't break normal operation.
+	// With 2ms lock timeout and 50 concurrent workers processing 2000 activities,
+	// some tasks should hit contention and be routed to ExecutionQueueScheduler.
+	s.Greater(wqsTasksSubmitted, int64(0),
+		"With 2ms lock timeout and 50 workers, some tasks should be routed to ExecutionQueueScheduler")
 }
 
 // TestActivityWorkflowWithFeatureEnabled verifies that workflows with activities work correctly

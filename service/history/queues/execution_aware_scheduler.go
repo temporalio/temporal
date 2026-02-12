@@ -142,18 +142,13 @@ func (s *ExecutionAwareScheduler) TrySubmit(executable Executable) bool {
 
 // HandleBusyWorkflow implements BusyWorkflowHandler.
 // It routes a task to the ExecutionQueueScheduler when it encounters a busy workflow error.
-// Returns true if the task was handled (submitted to a scheduler), false if caller should handle it.
+// Returns true if the task was handled (submitted to EQS), false if caller should handle it
+// (e.g., feature disabled or EQS at max capacity).
 func (s *ExecutionAwareScheduler) HandleBusyWorkflow(executable Executable) bool {
 	if !s.options.EnableExecutionQueueScheduler() {
-		// ExecutionQueueScheduler not enabled, let caller handle it
 		return false
 	}
-
-	if s.executionQueueScheduler.TrySubmit(executable) {
-		return true
-	}
-	// ExecutionQueueScheduler is full, fall back to base scheduler.
-	return s.baseScheduler.TrySubmit(executable)
+	return s.executionQueueScheduler.TrySubmit(executable)
 }
 
 // HasExecutionQueue returns true if the workflow has an active queue in the ExecutionQueueScheduler.

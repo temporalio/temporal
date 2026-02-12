@@ -440,7 +440,7 @@ func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_SubmitsToExecution
 	completionWG.Wait()
 }
 
-func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSchedulerWhenMaxQueues() {
+func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_ReturnsFalseWhenMaxQueuesReached() {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
@@ -479,10 +479,10 @@ func (s *executionAwareSchedulerSuite) TestHandleBusyWorkflow_FallsBackToBaseSch
 	// Wait for goroutine to pick up first task
 	<-execStarted
 
-	// Second task for a DIFFERENT workflow should fall back to base scheduler (MaxQueues reached)
+	// Second task for a DIFFERENT workflow should return false (MaxQueues reached).
+	// The caller (Nack path) is responsible for handling the task.
 	mockExec2 := s.createMockExecutable("ns1", "wf2", "run2")
-	mockBaseScheduler.EXPECT().TrySubmit(mockExec2).Return(true).Times(1)
-	s.True(scheduler.HandleBusyWorkflow(mockExec2))
+	s.False(scheduler.HandleBusyWorkflow(mockExec2))
 
 	// Cleanup
 	close(blockCh)

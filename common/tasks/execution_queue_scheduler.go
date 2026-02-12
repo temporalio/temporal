@@ -46,7 +46,7 @@ type (
 		// QueueTTL is how long an idle queue stays in the map before being swept.
 		QueueTTL func() time.Duration
 		// QueueConcurrency is the max number of worker goroutines per queue.
-		// Defaults to 1 (strictly sequential) if nil or returns <= 0.
+		// Values <= 0 are capped to 1 (strictly sequential).
 		QueueConcurrency func() int
 	}
 
@@ -213,7 +213,7 @@ func (s *ExecutionQueueScheduler[T]) appendTaskLocked(key any, entry taskEntry[T
 		metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
 	}
 	q.tasks = append(q.tasks, entry)
-	if q.activeWorkers < s.queueConcurrency() {
+	if q.activeWorkers < max(1, s.options.QueueConcurrency()) {
 		q.activeWorkers++
 		s.shutdownWG.Add(1)
 		go s.runWorker(q)
@@ -272,15 +272,16 @@ func (s *ExecutionQueueScheduler[T]) runWorker(q *workflowQueue[T]) {
 func (s *ExecutionQueueScheduler[T]) runSweeper() {
 	defer s.shutdownWG.Done()
 
-	ticker := time.NewTicker(s.options.QueueTTL())
-	defer ticker.Stop()
+	ch, t := s.timeSource.NewTimer(s.options.QueueTTL())
+	defer t.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
+		case <-ch:
 			if s.sweepIdleQueues() {
 				return
 			}
+			t.Reset(s.options.QueueTTL())
 		case <-s.shutdownChan:
 			return
 		}
@@ -355,16 +356,6 @@ func (s *ExecutionQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
 	// Record total task latency (time from submit to completion)
 	taskLatency := s.timeSource.Now().Sub(submitTime)
 	metrics.ExecutionQueueSchedulerTaskLatency.With(s.metricsHandler).Record(taskLatency)
-}
-
-func (s *ExecutionQueueScheduler[T]) queueConcurrency() int {
-	if s.options.QueueConcurrency == nil {
-		return 1
-	}
-	if c := s.options.QueueConcurrency(); c > 0 {
-		return c
-	}
-	return 1
 }
 
 func (s *ExecutionQueueScheduler[T]) isStopped() bool {
