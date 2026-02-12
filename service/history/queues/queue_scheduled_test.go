@@ -84,8 +84,8 @@ func (s *scheduledQueueSuite) SetupTest() {
 			WorkerCount:             s.mockShard.GetConfig().TimerProcessorSchedulerWorkerCount,
 			ActiveNamespaceWeights:  s.mockShard.GetConfig().TimerProcessorSchedulerActiveRoundRobinWeights,
 			StandbyNamespaceWeights: s.mockShard.GetConfig().TimerProcessorSchedulerStandbyRoundRobinWeights,
-			ExecutionAwareSchedulerOptions: ExecutionAwareSchedulerOptions{
-				EnableExecutionQueueScheduler: func() bool { return false },
+			ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+				Enabled: func() bool { return false },
 				ExecutionQueueSchedulerOptions: ctasks.ExecutionQueueSchedulerOptions{
 					MaxQueues: func() int { return 500 },
 					QueueTTL:  func() time.Duration { return 5 * time.Second },

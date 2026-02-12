@@ -49,8 +49,8 @@ func NewTimerQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TimerProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TimerProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
-					ExecutionAwareSchedulerOptions: queues.ExecutionAwareSchedulerOptions{
-						EnableExecutionQueueScheduler: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
 						ExecutionQueueSchedulerOptions: ctasks.ExecutionQueueSchedulerOptions{
 							MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
 							QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,

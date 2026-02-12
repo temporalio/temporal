@@ -45,8 +45,8 @@ func NewVisibilityQueueFactory(
 					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
-					ExecutionAwareSchedulerOptions: queues.ExecutionAwareSchedulerOptions{
-						EnableExecutionQueueScheduler: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
 						ExecutionQueueSchedulerOptions: ctasks.ExecutionQueueSchedulerOptions{
 							MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
 							QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,

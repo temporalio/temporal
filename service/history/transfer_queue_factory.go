@@ -52,8 +52,8 @@ func NewTransferQueueFactory(
 					ActiveNamespaceWeights:         params.Config.TransferProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.TransferProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
-					ExecutionAwareSchedulerOptions: queues.ExecutionAwareSchedulerOptions{
-						EnableExecutionQueueScheduler: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled: params.Config.TaskSchedulerEnableExecutionQueueScheduler,
 						ExecutionQueueSchedulerOptions: ctasks.ExecutionQueueSchedulerOptions{
 							MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
 							QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,

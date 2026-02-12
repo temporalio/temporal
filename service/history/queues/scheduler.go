@@ -5,6 +5,7 @@ package queues
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -25,6 +26,15 @@ const (
 )
 
 type (
+	// BusyWorkflowHandler is an interface for schedulers that can handle busy workflow errors
+	// by routing tasks to an ExecutionQueueScheduler.
+	BusyWorkflowHandler interface {
+		// HandleBusyWorkflow is called when a task encounters a busy workflow error.
+		// It routes the task to the ExecutionQueueScheduler for sequential processing.
+		// Returns true if the task was handled, false if the caller should handle it.
+		HandleBusyWorkflow(Executable) bool
+	}
+
 	// Scheduler is the component for scheduling and processing
 	// task executables, it's based on the common/tasks.Scheduler
 	// interface and provide the additional information of how
@@ -53,7 +63,7 @@ type (
 		InactiveNamespaceDeletionDelay dynamicconfig.DurationPropertyFn
 
 		// ExecutionAwareSchedulerOptions contains options for sequential per-workflow scheduling
-		ExecutionAwareSchedulerOptions
+		tasks.ExecutionAwareSchedulerOptions
 	}
 
 	RateLimitedSchedulerOptions struct {
@@ -72,7 +82,7 @@ type (
 
 		// executionAwareScheduler holds a reference to the workflow-aware scheduler
 		// for handling busy workflow errors
-		executionAwareScheduler *ExecutionAwareScheduler
+		executionAwareScheduler *tasks.ExecutionAwareScheduler[Executable]
 	}
 
 	rateLimitedSchedulerImpl struct {
@@ -144,9 +154,10 @@ func NewScheduler(
 	)
 
 	// Wrap the FIFO scheduler with ExecutionAwareScheduler for sequential per-execution processing
-	executionAwareScheduler := NewExecutionAwareScheduler(
+	executionAwareScheduler := tasks.NewExecutionAwareScheduler[Executable](
 		fifoScheduler,
 		options.ExecutionAwareSchedulerOptions,
+		executableQueueKeyFn,
 		logger,
 		metricsHandler,
 		timeSource,
@@ -304,4 +315,13 @@ func (s *rateLimitedSchedulerImpl) HandleBusyWorkflow(executable Executable) boo
 		return handler.HandleBusyWorkflow(executable)
 	}
 	return false
+}
+
+// executableQueueKeyFn extracts the workflow key from an Executable for queue routing.
+func executableQueueKeyFn(e Executable) any {
+	return definition.NewWorkflowKey(
+		e.GetNamespaceID(),
+		e.GetWorkflowID(),
+		e.GetRunID(),
+	)
 }

@@ -396,9 +396,9 @@ func (s *executionAwareSchedulerSuite) createMockExecutable(namespaceID, workflo
 	return mockExec
 }
 
-func (s *executionAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) ExecutionAwareSchedulerOptions {
-	return ExecutionAwareSchedulerOptions{
-		EnableExecutionQueueScheduler: func() bool { return enabled },
+func (s *executionAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) tasks.ExecutionAwareSchedulerOptions {
+	return tasks.ExecutionAwareSchedulerOptions{
+		Enabled: func() bool { return enabled },
 		ExecutionQueueSchedulerOptions: tasks.ExecutionQueueSchedulerOptions{
 			MaxQueues:        func() int { return 500 },
 			QueueTTL:         func() time.Duration { return 5 * time.Second },
@@ -408,14 +408,15 @@ func (s *executionAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) Exe
 }
 
 // createSchedulerWithMock creates a scheduler with Start/Stop expectations on the mock base.
-func (s *executionAwareSchedulerSuite) createSchedulerWithMock(enabled bool) (*ExecutionAwareScheduler, *tasks.MockScheduler[Executable]) {
+func (s *executionAwareSchedulerSuite) createSchedulerWithMock(enabled bool) (*tasks.ExecutionAwareScheduler[Executable], *tasks.MockScheduler[Executable]) {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
-	scheduler := NewExecutionAwareScheduler(
+	scheduler := tasks.NewExecutionAwareScheduler[Executable](
 		mockBaseScheduler,
 		s.defaultSchedulerOptions(enabled),
+		executableQueueKeyFn,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -424,11 +425,12 @@ func (s *executionAwareSchedulerSuite) createSchedulerWithMock(enabled bool) (*E
 }
 
 // createSchedulerWithoutLifecycle creates a scheduler without Start/Stop expectations.
-func (s *executionAwareSchedulerSuite) createSchedulerWithoutLifecycle(enabled bool) (*ExecutionAwareScheduler, *tasks.MockScheduler[Executable]) {
+func (s *executionAwareSchedulerSuite) createSchedulerWithoutLifecycle(enabled bool) (*tasks.ExecutionAwareScheduler[Executable], *tasks.MockScheduler[Executable]) {
 	mockBaseScheduler := s.createMockBaseScheduler()
-	scheduler := NewExecutionAwareScheduler(
+	scheduler := tasks.NewExecutionAwareScheduler[Executable](
 		mockBaseScheduler,
 		s.defaultSchedulerOptions(enabled),
+		executableQueueKeyFn,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
@@ -437,7 +439,7 @@ func (s *executionAwareSchedulerSuite) createSchedulerWithoutLifecycle(enabled b
 }
 
 // createSchedulerWithMaxQueues creates a scheduler with MaxQueues=maxQueues and Start/Stop expectations.
-func (s *executionAwareSchedulerSuite) createSchedulerWithMaxQueues(maxQueues int) (*ExecutionAwareScheduler, *tasks.MockScheduler[Executable]) {
+func (s *executionAwareSchedulerSuite) createSchedulerWithMaxQueues(maxQueues int) (*tasks.ExecutionAwareScheduler[Executable], *tasks.MockScheduler[Executable]) {
 	mockBaseScheduler := s.createMockBaseScheduler()
 	mockBaseScheduler.EXPECT().Start().Times(1)
 	mockBaseScheduler.EXPECT().Stop().Times(1)
@@ -445,9 +447,10 @@ func (s *executionAwareSchedulerSuite) createSchedulerWithMaxQueues(maxQueues in
 	opts := s.defaultSchedulerOptions(true)
 	opts.ExecutionQueueSchedulerOptions.MaxQueues = func() int { return maxQueues }
 
-	scheduler := NewExecutionAwareScheduler(
+	scheduler := tasks.NewExecutionAwareScheduler[Executable](
 		mockBaseScheduler,
 		opts,
+		executableQueueKeyFn,
 		s.logger,
 		metrics.NoopMetricsHandler,
 		clock.NewRealTimeSource(),
