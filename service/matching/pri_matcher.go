@@ -491,7 +491,7 @@ func (tm *priTaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*
 // Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
 // forwarding occurs then response or error is returned.
 func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	res, err := tm.syncOfferTask(ctx, task, true)
+	res, err := tm.syncOfferTask(ctx, task, false)
 	if res != nil { // note res may be non-nil "any" containing nil pointer
 		return res.(*matchingservice.DispatchNexusTaskResponse), err // nolint:revive
 	}
