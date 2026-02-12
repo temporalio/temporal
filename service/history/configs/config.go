@@ -401,13 +401,16 @@ type Config struct {
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Worker-Versioning related settings
-	EnableSuggestCaNOnNewTargetVersion   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableSendTargetVersionChanged       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VersionMembershipCacheTTL            dynamicconfig.DurationPropertyFn
-	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
-	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
-	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
+	EnableSuggestCaNOnNewTargetVersion    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSendTargetVersionChanged        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	UseRevisionNumberForWorkerVersioning  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VersionMembershipCacheTTL             dynamicconfig.DurationPropertyFn
+	VersionMembershipCacheMaxSize         dynamicconfig.IntPropertyFn
+	VersionReactivationSignalCacheTTL     dynamicconfig.DurationPropertyFn
+	VersionReactivationSignalCacheMaxSize dynamicconfig.IntPropertyFn
+	EnableVersionReactivationSignals      dynamicconfig.BoolPropertyFn
+	RoutingInfoCacheTTL                   dynamicconfig.DurationPropertyFn
+	RoutingInfoCacheMaxSize               dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -769,13 +772,16 @@ func NewConfig(
 		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
 
 		// Worker-Versioning related
-		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
-		EnableSuggestCaNOnNewTargetVersion:   dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
-		EnableSendTargetVersionChanged:       dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
-		VersionMembershipCacheTTL:            dynamicconfig.VersionMembershipCacheTTL.Get(dc),
-		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
-		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
-		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+		UseRevisionNumberForWorkerVersioning:  dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		EnableSuggestCaNOnNewTargetVersion:    dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
+		EnableSendTargetVersionChanged:        dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
+		VersionMembershipCacheTTL:             dynamicconfig.VersionMembershipCacheTTL.Get(dc),
+		VersionMembershipCacheMaxSize:         dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
+		VersionReactivationSignalCacheTTL:     dynamicconfig.VersionReactivationSignalCacheTTL.Get(dc),
+		VersionReactivationSignalCacheMaxSize: dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc),
+		EnableVersionReactivationSignals:      dynamicconfig.EnableVersionReactivationSignals.Get(dc),
+		RoutingInfoCacheTTL:                   dynamicconfig.RoutingInfoCacheTTL.Get(dc),
+		RoutingInfoCacheMaxSize:               dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 	}
 
 	return cfg
