@@ -316,18 +316,35 @@ def create_success_message(
     ci_breaking_count: int,
     flaky_content: str,
     run_id: str,
-    total_failures: int,
+    metrics: dict,
 ) -> Dict[str, Any]:
     """Create a success Slack message with flaky tests report."""
+
+    success_rate = metrics["success_rate"]
+    total_tests = metrics["total_tests"]
+    passed_tests = metrics["passed_tests"]
+    failed_tests = metrics["failed_tests"]
+    failures_per_1k = metrics["failures_per_1k"]
 
     blocks = [
         {
             "type": "section",
             "text": {"type": "mrkdwn", "text": "Flaky Tests Report - Last 7 Days"},
         },
+        # PROMINENT RELIABILITY METRIC
         {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"Total Failures: {total_failures}"},
+            "text": {
+                "type": "mrkdwn",
+                "text": f":dart: *{failures_per_1k:.2f} failures per 1,000 tests*\n{passed_tests:,} passed / {total_tests:,} total ({success_rate:.2f}% success)"
+            },
+        },
+        {
+            "type": "divider"
+        },
+        {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Failed Tests: {failed_tests}*"},
         },
         {
             "type": "section",
@@ -477,6 +494,7 @@ def create_github_actions_summary(
     flaky_count: int,
     timeout_count: int,
     ci_breaking_count: int,
+    metrics: dict,
 ) -> str:
     """Create GitHub Actions summary content."""
     summary_lines = []
@@ -485,11 +503,28 @@ def create_github_actions_summary(
     summary_lines.append(f"## Flaky Tests Report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     summary_lines.append("")
 
-    # Summary table
-    summary_lines.append("### Failure Categories Summary")
+    # TEST RELIABILITY METRICS - PROMINENT DISPLAY AT TOP
+    success_rate = metrics["success_rate"]
+    total_tests = metrics["total_tests"]
+    passed_tests = metrics["passed_tests"]
+    failed_tests = metrics["failed_tests"]
+    failures_per_1k = metrics["failures_per_1k"]
+
+    summary_lines.append("### 🎯 Test Reliability")
     summary_lines.append("")
-    summary_lines.append("| Category | Unique Tests |")
-    summary_lines.append("|----------|--------------|")
+    summary_lines.append(f"## {failures_per_1k:.2f} failures per 1,000 tests")
+    summary_lines.append("")
+    summary_lines.append(f"**{passed_tests:,}** passed / **{total_tests:,}** total ({success_rate:.2f}% success rate)")
+    summary_lines.append("")
+    summary_lines.append("---")
+    summary_lines.append("")
+
+    # Failure breakdown table
+    summary_lines.append("### Failure Categories Breakdown")
+    summary_lines.append("")
+    summary_lines.append("| Category | Count |")
+    summary_lines.append("|----------|-------|")
+    summary_lines.append(f"| Total Failed Tests | {failed_tests} |")
     summary_lines.append(f"| Crashes | {crash_count} |")
     summary_lines.append(f"| Timeouts | {timeout_count} |")
     summary_lines.append(f"| Flaky Tests | {flaky_count} |")
@@ -555,13 +590,35 @@ def process_json_file(input_filename: str, max_links: int = 3):
     # Create output directory if it doesn't exist
     os.makedirs("out", exist_ok=True)
 
-    process_flaky(data, "out/flaky.txt", max_links)
-    process_tests(data, "(timeout)", "out/timeout.txt", max_links)
-    process_crash(data, "(crash)", "out/crash.txt", max_links)
-    process_ci_breaking(data, "out/ci_breaking.txt", max_links)
+    # Calculate success metrics from ALL test data
+    total_tests = len(data)
+    passed_tests = sum(1 for item in data if item.get("passed", False))
+    failed_tests = total_tests - passed_tests
 
-    # Return total number of failures in the original data
-    return len(data)
+    # Calculate success rate percentage
+    success_rate = (passed_tests / total_tests * 100) if total_tests > 0 else 0.0
+
+    # Calculate failures per 1,000 tests (more interpretable for high success rates)
+    failures_per_1k = (failed_tests / total_tests * 1000) if total_tests > 0 else 0.0
+
+    # Filter to only failed tests for detailed failure analysis
+    failed_data = [item for item in data if not item.get("passed", False)]
+
+    process_flaky(failed_data, "out/flaky.txt", max_links)
+    process_tests(failed_data, "(timeout)", "out/timeout.txt", max_links)
+    process_crash(failed_data, "(crash)", "out/crash.txt", max_links)
+    process_ci_breaking(failed_data, "out/ci_breaking.txt", max_links)
+
+    with open("out/success_rate.txt", "w") as f:
+        f.write(f"{success_rate:.2f}")
+
+    return {
+        "total_tests": total_tests,
+        "passed_tests": passed_tests,
+        "failed_tests": failed_tests,
+        "success_rate": success_rate,
+        "failures_per_1k": failures_per_1k
+    }
 
 
 def create_argument_parser() -> argparse.ArgumentParser:
@@ -627,7 +684,7 @@ def get_failure_counts() -> tuple[int, int, int, int]:
     return crash_count, flaky_count, timeout_count, ci_breaking_count
 
 
-def handle_success_case(args, total_failures: int) -> None:
+def handle_success_case(args, metrics: dict) -> None:
     """Handle the successful processing case."""
     # Count failures from generated files
     crash_count, flaky_count, timeout_count, ci_breaking_count = get_failure_counts()
@@ -636,15 +693,15 @@ def handle_success_case(args, total_failures: int) -> None:
     if args.github_summary:
         print("Generating GitHub Actions summary...")
         summary_content = create_github_actions_summary(
-            crash_count, flaky_count, timeout_count, ci_breaking_count
+            crash_count, flaky_count, timeout_count, ci_breaking_count, metrics
         )
         write_github_actions_summary(summary_content)
 
     if args.slack_webhook:
-        send_success_slack_notification(args, crash_count, flaky_count, timeout_count, ci_breaking_count, total_failures)
+        send_success_slack_notification(args, crash_count, flaky_count, timeout_count, ci_breaking_count, metrics)
 
 
-def send_success_slack_notification(args, crash_count: int, flaky_count: int, timeout_count: int, ci_breaking_count: int, total_failures: int) -> None:
+def send_success_slack_notification(args, crash_count: int, flaky_count: int, timeout_count: int, ci_breaking_count: int, metrics: dict) -> None:
     """Send success Slack notification."""
     print("Sending success Slack notification...")
     if not args.run_id:
@@ -664,7 +721,7 @@ def send_success_slack_notification(args, crash_count: int, flaky_count: int, ti
         ci_breaking_count,
         flaky_content,
         args.run_id,
-        total_failures,
+        metrics,
     )
 
     # Send the message
@@ -703,9 +760,9 @@ def main():
 
     # Try to process the JSON file and handle both success and failure cases
     try:
-        total_failures = process_json_file(args.file, args.max_links)
+        metrics = process_json_file(args.file, args.max_links)
         print(f"Successfully processed {args.file}")
-        handle_success_case(args, total_failures)
+        handle_success_case(args, metrics)
 
     except FileNotFoundError:
         handle_failure_case(args, f"Error: File {args.file} not found")
