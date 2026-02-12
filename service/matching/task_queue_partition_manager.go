@@ -496,10 +496,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 	}
 
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+	identity, hasIdentity := ctx.Value(identityKey).(string)
+	if hasIdentity && identity != "" {
 		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	// The desired global rate limit for the task queue can come from multiple sources:
@@ -516,6 +515,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+	}
+
+	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).
+	// Skip on cancellation to avoid re-adding entry after RemovePoller was called.
+	if hasIdentity && identity != "" && ctx.Err() != context.Canceled {
+		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	return task, versionSetUsed, err
