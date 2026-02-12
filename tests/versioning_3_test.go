@@ -2475,7 +2475,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					// The flag is recomputed on every WFT, so both failed attempts and retries will have it if conditions persist.
 					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 
-					// In this test, deployment is changed after event 7 (line 2439).
+					// In this test, deployment is changed after event 7 (`s.setCurrentDeployment(tv2)`).
 					// So the first 2 WFT started events should NOT have the flag,
 					// and all subsequent events SHOULD have the flag.
 					eventsBeforeDeploymentChange := 2 // Events 3 and 7
