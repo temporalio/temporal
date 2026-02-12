@@ -174,6 +174,7 @@ type Config struct {
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
+	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
@@ -193,6 +194,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
+		UseNewFailureWireFormat:             chasmnexus.UseNewFailureWireFormat.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
