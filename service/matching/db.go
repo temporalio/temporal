@@ -275,14 +275,14 @@ func (db *taskQueueDB) OldUpdateState(
 	if err != nil {
 		db.subqueues[subqueueZero].AckLevel = prevAckLevel
 	}
-	db.emitBacklogGaugesLocked()
+	db.emitPhysicalBacklogGaugesLocked()
 	return err
 }
 
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
-	defer db.emitBacklogGaugesLocked()
+	defer db.emitPhysicalBacklogGaugesLocked()
 
 	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
 	// Note that we use the same threshold for non-sticky queues even though they don't have a
@@ -733,13 +733,15 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitBacklogGaugesLocked emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
-// task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
-// should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
-func (db *taskQueueDB) emitBacklogGaugesLocked() {
+// emitPhysicalBacklogGaugesLocked emits the physical_approximate_backlog_count,
+// physical_approximate_backlog_age_seconds, and the legacy task_lag_per_tl gauges.
+// Physical backlog metrics are only emitted for the default (unversioned) queue.
+// Attributed backlog metrics for all versions (including current/ramping attribution)
+// are emitted separately by the partition manager via fetchAndEmitLogicalBacklogMetrics.
+func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 	if !db.config.BreakdownMetricsByTaskQueue() ||
 		!db.config.BreakdownMetricsByPartition() ||
-		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+		db.queue.IsVersioned() {
 		return
 	}
 
@@ -823,10 +825,11 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 	return infos
 }
 
-func (db *taskQueueDB) emitZeroBacklogGauges() {
+func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
+	// Physical backlog metrics are only emitted for the default (unversioned) queue.
 	if !db.config.BreakdownMetricsByTaskQueue() ||
 		!db.config.BreakdownMetricsByPartition() ||
-		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
+		db.queue.IsVersioned() {
 		return
 	}
 

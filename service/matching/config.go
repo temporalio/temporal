@@ -79,7 +79,7 @@ type (
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
 		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		BacklogMetricsEmitInterval            dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		BacklogMetricsEmitInterval               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityBacklogForwarding                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxWaitForPollerBeforeFwd                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -142,13 +142,13 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration         func() time.Duration
-		EphemeralDataUpdateInterval   func() time.Duration
-		BacklogMetricsEmitInterval func() time.Duration
-		PriorityBacklogForwarding     func() bool
-		BacklogNegligibleAge          func() time.Duration
-		MaxWaitForPollerBeforeFwd     func() time.Duration
-		QueryPollerUnavailableWindow  func() time.Duration
+		SyncMatchWaitDuration        func() time.Duration
+		EphemeralDataUpdateInterval  func() time.Duration
+		BacklogMetricsEmitInterval   func() time.Duration
+		PriorityBacklogForwarding    func() bool
+		BacklogNegligibleAge         func() time.Duration
+		MaxWaitForPollerBeforeFwd    func() time.Duration
+		QueryPollerUnavailableWindow func() time.Duration
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		BacklogTaskForwardTimeout  func() time.Duration
@@ -317,7 +317,7 @@ func NewConfig(
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
 		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
-		BacklogMetricsEmitInterval:            dynamicconfig.MatchingBacklogMetricsEmitInterval.Get(dc),
+		BacklogMetricsEmitInterval:               dynamicconfig.MatchingBacklogMetricsEmitInterval.Get(dc),
 		PriorityBacklogForwarding:                dynamicconfig.MatchingPriorityBacklogForwarding.Get(dc),
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
 		MaxWaitForPollerBeforeFwd:                dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(dc),

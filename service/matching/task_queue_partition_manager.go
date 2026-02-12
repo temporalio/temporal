@@ -1132,12 +1132,17 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(backoff.Jitter(interval, 0.05)):
+		case <-time.After(interval):
 			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 		}
 	}
 }
 
+// fetchAndEmitLogicalBacklogMetrics calls Describe to get attributed backlog stats and emits
+// approximate_backlog_count and approximate_backlog_age_seconds per version. These metrics
+// reflect versioning attribution: for current/ramping versions, a proportional share of the
+// unversioned queue's backlog is added to their count, and the unversioned queue's count is
+// reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
 func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) {
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
 		return
@@ -1150,6 +1155,14 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 
 	for versionKey, vInfo := range resp.GetVersionsInfoInternal() {
+		// When BreakdownMetricsByBuildID is disabled, all versioned queues share the same
+		// "__versioned__" tag value. Since gauges overwrite on each Record() call, emitting
+		// multiple versions under the same tag would produce non-deterministic results.
+		// Skip versioned entries in this case; unversioned attributed metrics are still emitted.
+		if versionKey != "" && !pm.config.BreakdownMetricsByBuildID() {
+			continue
+		}
+
 		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
 
 		versionHandler := pm.metricsHandler.WithTags(

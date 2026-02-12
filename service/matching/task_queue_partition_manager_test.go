@@ -922,6 +922,93 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SmallBacklog() {
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildIDDisabled() {
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+	)
+
+	// Set up current version so Describe produces a versioned entry.
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime: 1 * time.Minute,
+	})
+	defer cleanup()
+
+	// Disable BreakdownMetricsByBuildID. When disabled, versioned entries would all share the
+	// "__versioned__" tag, producing non-deterministic gauge values. The function should skip
+	// versioned entries and only emit the unversioned metric.
+	pm.config.BreakdownMetricsByBuildID = func() bool { return false }
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Spool 5 tasks to the default queue.
+	dQueue := pm.defaultQueue()
+	for i := 0; i < 5; i++ {
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	// Create the versioned queue so it would appear in Describe output.
+	_, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
+	s.Require().NoError(err)
+
+	// Wait for backlog stats to stabilize, then emit.
+	s.Require().Eventually(func() bool {
+		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+		snap := capture.Snapshot()
+
+		// Unversioned should still be emitted (with attributed count = 0 since current takes all).
+		_, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
+		if !unvOk {
+			return false
+		}
+
+		// Versioned entry should NOT be emitted with the actual version tag.
+		currentVersionTag := deploymentName + ":" + currentBuildID
+		_, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
+		if curOk {
+			return false // should not be present
+		}
+
+		// Also should not appear under the generic "__versioned__" tag, since we skip entirely.
+		_, genericOk := latestLogicalBacklogCount(snap, "__versioned__")
+		return !genericOk
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)
