@@ -198,6 +198,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -209,6 +210,7 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		versioningStamp,
 		buildIdRedirectCounter,
 		suggestContinueAsNewReasons,
+		targetWorkerDeploymentVersionChanged,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

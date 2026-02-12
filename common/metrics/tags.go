@@ -47,7 +47,6 @@ const (
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
 	suggestContinueAsNewReasonTooManyHistoryEvents = "suggest_continue_as_new_reason_too_many_history_events"
 	suggestContinueAsNewReasonHistorySizeTooLarge  = "suggest_continue_as_new_reason_history_size_too_large"
-	suggestContinueAsNewReasonTargetVersionChanged = "suggest_continue_as_new_reason_target_version_changed"
 	isFirstAttempt                                 = "first-attempt"
 	workflowStatus                                 = "workflow_status"
 	behaviorBefore                                 = "behavior_before"
@@ -412,14 +411,6 @@ func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 
 func ContinueAsNewVersioningBehaviorTag(canBehavior enumspb.ContinueAsNewVersioningBehavior) Tag {
 	return Tag{Key: continueAsNewVersioningBehavior, Value: canBehavior.String()}
-}
-
-func SuggestContinueAsNewReasonTargetVersionChangedTag(present bool) Tag {
-	v := falseValue
-	if present {
-		v = trueValue
-	}
-	return Tag{Key: suggestContinueAsNewReasonTargetVersionChanged, Value: v}
 }
 
 func SuggestContinueAsNewReasonTooManyUpdatesTag(present bool) Tag {
