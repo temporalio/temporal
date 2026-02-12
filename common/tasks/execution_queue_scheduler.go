@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 package tasks
 
 import (
@@ -40,7 +18,7 @@ type (
 	// ExecutionQueueSchedulerOptions contains configuration for the ExecutionQueueScheduler.
 	// Both fields are functions so they respond to dynamic config changes at runtime.
 	ExecutionQueueSchedulerOptions struct {
-		// MaxQueues is the maximum number of concurrent workflow queues.
+		// MaxQueues is the maximum number of concurrent execution queues.
 		// When this limit is reached, TrySubmit will reject new queues.
 		MaxQueues func() int
 		// QueueTTL is how long an idle queue stays in the map before being swept.
@@ -50,7 +28,7 @@ type (
 		QueueConcurrency func() int
 	}
 
-	// QueueKeyFn extracts a workflow key from a task for queue routing.
+	// QueueKeyFn extracts a queue key from a task for queue routing.
 	QueueKeyFn[T Task] func(T) any
 
 	// taskEntry wraps a task with its submit timestamp for latency tracking.
@@ -59,21 +37,21 @@ type (
 		submitTime time.Time
 	}
 
-	// workflowQueue represents a single workflow's task queue.
+	// executionQueue represents a single execution's task queue.
 	// Tasks are stored in a slice protected by the scheduler's mutex.
 	// Worker goroutines pop tasks and execute them (up to QueueConcurrency workers).
-	workflowQueue[T Task] struct {
+	executionQueue[T Task] struct {
 		tasks         []taskEntry[T]
 		activeWorkers int
 		lastActive    time.Time
 	}
 
 	// ExecutionQueueScheduler is a scheduler that ensures sequential task execution
-	// per workflow using a dedicated goroutine per queue.
+	// per execution using a dedicated goroutine per queue.
 	//
 	// Key characteristics:
-	// - Tasks for the same workflow are executed sequentially
-	// - Each workflow gets its own goroutine that processes tasks from a slice
+	// - Tasks for the same execution are executed sequentially
+	// - Each execution gets its own goroutine that processes tasks from a slice
 	// - Worker goroutines exit when the queue is empty; a background sweeper
 	//   removes idle queue entries after QueueTTL
 	// - Maximum number of concurrent queues is capped at MaxQueues
@@ -88,10 +66,10 @@ type (
 		metricsHandler metrics.Handler
 		timeSource     clock.TimeSource
 
-		// mu protects the queues map, sweeperRunning, and all workflowQueue fields.
+		// mu protects the queues map, sweeperRunning, and all executionQueue fields.
 		// All task submissions and worker pops are serialized through this lock.
 		mu             sync.Mutex
-		queues         map[any]*workflowQueue[T]
+		queues         map[any]*executionQueue[T]
 		sweeperRunning bool
 	}
 )
@@ -111,7 +89,7 @@ func NewExecutionQueueScheduler[T Task](
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		timeSource:     timeSource,
-		queues:         make(map[any]*workflowQueue[T]),
+		queues:         make(map[any]*executionQueue[T]),
 	}
 	s.status.Store(common.DaemonStatusInitialized)
 	return s
@@ -121,7 +99,7 @@ func (s *ExecutionQueueScheduler[T]) Start() {
 	if !s.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
-	s.logger.Info("workflow queue scheduler started")
+	s.logger.Info("execution queue scheduler started")
 }
 
 func (s *ExecutionQueueScheduler[T]) Stop() {
@@ -133,14 +111,14 @@ func (s *ExecutionQueueScheduler[T]) Stop() {
 
 	go func() {
 		if success := common.AwaitWaitGroup(&s.shutdownWG, time.Minute); !success {
-			s.logger.Warn("workflow queue scheduler timed out waiting for goroutines")
+			s.logger.Warn("execution queue scheduler timed out waiting for goroutines")
 		}
 	}()
 
-	s.logger.Info("workflow queue scheduler stopped")
+	s.logger.Info("execution queue scheduler stopped")
 }
 
-// HasQueue returns true if a queue exists for the given workflow key.
+// HasQueue returns true if a queue exists for the given execution key.
 // This is used by other schedulers to check if they should route tasks here.
 func (s *ExecutionQueueScheduler[T]) HasQueue(key any) bool {
 	s.mu.Lock()
@@ -149,7 +127,7 @@ func (s *ExecutionQueueScheduler[T]) HasQueue(key any) bool {
 	return exists
 }
 
-// Submit adds a task to its workflow's queue. Creates a new queue if needed.
+// Submit adds a task to its execution's queue. Creates a new queue if needed.
 func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 	if s.isStopped() {
 		task.Abort()
@@ -172,7 +150,7 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 	metrics.ExecutionQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
 }
 
-// TrySubmit adds a task to its workflow's queue without blocking.
+// TrySubmit adds a task to its execution's queue without blocking.
 // Returns true if the task was accepted, false if at max queue capacity for new queues.
 func (s *ExecutionQueueScheduler[T]) TrySubmit(task T) bool {
 	if s.isStopped() {
@@ -208,7 +186,7 @@ func (s *ExecutionQueueScheduler[T]) TrySubmit(task T) bool {
 func (s *ExecutionQueueScheduler[T]) appendTaskLocked(key any, entry taskEntry[T]) {
 	q, exists := s.queues[key]
 	if !exists {
-		q = &workflowQueue[T]{}
+		q = &executionQueue[T]{}
 		s.queues[key] = q
 		metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
 	}
@@ -225,11 +203,11 @@ func (s *ExecutionQueueScheduler[T]) appendTaskLocked(key any, entry taskEntry[T
 	}
 }
 
-// runWorker is the goroutine that processes tasks for a single workflow queue.
+// runWorker is the goroutine that processes tasks for a single execution queue.
 // It pops tasks from the slice under the lock and executes them without the lock.
 // When the queue is empty, the worker marks itself inactive and exits.
 // A new worker is spawned by Submit/TrySubmit when tasks arrive for an inactive queue.
-func (s *ExecutionQueueScheduler[T]) runWorker(q *workflowQueue[T]) {
+func (s *ExecutionQueueScheduler[T]) runWorker(q *executionQueue[T]) {
 	defer s.shutdownWG.Done()
 
 	for {

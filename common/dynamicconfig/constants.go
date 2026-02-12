@@ -1789,13 +1789,12 @@ that processes tasks for contended workflows sequentially to avoid busy workflow
 		"history.taskSchedulerExecutionQueueSchedulerMaxQueues",
 		500,
 		`TaskSchedulerExecutionQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues in the execution queue scheduler.
-When this limit is reached, new workflows will fall back to the base FIFO scheduler. Changes to this value require a restart to take effect.`,
+When this limit is reached, new workflows will fall back to the base FIFO scheduler.`,
 	)
 	TaskSchedulerExecutionQueueSchedulerQueueTTL = NewGlobalDurationSetting(
 		"history.taskSchedulerExecutionQueueSchedulerQueueTTL",
 		5*time.Second,
-		`TaskSchedulerExecutionQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.
-Changes to this value require a restart to take effect.`,
+		`TaskSchedulerExecutionQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.`,
 	)
 
 	TaskSchedulerExecutionQueueSchedulerQueueConcurrency = NewGlobalIntSetting(
