@@ -250,7 +250,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
 
 	pm.goroGroup.Cancel()
-	pm.emitZeroLogicalBacklogMetrics()
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -1191,40 +1190,7 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 }
 
-// emitZeroLogicalBacklogMetrics zeroes out logical backlog gauges to prevent stale values
-// persisting after a partition is unloaded. Only zeroes priority keys that actually exist
-// in each queue's subqueues to avoid creating noisy zero-value series.
-func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogMetrics() {
-	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
-		return
-	}
 
-	emitZeroLogicalBacklogFunc := func(handler metrics.Handler, pq physicalTaskQueueManager) {
-		for pri := range pq.GetStatsByPriority(false) {
-			metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
-		}
-		metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
-	}
-
-	// unversioned queue
-	if dq := pm.defaultQueue(); dq != nil {
-		emitZeroLogicalBacklogFunc(pm.metricsHandler.WithTags(
-			metrics.WorkerVersionTag("", pm.config.BreakdownMetricsByBuildID()),
-		), dq)
-	}
-
-	// versioned queues
-	if pm.config.BreakdownMetricsByBuildID() {
-		pm.versionedQueuesLock.Lock()
-		defer pm.versionedQueuesLock.Unlock()
-		for version, vq := range pm.versionedQueues {
-			vHandler := pm.metricsHandler.WithTags(
-				metrics.WorkerVersionTag(version.MetricsTagValue(), true),
-			)
-			emitZeroLogicalBacklogFunc(vHandler, vq)
-		}
-	}
-}
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
