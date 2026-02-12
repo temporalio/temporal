@@ -7,6 +7,7 @@ import (
 
 type ReplicationResolver interface {
 	ActiveClusterName(businessID string) string
+	ActiveInCluster(clusterName string) bool
 	ClusterNames(businessID string) []string
 	ReplicationState() enumspb.ReplicationState
 	IsGlobalNamespace() bool
@@ -49,6 +50,15 @@ func (r *defaultReplicationResolver) ActiveClusterName(businessID string) string
 		return ""
 	}
 	return r.replicationConfig.ActiveClusterName
+}
+
+func (r *defaultReplicationResolver) ActiveInCluster(clusterName string) bool {
+	if !r.IsGlobalNamespace() {
+		// namespace is not a global namespace, meaning namespace is always
+		// "active" within each cluster
+		return true
+	}
+	return r.replicationConfig.ActiveClusterName == clusterName
 }
 
 func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {

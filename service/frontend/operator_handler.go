@@ -214,8 +214,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesElasticsearch(
 		} else {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(visibilityIndexNameTagName, indexName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+				tag.String(visibilityIndexNameTagName, indexName),
+				tag.String(visibilitySearchAttributeTagName, saName),
 			)
 		}
 	}
@@ -281,8 +281,8 @@ func (h *OperatorHandlerImpl) addSearchAttributesSQL(
 		if _, ok := aliasToFieldMap[saName]; ok {
 			h.logger.Warn(
 				fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName),
-				tag.NewStringTag(namespaceTagName, nsName),
-				tag.NewStringTag(visibilitySearchAttributeTagName, saName),
+				tag.String(namespaceTagName, nsName),
+				tag.String(visibilitySearchAttributeTagName, saName),
 			)
 			continue
 		}

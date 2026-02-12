@@ -3251,10 +3251,11 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter,
-		suggestContinueAsNewReasons)
+		suggestContinueAsNewReasons, targetWorkerDeploymentVersionChanged)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -4167,7 +4168,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowStartedEventID(startedEventID))
 		return nil, ms.createInternalServerError(opTag)
@@ -4216,7 +4217,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowStartedEventID(startedEventID))
 		return nil, ms.createInternalServerError(opTag)
@@ -4267,7 +4268,7 @@ func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(ai.ScheduledEventId),
 			tag.WorkflowStartedEventID(ai.StartedEventId),
 			tag.WorkflowTimeoutType(timeoutType))
@@ -4318,7 +4319,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 			ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 				tag.WorkflowEventID(ms.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
-				tag.Bool(ok),
+				tag.Bool("hasActivityInfo", ok),
 				tag.WorkflowScheduledEventID(scheduledEventID))
 
 			return nil, nil, ms.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
@@ -4330,7 +4331,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID))
 
 		return nil, nil, ms.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
@@ -4587,7 +4588,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowState(ms.executionState.State),
-			tag.Bool(ms.executionInfo.CancelRequested),
+			tag.Bool("cancelRequested", ms.executionInfo.CancelRequested),
 			tag.Key(ms.executionInfo.CancelRequestId),
 		)
 		return nil, ms.createInternalServerError(opTag)
@@ -5852,7 +5853,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -5913,7 +5914,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -5958,7 +5959,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6006,7 +6007,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(!ok),
+			tag.Bool("doesntHaveChildInfo", !ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6055,7 +6056,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6102,7 +6103,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6149,7 +6150,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6497,16 +6498,16 @@ func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []s
 	if oldPayload == nil && newPayload != nil {
 		// Adding search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute added",
-			tag.NewStringsTag("reported-problems", newPayload))
+			tag.Strings("reported-problems", newPayload))
 	} else if oldPayload != nil && newPayload == nil {
 		// Removing search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute removed",
-			tag.NewStringsTag("previous-reported-problems", oldPayload))
+			tag.Strings("previous-reported-problems", oldPayload))
 	} else if oldPayload != nil && newPayload != nil {
 		// Updating search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute updated",
-			tag.NewStringsTag("previous-reported-problems", oldPayload),
-			tag.NewStringsTag("reported-problems", newPayload))
+			tag.Strings("previous-reported-problems", oldPayload),
+			tag.Strings("reported-problems", newPayload))
 	}
 }
 
@@ -6993,19 +6994,19 @@ type closeTransactionResult struct {
 	chasmNodesMutation chasm.NodesMutation
 }
 
-func (ms *MutableStateImpl) setMetaDataMap(
+func (ms *MutableStateImpl) SetContextMetadata(
 	ctx context.Context,
 ) {
 	switch ms.chasmTree.ArchetypeID() {
 	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
 		// Set workflow type
 		if wfType := ms.GetWorkflowType(); wfType != nil && wfType.GetName() != "" {
-			contextutil.ContextMetadataSet(ctx, "workflow-type", wfType.GetName())
+			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, wfType.GetName())
 		}
 
 		// Set workflow task queue
 		if ms.executionInfo != nil && ms.executionInfo.TaskQueue != "" {
-			contextutil.ContextMetadataSet(ctx, "workflow-task-queue", ms.executionInfo.TaskQueue)
+			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, ms.executionInfo.TaskQueue)
 		}
 
 		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
@@ -7019,7 +7020,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
-	ms.setMetaDataMap(ctx)
+	ms.SetContextMetadata(ctx)
 
 	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
@@ -8696,11 +8697,12 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,
 
-			SuggestContinueAsNew:        incoming.WorkflowTaskSuggestContinueAsNew,
-			SuggestContinueAsNewReasons: incoming.WorkflowTaskSuggestContinueAsNewReasons,
-			HistorySizeBytes:            incoming.WorkflowTaskHistorySizeBytes,
-			BuildId:                     incoming.WorkflowTaskBuildId,
-			BuildIdRedirectCounter:      incoming.WorkflowTaskBuildIdRedirectCounter,
+			SuggestContinueAsNew:                 incoming.WorkflowTaskSuggestContinueAsNew,
+			SuggestContinueAsNewReasons:          incoming.WorkflowTaskSuggestContinueAsNewReasons,
+			TargetWorkerDeploymentVersionChanged: incoming.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+			HistorySizeBytes:                     incoming.WorkflowTaskHistorySizeBytes,
+			BuildId:                              incoming.WorkflowTaskBuildId,
+			BuildIdRedirectCounter:               incoming.WorkflowTaskBuildIdRedirectCounter,
 		})
 		workflowTaskVersionUpdated = true
 	}

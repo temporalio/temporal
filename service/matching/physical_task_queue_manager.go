@@ -117,11 +117,11 @@ var (
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
 
-	backlogTagClassic       = tag.NewStringTag("backlog", "classic")
-	backlogTagPriority      = tag.NewStringTag("backlog", "priority")
-	backlogTagFairness      = tag.NewStringTag("backlog", "fairness")
-	backlogTagPriorityDrain = tag.NewStringTag("backlog", "priority-drain")
-	backlogTagFairnessDrain = tag.NewStringTag("backlog", "fairness-drain")
+	backlogTagClassic       = tag.String("backlog", "classic")
+	backlogTagPriority      = tag.String("backlog", "priority")
+	backlogTagFairness      = tag.String("backlog", "fairness")
+	backlogTagPriorityDrain = tag.String("backlog", "priority-drain")
+	backlogTagFairnessDrain = tag.String("backlog", "fairness-drain")
 )
 
 func newPhysicalTaskQueueManager(
@@ -436,6 +436,13 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }
 
+func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
+	if c.priMatcher == nil {
+		return
+	}
+	c.priMatcher.ReprocessRedirectedTasksAfterStop()
+}
+
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	c.liveness.markAlive()
 	return c.backlogMgr.SpoolTask(taskInfo)
@@ -550,12 +557,12 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) error {
 	if c.priMatcher == nil {
 		softassert.Fail(c.logger, "AddSpooledTaskToMatcher called on old matcher")
-		return
+		return errInternalMatchError
 	}
-	c.priMatcher.AddTask(task)
+	return c.priMatcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {

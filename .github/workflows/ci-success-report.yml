@@ -1,0 +1,72 @@
+name: CI Success Report
+
+on:
+  schedule:
+    # Run on Tuesdays at noon Eastern time (5 PM UTC)
+    - cron: '0 17 * * 2'
+  workflow_dispatch:
+    inputs:
+      days:
+        description: 'Number of days to include in report'
+        required: false
+        default: '7'
+        type: string
+      workflow:
+        description: 'Workflow name to report on'
+        required: false
+        default: 'All Tests'
+        type: string
+      branch:
+        description: 'Branch to generate report for'
+        required: false
+        default: 'main'
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  ci-success-report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate token
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          token: ${{ steps.generate_token.outputs.token }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Generate CI Success Report
+        env:
+          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          DAYS_PARAM: ${{ github.event.inputs.days || '7' }}
+          WORKFLOW_PARAM: ${{ github.event.inputs.workflow || 'All Tests' }}
+          BRANCH_PARAM: ${{ github.event.inputs.branch || 'main' }}
+        run: |
+          set -euo pipefail
+
+          echo "Branch: $BRANCH_PARAM"
+          echo "Workflow: $WORKFLOW_PARAM"
+          echo "Days: $DAYS_PARAM"
+
+          go run ./cmd/tools/ci-notify/main.go digest \
+            --branch "$BRANCH_PARAM" \
+            --workflow "$WORKFLOW_PARAM" \
+            --days "$DAYS_PARAM" \
+            --slack-webhook "$SLACK_WEBHOOK"
+
+          echo "Report sent successfully"
