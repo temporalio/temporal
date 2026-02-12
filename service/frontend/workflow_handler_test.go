@@ -3927,16 +3927,12 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	workerInstanceKey := "worker-instance-123"
 
 	// Mixed results: some succeed, some fail (2 partitions x 2 task types = 4 calls)
-	callCount := 0
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ *matchingservice.CancelOutstandingWorkerPollsRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-			callCount++
-			if callCount%2 == 0 {
-				return nil, serviceerror.NewUnavailable("temporary error")
-			}
-			return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil
-		}).
-		Times(4)
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(2)
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewUnavailable("temporary error")).
+		Times(2)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
