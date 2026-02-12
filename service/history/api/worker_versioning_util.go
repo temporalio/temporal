@@ -22,6 +22,8 @@ type VersionReactivationSignalerFn func(
 // signals within the cache TTL window.
 // This is a fire-and-forget operation - the signal is sent asynchronously and errors are
 // logged by the signaler implementation.
+//
+//nolint:revive
 func ReactivateVersionWorkflowIfPinned(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -57,7 +59,6 @@ func ReactivateVersionWorkflowIfPinned(
 	// Send the signal asynchronously to avoid adding latency to the caller's request.
 	// Errors are logged by the signaler implementation (e.g. via convertAndRecordError). However,
 	// errors are not propagated to the caller as this is a fire-and-forget operation.
-	//nolint:errcheck
 	go func() {
 		signaler(context.Background(), namespaceEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())
 	}()
