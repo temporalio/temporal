@@ -82,6 +82,7 @@ func GetTransferTaskEventID(
 		if len(task.ScheduledEventIDs) > 0 {
 			eventID = task.ScheduledEventIDs[0]
 		} else {
+			// Should never happen.
 			eventID = common.FirstEventID
 		}
 	case *FakeTask:
