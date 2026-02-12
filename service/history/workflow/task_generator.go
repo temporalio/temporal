@@ -590,6 +590,7 @@ func (r *TaskGeneratorImpl) GenerateCancelActivityNexusTasks(scheduledEventID in
 	}
 
 	ai, ok := r.mutableState.GetActivityInfo(scheduledEventID)
+	// If control queue is not set, it means the worker that this activity belongs to does not support Nexus tasks.
 	if !ok || ai.WorkerControlTaskQueue == "" {
 		return nil
 	}
