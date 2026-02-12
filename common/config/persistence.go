@@ -111,11 +111,6 @@ func (c *Persistence) IsCustomVisibilityStore() bool {
 		c.GetSecondaryVisibilityStoreConfig().CustomDataStoreConfig != nil
 }
 
-func (c *Persistence) IsElasticsearchVisibilityStore() bool {
-	return (c.VisibilityConfigExist() && c.DataStores[c.VisibilityStore].Elasticsearch != nil) ||
-		(c.SecondaryVisibilityConfigExist() && c.DataStores[c.SecondaryVisibilityStore].Elasticsearch != nil)
-}
-
 func (c *Persistence) GetVisibilityStoreConfig() DataStore {
 	return c.DataStores[c.VisibilityStore]
 }
