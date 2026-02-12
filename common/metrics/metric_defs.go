@@ -1072,8 +1072,6 @@ var (
 
 	// ExecutionQueueScheduler metrics
 	ExecutionQueueSchedulerQueueCount        = NewGaugeDef("execution_queue_scheduler_queue_count")
-	ExecutionQueueSchedulerPendingTasks      = NewGaugeDef("execution_queue_scheduler_pending_tasks")
-	ExecutionQueueSchedulerActiveWorkers     = NewGaugeDef("execution_queue_scheduler_active_workers")
 	ExecutionQueueSchedulerTasksSubmitted    = NewCounterDef("execution_queue_scheduler_tasks_submitted")
 	ExecutionQueueSchedulerTasksCompleted    = NewCounterDef("execution_queue_scheduler_tasks_completed")
 	ExecutionQueueSchedulerTasksFailed       = NewCounterDef("execution_queue_scheduler_tasks_failed")
