@@ -57,15 +57,16 @@ type (
 		workflowTaskCompletedID int64
 
 		// internal state
-		hasBufferedEventsOrMessages     bool
-		workflowTaskFailedCause         *workflowTaskFailedCause
-		activityNotStartedCancelled     bool
-		newMutableState                 historyi.MutableState
-		stopProcessing                  bool // should stop processing any more commands
-		mutableState                    historyi.MutableState
-		effects                         effect.Controller
-		initiatedChildExecutionsInBatch map[string]struct{} // Set of initiated child executions in the workflow task
-		updateRegistry                  update.Registry
+		hasBufferedEventsOrMessages          bool
+		workflowTaskFailedCause              *workflowTaskFailedCause
+		activityNotStartedCancelled          bool
+		newMutableState                      historyi.MutableState
+		stopProcessing                       bool // should stop processing any more commands
+		mutableState                         historyi.MutableState
+		effects                              effect.Controller
+		initiatedChildExecutionsInBatch      map[string]struct{} // Set of initiated child executions in the workflow task
+		pendingActivityCancelsByControlQueue map[string][]int64  // Batched activity cancels by control queue
+		updateRegistry                       update.Registry
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -209,6 +210,9 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 			mutations = append(mutations, mutation)
 		}
 	}
+
+	// Create batched activity cancel tasks after all commands are processed.
+	handler.createBatchedActivityCancelTasks()
 
 	return mutations, nil
 }
@@ -664,15 +668,27 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
-		} else if ai.StartedEventId != common.EmptyEventID {
-			// Activity has started - create cancel task and send to worker via Nexus.
-			// TODO: Batch tasks for the same control queue.
-			if err := handler.mutableState.AddCancelActivityNexusTasks(ai.ScheduledEventId); err != nil {
-				return nil, err
+		} else if ai.WorkerControlTaskQueue != "" && handler.config.EnableActivityCancellationNexusTask() {
+			// Activity has started and worker supports Nexus tasks - collect for batched dispatch.
+			if handler.pendingActivityCancelsByControlQueue == nil {
+				handler.pendingActivityCancelsByControlQueue = make(map[string][]int64)
 			}
+			handler.pendingActivityCancelsByControlQueue[ai.WorkerControlTaskQueue] = append(
+				handler.pendingActivityCancelsByControlQueue[ai.WorkerControlTaskQueue],
+				ai.ScheduledEventId,
+			)
 		}
 	}
 	return actCancelReqEvent, nil
+}
+
+// createBatchedActivityCancelTasks creates one CancelActivityNexusTask per control queue,
+// batching cancellations for activities on the same worker.
+func (handler *workflowTaskCompletedHandler) createBatchedActivityCancelTasks() {
+	for controlQueue, scheduledEventIDs := range handler.pendingActivityCancelsByControlQueue {
+		// Error is ignored as the only failure case (feature disabled) is already checked at collection time.
+		_ = handler.mutableState.AddCancelActivityNexusTasks(scheduledEventIDs, controlQueue)
+	}
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandStartTimer(
