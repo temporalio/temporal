@@ -62,7 +62,7 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 			(*struct{})(nil),
 		)
 		if readErr != nil {
-			return nil, readErr // Returns ErrSentinel (409) if sentinel
+			return nil, readErr // Returns ErrSentinel (404) if sentinel
 		}
 		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
 	}

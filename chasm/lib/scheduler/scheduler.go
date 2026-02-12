@@ -85,7 +85,7 @@ var (
 	ErrConflictTokenMismatch = serviceerror.NewFailedPrecondition("mismatched conflict token")
 	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
-	ErrSentinel              = serviceerror.NewFailedPrecondition("schedule is a sentinel")
+	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -130,7 +130,7 @@ func NewScheduler(
 }
 
 // NewSentinel returns a sentinel CHASM scheduler that exists only to reserve
-// the schedule ID. Sentinels have no sub-components and return FailedPrecondition
+// the schedule ID. Sentinels have no sub-components and return NotFound
 // on all API operations.
 func NewSentinel(
 	ctx chasm.MutableContext,

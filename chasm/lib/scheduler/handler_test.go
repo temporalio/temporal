@@ -14,7 +14,7 @@ import (
 )
 
 // runSentinelHandlerTestCase asserts that the given operation returns
-// FailedPrecondition when invoked on a sentinel scheduler.
+// NotFound when invoked on a sentinel scheduler.
 func runSentinelHandlerTestCase(
 	t *testing.T,
 	callFn func(sentinel *scheduler.Scheduler, ctx chasm.MutableContext, specBuilder *legacyscheduler.SpecBuilder) error,
@@ -25,8 +25,8 @@ func runSentinelHandlerTestCase(
 	err := callFn(sentinel, ctx, specBuilder)
 
 	require.Error(t, err)
-	var failedPreconditionErr *serviceerror.FailedPrecondition
-	require.ErrorAs(t, err, &failedPreconditionErr, "expected FailedPrecondition error for sentinel")
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr, "expected NotFound error for sentinel")
 }
 
 func TestSentinelHandler_DescribeSchedule(t *testing.T) {

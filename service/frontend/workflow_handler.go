@@ -3376,12 +3376,11 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 // indicates that the request should be routed to the legacy (V1) scheduler stack.
 // This accounts for two situations:
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
-//   - FailedPrecondition: the key at that ID is a sentinel value (reserving the ID
+//   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
-	var failedPreconditionErr *serviceerror.FailedPrecondition
-	return errors.As(err, &notFoundErr) || errors.As(err, &failedPreconditionErr)
+	return errors.As(err, &notFoundErr)
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.

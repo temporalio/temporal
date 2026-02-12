@@ -44,7 +44,7 @@ type SchedulerState struct {
 	// expires.
 	Closed bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
 	// When true, this scheduler is a sentinel that exists only to reserve the
-	// schedule ID. All API operations return FailedPrecondition.
+	// schedule ID. All API operations return NotFound.
 	Sentinel      bool `protobuf:"varint,10,opt,name=sentinel,proto3" json:"sentinel,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

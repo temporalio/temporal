@@ -31,7 +31,7 @@ message SchedulerState {
     bool closed = 9;
 
     // When true, this scheduler is a sentinel that exists only to reserve the
-    // schedule ID. All API operations return FailedPrecondition.
+    // schedule ID. All API operations return NotFound.
     bool sentinel = 10;
 }
 
