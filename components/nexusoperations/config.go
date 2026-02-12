@@ -76,14 +76,14 @@ Uses Go's len() function on header keys and values to determine the total size.`
 
 var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.useSystemCallbackURL",
-	false,
+	true,
 	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates
 	callback URLs for worker targets in Nexus Operations.When set to true,
 	the executor will use the fixed system callback URL ("temporal://system") for all worker targets,
 	instead of generating URLs from the callback URL template.
 	This simplifies configuration and improves reliability for worker callbacks.
-	- false (default): The executor uses the callback URL template to generate callback URLs for worker targets.
-	- true: The executor uses the fixed system callback URL ("temporal://system") for worker targets.
+	- false: The executor uses the callback URL template to generate callback URLs for worker targets.
+	- true (default): The executor uses the fixed system callback URL ("temporal://system") for worker targets.
 	Note: The default will switch to true in future releases.`,
 )
 
@@ -174,6 +174,7 @@ type Config struct {
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
+	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
@@ -193,6 +194,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
+		UseNewFailureWireFormat:             chasmnexus.UseNewFailureWireFormat.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
