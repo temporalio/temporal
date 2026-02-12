@@ -109,7 +109,7 @@ func GenerateSelfSignedCAPool(caCert *tls.Certificate) (*x509.CertPool, error) {
 }
 
 func GenerateSelfSignedCA(filePath string) (*tls.Certificate, error) {
-	caCert, err := generateSelfSignedX509CA("undefined", nil, 1024)
+	caCert, err := generateSelfSignedX509CA("undefined", nil, 2048)
 	if err != nil {
 		return nil, err
 	}

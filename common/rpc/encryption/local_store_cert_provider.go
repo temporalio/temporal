@@ -2,7 +2,7 @@ package encryption
 
 import (
 	"bytes"
-	"crypto/md5"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
@@ -403,7 +403,7 @@ func checkCertForExpiration(
 
 	if cert != nil && expiresBefore(cert, pointInTime) {
 		record := CertExpirationData{
-			Thumbprint: md5.Sum(cert.Raw),
+			Thumbprint: sha256.Sum256(cert.Raw),
 			IsCA:       cert.IsCA,
 			DNSNames:   cert.DNSNames,
 			Expiration: cert.NotAfter,
