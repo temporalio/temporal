@@ -761,12 +761,12 @@ func (db *taskQueueDB) emitBacklogGaugesLocked() {
 	}
 
 	for priority, count := range counts {
-		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
+		metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
 	}
 	if oldestTime.IsZero() {
-		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	} else {
-		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -838,8 +838,8 @@ func (db *taskQueueDB) emitZeroBacklogGauges() {
 	db.Unlock()
 
 	for k := range priorities {
-		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+		metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
 	}
-	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+	metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

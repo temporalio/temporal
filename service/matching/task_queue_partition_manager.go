@@ -1158,7 +1158,7 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 
 		// Per-priority backlog count
 		for pri, stats := range pqInfo.GetTaskQueueStatsByPriorityKey() {
-			metrics.LogicalApproximateBacklogCount.With(versionHandler).Record(
+			metrics.ApproximateBacklogCount.With(versionHandler).Record(
 				float64(stats.GetApproximateBacklogCount()),
 				metrics.MatchingTaskPriorityTag(pri),
 			)
@@ -1166,16 +1166,16 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 
 		// Aggregate backlog count
 		aggregateStats := pqInfo.GetTaskQueueStats()
-		metrics.LogicalApproximateBacklogCount.With(versionHandler).Record(
+		metrics.ApproximateBacklogCount.With(versionHandler).Record(
 			float64(aggregateStats.GetApproximateBacklogCount()),
 		)
 
 		// Aggregate backlog age
 		age := aggregateStats.GetApproximateBacklogAge()
 		if age != nil && age.AsDuration() > 0 {
-			metrics.LogicalApproximateBacklogAgeSeconds.With(versionHandler).Record(age.AsDuration().Seconds())
+			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(age.AsDuration().Seconds())
 		} else {
-			metrics.LogicalApproximateBacklogAgeSeconds.With(versionHandler).Record(0)
+			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(0)
 		}
 	}
 }

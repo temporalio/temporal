@@ -615,7 +615,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording, workerVersion string) (float64, bool) {
 	var latest float64
 	found := false
-	for _, rec := range snap[metrics.LogicalApproximateBacklogCount.Name()] {
+	for _, rec := range snap[metrics.ApproximateBacklogCount.Name()] {
 		if rec.Tags["worker_version"] == workerVersion && rec.Tags[metrics.TaskPriorityTagName] == "" {
 			latest = rec.Value.(float64)
 			found = true
