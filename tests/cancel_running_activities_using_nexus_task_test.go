@@ -19,8 +19,6 @@ import (
 // Tests that when a workflow is cancelled, all running activities are also cancelled.
 // The cancellation request should be delivered to the worker's control queue via the Nexus service.
 func TestDispatchCancelToWorker(t *testing.T) {
-	t.Parallel()
-
 	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableActivityCancellationNexusTask, true))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
