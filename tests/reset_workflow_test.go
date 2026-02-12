@@ -1154,5 +1154,5 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 }
 
 func (s *ResetWorkflowTestSuite) Context() context.Context {
-	return context.Background()
+	return s.T().Context()
 }

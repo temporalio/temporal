@@ -5536,5 +5536,5 @@ func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.Deployment
 }
 
 func (s *Versioning3Suite) Context() context.Context {
-	return context.Background()
+	return s.T().Context()
 }

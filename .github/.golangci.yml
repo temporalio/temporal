@@ -46,6 +46,8 @@ linters:
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
         - pattern: FunctionalTestBase
           msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
+        - pattern: context\.Background\(\)
+          msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
     depguard:
       rules:
         main:
@@ -189,6 +191,10 @@ linters:
           - forbidigo
       - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
         text: "FunctionalTestBase"
+        linters:
+          - forbidigo
+      - path-except: tests/.+\.go # only enforce in test files
+        text: "context.Background"
         linters:
           - forbidigo
       - path: _test\.go|tests/.+\.go|common/testing/
