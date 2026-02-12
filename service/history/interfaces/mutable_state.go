@@ -57,7 +57,6 @@ type (
 			*commonpb.WorkerVersionStamp,
 			*deploymentpb.Deployment,
 			*taskqueuespb.BuildIdRedirectInfo,
-			string, // workerInstanceKey
 			string, // workerControlTaskQueue
 		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
