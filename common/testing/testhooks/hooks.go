@@ -61,4 +61,3 @@ type Key[T any, S any] struct {
 	id    keyID
 	scope Scope
 }
-

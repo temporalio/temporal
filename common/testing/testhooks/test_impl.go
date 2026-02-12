@@ -6,8 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.uber.org/fx"
 	"go.temporal.io/server/common/namespace"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
