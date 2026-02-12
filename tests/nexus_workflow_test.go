@@ -54,7 +54,11 @@ type NexusWorkflowTestSuite struct {
 
 func TestNexusWorkflowTestSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, new(NexusWorkflowTestSuite))
+	suite.Run(t, &NexusWorkflowTestSuite{
+		NexusTestBaseSuite: NexusTestBaseSuite{
+			useTemporalFailures: true,
+		},
+	})
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
@@ -1517,7 +1521,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 		Identity:           "test",
 	}
 
-	go s.nexusTaskPoller(ctx, taskQueue, func(res *workflowservice.PollNexusTaskQueueResponse) (*nexuspb.Response, *nexuspb.HandlerError) {
+	pollerErrCh := s.nexusTaskPoller(ctx, taskQueue, func(res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
 		start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
 		s.Equal(op.Name(), start.Operation)
 
@@ -1533,19 +1537,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 		}
 
 		_, err := s.FrontendClient().StartWorkflowExecution(ctx, completionWFStartReq)
-		s.NoError(err)
+		if err != nil {
+			return nil, err
+		}
 
-		return &nexuspb.Response{
-			Variant: &nexuspb.Response_StartOperation{
-				StartOperation: &nexuspb.StartOperationResponse{
-					Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
-						AsyncSuccess: &nexuspb.StartOperationResponse_Async{
-							OperationToken: "test-token",
-						},
-					},
-				},
-			},
-		}, nil
+		return &nexusTaskResponse{StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "test-token"}}, nil
 	})
 
 	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1661,6 +1657,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 	})
 
 	s.NoError(err)
+	s.NoError(<-pollerErrCh)
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
