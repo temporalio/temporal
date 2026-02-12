@@ -542,6 +542,7 @@ comma := ,
 # Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
 # end of the variable name is set. Each temporal_with_* tag needs one.
 EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.temporal.io/server/common/archiver/gcloud
+EXCLUDED_PACKAGES_temporal_with_azblob := github.com/Azure/azure-sdk-for-go/sdk/storage/azblob go.temporal.io/server/common/archiver/azure_store
 
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
@@ -796,6 +797,9 @@ start-cass-es-dual: temporal-server
 
 start-cass-es-custom: temporal-server
 	./temporal-server --config-file config/development-cass-es-custom.yaml --allow-no-auth start
+
+start-cass-archival-azure: temporal-server
+	./temporal-server --config-file config/development-cass-archival-azure.yaml --allow-no-auth start
 
 start-es-fi: temporal-server
 	./temporal-server --config-file config/development-cass-es-fi.yaml --allow-no-auth start

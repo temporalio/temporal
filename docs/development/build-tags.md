@@ -34,6 +34,7 @@ included.
 | Tag                      | Integration                   | Dependencies it brings in |
 | ------------------------ | ----------------------------- | ------------------------- |
 | `temporal_with_gstorage` | Google Cloud Storage archival | Google Cloud Storage SDK  |
+| `temporal_with_azblob`   | Azure Blob Storage archival   | Azure Storage SDK         |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 

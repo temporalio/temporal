@@ -27,6 +27,7 @@ const (
 	URISchemeFilestore = "file"
 	URISchemeS3store   = "s3"
 	URISchemeGstorage  = "gs"
+	URISchemeAzblob    = "azblob"
 )
 
 var (
