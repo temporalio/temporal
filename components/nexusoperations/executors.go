@@ -245,6 +245,10 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 		header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(opTimeout)
 	}
+	if e.Config.UseNewFailureWireFormat(ns.Name().String()) {
+		// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
+		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+	}
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()

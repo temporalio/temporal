@@ -237,7 +237,7 @@ func (h *NexusHTTPHandler) baseNexusContext(apiName string, header http.Header) 
 		apiName:                              apiName,
 		requestStartTime:                     time.Now(),
 		responseHeaders:                      make(map[string]string),
-		callerFailureSupport:                 header.Get("temporal-nexus-failure-support") == "true",
+		callerFailureSupport:                 header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) == "true",
 	}
 }
 

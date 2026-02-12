@@ -26,6 +26,12 @@ const (
 	headerOperationStartTime = "nexus-operation-start-time"
 	headerOperationCloseTime = "nexus-operation-close-time"
 	headerRetryable          = "nexus-request-retryable"
+
+	// HeaderTemporalNexusFailureSupport is a Temporal specific header that toggles behavior of how failures are
+	// serialized over the wire when set to the string "true".
+	// NOTE: If / when porting this package back into the Nexus SDK, make sure not to copy this header over.
+	// The header should be safe to remove by server version 1.32.0.
+	HeaderTemporalNexusFailureSupport = "temporal-nexus-failure-support"
 )
 
 const contentTypeJSON = "application/json"

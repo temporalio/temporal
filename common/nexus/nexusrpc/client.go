@@ -176,7 +176,6 @@ func NewHTTPClient(options HTTPClientOptions) (*HTTPClient, error) {
 	if options.FailureConverter == nil {
 		options.FailureConverter = DefaultFailureConverter()
 	}
-
 	return &HTTPClient{
 		baseHTTPClient: baseHTTPClient{
 			serializer:       options.Serializer,
@@ -283,8 +282,6 @@ func (c *HTTPClient) StartOperation(
 	}
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
-	// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
-	request.Header.Set("temporal-nexus-failure-support", "true")
 
 	response, err := c.httpCaller(request)
 	if err != nil {

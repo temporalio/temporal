@@ -110,7 +110,7 @@ func (h *BaseHTTPHandler) WriteFailure(writer http.ResponseWriter, r *http.Reque
 			return
 		}
 		// Backward compatibility, unwrap the failure cause.
-		if r.Header.Get("temporal-nexus-failure-support") != "true" && failure.Cause != nil {
+		if r.Header.Get(HeaderTemporalNexusFailureSupport) != "true" && failure.Cause != nil {
 			failure = *failure.Cause
 		}
 
@@ -131,7 +131,7 @@ func (h *BaseHTTPHandler) WriteFailure(writer http.ResponseWriter, r *http.Reque
 			return
 		}
 		// Backward compatibility, unwrap the failure cause.
-		if r.Header.Get("temporal-nexus-failure-support") != "true" && failure.Cause != nil {
+		if r.Header.Get(HeaderTemporalNexusFailureSupport) != "true" && failure.Cause != nil {
 			failure = *failure.Cause
 		}
 		switch handlerError.Type {
