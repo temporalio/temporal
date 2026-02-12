@@ -665,12 +665,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 				return nil, err
 			}
 			handler.activityNotStartedCancelled = true
-		} else if ai.WorkerInstanceKey != "" && handler.config.EnableActivityCancellationNexusTask() {
+		} else if ai.WorkerControlTaskQueue != "" && handler.config.EnableActivityCancellationNexusTask() {
 			// Activity has started and worker supports Nexus tasks - create cancel task.
 			handler.mutableState.AddTasks(&tasks.CancelActivityNexusTask{
 				WorkflowKey:       handler.mutableState.GetWorkflowKey(),
 				ScheduledEventIDs: []int64{ai.ScheduledEventId},
-				WorkerInstanceKey: ai.WorkerInstanceKey,
 			})
 		}
 	}

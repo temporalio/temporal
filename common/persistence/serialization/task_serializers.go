@@ -122,7 +122,6 @@ func transferCancelActivityNexusTaskToProto(task *tasks.CancelActivityNexusTask)
 		TaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails_{
 			CancelActivityNexusTaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails{
 				ScheduledEventIds: task.ScheduledEventIDs,
-				WorkerInstanceKey: task.WorkerInstanceKey,
 			},
 		},
 	}
@@ -140,7 +139,6 @@ func transferCancelActivityNexusTaskFromProto(task *persistencespb.TransferTaskI
 		TaskID:              task.TaskId,
 		Version:             task.Version,
 		ScheduledEventIDs:   details.GetScheduledEventIds(),
-		WorkerInstanceKey:   details.GetWorkerInstanceKey(),
 	}
 }
 

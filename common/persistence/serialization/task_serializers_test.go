@@ -176,7 +176,6 @@ func (s *taskSerializerSuite) TestTransferCancelActivityNexusTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		ScheduledEventIDs:   []int64{rand.Int63(), rand.Int63(), rand.Int63()},
-		WorkerInstanceKey:   "test-worker-instance-key",
 	}
 
 	s.assertEqualTasks(cancelActivityNexusTask)
