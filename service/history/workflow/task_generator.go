@@ -598,6 +598,7 @@ func (r *TaskGeneratorImpl) GenerateCancelActivityNexusTasks(scheduledEventID in
 		WorkflowKey:            r.mutableState.GetWorkflowKey(),
 		ScheduledEventIDs:      []int64{scheduledEventID},
 		WorkerControlTaskQueue: ai.WorkerControlTaskQueue,
+		Version:                ai.Version,
 	})
 	return nil
 }
