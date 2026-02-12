@@ -11,11 +11,14 @@ type (
 	}
 
 	// hybridCounter is a Counter that uses a mapCounter until it has params.MapLimit entries,
-	// then switches to a cmSketch. hybridCounter is not safe for concurrent use.
+	// then switches to a cmSketch. After switching, it continues to track the top MapLimit
+	// entries in the mapCounter, so they can be preserved when cmSketch resizes and persisted.
+	// hybridCounter is not safe for concurrent use.
 	hybridCounter struct {
-		Counter
-		params CounterParams
-		src    rand.Source
+		mapCounter mapCounter
+		cmSketch   *cmSketch
+		params     CounterParams
+		src        rand.Source
 	}
 )
 
@@ -37,25 +40,43 @@ var DefaultCounterParams = CounterParams{
 
 func NewHybridCounter(params CounterParams, src rand.Source) *hybridCounter {
 	return &hybridCounter{
-		Counter: NewMapCounter(),
-		params:  params,
-		src:     src,
+		mapCounter: *NewMapCounter(params.MapLimit),
+		params:     params,
+		src:        src,
 	}
 }
 
 func (h *hybridCounter) GetPass(key string, base int64, inc int64) int64 {
-	p := h.Counter.GetPass(key, base, inc)
-	if m, ok := h.Counter.(*mapCounter); ok && len(m.m) > h.params.MapLimit {
-		h.migrateToCMS(m.m)
+	if h.cmSketch != nil {
+		p := h.cmSketch.GetPass(key, base, inc)
+		// after migration, continue updating top-K tracker
+		_ = h.mapCounter.updateHeap(key, p)
+		return p
+	}
+
+	p, overflow := h.mapCounter.getPassWithOverflow(key, base, inc)
+	if overflow {
+		h.migrateToCMS()
 	}
 	return p
 }
 
-func (h *hybridCounter) migrateToCMS(m map[string]int64) {
-	cms := NewCMSketchCounter(h.params.CMS, h.src)
+func (h *hybridCounter) migrateToCMS() {
+	h.cmSketch = NewCMSketchCounter(h.params.CMS, h.src, h.mapCounter.TopK)
 	// move existing counts into CMS
-	for key, count := range m {
-		_ = cms.GetPass(key, count, 0)
+	for _, entry := range h.mapCounter.heap {
+		_ = h.cmSketch.GetPass(entry.Key, entry.Count, 0)
 	}
-	h.Counter = cms
+}
+
+func (h *hybridCounter) EstimateDistinctKeys() int {
+	if h.cmSketch != nil {
+		return h.cmSketch.EstimateDistinctKeys()
+	}
+	return h.mapCounter.EstimateDistinctKeys()
+}
+
+// TopK returns the current top-K entries being tracked.
+func (h *hybridCounter) TopK() []TopKEntry {
+	return h.mapCounter.TopK()
 }

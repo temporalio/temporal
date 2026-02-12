@@ -98,6 +98,10 @@ func setUnknownNexusContent(nexusHeader nexus.Header, payloadMetadata map[string
 
 // Serialize implements nexus.Serializer.
 func (payloadSerializer) Serialize(v any) (*nexus.Content, error) {
+	if v == nil {
+		// Use same structure as the nil serializer from the Nexus Go SDK.
+		return &nexus.Content{Header: nexus.Header{}}, nil
+	}
 	payload, ok := v.(*commonpb.Payload)
 	if !ok {
 		return nil, fmt.Errorf("%w: cannot serialize %v", errSerializer, v)

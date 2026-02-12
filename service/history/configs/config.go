@@ -402,6 +402,7 @@ type Config struct {
 
 	// Worker-Versioning related settings
 	EnableSuggestCaNOnNewTargetVersion    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSendTargetVersionChanged        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	UseRevisionNumberForWorkerVersioning  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VersionMembershipCacheTTL             dynamicconfig.DurationPropertyFn
 	VersionMembershipCacheMaxSize         dynamicconfig.IntPropertyFn
@@ -773,6 +774,7 @@ func NewConfig(
 		// Worker-Versioning related
 		UseRevisionNumberForWorkerVersioning:  dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
 		EnableSuggestCaNOnNewTargetVersion:    dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
+		EnableSendTargetVersionChanged:        dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
 		VersionMembershipCacheTTL:             dynamicconfig.VersionMembershipCacheTTL.Get(dc),
 		VersionMembershipCacheMaxSize:         dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
 		VersionReactivationSignalCacheTTL:     dynamicconfig.VersionReactivationSignalCacheTTL.Get(dc),
