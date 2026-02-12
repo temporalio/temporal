@@ -137,14 +137,13 @@ func NewScheduler(
 		WorkerCount: options.WorkerCount,
 	}
 
-	// Create the base FIFO scheduler
 	fifoScheduler := tasks.NewFIFOScheduler[Executable](
 		fifoSchedulerOptions,
 		logger,
 		metricsHandler,
 	)
 
-	// Wrap the FIFO scheduler with ExecutionAwareScheduler for sequential per-workflow processing
+	// Wrap the FIFO scheduler with ExecutionAwareScheduler for sequential per-execution processing
 	executionAwareScheduler := NewExecutionAwareScheduler(
 		fifoScheduler,
 		options.ExecutionAwareSchedulerOptions,
@@ -165,11 +164,11 @@ func NewScheduler(
 	)
 
 	return &schedulerImpl{
-		Scheduler:              scheduler,
-		namespaceRegistry:      namespaceRegistry,
-		taskChannelKeyFn:       taskChannelKeyFn,
-		channelWeightFn:        channelWeightFn,
-		channelWeightUpdateCh:  channelWeightUpdateCh,
+		Scheduler:               scheduler,
+		namespaceRegistry:       namespaceRegistry,
+		taskChannelKeyFn:        taskChannelKeyFn,
+		channelWeightFn:         channelWeightFn,
+		channelWeightUpdateCh:   channelWeightUpdateCh,
 		executionAwareScheduler: executionAwareScheduler,
 	}
 }
