@@ -355,6 +355,8 @@ message TransferTaskInfo {
     message CancelActivityNexusTaskDetails {
         // Scheduled event IDs of activities to cancel.
         repeated int64 scheduled_event_ids = 1;
+        // The Nexus queue to dispatch the cancel request to.
+        string worker_control_task_queue = 2;
     }
 
     oneof task_details {

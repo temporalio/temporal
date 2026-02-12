@@ -19,6 +19,8 @@ type (
 
 		// ScheduledEventIDs of activities to cancel (batched by worker).
 		ScheduledEventIDs []int64
+		// WorkerControlTaskQueue is the Nexus queue to dispatch the cancel request to.
+		WorkerControlTaskQueue string
 	}
 )
 

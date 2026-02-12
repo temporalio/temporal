@@ -4143,8 +4143,10 @@ type TransferTaskInfo_CancelActivityNexusTaskDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Scheduled event IDs of activities to cancel.
 	ScheduledEventIds []int64 `protobuf:"varint,1,rep,packed,name=scheduled_event_ids,json=scheduledEventIds,proto3" json:"scheduled_event_ids,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// The Nexus queue to dispatch the cancel request to.
+	WorkerControlTaskQueue string `protobuf:"bytes,2,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *TransferTaskInfo_CancelActivityNexusTaskDetails) Reset() {
@@ -4182,6 +4184,13 @@ func (x *TransferTaskInfo_CancelActivityNexusTaskDetails) GetScheduledEventIds()
 		return x.ScheduledEventIds
 	}
 	return nil
+}
+
+func (x *TransferTaskInfo_CancelActivityNexusTaskDetails) GetWorkerControlTaskQueue() string {
+	if x != nil {
+		return x.WorkerControlTaskQueue
+	}
+	return ""
 }
 
 // Deprecated. Clean up with versioning-2. [cleanup-old-wv]
@@ -4798,7 +4807,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\rRequestIDInfo\x12?\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
-	"\bevent_id\x18\x02 \x01(\x03R\aeventId\"\xd5\t\n" +
+	"\bevent_id\x18\x02 \x01(\x03R\aeventId\"\x91\n" +
+	"\n" +
 	"\x10TransferTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4822,9 +4832,10 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\"cancel_activity_nexus_task_details\x18\x13 \x01(\v2S.temporal.server.api.persistence.v1.TransferTaskInfo.CancelActivityNexusTaskDetailsH\x00R\x1ecancelActivityNexusTaskDetails\x12\x14\n" +
 	"\x05stamp\x18\x11 \x01(\x05R\x05stamp\x1a\\\n" +
 	"\x19CloseExecutionTaskDetails\x12?\n" +
-	"\x1ccan_skip_visibility_archival\x18\x01 \x01(\bR\x19canSkipVisibilityArchival\x1aP\n" +
+	"\x1ccan_skip_visibility_archival\x18\x01 \x01(\bR\x19canSkipVisibilityArchival\x1a\x8b\x01\n" +
 	"\x1eCancelActivityNexusTaskDetails\x12.\n" +
-	"\x13scheduled_event_ids\x18\x01 \x03(\x03R\x11scheduledEventIdsB\x0e\n" +
+	"\x13scheduled_event_ids\x18\x01 \x03(\x03R\x11scheduledEventIds\x129\n" +
+	"\x19worker_control_task_queue\x18\x02 \x01(\tR\x16workerControlTaskQueueB\x0e\n" +
 	"\ftask_detailsJ\x04\b\x0e\x10\x0f\"\xd8\b\n" +
 	"\x13ReplicationTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
