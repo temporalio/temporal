@@ -94,7 +94,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			nil,
 			metrics.NoopMetricsHandler,
-			func() counter.Counter { return counter.NewMapCounter() },
+			func() counter.Counter { return counter.NewMapCounter(1000) },
 			false,
 		)
 	} else if s.newMatcher {
