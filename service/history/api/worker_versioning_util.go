@@ -23,7 +23,7 @@ type VersionReactivationSignalerFn func(
 // This is a fire-and-forget operation - the signal is sent asynchronously and errors are
 // logged by the signaler implementation.
 //
-//nolint:revive
+//nolint:revive,errcheck
 func ReactivateVersionWorkflowIfPinned(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
@@ -60,6 +60,6 @@ func ReactivateVersionWorkflowIfPinned(
 	// Errors are logged by the signaler implementation (e.g. via convertAndRecordError). However,
 	// errors are not propagated to the caller as this is a fire-and-forget operation.
 	go func() {
-		signaler(context.Background(), namespaceEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())
+		signaler(context.Background(), namespaceEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId()) //nolint:errcheck
 	}()
 }
