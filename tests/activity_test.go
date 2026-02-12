@@ -1481,3 +1481,98 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	w.RegisterActivity(mockErrorActivity)
 	return w, wf
 }
+
+func (s *ActivityClientTestSuite) TestActivityScheduleToClose_NoTimeForNextAttempt_FirstAttemptTimedOut() {
+	activityFunction := func(ctx context.Context) error {
+		timer := time.NewTimer(100 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return nil
+		}
+	}
+
+	workflowFn := func(ctx workflow.Context) error {
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			// This will not allow the activit to retry more than once because schedule to close will happen before next retry
+			// is scheduled.
+			StartToCloseTimeout:    1 * time.Second,
+			ScheduleToCloseTimeout: 3 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: 10 * time.Second,
+			},
+		}), activityFunction).Get(ctx, nil)
+		return err
+	}
+
+	s.Worker().RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFunction)
+
+	wfId := testcore.RandomizeStr(s.T().Name())
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        wfId,
+		TaskQueue: s.TaskQueue(),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	err = workflowRun.Get(ctx, nil)
+	var wfExecutionError *temporal.WorkflowExecutionError
+	s.ErrorAs(err, &wfExecutionError)
+	var activityError *temporal.ActivityError
+	s.ErrorAs(wfExecutionError.Unwrap(), &activityError)
+	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
+	var timeoutErr *temporal.TimeoutError
+	s.ErrorAs(activityError.Unwrap(), &timeoutErr)
+	s.Equal("not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+
+	history := s.GetHistory(string(s.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
+	s.ContainsHistory(`ActivityTaskTimedOut`, &historypb.History{Events: history})
+}
+
+func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
+	activityFunction := func(ctx context.Context) error {
+		return errors.New("non-retryable-error") //nolint:err113
+	}
+
+	workflowFn := func(ctx workflow.Context) error {
+		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 10 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 1,
+			},
+		}), activityFunction).Get(ctx, nil)
+		return err
+	}
+
+	s.Worker().RegisterWorkflow(workflowFn)
+	s.Worker().RegisterActivity(activityFunction)
+
+	wfId := testcore.RandomizeStr(s.T().Name())
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        wfId,
+		TaskQueue: s.TaskQueue(),
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	s.NoError(err)
+
+	err = workflowRun.Get(ctx, nil)
+	var wfExecutionError *temporal.WorkflowExecutionError
+	s.ErrorAs(err, &wfExecutionError)
+	var activityError *temporal.ActivityError
+	s.ErrorAs(wfExecutionError.Unwrap(), &activityError)
+	s.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, activityError.RetryState())
+	var applicationErr *temporal.ApplicationError
+	s.ErrorAs(activityError.Unwrap(), &applicationErr)
+	s.Equal("non-retryable-error", applicationErr.Message())
+
+	history := s.GetHistory(string(s.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
+	s.ContainsHistory(`ActivityTaskFailed`, &historypb.History{Events: history})
+}
