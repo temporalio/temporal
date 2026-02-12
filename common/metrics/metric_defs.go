@@ -567,6 +567,7 @@ const (
 	TaskTypeTransferActiveTaskStartChildExecution         = "TransferActiveTaskStartChildExecution"
 	TaskTypeTransferActiveTaskResetWorkflow               = "TransferActiveTaskResetWorkflow"
 	TaskTypeTransferActiveTaskDeleteExecution             = "TransferActiveTaskDeleteExecution"
+	TaskTypeTransferActiveTaskCancelActivityNexus         = "TransferActiveTaskCancelActivityNexus"
 	TaskTypeTransferStandbyTaskActivity                   = "TransferStandbyTaskActivity"
 	TaskTypeTransferStandbyTaskWorkflowTask               = "TransferStandbyTaskWorkflowTask"
 	TaskTypeTransferStandbyTaskCloseExecution             = "TransferStandbyTaskCloseExecution"
