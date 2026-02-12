@@ -46,12 +46,6 @@ func appendTransientTasks(
 	cachedTransientTasks *historyspb.TransientWorkflowTaskInfo,
 	nextEventID int64,
 ) {
-	// CLI and UI clients should not receive transient events for backward compatibility
-	clientName, _ := headers.GetClientNameAndVersion(ctx)
-	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
-		return
-	}
-
 	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
 
 	// Try cached tasks first
@@ -87,6 +81,12 @@ func appendTransientTasks(
 			return
 		}
 		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
+	}
+
+	// CLI and UI clients should not receive transient events for backward compatibility
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
+		return
 	}
 
 	// Manually append transient events to the response

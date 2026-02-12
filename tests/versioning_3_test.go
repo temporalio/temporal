@@ -2458,19 +2458,31 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					}
 				}
 				if enableSendTargetVersionChanged {
-					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
-					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
+					// Verify TargetWorkerDeploymentVersionChanged was sent on WFT started events after deployment change.
+					// Events BEFORE deployment change (events 3, 7) should NOT have the flag.
+					// Events AFTER deployment change (all subsequent WFTs) SHOULD have the flag, regardless of success/failure.
+					// The flag is recomputed on every WFT, so both failed attempts and retries will have it if conditions persist.
+					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 3 WFT started events
+
+					// In this test, deployment is changed after event 7 (`s.setCurrentDeployment(tv2)`).
+					// So the first 2 WFT started events should NOT have the flag,
+					// and all subsequent events SHOULD have the flag.
+					eventsBeforeDeploymentChange := 2 // Events 3 and 7
 
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
-						if i == len(wfTaskStartedEvents)-1 { // last event
+						if i < eventsBeforeDeploymentChange {
+							// Events before deployment change should NOT have the flag
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
-							s.True(attr.GetTargetWorkerDeploymentVersionChanged())
-						} else { // earlier events
+							s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
+								"Event %d should not have flag (before deployment change)", event.GetEventId())
+						} else {
+							// Events after deployment change SHOULD have the flag (including failed attempts and transient retries)
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
-							s.False(attr.GetTargetWorkerDeploymentVersionChanged())
+							s.True(attr.GetTargetWorkerDeploymentVersionChanged(),
+								"Event %d should have flag (after deployment change)", event.GetEventId())
 						}
 					}
 				} else {
