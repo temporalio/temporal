@@ -198,6 +198,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	pm.defaultQueueFuture.Set(defaultQ, nil)
 	defaultQ.Start()
 	pm.goroGroup.Go(pm.updateEphemeralData)
+	pm.goroGroup.Go(pm.emitLogicalBacklogMetrics)
 	return nil
 }
 
@@ -1118,6 +1119,65 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 	pm.userDataManager.LocalBacklogPriorityChanged(backlogPriority)
 	return backlogPriority
+}
+
+func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
+	for {
+		interval := pm.config.LogicalBacklogMetricsInterval()
+		if interval == 0 { // disabled
+			_ = util.InterruptibleSleep(ctx, time.Minute)
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backoff.Jitter(interval, 0.05)):
+			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+		}
+	}
+}
+
+func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) {
+	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
+		return
+	}
+
+	buildIds := map[string]bool{"": true} // include unversioned
+	resp, err := pm.Describe(ctx, buildIds, true, true, false, false)
+	if err != nil {
+		return
+	}
+
+	for versionKey, vInfo := range resp.GetVersionsInfoInternal() {
+		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
+
+		versionHandler := pm.metricsHandler.WithTags(
+			metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
+		)
+
+		// Per-priority backlog count
+		for pri, stats := range pqInfo.GetTaskQueueStatsByPriorityKey() {
+			metrics.LogicalApproximateBacklogCount.With(versionHandler).Record(
+				float64(stats.GetApproximateBacklogCount()),
+				metrics.MatchingTaskPriorityTag(pri),
+			)
+		}
+
+		// Aggregate backlog count
+		aggregateStats := pqInfo.GetTaskQueueStats()
+		metrics.LogicalApproximateBacklogCount.With(versionHandler).Record(
+			float64(aggregateStats.GetApproximateBacklogCount()),
+		)
+
+		// Aggregate backlog age
+		age := aggregateStats.GetApproximateBacklogAge()
+		if age != nil && age.AsDuration() > 0 {
+			metrics.LogicalApproximateBacklogAgeSeconds.With(versionHandler).Record(age.AsDuration().Seconds())
+		} else {
+			metrics.LogicalApproximateBacklogAgeSeconds.With(versionHandler).Record(0)
+		}
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {

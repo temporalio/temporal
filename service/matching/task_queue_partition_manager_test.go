@@ -610,6 +610,318 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 	})
 }
 
+// latestLogicalBacklogCount returns the most recent aggregate logical_approximate_backlog_count
+// recording for the given worker_version tag value.
+func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording, workerVersion string) (float64, bool) {
+	var latest float64
+	found := false
+	for _, rec := range snap[metrics.LogicalApproximateBacklogCount.Name()] {
+		if rec.Tags["worker_version"] == workerVersion && rec.Tags[metrics.TaskPriorityTagName] == "" {
+			latest = rec.Value.(float64)
+			found = true
+		}
+	}
+	return latest, found
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime: 1 * time.Minute,
+	})
+	defer cleanup()
+
+	// Spool 5 tasks to the default queue.
+	dQueue := pm.defaultQueue()
+	for i := 0; i < 5; i++ {
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	// Wait for backlog stats to stabilize, then emit logical metrics.
+	s.Require().Eventually(func() bool {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+
+		snap := capture.Snapshot()
+		count, ok := latestLogicalBacklogCount(snap, "__unversioned__")
+		return ok && count == float64(5)
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentOnly() {
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+	)
+
+	// Set up current version, no ramping.
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime: 1 * time.Minute,
+	})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Spool 10 tasks to the default queue.
+	dQueue := pm.defaultQueue()
+	for i := 0; i < 10; i++ {
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	// Create versioned queue and spool 2 pinned tasks.
+	currentQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
+	s.Require().NoError(err)
+	for i := 0; i < 2; i++ {
+		err = currentQ.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-pinned-%d", i),
+			VersionDirective: &taskqueuespb.TaskVersionDirective{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        currentBuildID,
+				},
+				RevisionNumber: 1,
+			},
+		})
+		s.Require().NoError(err)
+	}
+
+	currentVersionTag := deploymentName + ":" + currentBuildID
+
+	// Wait for backlog stats to stabilize, then emit logical metrics.
+	s.Require().Eventually(func() bool {
+		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+		snap := capture.Snapshot()
+
+		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
+		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
+		return unvOk && unvCount == float64(0) &&
+			curOk && curCount == float64(12)
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentAndRamping() {
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		rampingBuildID = "B"
+		rampPct        = float32(30)
+	)
+
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        rampingBuildID,
+									},
+									RampingVersionPercentage:            rampPct,
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime: 1 * time.Minute,
+	})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Spool 10 tasks to the default queue.
+	dQueue := pm.defaultQueue()
+	for i := 0; i < 10; i++ {
+		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+		})
+		s.Require().NoError(err)
+	}
+
+	// Create versioned queues so includeAllActive picks them up.
+	_, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
+	s.Require().NoError(err)
+	_, err = pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    rampingBuildID,
+	}, true)
+	s.Require().NoError(err)
+
+	currentVersionTag := deploymentName + ":" + currentBuildID
+	rampingVersionTag := deploymentName + ":" + rampingBuildID
+
+	// ceil(10 * 70/100) = 7 for current, ceil(10 * 30/100) = 3 for ramping
+	s.Require().Eventually(func() bool {
+		iterCtx, iterCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer iterCancel()
+		pm.fetchAndEmitLogicalBacklogMetrics(iterCtx)
+		snap := capture.Snapshot()
+
+		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
+		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
+		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag)
+		return unvOk && unvCount == float64(0) &&
+			curOk && curCount == float64(7) &&
+			rmpOk && rmpCount == float64(3)
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SmallBacklog() {
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		rampingBuildID = "B"
+		rampPct        = float32(30)
+	)
+
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									RampingDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        rampingBuildID,
+									},
+									RampingVersionPercentage:            rampPct,
+									RampingVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									RampingVersionPercentageChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									CurrentVersionChangedTime:           timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									rampingBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime: 1 * time.Minute,
+	})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Spool just 1 task to the default queue.
+	dQueue := pm.defaultQueue()
+	err := dQueue.SpoolTask(&persistencespb.TaskInfo{
+		NamespaceId: namespaceID,
+		RunId:       "run",
+		WorkflowId:  "wf-0",
+	})
+	s.Require().NoError(err)
+
+	// Create versioned queues so includeAllActive picks them up.
+	_, err = pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
+	s.Require().NoError(err)
+	_, err = pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    rampingBuildID,
+	}, true)
+	s.Require().NoError(err)
+
+	currentVersionTag := deploymentName + ":" + currentBuildID
+	rampingVersionTag := deploymentName + ":" + rampingBuildID
+
+	// ceil(1 * 70/100) = 1 for current, ceil(1 * 30/100) = 1 for ramping.
+	// Over-attribution: both get 1, unversioned is max(0, 1-1-1) = 0.
+	s.Require().Eventually(func() bool {
+		iterCtx, iterCancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer iterCancel()
+		pm.fetchAndEmitLogicalBacklogMetrics(iterCtx)
+		snap := capture.Snapshot()
+
+		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
+		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
+		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag)
+		return unvOk && unvCount == float64(0) &&
+			curOk && curCount == float64(1) &&
+			rmpOk && rmpCount == float64(1)
+	}, 2*time.Second, 50*time.Millisecond)
+}
+
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_UnassignedTask() {
 	s.validateAddTask("", false, nil, worker_versioning.MakeUseAssignmentRulesDirective())
 	s.validatePollTask("", false)

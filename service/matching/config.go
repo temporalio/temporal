@@ -79,6 +79,7 @@ type (
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
 		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		LogicalBacklogMetricsInterval            dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityBacklogForwarding                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxWaitForPollerBeforeFwd                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -141,9 +142,10 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration        func() time.Duration
-		EphemeralDataUpdateInterval  func() time.Duration
-		PriorityBacklogForwarding    func() bool
+		SyncMatchWaitDuration           func() time.Duration
+		EphemeralDataUpdateInterval     func() time.Duration
+		LogicalBacklogMetricsInterval   func() time.Duration
+		PriorityBacklogForwarding       func() bool
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
 		QueryPollerUnavailableWindow func() time.Duration
@@ -315,6 +317,7 @@ func NewConfig(
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
 		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
+		LogicalBacklogMetricsInterval:            dynamicconfig.MatchingLogicalBacklogMetricsInterval.Get(dc),
 		PriorityBacklogForwarding:                dynamicconfig.MatchingPriorityBacklogForwarding.Get(dc),
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
 		MaxWaitForPollerBeforeFwd:                dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(dc),
@@ -397,6 +400,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		EphemeralDataUpdateInterval: func() time.Duration {
 			return config.EphemeralDataUpdateInterval(ns.String(), taskQueueName, taskType)
+		},
+		LogicalBacklogMetricsInterval: func() time.Duration {
+			return config.LogicalBacklogMetricsInterval(ns.String(), taskQueueName, taskType)
 		},
 		PriorityBacklogForwarding: func() bool {
 			return config.PriorityBacklogForwarding(ns.String(), taskQueueName, taskType)
