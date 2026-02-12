@@ -1,14 +1,10 @@
 package testhooks
 
 import (
-	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/namespace"
 )
-
-// keyCounter provides unique IDs for keys.
-var keyCounter atomic.Int64
 
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
@@ -40,30 +36,25 @@ const (
 	ScopeGlobal
 )
 
-type Hook interface {
-	Scope() Scope
-	Apply(TestHooks, any) func()
+// Hook bundles a key and value for type-erased use in InjectHook.
+type Hook struct {
+	scopeType Scope
+	apply     func(TestHooks, any) func()
 }
 
-type hook[T any, S any] struct {
-	key   Key[T, S]
-	value T
-}
+func (h Hook) Scope() Scope                         { return h.scopeType }
+func (h Hook) Apply(th TestHooks, scope any) func() { return h.apply(th, scope) }
 
-func (h hook[T, S]) Scope() Scope {
-	return h.key.scope
-}
-
-func (h hook[T, S]) Apply(th TestHooks, scope any) func() {
-	s, ok := scope.(S)
-	if !ok {
-		panic("testhooks: scope type mismatch")
+func NewHook[T any, S any](key Key[T, S], value T) Hook {
+	return Hook{
+		scopeType: key.scope,
+		apply: func(th TestHooks, scope any) func() {
+			if _, ok := scope.(S); !ok {
+				panic("testhooks: scope type mismatch")
+			}
+			return Set(th, key, value, scope)
+		},
 	}
-	return Set(th, h.key, h.value, s)
-}
-
-func NewHook[T any, S any](key Key[T, S], value T) hook[T, S] {
-	return hook[T, S]{key: key, value: value}
 }
 
 type Key[T any, S any] struct {
@@ -71,16 +62,3 @@ type Key[T any, S any] struct {
 	scope Scope
 }
 
-func newKey[T any, S any]() Key[T, S] {
-	var zero S
-	var s Scope
-	switch any(zero).(type) {
-	case namespace.ID:
-		s = ScopeNamespace
-	case global:
-		s = ScopeGlobal
-	default:
-		panic("testhooks: unknown scope type")
-	}
-	return Key[T, S]{id: keyCounter.Add(1), scope: s}
-}
