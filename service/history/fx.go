@@ -398,8 +398,8 @@ func ReactivationSignalCacheProvider(
 	serviceConfig *configs.Config,
 	metricsHandler metrics.Handler,
 ) worker_versioning.ReactivationSignalCache {
-	c := commoncache.New(serviceConfig.ReactivationSignalCacheMaxSize(), &commoncache.Options{
-		TTL: max(1*time.Second, serviceConfig.ReactivationSignalCacheTTL()),
+	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
 	})
 	lc.Append(fx.Hook{
 		OnStop: func(context.Context) error {

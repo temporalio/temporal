@@ -30,7 +30,7 @@ type (
 
 // NewReactivationSignalCache wraps the provided cache with a typed API and metrics.
 func NewReactivationSignalCache(c cache.Cache, metricsHandler metrics.Handler) ReactivationSignalCache {
-	h := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.ReactivationSignalCacheTypeTagValue))
+	h := metricsHandler.WithTags(metrics.CacheTypeTag(metrics.VersionReactivationSignalCacheTypeTagValue))
 	return &ReactivationSignalCacheImpl{
 		Cache:          c,
 		metricsHandler: h,
@@ -41,7 +41,7 @@ func (c *ReactivationSignalCacheImpl) ShouldSendSignal(
 	namespaceID, deploymentName, buildID string,
 ) bool {
 	handler := c.metricsHandler.WithTags(
-		metrics.OperationTag(metrics.ReactivationSignalCacheShouldSendScope),
+		metrics.OperationTag(metrics.VersionReactivationSignalCacheShouldSendScope),
 		metrics.NamespaceIDTag(namespaceID),
 	)
 	metrics.CacheRequests.With(handler).Record(1)

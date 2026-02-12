@@ -85,7 +85,7 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 		dynamicconfig.VersionDrainageStatusRefreshInterval.Key():       testVersionDrainageRefreshInterval,
 		dynamicconfig.VersionDrainageStatusVisibilityGracePeriod.Key(): testVersionDrainageVisibilityGracePeriod,
 		dynamicconfig.VersionMembershipCacheTTL.Key():                  5 * time.Second,
-		dynamicconfig.ReactivationSignalCacheTTL.Key():                 5 * time.Minute, // Large TTL for deduplication test
+		dynamicconfig.VersionReactivationSignalCacheTTL.Key():          5 * time.Minute, // Large TTL for deduplication test
 	}))
 }
 
@@ -3109,7 +3109,7 @@ func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Updat
 	s.NoError(run2.Get(ctx, &result))
 }
 
-// TestReactivationSignalCache_Deduplication_Reset verifies that the reactivation signal cache
+// TestReactivationSignalCache_Deduplication_Reset verifies that the version reactivation signal cache
 // deduplicates signals when ResetWorkflowExecution is called multiple times with a pinned override
 // to a DRAINED version.
 func (s *DeploymentVersionSuite) TestReactivationSignalCache_Deduplication_Reset() {
