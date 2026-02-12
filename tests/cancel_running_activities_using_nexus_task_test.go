@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,57 +12,40 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/testing/taskpoller"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type CancelRunningActivitiesUsingNexusTaskSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestCancelRunningActivitiesUsingNexusTaskSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(CancelRunningActivitiesUsingNexusTaskSuite))
-}
-
 // Tests that when a workflow is cancelled, all running activities are also cancelled.
 // The cancellation request should be delivered to the worker's control queue via the Nexus service.
-//
-// - Start a workflow that schedules a long running activity.
-// - Poll the activity task queue and start running the activity.
-// - Poll the control task queue and wait for the cancel request to be delivered.
-// - Request the workflow to be cancelled.
-// - Verify that the cancel request was delivered to the control queue.
-func (s *CancelRunningActivitiesUsingNexusTaskSuite) TestDispatchCancelToWorker() {
-	// Enable the feature
-	cleanup := s.OverrideDynamicConfig(dynamicconfig.EnableActivityCancellationNexusTask, true)
-	defer cleanup()
+func TestDispatchCancelToWorker(t *testing.T) {
+	t.Parallel()
+
+	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableActivityCancellationNexusTask, true))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	tv := testvars.New(s.T())
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	tv := env.Tv()
+	poller := env.TaskPoller()
 
 	// Get the control queue name from test vars
-	controlQueueName := tv.ControlQueueName(s.Namespace().String())
-	s.T().Logf("WorkerInstanceKey: %s", tv.WorkerInstanceKey())
-	s.T().Logf("ControlQueueName: %s", controlQueueName)
+	controlQueueName := tv.ControlQueueName(env.Namespace().String())
+	t.Logf("WorkerInstanceKey: %s", tv.WorkerInstanceKey())
+	t.Logf("ControlQueueName: %s", controlQueueName)
 
 	// Start the workflow
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                tv.Any().String(),
-		Namespace:                s.Namespace().String(),
+		Namespace:                env.Namespace().String(),
 		WorkflowId:               tv.WorkflowID(),
 		WorkflowType:             tv.WorkflowType(),
 		TaskQueue:                tv.TaskQueue(),
 		WorkflowExecutionTimeout: durationpb.New(60 * time.Second),
 		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
 	})
-	s.NoError(err)
-	s.T().Logf("Started workflow: %s/%s", tv.WorkflowID(), startResp.RunId)
+	env.NoError(err)
+	t.Logf("Started workflow: %s/%s", tv.WorkflowID(), startResp.RunId)
 
 	// Poll and complete first workflow task - schedule the activity
 	_, err = poller.PollAndHandleWorkflowTask(tv,
@@ -85,32 +67,32 @@ func (s *CancelRunningActivitiesUsingNexusTaskSuite) TestDispatchCancelToWorker(
 				},
 			}, nil
 		})
-	s.NoError(err)
-	s.T().Log("Scheduled activity")
+	env.NoError(err)
+	t.Log("Scheduled activity")
 
 	// Poll for activity task and start running the activity.
-	activityPollResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace:              s.Namespace().String(),
+	activityPollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace:              env.Namespace().String(),
 		TaskQueue:              tv.TaskQueue(),
 		Identity:               tv.WorkerIdentity(),
 		WorkerInstanceKey:      tv.WorkerInstanceKey(),
 		WorkerControlTaskQueue: controlQueueName,
 	})
-	s.NoError(err)
-	s.NotNil(activityPollResp)
-	s.NotEmpty(activityPollResp.TaskToken)
-	s.T().Log("Activity started with WorkerInstanceKey")
+	env.NoError(err)
+	env.NotNil(activityPollResp)
+	env.NotEmpty(activityPollResp.TaskToken)
+	t.Log("Activity started with WorkerInstanceKey")
 
 	// Request workflow cancellation
-	s.T().Log("Requesting workflow cancellation...")
-	_, err = s.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	t.Log("Requesting workflow cancellation...")
+	_, err = env.FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      startResp.RunId,
 		},
 	})
-	s.NoError(err)
+	env.NoError(err)
 
 	// Simulate what the SDK does when a workflow is cancelled.
 	// - Poll and complete the workflow task with RequestCancelActivityTask command
@@ -138,32 +120,31 @@ func (s *CancelRunningActivitiesUsingNexusTaskSuite) TestDispatchCancelToWorker(
 				},
 			}, nil
 		})
-	s.NoError(err)
-	s.T().Log("Workflow task completed with RequestCancelActivityTask command")
+	env.NoError(err)
+	t.Log("Workflow task completed with RequestCancelActivityTask command")
 
-	// Poll Nexus control queue in a loop until we receive the cancel request
+	// Poll Nexus control queue until we receive the cancel request
 	var nexusPollResp *workflowservice.PollNexusTaskQueueResponse
-	deadline := time.Now().Add(120 * time.Second)
-	for time.Now().Before(deadline) {
+	env.Eventually(func() bool {
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
-		nexusPollResp, err = s.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
-			Namespace: s.Namespace().String(),
+		defer pollCancel()
+		resp, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: controlQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  tv.WorkerIdentity(),
 		})
-		pollCancel()
-		if nexusPollResp != nil && nexusPollResp.Request != nil {
-			break
+		if err == nil && resp != nil && resp.Request != nil {
+			nexusPollResp = resp
+			return true
 		}
-		time.Sleep(100 * time.Millisecond)
-	}
+		return false
+	}, 120*time.Second, 100*time.Millisecond, "Timed out waiting for Nexus task")
 
 	// Verify we received the cancel request on the control queue
-	s.Require().NotNil(nexusPollResp, "Timed out waiting for Nexus task")
-	s.Require().NotNil(nexusPollResp.Request, "Expected to receive Nexus request on control queue")
+	env.NotNil(nexusPollResp.Request, "Expected to receive Nexus request on control queue")
 
 	startOp := nexusPollResp.Request.GetStartOperation()
-	s.NotNil(startOp, "Expected StartOperation in Nexus request")
-	s.Equal(nexus.CancelActivitiesOperation, startOp.Operation, "Expected cancel-activities operation")
-	s.T().Logf("SUCCESS: Received cancel-activities Nexus request on control queue")
+	env.NotNil(startOp, "Expected StartOperation in Nexus request")
+	env.Equal(nexus.CancelActivitiesOperation, startOp.Operation, "Expected cancel-activities operation")
+	t.Logf("SUCCESS: Received cancel-activities Nexus request on control queue")
 }

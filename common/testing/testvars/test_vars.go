@@ -401,8 +401,8 @@ func (tv *TestVars) WorkerInstanceKey() string {
 }
 
 // ControlQueueName returns the queue name used to deliver Nexus tasks to this worker instance.
-func (tv *TestVars) ControlQueueName(namespace string) string {
-	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", namespace, tv.WorkerInstanceKey())
+func (tv *TestVars) ControlQueueName(ns string) string {
+	return fmt.Sprintf("/temporal-sys/worker-commands/%s/%s-nexus-queue", ns, tv.WorkerInstanceKey())
 }
 
 func (tv *TestVars) TimerID() string {
