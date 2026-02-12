@@ -250,6 +250,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, -1)
 
 	pm.goroGroup.Cancel()
+	pm.emitZeroLogicalBacklogMetrics()
 }
 
 func (pm *taskQueuePartitionManagerImpl) GetRateLimitManager() *rateLimitManager {
@@ -1126,6 +1127,9 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		interval := pm.config.BacklogMetricsEmitInterval()
 		if interval == 0 { // disabled
 			_ = util.InterruptibleSleep(ctx, time.Minute)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			continue
 		}
 
@@ -1177,18 +1181,47 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			)
 		}
 
-		// Aggregate backlog count
-		aggregateStats := pqInfo.GetTaskQueueStats()
-		metrics.ApproximateBacklogCount.With(versionHandler).Record(
-			float64(aggregateStats.GetApproximateBacklogCount()),
-		)
-
-		// Aggregate backlog age
-		age := aggregateStats.GetApproximateBacklogAge()
+		// Backlog age (oldest across all priorities)
+		age := pqInfo.GetTaskQueueStats().GetApproximateBacklogAge()
 		if age != nil && age.AsDuration() > 0 {
 			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(age.AsDuration().Seconds())
 		} else {
 			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(0)
+		}
+	}
+}
+
+// emitZeroLogicalBacklogMetrics zeroes out logical backlog gauges to prevent stale values
+// persisting after a partition is unloaded. Only zeroes priority keys that actually exist
+// in each queue's subqueues to avoid creating noisy zero-value series.
+func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogMetrics() {
+	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
+		return
+	}
+
+	emitZeroLogicalBacklogFunc := func(handler metrics.Handler, pq physicalTaskQueueManager) {
+		for pri := range pq.GetStatsByPriority(false) {
+			metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
+		}
+		metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
+	}
+
+	// unversioned queue
+	if dq := pm.defaultQueue(); dq != nil {
+		emitZeroLogicalBacklogFunc(pm.metricsHandler.WithTags(
+			metrics.WorkerVersionTag("", pm.config.BreakdownMetricsByBuildID()),
+		), dq)
+	}
+
+	// versioned queues
+	if pm.config.BreakdownMetricsByBuildID() {
+		pm.versionedQueuesLock.Lock()
+		defer pm.versionedQueuesLock.Unlock()
+		for version, vq := range pm.versionedQueues {
+			vHandler := pm.metricsHandler.WithTags(
+				metrics.WorkerVersionTag(version.MetricsTagValue(), true),
+			)
+			emitZeroLogicalBacklogFunc(vHandler, vq)
 		}
 	}
 }

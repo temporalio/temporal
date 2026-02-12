@@ -34,9 +34,10 @@ import (
 )
 
 const (
-	namespaceID   = "ns-id"
-	namespaceName = "ns-name"
-	taskQueueName = "my-test-tq"
+	namespaceID        = "ns-id"
+	namespaceName      = "ns-name"
+	taskQueueName      = "my-test-tq"
+	defaultPriorityTag = "3" // MatchingTaskPriorityTag(DefaultPriorityKey) with PriorityLevels=5
 )
 
 type PartitionManagerTestSuite struct {
@@ -610,13 +611,13 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 	})
 }
 
-// latestLogicalBacklogCount returns the most recent aggregate logical_approximate_backlog_count
-// recording for the given worker_version tag value.
-func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording, workerVersion string) (float64, bool) {
+// latestLogicalBacklogCount returns the most recent approximate_backlog_count
+// recording for the given worker_version and task_priority tag values.
+func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording, workerVersion, priorityTag string) (float64, bool) {
 	var latest float64
 	found := false
 	for _, rec := range snap[metrics.ApproximateBacklogCount.Name()] {
-		if rec.Tags["worker_version"] == workerVersion && rec.Tags[metrics.TaskPriorityTagName] == "" {
+		if rec.Tags["worker_version"] == workerVersion && rec.Tags[metrics.TaskPriorityTagName] == priorityTag {
 			latest = rec.Value.(float64)
 			found = true
 		}
@@ -694,7 +695,7 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 
 		snap := capture.Snapshot()
-		count, ok := latestLogicalBacklogCount(snap, "__unversioned__")
+		count, ok := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		return ok && count == float64(5)
 	}, 2*time.Second, 50*time.Millisecond)
 }
@@ -749,8 +750,8 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentOnly() {
 		pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 		snap := capture.Snapshot()
 
-		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
-		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
+		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
+		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		return unvOk && unvCount == float64(0) &&
 			curOk && curCount == float64(12)
 	}, 2*time.Second, 50*time.Millisecond)
@@ -802,9 +803,9 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentAndRamping(
 		pm.fetchAndEmitLogicalBacklogMetrics(iterCtx)
 		snap := capture.Snapshot()
 
-		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
-		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
-		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag)
+		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
+		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
+		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag, defaultPriorityTag)
 		return unvOk && unvCount == float64(0) &&
 			curOk && curCount == float64(7) &&
 			rmpOk && rmpCount == float64(3)
@@ -858,9 +859,9 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SmallBacklog() {
 		pm.fetchAndEmitLogicalBacklogMetrics(iterCtx)
 		snap := capture.Snapshot()
 
-		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
-		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
-		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag)
+		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
+		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
+		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag, defaultPriorityTag)
 		return unvOk && unvCount == float64(0) &&
 			curOk && curCount == float64(1) &&
 			rmpOk && rmpCount == float64(1)
@@ -903,7 +904,7 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildID
 		snap := capture.Snapshot()
 
 		// Unversioned should still be emitted (with attributed count = 0 since current takes all).
-		_, unvOk := latestLogicalBacklogCount(snap, "__unversioned__")
+		_, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		if !unvOk {
 			return false
 		}
@@ -912,13 +913,13 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_BreakdownByBuildID
 		currentVersionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
 			&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
 		)
-		_, curOk := latestLogicalBacklogCount(snap, currentVersionTag)
+		_, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		if curOk {
 			return false // should not be present
 		}
 
 		// Also should not appear under the generic "__versioned__" tag, since we skip entirely.
-		_, genericOk := latestLogicalBacklogCount(snap, "__versioned__")
+		_, genericOk := latestLogicalBacklogCount(snap, "__versioned__", defaultPriorityTag)
 		return !genericOk
 	}, 2*time.Second, 50*time.Millisecond)
 }
