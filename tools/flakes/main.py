@@ -24,6 +24,69 @@ def normalize_test_name(name: str) -> str:
     return re.sub(r'\s*\(retry \d+\)$', '', name)
 
 
+def build_job_url_from_artifact(artifact: str) -> str:
+    """Build GitHub Actions job or run URL from artifact string.
+
+    Artifact format: {field0}--{run_id}--{job_id}
+    If job_id is available and not 'unknown', links to the specific job page.
+    Otherwise, links to the run page.
+    """
+    parts = artifact.split("--")
+    if len(parts) > 2 and parts[1] and parts[2]:
+        job_id = parts[2]
+        if job_id != "unknown" and job_id != "":
+            return f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}/job/{job_id}"
+        else:
+            return f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
+    elif len(parts) > 1 and parts[1]:
+        return f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
+    return artifact
+
+
+def write_report_files(
+    transformed: list,
+    output_file: str,
+    count_label: str = "failures",
+    create_slack_file: bool = True,
+    create_count_file: bool = False,
+    total_count: int = None,
+) -> None:
+    """Write report files in standardized format.
+
+    Args:
+        transformed: List of dicts with 'name', 'count', 'artifacts' keys
+        output_file: Path to main output file
+        count_label: Label for count (e.g., "failures", "runs")
+        create_slack_file: Whether to create a Slack-friendly version
+        create_count_file: Whether to create a count metadata file
+        total_count: Total count to write to metadata file (if None, uses len(transformed))
+    """
+    # Write bullet point format (for GitHub)
+    lines = []
+    for item in transformed:
+        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
+        lines.append(f"* {item['count']} {count_label}: `{item['name']}` {links}\n")
+
+    with open(output_file, "w") as outfile:
+        outfile.writelines(lines)
+
+    # Create Slack version (without links)
+    if create_slack_file:
+        slack_file = output_file.replace(".txt", "_slack.txt")
+        slack_lines = []
+        for item in transformed:
+            slack_lines.append(f"• {item['count']} {count_label}: `{item['name']}`\n")
+        with open(slack_file, "w") as outfile:
+            outfile.writelines(slack_lines)
+
+    # Write count metadata
+    if create_count_file:
+        count_file = output_file.replace(".txt", "_count.txt")
+        count_to_write = total_count if total_count is not None else len(transformed)
+        with open(count_file, "w") as f:
+            f.write(str(count_to_write))
+
+
 def process_tests(data, pattern, output_file: str, max_links: int = 3):
     # Group data by test name and collect artifacts for tests matching pattern
     test_groups = {}
@@ -38,27 +101,14 @@ def process_tests(data, pattern, output_file: str, max_links: int = 3):
         if test_name not in test_groups:
             test_groups[test_name] = []
 
-        parts = item["artifact"].split("--")
-        if len(parts) > 0 and len(parts[1]) > 0 and len(parts[2]) > 0:
-            p2 = parts[2]
-            if p2 == "unknown":
-                job_url = (
-                    f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
-                )
-            else:
-                job_url = f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}/job/{p2}"
-        else:
-            job_url = item["artifact"]
-
+        job_url = build_job_url_from_artifact(item["artifact"])
         test_groups[test_name].append(job_url)
 
     # Transform into list with counts and multiple links
     transformed = []
     for test_name, artifacts in test_groups.items():
         failure_count = len(artifacts)
-        # Get up to max_links most recent artifacts (already sorted desc from SQL)
         recent_artifacts = artifacts[:max_links]
-
         transformed.append({
             "name": test_name,
             "count": failure_count,
@@ -68,15 +118,8 @@ def process_tests(data, pattern, output_file: str, max_links: int = 3):
     # Sort by failure count descending
     transformed.sort(key=lambda x: x["count"], reverse=True)
 
-    # Write bullet point format
-    lines = []
-    for item in transformed:
-        # Format: * XXX failures: `TestName` [1](url1) [2](url2) [3](url3)
-        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
-
-    with open(output_file, "w") as outfile:
-        outfile.writelines(lines)
+    # Write report files
+    write_report_files(transformed, output_file, count_label="failures", create_slack_file=False, create_count_file=False)
 
 
 def process_crash(data, pattern, output_file: str, max_links: int = 3):
@@ -90,14 +133,7 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
         if test_name not in test_groups:
             test_groups[test_name] = []
 
-        parts = item["artifact"].split("--")
-        if len(parts) > 0 and len(parts[1]) > 0:
-            job_url = (
-                f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
-            )
-        else:
-            job_url = item["artifact"]
-
+        job_url = build_job_url_from_artifact(item["artifact"])
         test_groups[test_name].append(job_url)
 
     # Transform into list with counts and multiple links
@@ -114,14 +150,8 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
     # Sort by failure count descending
     transformed.sort(key=lambda x: x["count"], reverse=True)
 
-    # Write bullet point format
-    lines = []
-    for item in transformed:
-        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
-
-    with open(output_file, "w") as outfile:
-        outfile.writelines(lines)
+    # Write report files
+    write_report_files(transformed, output_file, count_label="failures", create_slack_file=False, create_count_file=False)
 
 
 def process_flaky(data, output_file: str, max_links: int = 3):
@@ -147,18 +177,7 @@ def process_flaky(data, output_file: str, max_links: int = 3):
         if test_name not in test_groups:
             test_groups[test_name] = []
 
-        parts = item["artifact"].split("--")
-        if len(parts) > 0 and len(parts[1]) > 0 and len(parts[2]) > 0:
-            p2 = parts[2]
-            if p2 == "unknown":
-                job_url = (
-                    f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}"
-                )
-            else:
-                job_url = f"https://github.com/temporalio/temporal/actions/runs/{parts[1]}/job/{p2}"
-        else:
-            job_url = item["artifact"]
-
+        job_url = build_job_url_from_artifact(item["artifact"])
         test_groups[test_name].append(job_url)
 
     # Transform into list with counts and multiple links
@@ -170,9 +189,7 @@ def process_flaky(data, output_file: str, max_links: int = 3):
         if failure_count <= MIN_FLAKY_FAILURES:
             continue
 
-        # Get up to max_links most recent artifacts (already sorted desc from SQL)
         recent_artifacts = artifacts[:max_links]
-
         transformed.append({
             "name": test_name,
             "count": failure_count,
@@ -188,30 +205,106 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     # Limit to top 10 flaky tests for display
     display_tests = transformed[:10]
 
-    # Write bullet point format (for GitHub)
-    lines = []
-    for item in display_tests:
-        # Format: * XXX failures: `TestName` [1](url1) [2](url2) [3](url3)
-        links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
-        lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
+    # Write report files
+    write_report_files(
+        display_tests,
+        output_file,
+        count_label="failures",
+        create_slack_file=True,
+        create_count_file=True,
+        total_count=total_count,
+    )
 
-    with open(output_file, "w") as outfile:
-        outfile.writelines(lines)
+    return total_count
 
-    # Also create a plain text version for Slack (without links for cleaner viewing)
-    slack_file = output_file.replace(".txt", "_slack.txt")
-    slack_lines = []
-    for item in display_tests:
-        # Format for Slack: • XXX failures: `TestName`
-        slack_lines.append(f"• {item['count']} failures: `{item['name']}`\n")
 
-    with open(slack_file, "w") as outfile:
-        outfile.writelines(slack_lines)
+def extract_run_id(artifact: str) -> str:
+    """Extract run_id from artifact string.
 
-    # Write count metadata for summary
-    count_file = output_file.replace(".txt", "_count.txt")
-    with open(count_file, "w") as f:
-        f.write(str(total_count))
+    Artifact format: {field0}--{run_id}--{job_id}
+    """
+    parts = artifact.split("--")
+    if len(parts) > 1:
+        return parts[1]
+    return artifact
+
+
+def process_ci_breaking(data, output_file: str, max_links: int = 3):
+    """
+    Identify tests that failed all 3 consecutive attempts on single runs.
+
+    A test is considered "CI-breaking" if it failed the initial attempt plus
+    both retry 1 and retry 2 within the same CI run, causing that run to fail.
+
+    Args:
+        data: Test failure data from Tringa
+        output_file: Path to output file
+        max_links: Maximum number of failure links per test
+
+    Returns:
+        Total count of CI-breaking tests
+    """
+    # Step 1: Group failures by run_id
+    runs = {}  # {run_id: [failure_records]}
+    for item in data:
+        run_id = extract_run_id(item["artifact"])
+        if run_id not in runs:
+            runs[run_id] = []
+        runs[run_id].append(item)
+
+    # Step 2: For each run, identify tests with 3 consecutive failures
+    ci_breaking_tests = {}  # {test_name: [run_urls]}
+
+    for run_id, failures in runs.items():
+        # Group by normalized test name within this run
+        test_attempts = {}  # {normalized_name: [failure_records]}
+        for failure in failures:
+            normalized = normalize_test_name(failure["name"])
+            if normalized not in test_attempts:
+                test_attempts[normalized] = []
+            test_attempts[normalized].append(failure)
+
+        # Check for 3 consecutive failures (base + retry 1 + retry 2)
+        for normalized_name, attempts in test_attempts.items():
+            # Check if we have base test + retry 1 + retry 2
+            has_base = any(normalize_test_name(f["name"]) == normalized_name and "(retry" not in f["name"] for f in attempts)
+            has_retry1 = any("(retry 1)" in f["name"] for f in attempts)
+            has_retry2 = any("(retry 2)" in f["name"] for f in attempts)
+
+            if has_base and has_retry1 and has_retry2:
+                # This test failed all 3 attempts in this run
+                if normalized_name not in ci_breaking_tests:
+                    ci_breaking_tests[normalized_name] = []
+
+                # Get the job URL from the first failure's artifact
+                job_url = build_job_url_from_artifact(attempts[0]["artifact"])
+                ci_breaking_tests[normalized_name].append(job_url)
+
+    # Step 3: Transform into list with counts and multiple links
+    transformed = []
+    for test_name, run_urls in ci_breaking_tests.items():
+        run_count = len(run_urls)
+        recent_runs = run_urls[:max_links]
+        transformed.append({
+            "name": test_name,
+            "count": run_count,
+            "artifacts": recent_runs,
+        })
+
+    # Sort by run count descending
+    transformed.sort(key=lambda x: x["count"], reverse=True)
+
+    total_count = len(transformed)
+
+    # Write report files
+    write_report_files(
+        transformed,
+        output_file,
+        count_label="runs",
+        create_slack_file=True,
+        create_count_file=True,
+        total_count=total_count,
+    )
 
     return total_count
 
@@ -220,6 +313,7 @@ def create_success_message(
     crash_count: int,
     flaky_count: int,
     timeout_count: int,
+    ci_breaking_count: int,
     flaky_content: str,
     run_id: str,
     total_failures: int,
@@ -241,6 +335,7 @@ def create_success_message(
                 {"type": "mrkdwn", "text": f"Crashes: {crash_count}"},
                 {"type": "mrkdwn", "text": f"Flaky Tests: {flaky_count}"},
                 {"type": "mrkdwn", "text": f"Timeouts: {timeout_count}"},
+                {"type": "mrkdwn", "text": f"CI-Breaking: {ci_breaking_count}"},
             ],
         },
     ]
@@ -381,11 +476,11 @@ def create_github_actions_summary(
     crash_count: int,
     flaky_count: int,
     timeout_count: int,
-    run_id: str,
+    ci_breaking_count: int,
 ) -> str:
     """Create GitHub Actions summary content."""
     summary_lines = []
-    
+
     # Header
     summary_lines.append(f"## Flaky Tests Report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     summary_lines.append("")
@@ -398,8 +493,9 @@ def create_github_actions_summary(
     summary_lines.append(f"| Crashes | {crash_count} |")
     summary_lines.append(f"| Timeouts | {timeout_count} |")
     summary_lines.append(f"| Flaky Tests | {flaky_count} |")
+    summary_lines.append(f"| CI-Breaking Tests | {ci_breaking_count} |")
     summary_lines.append("")
-    
+
     # Add detailed tables for each category
     if crash_count > 0 and os.path.exists("out/crash.txt"):
         summary_lines.append("### Crashes")
@@ -422,9 +518,18 @@ def create_github_actions_summary(
             summary_lines.append(f.read())
         summary_lines.append("")
 
-    if crash_count == 0 and flaky_count == 0 and timeout_count == 0:
+    if ci_breaking_count > 0 and os.path.exists("out/ci_breaking.txt"):
+        summary_lines.append("### CI-Breaking Tests (Failed All 3 Attempts)")
+        summary_lines.append("")
+        summary_lines.append("These tests failed all 3 consecutive retry attempts and caused CI runs to fail:")
+        summary_lines.append("")
+        with open("out/ci_breaking.txt", "r") as f:
+            summary_lines.append(f.read())
+        summary_lines.append("")
+
+    if crash_count == 0 and flaky_count == 0 and timeout_count == 0 and ci_breaking_count == 0:
         summary_lines.append("**No test failures found in the last 7 days!**")
-    
+
     return "\n".join(summary_lines)
 
 
@@ -453,6 +558,7 @@ def process_json_file(input_filename: str, max_links: int = 3):
     process_flaky(data, "out/flaky.txt", max_links)
     process_tests(data, "(timeout)", "out/timeout.txt", max_links)
     process_crash(data, "(crash)", "out/crash.txt", max_links)
+    process_ci_breaking(data, "out/ci_breaking.txt", max_links)
 
     # Return total number of failures in the original data
     return len(data)
@@ -494,7 +600,7 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def get_failure_counts() -> tuple[int, int, int]:
+def get_failure_counts() -> tuple[int, int, int, int]:
     """Count failures from generated report files."""
     crash_count = count_failures_in_file("out/crash.txt")
 
@@ -508,29 +614,37 @@ def get_failure_counts() -> tuple[int, int, int]:
 
     timeout_count = count_failures_in_file("out/timeout.txt")
 
-    print(f"Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Timeout: {timeout_count}")
+    # For CI-breaking tests, read from metadata file
+    try:
+        with open("out/ci_breaking_count.txt", "r") as f:
+            ci_breaking_count = int(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        # Fallback to counting lines if metadata doesn't exist
+        ci_breaking_count = count_failures_in_file("out/ci_breaking.txt")
 
-    return crash_count, flaky_count, timeout_count
+    print(f"Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Timeout: {timeout_count}, CI-Breaking: {ci_breaking_count}")
+
+    return crash_count, flaky_count, timeout_count, ci_breaking_count
 
 
 def handle_success_case(args, total_failures: int) -> None:
     """Handle the successful processing case."""
     # Count failures from generated files
-    crash_count, flaky_count, timeout_count = get_failure_counts()
+    crash_count, flaky_count, timeout_count, ci_breaking_count = get_failure_counts()
 
     # Generate GitHub Actions summary if requested
     if args.github_summary:
         print("Generating GitHub Actions summary...")
         summary_content = create_github_actions_summary(
-            crash_count, flaky_count, timeout_count, args.run_id or "unknown"
+            crash_count, flaky_count, timeout_count, ci_breaking_count
         )
         write_github_actions_summary(summary_content)
 
     if args.slack_webhook:
-        send_success_slack_notification(args, crash_count, flaky_count, timeout_count, total_failures)
+        send_success_slack_notification(args, crash_count, flaky_count, timeout_count, ci_breaking_count, total_failures)
 
 
-def send_success_slack_notification(args, crash_count: int, flaky_count: int, timeout_count: int, total_failures: int) -> None:
+def send_success_slack_notification(args, crash_count: int, flaky_count: int, timeout_count: int, ci_breaking_count: int, total_failures: int) -> None:
     """Send success Slack notification."""
     print("Sending success Slack notification...")
     if not args.run_id:
@@ -547,6 +661,7 @@ def send_success_slack_notification(args, crash_count: int, flaky_count: int, ti
         crash_count,
         flaky_count,
         timeout_count,
+        ci_breaking_count,
         flaky_content,
         args.run_id,
         total_failures,
