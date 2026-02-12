@@ -4,10 +4,8 @@ import (
 	"context"
 
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/worker_versioning"
-	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
 // VersionReactivationSignalerFn is a function type for sending reactivation signals to version workflows.
@@ -22,11 +20,11 @@ type VersionReactivationSignalerFn func(
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
 // when workflows are pinned to a potentially DRAINED/INACTIVE version. It also deduplicates
 // signals within the cache TTL window.
-// This is a fire-and-forget operation - errors are logged but don't fail the calling operation.
+// This is a fire-and-forget operation - the signal is sent asynchronously and errors are
+// logged by the signaler implementation.
 func ReactivateVersionWorkflowIfPinned(
 	ctx context.Context,
-	shardContext historyi.ShardContext,
-	namespaceID namespace.ID,
+	namespaceEntry *namespace.Namespace,
 	override *workflowpb.VersioningOverride,
 	signalCache worker_versioning.ReactivationSignalCache,
 	signaler VersionReactivationSignalerFn,
@@ -49,28 +47,16 @@ func ReactivateVersionWorkflowIfPinned(
 
 	// Check cache - skip if signal was recently sent
 	if signalCache != nil && !signalCache.ShouldSendSignal(
-		namespaceID.String(),
+		namespaceEntry.ID().String(),
 		pinnedVersion.GetDeploymentName(),
 		pinnedVersion.GetBuildId(),
 	) {
 		return
 	}
 
-	// Get namespace entry from registry
-	nsEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		shardContext.GetLogger().Warn("Failed to get namespace for version workflow signal",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.Error(err))
-		return
-	}
-
-	// Use signaler function to send the signal
-	err = signaler(ctx, nsEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())
-	if err != nil {
-		shardContext.GetLogger().Warn("Failed to signal version workflow for reactivation",
-			tag.WorkflowNamespace(nsEntry.Name().String()),
-			tag.WorkflowID(worker_versioning.GenerateVersionWorkflowID(pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())),
-			tag.Error(err))
-	}
+	// Send the signal asynchronously to avoid adding latency to the caller's request.
+	// Errors are logged by the signaler implementation (e.g. via convertAndRecordError).
+	go func() {
+		signaler(context.Background(), namespaceEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId())
+	}()
 }

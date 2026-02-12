@@ -219,7 +219,7 @@ func (s *Starter) Invoke(
 				// Notify version workflow if we are starting a workflow execution on a potentially drained version.
 				// Only signal when a new workflow was actually created (StartNew), not for deduped retries
 				// (StartDeduped) or reused existing workflows (StartReused) where the pinned override is not applied.
-				api.ReactivateVersionWorkflowIfPinned(ctx, s.shardContext, s.namespace.ID(), s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+				api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
 			}
 			return resp, outcome, conflictErr
 		}
@@ -227,7 +227,7 @@ func (s *Starter) Invoke(
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
-	api.ReactivateVersionWorkflowIfPinned(ctx, s.shardContext, s.namespace.ID(), s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
 
 	resp, err = s.generateResponse(
 		creationParams.runID,

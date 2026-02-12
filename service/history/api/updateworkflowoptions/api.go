@@ -118,7 +118,7 @@ func Invoke(
 
 	// Notify version workflow if we're pinning to a potentially drained version.
 	// This is done after successful persistence to avoid signaling if the update fails.
-	api.ReactivateVersionWorkflowIfPinned(ctx, shardCtx, ns.ID(), versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
 
 	return ret, nil
 }

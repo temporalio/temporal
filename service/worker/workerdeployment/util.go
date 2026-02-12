@@ -135,6 +135,12 @@ func GetDeploymentNameFromWorkflowID(workflowID string) string {
 	return deploymentName
 }
 
+// GenerateDeploymentWorkflowID is a helper that generates a system accepted
+// workflowID which are used in our Worker Deployment workflows
+func GenerateDeploymentWorkflowID(deploymentName string) string {
+	return worker_versioning.WorkerDeploymentWorkflowIDPrefix + worker_versioning.WorkerDeploymentVersionDelimiter + deploymentName
+}
+
 // GenerateVersionWorkflowID is a helper that generates a system accepted
 // workflowID which are used in our Worker Deployment Version workflows
 func GenerateVersionWorkflowID(deploymentName string, buildID string) string {

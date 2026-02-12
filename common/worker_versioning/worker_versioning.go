@@ -61,21 +61,6 @@ const (
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 )
 
-// GenerateDeploymentWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment workflows
-func GenerateDeploymentWorkflowID(deploymentName string) string {
-	return WorkerDeploymentWorkflowIDPrefix + WorkerDeploymentVersionDelimiter + deploymentName
-}
-
-// GenerateVersionWorkflowID is a helper that generates a system accepted
-// workflowID which are used in our Worker Deployment Version workflows
-func GenerateVersionWorkflowID(deploymentName string, buildID string) string {
-	versionString := ExternalWorkerDeploymentVersionToString(&deploymentpb.WorkerDeploymentVersion{
-		DeploymentName: deploymentName,
-		BuildId:        buildID,
-	})
-	return WorkerDeploymentVersionWorkflowIDPrefix + WorkerDeploymentVersionDelimiter + versionString
-}
 
 // FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
 // is not present in a task queue.

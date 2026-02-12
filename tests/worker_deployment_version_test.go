@@ -193,7 +193,7 @@ func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {
 	s.NoError(err)
 
 	// ForceCAN
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
@@ -540,7 +540,7 @@ func (s *DeploymentVersionSuite) TestVersionIgnoresDrainageSignalWhenCurrentOrRa
 	s.Nil(err)
 
 	// Signal it to be drained. Only do this in tests.
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv1.DeploymentSeries(), tv1.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}
@@ -733,7 +733,7 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_Drained_But_Pollers_Exist() {
 }
 
 func (s *DeploymentVersionSuite) signalAndWaitForDrained(ctx context.Context, tv *testvars.TestVars) {
-	versionWorkflowID := worker_versioning.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: versionWorkflowID,
 	}

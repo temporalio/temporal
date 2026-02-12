@@ -183,7 +183,7 @@ func Invoke(
 	// Notify version workflow if we're pinning to a potentially drained version via post-reset operations
 	for _, operation := range request.GetPostResetOperations() {
 		if updateOpts, ok := operation.GetVariant().(*workflowpb.PostResetOperation_UpdateWorkflowOptions_); ok {
-			api.ReactivateVersionWorkflowIfPinned(ctx, shardContext, namespaceID,
+			api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry,
 				updateOpts.UpdateWorkflowOptions.GetWorkflowExecutionOptions().GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shardContext.GetConfig().EnableVersionReactivationSignals())
 		}
 	}
