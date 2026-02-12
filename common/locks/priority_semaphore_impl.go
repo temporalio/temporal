@@ -157,6 +157,10 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 // TryAcquire acquires the semaphore with a weight of n without blocking.
 // On success, returns true. On failure, returns false and leaves the semaphore unchanged.
 func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
+	if priority >= NumPriorities {
+		panic(fmt.Sprintf("semaphore: invalid priority %v, priority must be less than %v", priority, NumPriorities))
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.size-s.cur >= n && s.noWaiters(priority) {
