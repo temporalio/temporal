@@ -19,7 +19,7 @@ type Engine interface {
 		ComponentRef,
 		func(MutableContext) (Component, error),
 		...TransitionOption,
-	) (EngineStartExecutionResult, error)
+	) (StartExecutionResult, error)
 	UpdateWithStartExecution(
 		context.Context,
 		ComponentRef,
@@ -94,17 +94,11 @@ type TransitionOption func(*TransitionOptions)
 //     the execution already existed (based on the [BusinessIDReusePolicy] and
 //     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
 //     existing execution was returned instead.
-//   - Output: The output value returned by the factory function.
-type StartExecutionResult[O any] struct {
+type StartExecutionResult struct {
 	ExecutionKey ExecutionKey
 	ExecutionRef []byte
 	Created      bool
-	Output       O
 }
-
-// EngineStartExecutionResult is a type alias for the result type returned by the Engine implementation.
-// This avoids repeating [struct{}] everywhere in the engine implementation.
-type EngineStartExecutionResult = StartExecutionResult[struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -174,14 +168,13 @@ func WithRequestID(
 //   - O: The output value produced by startFn
 //   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
 //   - error: Non-nil if creation failed or policy constraints were violated
-func StartExecution[C Component, I any, O any](
+func StartExecution[C Component, I any](
 	ctx context.Context,
 	key ExecutionKey,
-	startFn func(MutableContext, I) (C, O, error),
+	startFn func(MutableContext, I) (C, error),
 	input I,
 	opts ...TransitionOption,
-) (StartExecutionResult[O], error) {
-	var output O
+) (StartExecutionResult, error) {
 	result, err := engineFromContext(ctx).StartExecution(
 		ctx,
 		NewComponentRef[C](key),
@@ -190,22 +183,19 @@ func StartExecution[C Component, I any, O any](
 
 			var c C
 			var err error
-			c, output, err = startFn(ctx, input)
+			c, err = startFn(ctx, input)
 			return c, err
 		},
 		opts...,
 	)
 	if err != nil {
-		return StartExecutionResult[O]{
-			Output: output,
-		}, err
+		return StartExecutionResult{}, err
 	}
 
-	return StartExecutionResult[O]{
+	return StartExecutionResult{
 		ExecutionKey: result.ExecutionKey,
 		ExecutionRef: result.ExecutionRef,
 		Created:      result.Created,
-		Output:       output,
 	}, nil
 }
 

@@ -1,8 +1,9 @@
 module go.temporal.io/server
 
-go 1.25.5
+go 1.26.0
 
 retract (
+	v1.30.0
 	v1.26.1 // Contains retractions only.
 	v1.26.0 // Published accidentally.
 )
@@ -32,7 +33,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.5.1
+	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pkg/errors v0.9.1
@@ -45,6 +46,7 @@ require (
 	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
+	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
@@ -58,7 +60,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.61.1-0.20260128230845-c246540cf2ed
+	go.temporal.io/api v1.62.2-0.20260212001044-b64b7ab17efc
 	go.temporal.io/sdk v1.38.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
