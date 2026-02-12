@@ -13,12 +13,11 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workerpb "go.temporal.io/api/worker/v1"
+	workerv1 "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/nexus"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
@@ -108,7 +107,7 @@ func (t *transferQueueActiveTaskExecutor) dispatchCancelTaskToWorker(
 	controlQueueName string,
 	taskTokens [][]byte,
 ) error {
-	cancelPayload := &workerpb.CancelActivitiesRequestPayload{
+	cancelPayload := &workerv1.CancelActivitiesRequestPayload{
 		TaskTokens: taskTokens,
 	}
 	payloadBytes, err := proto.Marshal(cancelPayload)
@@ -120,8 +119,8 @@ func (t *transferQueueActiveTaskExecutor) dispatchCancelTaskToWorker(
 		Header: map[string]string{},
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &nexuspb.StartOperationRequest{
-				Service:   nexus.WorkerControlService,
-				Operation: nexus.CancelActivitiesOperation,
+				Service:   workerv1.WorkerService.ServiceName,
+				Operation: workerv1.WorkerService.CancelActivities.Name(),
 				Payload: &commonpb.Payload{
 					Metadata: map[string][]byte{
 						"encoding": []byte("proto"),
