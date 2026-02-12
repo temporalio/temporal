@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"context"
 	"fmt"
 	"net"
 
@@ -157,6 +158,7 @@ var Module = fx.Options(
 	fx.Provide(NewServiceProvider),
 	fx.Provide(NexusEndpointClientProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(SearchAttributeMappingsBackfillLifetimeHooks),
 	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(namespacereplicationpb.NewNamespaceReplicationServiceLayeredClient),
 	chasmnexus.FrontendModule,
@@ -1218,4 +1220,36 @@ func NexusEndpointClientProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+// SearchAttributeMappingsBackfillLifetimeHooks runs the search attribute backfill on frontend startup.
+// Only runs when Elasticsearch visibility is configured; updates go through the namespace handler.
+func SearchAttributeMappingsBackfillLifetimeHooks(
+	lc fx.Lifecycle,
+	cfg *config.Config,
+	clusterMetadata cluster.Metadata,
+	metadataManager persistence.MetadataManager,
+	clusterMetadataManager persistence.ClusterMetadataManager,
+	handler Handler,
+	logger log.Logger,
+) {
+	visDataStore := cfg.Persistence.GetVisibilityStoreConfig()
+	if visDataStore.Elasticsearch == nil {
+		return
+	}
+	visibilityIndexName := visDataStore.GetIndexName()
+	currentClusterName := clusterMetadata.GetCurrentClusterName()
+	lc.Append(fx.Hook{
+		OnStart: func(ctx context.Context) error {
+			return InitializeSearchAttributeMappings(
+				ctx,
+				metadataManager,
+				clusterMetadataManager,
+				currentClusterName,
+				visibilityIndexName,
+				handler,
+				logger,
+			)
+		},
+	})
 }

@@ -2326,10 +2326,9 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 							}
 						}
 					}
-				}
-				return &historyservice.ImportWorkflowExecutionResponse{}, nil
-			})
-		}
+					return &historyservice.ImportWorkflowExecutionResponse{}, nil
+				})
+			}
 
 			_, err := s.handler.ImportWorkflowExecution(context.Background(), &adminservice.ImportWorkflowExecutionRequest{
 				Namespace:      tv.NamespaceName().String(),
