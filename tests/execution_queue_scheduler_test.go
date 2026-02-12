@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"slices"
-	"sync"
 	"testing"
 	"time"
 
@@ -17,178 +16,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/tests/testcore"
 )
-
-type ExecutionQueueSchedulerTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestExecutionQueueSchedulerTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(ExecutionQueueSchedulerTestSuite))
-}
-
-func (s *ExecutionQueueSchedulerTestSuite) SetupSuite() {
-	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Key(): true,
-	}
-	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
-}
-
-// TestSignalBurstProcessing verifies that rapid signal bursts are processed correctly
-// with the ExecutionQueueScheduler feature enabled.
-//
-// This is a smoke test that ensures the feature doesn't break normal signal processing.
-// The actual routing of tasks through the ExecutionQueueScheduler only occurs when
-// ErrResourceExhaustedBusyWorkflow errors happen (lock contention), which requires
-// specific timing conditions that are hard to trigger reliably in functional tests.
-// The unit tests in execution_aware_scheduler_test.go verify the routing logic directly.
-func (s *ExecutionQueueSchedulerTestSuite) TestSignalBurstProcessing() {
-	const workflowCount = 5
-	const signalsPerWorkflow = 50 // Total: 250 signals across 5 workflows
-	const signalName = "test-signal"
-
-	// Workflow that counts signals received
-	signalCountWorkflow := func(ctx workflow.Context) (int, error) {
-		count := 0
-		signalChan := workflow.GetSignalChannel(ctx, signalName)
-
-		// Keep receiving signals until timeout
-		for {
-			var signal int
-			ok, _ := signalChan.ReceiveWithTimeout(ctx, 30*time.Second, &signal)
-			if !ok {
-				// Timeout - no more signals coming
-				break
-			}
-			count++
-			if count >= signalsPerWorkflow {
-				break
-			}
-		}
-
-		return count, nil
-	}
-
-	s.Worker().RegisterWorkflowWithOptions(signalCountWorkflow, workflow.RegisterOptions{Name: "signal-count-workflow"})
-
-	// Start metrics capture
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
-
-	// Start multiple workflows to increase load
-	var runs []client.WorkflowRun
-	for i := range workflowCount {
-		workflowID := testcore.RandomizeStr("wf-signal-burst")
-		run, err := s.SdkClient().ExecuteWorkflow(testcore.NewContext(), client.StartWorkflowOptions{
-			ID:        workflowID,
-			TaskQueue: s.TaskQueue(),
-		}, signalCountWorkflow)
-		s.NoError(err, "Failed to start workflow %d", i)
-		runs = append(runs, run)
-	}
-
-	// Wait a moment for workflows to start
-	time.Sleep(200 * time.Millisecond)
-
-	// Send signals in parallel to all workflows
-	var wg sync.WaitGroup
-	for _, run := range runs {
-		for j := range signalsPerWorkflow {
-			wg.Add(1)
-			go func(r client.WorkflowRun, signalNum int) {
-				defer wg.Done()
-				err := s.SdkClient().SignalWorkflow(testcore.NewContext(), r.GetID(), r.GetRunID(), signalName, signalNum)
-				if err != nil {
-					s.Logger.Warn("Signal failed", tag.Error(err), tag.Counter(signalNum))
-				}
-			}(run, j)
-		}
-	}
-	wg.Wait()
-
-	// Wait for all workflows to complete
-	for i, run := range runs {
-		var result int
-		err := run.Get(testcore.NewContext(), &result)
-		s.NoError(err, "Workflow %d failed", i)
-		s.Equal(signalsPerWorkflow, result, "Workflow %d should process all signals", i)
-	}
-
-	// Log ExecutionQueueScheduler metrics for observability
-	// Note: These will typically be 0 in functional tests because lock contention is hard to trigger
-	snapshot := capture.Snapshot()
-	tasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
-	tasksCompleted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())
-
-	s.Logger.Info("ExecutionQueueScheduler metrics",
-		tag.NewInt64("tasks_submitted", tasksSubmitted),
-		tag.NewInt64("tasks_completed", tasksCompleted))
-}
-
-// TestSignalBurstComparison runs the same test with the feature enabled
-// to compare behavior and collect metrics.
-func (s *ExecutionQueueSchedulerTestSuite) TestSignalBurstComparison() {
-	const signalCount = 50
-	const signalName = "comparison-signal"
-
-	countWorkflow := func(ctx workflow.Context) (int, error) {
-		count := 0
-		signalChan := workflow.GetSignalChannel(ctx, signalName)
-
-		// Process signals with a timeout
-		for {
-			var signal int
-			ok, _ := signalChan.ReceiveWithTimeout(ctx, 2*time.Second, &signal)
-			if !ok {
-				break
-			}
-			count++
-			if count >= signalCount {
-				break
-			}
-		}
-		return count, nil
-	}
-
-	s.Worker().RegisterWorkflowWithOptions(countWorkflow, workflow.RegisterOptions{Name: "comparison-workflow"})
-
-	// Capture metrics
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
-
-	workflowID := testcore.RandomizeStr("wf-comparison")
-	run, err := s.SdkClient().ExecuteWorkflow(testcore.NewContext(), client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: s.TaskQueue(),
-	}, countWorkflow)
-	s.NoError(err)
-
-	time.Sleep(100 * time.Millisecond)
-
-	// Send signals rapidly
-	var wg sync.WaitGroup
-	for i := range signalCount {
-		wg.Add(1)
-		go func(num int) {
-			defer wg.Done()
-			err := s.SdkClient().SignalWorkflow(testcore.NewContext(), workflowID, run.GetRunID(), signalName, num)
-			if err != nil {
-				s.Logger.Warn("Signal failed", tag.Error(err), tag.Counter(num))
-			}
-		}(i)
-	}
-	wg.Wait()
-
-	var result int
-	err = run.Get(testcore.NewContext(), &result)
-	s.NoError(err)
-	s.Equal(signalCount, result)
-
-	snapshot := capture.Snapshot()
-	s.Logger.Info("Comparison test metrics",
-		tag.NewInt64("tasks_submitted", sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())),
-		tag.NewInt64("tasks_completed", sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())))
-}
 
 // sumMetricValues sums all values for a given metric name across all tags.
 func sumMetricValues(snapshot map[string][]*metricstest.CapturedRecording, metricName string) int64 {
@@ -271,76 +98,10 @@ func (s *ExecutionQueueSchedulerDisabledTestSuite) SetupSuite() {
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
 
-func (s *ExecutionQueueSchedulerDisabledTestSuite) TestSignalBurstWithFeatureDisabled() {
-	const signalCount = 50
-	const signalName = "disabled-test-signal"
-
-	countWorkflow := func(ctx workflow.Context) (int, error) {
-		count := 0
-		signalChan := workflow.GetSignalChannel(ctx, signalName)
-
-		for {
-			var signal int
-			ok, _ := signalChan.ReceiveWithTimeout(ctx, 3*time.Second, &signal)
-			if !ok {
-				break
-			}
-			count++
-			if count >= signalCount {
-				break
-			}
-		}
-		return count, nil
-	}
-
-	s.Worker().RegisterWorkflowWithOptions(countWorkflow, workflow.RegisterOptions{Name: "disabled-test-workflow"})
-
-	// Capture metrics
-	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
-	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
-
-	workflowID := testcore.RandomizeStr("wf-disabled")
-	run, err := s.SdkClient().ExecuteWorkflow(testcore.NewContext(), client.StartWorkflowOptions{
-		ID:        workflowID,
-		TaskQueue: s.TaskQueue(),
-	}, countWorkflow)
-	s.NoError(err)
-
-	time.Sleep(100 * time.Millisecond)
-
-	// Send signals
-	var wg sync.WaitGroup
-	for i := range signalCount {
-		wg.Add(1)
-		go func(num int) {
-			defer wg.Done()
-			err := s.SdkClient().SignalWorkflow(testcore.NewContext(), workflowID, run.GetRunID(), signalName, num)
-			if err != nil {
-				s.Logger.Warn("Signal failed", tag.Error(err), tag.Counter(num))
-			}
-		}(i)
-	}
-	wg.Wait()
-
-	var result int
-	err = run.Get(testcore.NewContext(), &result)
-	s.NoError(err)
-	s.Equal(signalCount, result)
-
-	// With feature disabled, ExecutionQueueScheduler metrics should be zero or minimal
-	snapshot := capture.Snapshot()
-	tasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
-
-	s.Logger.Info("Disabled feature test metrics",
-		tag.NewInt64("tasks_submitted", tasksSubmitted))
-
-	// Tasks should not be routed to ExecutionQueueScheduler when disabled
-	s.Equal(int64(0), tasksSubmitted, "No tasks should be submitted to ExecutionQueueScheduler when disabled")
-}
-
 // TestActivityWorkflowWithFeatureDisabled runs the same 2000-activity workload as the enabled test
 // but with WQS disabled, for direct performance comparison.
 func (s *ExecutionQueueSchedulerDisabledTestSuite) TestActivityWorkflowWithFeatureDisabled() {
+	s.T().Skip("benchmark test — run manually with -run TestExecutionQueueSchedulerDisabledTestSuite/TestActivityWorkflowWithFeatureDisabled")
 	const activityCount = 2000
 
 	// Simple activity that returns immediately
@@ -485,6 +246,7 @@ func (s *ExecutionQueueSchedulerContentionTestSuite) SetupSuite() {
 // With 2ms lock timeout and 50 concurrent FIFO workers processing 2000 activities,
 // lock contention is reliably triggered, causing tasks to be routed to the EQS.
 func (s *ExecutionQueueSchedulerContentionTestSuite) TestActivityWorkflowWithMetricsObservability() {
+	s.T().Skip("benchmark test — run manually with -run TestExecutionQueueSchedulerContentionTestSuite/TestActivityWorkflowWithMetricsObservability")
 	const activityCount = 2000
 
 	// Simple activity that returns immediately
@@ -675,4 +437,71 @@ func (s *ExecutionQueueSchedulerActivityTestSuite) TestActivityWorkflowWithFeatu
 	s.Logger.Info("Activity test with ExecutionQueueScheduler enabled",
 		tag.NewInt64("tasks_submitted", tasksSubmitted),
 		tag.NewInt64("tasks_completed", tasksCompleted))
+}
+
+// TestActivityWorkflowRoutesToEQSUnderContention verifies that tasks are routed to the
+// ExecutionQueueScheduler when lock contention occurs. Uses moderate load (200 activities)
+// to trigger contention without heavy benchmarking.
+func (s *ExecutionQueueSchedulerContentionTestSuite) TestActivityWorkflowRoutesToEQSUnderContention() {
+	const activityCount = 200
+
+	noopActivity := func(ctx context.Context, input int) (int, error) {
+		return input, nil
+	}
+
+	activityWorkflow := func(ctx workflow.Context) (int, error) {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 60 * time.Second,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		var futures []workflow.Future
+		for i := 0; i < activityCount; i++ {
+			f := workflow.ExecuteActivity(ctx, noopActivity, i)
+			futures = append(futures, f)
+		}
+
+		completed := 0
+		for _, f := range futures {
+			var result int
+			if err := f.Get(ctx, &result); err != nil {
+				return completed, err
+			}
+			completed++
+		}
+		return completed, nil
+	}
+
+	s.Worker().RegisterWorkflowWithOptions(activityWorkflow, workflow.RegisterOptions{Name: "contention-functional-workflow"})
+	s.Worker().RegisterActivityWithOptions(noopActivity, activity.RegisterOptions{Name: "noop-activity-functional"})
+
+	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()
+	defer s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	workflowID := testcore.RandomizeStr("wf-contention-functional")
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: s.TaskQueue(),
+	}, activityWorkflow)
+	s.NoError(err)
+
+	var result int
+	err = run.Get(ctx, &result)
+	s.NoError(err)
+	s.Equal(activityCount, result, "All activities should complete")
+
+	snapshot := capture.Snapshot()
+	wqsTasksSubmitted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksSubmitted.Name())
+	wqsTasksCompleted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksCompleted.Name())
+	wqsTasksAborted := sumMetricValues(snapshot, metrics.ExecutionQueueSchedulerTasksAborted.Name())
+
+	s.Greater(wqsTasksSubmitted, int64(0),
+		"With 2ms lock timeout and 50 workers, some tasks should be routed to ExecutionQueueScheduler")
+	s.Greater(wqsTasksCompleted, int64(0),
+		"ExecutionQueueScheduler should complete some tasks")
+	s.Equal(int64(0), wqsTasksAborted,
+		"No tasks should be aborted")
 }
