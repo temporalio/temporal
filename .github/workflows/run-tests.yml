@@ -239,7 +239,11 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: TEST_TIMEOUT=15m make unit-test-coverage
+        run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
@@ -322,7 +326,11 @@ jobs:
 
       - name: Run integration test
         timeout-minutes: 15
-        run: make integration-test-coverage
+        run: ./develop/github/monitor_test.sh make integration-test-coverage
+
+      - name: Print memory snapshot
+        if: always()
+        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
 
       - name: Generate crash report
         if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
