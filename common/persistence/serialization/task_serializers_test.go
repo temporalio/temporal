@@ -171,11 +171,12 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 
 func (s *taskSerializerSuite) TestTransferCancelActivityNexusTask() {
 	cancelActivityNexusTask := &tasks.CancelActivityNexusTask{
-		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
-		TaskID:              rand.Int63(),
-		Version:             rand.Int63(),
-		ScheduledEventIDs:   []int64{rand.Int63(), rand.Int63(), rand.Int63()},
+		WorkflowKey:            s.workflowKey,
+		VisibilityTimestamp:    time.Unix(0, rand.Int63()).UTC(),
+		TaskID:                 rand.Int63(),
+		Version:                rand.Int63(),
+		ScheduledEventIDs:      []int64{rand.Int63(), rand.Int63(), rand.Int63()},
+		WorkerControlTaskQueue: "test-control-queue",
 	}
 
 	s.assertEqualTasks(cancelActivityNexusTask)

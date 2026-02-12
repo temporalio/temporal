@@ -121,7 +121,8 @@ func transferCancelActivityNexusTaskToProto(task *tasks.CancelActivityNexusTask)
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		TaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails_{
 			CancelActivityNexusTaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails{
-				ScheduledEventIds: task.ScheduledEventIDs,
+				ScheduledEventIds:      task.ScheduledEventIDs,
+				WorkerControlTaskQueue: task.WorkerControlTaskQueue,
 			},
 		},
 	}
@@ -135,10 +136,11 @@ func transferCancelActivityNexusTaskFromProto(task *persistencespb.TransferTaskI
 			task.WorkflowId,
 			task.RunId,
 		),
-		VisibilityTimestamp: task.VisibilityTime.AsTime(),
-		TaskID:              task.TaskId,
-		Version:             task.Version,
-		ScheduledEventIDs:   details.GetScheduledEventIds(),
+		VisibilityTimestamp:    task.VisibilityTime.AsTime(),
+		TaskID:                 task.TaskId,
+		Version:                task.Version,
+		ScheduledEventIDs:      details.GetScheduledEventIds(),
+		WorkerControlTaskQueue: details.GetWorkerControlTaskQueue(),
 	}
 }
 
