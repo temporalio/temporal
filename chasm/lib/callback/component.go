@@ -15,7 +15,7 @@ import (
 )
 
 type CompletionSource interface {
-	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.OperationCompletion, error)
+	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 }
 
 var _ chasm.Component = (*Callback)(nil)

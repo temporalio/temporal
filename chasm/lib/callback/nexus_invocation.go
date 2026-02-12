@@ -1,15 +1,10 @@
 package callback
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
-	"mime"
+	"errors"
 	"net/http"
 	"net/http/httptrace"
-	"slices"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -32,23 +27,9 @@ var retryable4xxErrorTypes = []int{
 
 type nexusInvocation struct {
 	nexus             *callbackspb.Callback_Nexus
-	completion        nexusrpc.OperationCompletion
+	completion        nexusrpc.CompleteOperationOptions
 	workflowID, runID string
 	attempt           int32
-}
-
-func isRetryableHTTPResponse(response *http.Response) bool {
-	return response.StatusCode >= 500 || slices.Contains(retryable4xxErrorTypes, response.StatusCode)
-}
-
-func outcomeTag(callCtx context.Context, response *http.Response, callErr error) string {
-	if callErr != nil {
-		if callCtx.Err() != nil {
-			return "request-timeout"
-		}
-		return "unknown-error"
-	}
-	return fmt.Sprintf("status:%d", response.StatusCode)
 }
 
 func (n nexusInvocation) WrapError(result invocationResult, err error) error {
@@ -80,107 +61,54 @@ func (n nexusInvocation) Invoke(
 		}
 	}
 
-	request, err := nexusrpc.NewCompletionHTTPRequest(ctx, n.nexus.Url, n.completion)
-	if err != nil {
-		return invocationResultFail{queueserrors.NewUnprocessableTaskError(
-			fmt.Sprintf("failed to construct Nexus request: %v", err),
-		)}
-	}
-	if request.Header == nil {
-		request.Header = make(http.Header)
-	}
-	for k, v := range n.nexus.Header {
-		request.Header.Set(k, v)
-	}
-
-	caller := e.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
-		NamespaceID: ns.ID().String(),
-		Destination: taskAttr.Destination,
+	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		HTTPCaller: e.httpCallerProvider(queuescommon.NamespaceIDAndDestination{
+			NamespaceID: ns.ID().String(),
+			Destination: taskAttr.Destination,
+		}),
+		Serializer: commonnexus.PayloadSerializer,
 	})
 	// Make the call and record metrics.
 	startTime := time.Now()
-	response, err := caller(request)
+
+	n.completion.Header = n.nexus.Header
+	err := client.CompleteOperation(ctx, n.nexus.Url, n.completion)
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
-	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, response, err))
-	e.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+	outcomeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
+	e.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
+	e.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
 
 	if err != nil {
-		e.logger.Error("Callback request failed with error", tag.Error(err))
-		return invocationResultRetry{err: err}
-	}
-
-	if response.StatusCode >= 200 && response.StatusCode < 300 {
-		// Body is not read but should be discarded to keep the underlying TCP connection alive.
-		// Just in case something unexpected happens while discarding or closing the body,
-		// propagate errors to the machine.
-		if _, err = io.Copy(io.Discard, response.Body); err == nil {
-			if err = response.Body.Close(); err != nil {
-				e.logger.Error("Callback request failed with error", tag.Error(err))
-				return invocationResultRetry{err: err}
-			}
+		retryable := isRetryableCallError(err)
+		e.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		if retryable {
+			return invocationResultRetry{err}
 		}
-		return invocationResultOK{}
+		return invocationResultFail{err}
 	}
-
-	retryable := isRetryableHTTPResponse(response)
-	err = readHandlerErrFromResponse(response, e.logger)
-	e.logger.Error("Callback request failed", tag.Error(err), tag.String("status", response.Status), tag.Bool("retryable", retryable))
-	if retryable {
-		return invocationResultRetry{err: err}
-	}
-	return invocationResultFail{err}
+	return invocationResultOK{}
 }
 
-// Reads and replaces the http response body and attempts to deserialize it into a Nexus failure. If successful,
-// returns a nexus.HandlerError with the deserialized failure as the Cause. If there is an error reading the body or
-// during deserialization, returns a nexus.HandlerError with a generic Cause based on response status.
-// TODO: This logic is duplicated in the frontend handler for forwarded requests. Eventually it should live in the Nexus SDK.
-func readHandlerErrFromResponse(response *http.Response, logger log.Logger) error {
-	handlerErr := &nexus.HandlerError{
-		Type:  commonnexus.HandlerErrorTypeFromHTTPStatus(response.StatusCode),
-		Cause: fmt.Errorf("request failed with: %v", response.Status),
+func isRetryableCallError(err error) bool {
+	var handlerError *nexus.HandlerError
+	if errors.As(err, &handlerError) {
+		return handlerError.Retryable()
 	}
-
-	body, err := readAndReplaceBody(response)
-	if err != nil {
-		logger.Error("Error reading response body for non-ok callback request", tag.Error(err), tag.String("status", response.Status))
-		return err
-	}
-
-	if !isMediaTypeJSON(response.Header.Get("Content-Type")) {
-		logger.Error("received invalid content-type header for non-OK HTTP response to CompleteOperation request", tag.Value(response.Header.Get("Content-Type")))
-		return handlerErr
-	}
-
-	var failure nexus.Failure
-	err = json.Unmarshal(body, &failure)
-	if err != nil {
-		logger.Error("failed to deserialize Nexus Failure from HTTP response to CompleteOperation request", tag.Error(err))
-		return handlerErr
-	}
-
-	handlerErr.Cause = &nexus.FailureError{Failure: failure}
-	return handlerErr
+	return true
 }
 
-// readAndReplaceBody reads the response body in its entirety and closes it, and then replaces the original response
-// body with an in-memory buffer.
-// The body is replaced even when there was an error reading the entire body.
-func readAndReplaceBody(response *http.Response) ([]byte, error) {
-	responseBody := response.Body
-	body, err := io.ReadAll(responseBody)
-	_ = responseBody.Close()
-	response.Body = io.NopCloser(bytes.NewReader(body))
-	return body, err
-}
-
-func isMediaTypeJSON(contentType string) bool {
-	if contentType == "" {
-		return false
+func outcomeTag(callCtx context.Context, callErr error) string {
+	if callErr != nil {
+		if callCtx.Err() != nil {
+			return "request-timeout"
+		}
+		var handlerErr *nexus.HandlerError
+		if errors.As(callErr, &handlerErr) {
+			return "handler-error:" + string(handlerErr.Type)
+		}
+		return "unknown-error"
 	}
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	return err == nil && mediaType == "application/json"
+	return "success"
 }

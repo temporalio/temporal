@@ -169,9 +169,12 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 
 	infra := setupTestInfra(t, specProcessor)
 	ctx := chasm.NewMutableContext(context.Background(), infra.node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	if err != nil {
+		t.Fatalf("failed to create scheduler: %v", err)
+	}
 	infra.node.SetRootComponent(sched)
-	_, err := infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction()
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}

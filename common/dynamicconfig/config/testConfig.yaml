@@ -1,89 +1,89 @@
 frontend.namespaceCount:
-- value:
-    NamespaceId: 1
-  constraints: {}
+  - value:
+      NamespaceId: 1
+    constraints: {}
 TestCaseInsensitivePropertykEy:
   - value: true
     constraints: {}
 testGetBoolPropertyKey:
-- value: false
-  constraints: {}
-- value: true
-  constraints:
-    namespace: global-samples-namespace
-- value: true
-  constraints:
-    namespace: samples-namespace
+  - value: false
+    constraints: {}
+  - value: true
+    constraints:
+      namespace: global-samples-namespace
+  - value: true
+    constraints:
+      namespace: samples-namespace
 testGetDurationPropertyKey:
-- value: 1m
-  constraints: {}
-- value: wrong duration string
-  constraints:
-    namespace: samples-namespace
-    taskQueueName: longIdleTimeTaskqueue
-- value: 2
-  constraints:
-    namespace: samples-namespace
-- value: true
-  constraints:
-    namespace: broken-namespace
+  - value: 1m
+    constraints: {}
+  - value: wrong duration string
+    constraints:
+      namespace: samples-namespace
+      taskQueueName: longIdleTimeTaskqueue
+  - value: 2
+    constraints:
+      namespace: samples-namespace
+  - value: true
+    constraints:
+      namespace: broken-namespace
 testGetFloat64PropertyKey:
-- value: 12
-  constraints: {}
-- value: wrong type
-  constraints:
-    namespace: samples-namespace
+  - value: 12
+    constraints: {}
+  - value: wrong type
+    constraints:
+      namespace: samples-namespace
 testGetIntPropertyKey:
-- value: 1000
-  constraints: {}
-- value: 1000.1
-  constraints:
-    namespace: global-samples-namespace
-- value: 1001
-  constraints:
-    namespace: global-samples-namespace
-    taskQueueName: test-tq
-    taskType: Workflow
-- value: 1002
-  constraints:
-    namespace: global-samples-namespace
-    taskQueueName: test-tq
-    taskType: Activity
-- value: 1003
-  constraints:
-    namespace: global-samples-namespace
-    taskQueueName: test-tq
-- value: 1004
-  constraints:
-    namespace: another-namespace
-- value: 1005
-  constraints:
-    taskQueueName: other-test-tq
+  - value: 1000
+    constraints: {}
+  - value: 1000.1
+    constraints:
+      namespace: global-samples-namespace
+  - value: 1001
+    constraints:
+      namespace: global-samples-namespace
+      taskQueueName: test-tq
+      taskType: Workflow
+  - value: 1002
+    constraints:
+      namespace: global-samples-namespace
+      taskQueueName: test-tq
+      taskType: Activity
+  - value: 1003
+    constraints:
+      namespace: global-samples-namespace
+      taskQueueName: test-tq
+  - value: 1004
+    constraints:
+      namespace: another-namespace
+  - value: 1005
+    constraints:
+      taskQueueName: other-test-tq
 testGetMapPropertyKey:
-- value:
-    key1: "1"
-    key2: 1
-    key3:
-    - false
-    - key4: true
-      key5: 2.1
-  constraints: {}
-- value: "1"
-  constraints:
-    namespace: random-namespace
+  - value:
+      key1: "1"
+      key2: 1
+      key3:
+        - false
+        - key4: true
+          key5: 2.1
+    constraints: {}
+  - value: "1"
+    constraints:
+      namespace: random-namespace
 testGetTypedPropertyKey:
-- value:
-    number: 23.2  # note field is int
-    days: "6d"
-    inner:
-      key1: 12345  # note field is float
-      key2: true
+  - value:
+      number: 23.2 # note field is int
+      days: "6d"
+      inner:
+        key1: 12345 # note field is float
+        key2: true
 testGetStringPropertyKey:
-- value: some random string
-  constraints: {}
-- value: constrained-string
-  constraints:
-    namespace: random-namespace
+  - value: some random string
+    constraints: {}
+  - value: constrained-string
+    constraints:
+      namespace: random-namespace
 testGetDurationPropertyFilteredByTaskTypeKey:
   - value: 10s
     constraints:
