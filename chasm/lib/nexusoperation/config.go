@@ -141,6 +141,13 @@ Adding high-cardinality tags (like unique operation names) can significantly inc
 query complexity. Consider the cardinality impact when enabling these tags.`,
 )
 
+var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.useNewFailureWireFormat",
+	true,
+	`Controls whether to use the new failure wire format via an HTTP header that is attached to StartOperation requests.
+Added for safety. Defaults to true. Likely to be removed in future server versions.`,
+)
+
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -156,7 +163,7 @@ type Config struct {
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
-	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
+	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
@@ -176,6 +183,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
+		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(

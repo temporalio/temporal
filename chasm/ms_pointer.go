@@ -20,6 +20,6 @@ func NewMSPointer(backend NodeBackend) MSPointer {
 }
 
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
-func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.getContext(), requestID)
 }

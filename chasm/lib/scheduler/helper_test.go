@@ -154,9 +154,12 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 
 	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
 	ctx := chasm.NewMutableContext(context.Background(), node)
-	sched := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
-	err = node.SetRootComponent(sched)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	if err != nil {
+		t.Fatalf("failed to create scheduler: %v", err)
+	}
+	node.SetRootComponent(sched)
+  if err != nil {
 		t.Fatalf("failed to set root component: %v", err)
 	}
 	_, err = node.CloseTransaction()

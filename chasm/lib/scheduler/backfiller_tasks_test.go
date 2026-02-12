@@ -89,8 +89,9 @@ func (s *backfillerTasksSuite) SetupTest() {
 
 	s.node = chasm.NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, chasm.DefaultPathEncoder, s.logger)
 	ctx := s.newMutableContext()
-	s.scheduler = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
-	s.NoError(s.node.SetRootComponent(s.scheduler))
+	s.scheduler, err = scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	s.NoError(err)
+	s.node.SetRootComponent(s.scheduler)
 
 	// Advance Generator's high water mark to 'now'.
 	generator := s.scheduler.Generator.Get(ctx)
