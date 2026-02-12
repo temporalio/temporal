@@ -15,8 +15,6 @@ import (
 var _ Scheduler[Task] = (*ExecutionQueueScheduler[Task])(nil)
 
 type (
-	// ExecutionQueueSchedulerOptions contains configuration for the ExecutionQueueScheduler.
-	// Both fields are functions so they respond to dynamic config changes at runtime.
 	ExecutionQueueSchedulerOptions struct {
 		// MaxQueues is the maximum number of concurrent execution queues.
 		// When this limit is reached, TrySubmit will reject new queues.
@@ -47,13 +45,13 @@ type (
 	}
 
 	// ExecutionQueueScheduler is a scheduler that ensures sequential task execution
-	// per execution using a dedicated goroutine per queue.
+	// per execution using dedicated goroutines per queue.
 	//
 	// Key characteristics:
 	// - Tasks for the same execution are executed sequentially
-	// - Each execution gets its own goroutine that processes tasks from a slice
-	// - Worker goroutines exit when the queue is empty; a background sweeper
-	//   removes idle queue entries after QueueTTL
+	// - Each execution gets its own goroutines that processes tasks from a slice
+	// - Worker goroutines exit when the queue is empty
+	// - A background sweeper removes idle queue entries after QueueTTL
 	// - Maximum number of concurrent queues is capped at MaxQueues
 	ExecutionQueueScheduler[T Task] struct {
 		status       atomic.Int32
@@ -71,6 +69,9 @@ type (
 		mu             sync.Mutex
 		queues         map[any]*executionQueue[T]
 		sweeperRunning bool
+		// queueAvailable is signaled when queues are removed by the sweeper,
+		// unblocking Submit callers waiting for queue capacity.
+		queueAvailable *sync.Cond
 	}
 )
 
@@ -91,6 +92,7 @@ func NewExecutionQueueScheduler[T Task](
 		timeSource:     timeSource,
 		queues:         make(map[any]*executionQueue[T]),
 	}
+	s.queueAvailable = sync.NewCond(&s.mu)
 	s.status.Store(common.DaemonStatusInitialized)
 	return s
 }
@@ -108,6 +110,11 @@ func (s *ExecutionQueueScheduler[T]) Stop() {
 	}
 
 	close(s.shutdownChan)
+
+	// Wake up any Submit callers blocked waiting for queue capacity.
+	s.mu.Lock()
+	s.queueAvailable.Broadcast()
+	s.mu.Unlock()
 
 	go func() {
 		if success := common.AwaitWaitGroup(&s.shutdownWG, time.Minute); !success {
@@ -128,6 +135,8 @@ func (s *ExecutionQueueScheduler[T]) HasQueue(key any) bool {
 }
 
 // Submit adds a task to its execution's queue. Creates a new queue if needed.
+// If MaxQueues is reached and the task needs a new queue, Submit blocks until
+// the sweeper frees a slot or the scheduler is stopped.
 func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 	if s.isStopped() {
 		task.Abort()
@@ -139,11 +148,17 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 	entry := taskEntry[T]{task: task, submitTime: s.timeSource.Now()}
 
 	s.mu.Lock()
-	if s.isStopped() {
-		s.mu.Unlock()
-		task.Abort()
-		metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
-		return
+	for {
+		if s.isStopped() {
+			s.mu.Unlock()
+			task.Abort()
+			metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+			return
+		}
+		if _, exists := s.queues[key]; exists || len(s.queues) < s.options.MaxQueues() {
+			break
+		}
+		s.queueAvailable.Wait()
 	}
 	s.appendTaskLocked(key, entry)
 	s.mu.Unlock()
@@ -189,6 +204,10 @@ func (s *ExecutionQueueScheduler[T]) appendTaskLocked(key any, entry taskEntry[T
 		q = &executionQueue[T]{}
 		s.queues[key] = q
 		metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
+		// Wake all blocked Submit callers — those waiting for this same key
+		// can now proceed since the queue exists. Different-key waiters will
+		// re-check the condition and go back to sleep.
+		s.queueAvailable.Broadcast()
 	}
 	q.tasks = append(q.tasks, entry)
 	if q.activeWorkers < max(1, s.options.QueueConcurrency()) {
@@ -273,16 +292,19 @@ func (s *ExecutionQueueScheduler[T]) sweepIdleQueues() bool {
 	defer s.mu.Unlock()
 
 	now := s.timeSource.Now()
-	swept := false
+	sweptCount := 0
 	for key, q := range s.queues {
 		if q.activeWorkers == 0 && len(q.tasks) == 0 && now.Sub(q.lastActive) > s.options.QueueTTL() {
 			delete(s.queues, key)
-			swept = true
+			sweptCount++
 		}
 	}
-	if swept {
-		metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
+
+	metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
+	for range sweptCount {
+		s.queueAvailable.Signal()
 	}
+
 	if len(s.queues) == 0 {
 		s.sweeperRunning = false
 		return true

@@ -515,6 +515,193 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 // Max Queues Tests
 // =============================================================================
 
+func (s *executionQueueSchedulerSuite) TestSubmit_BlocksUntilQueueAvailable() {
+	// Create scheduler with max 1 queue and short TTL
+	ttl := 50 * time.Millisecond
+	scheduler := NewExecutionQueueScheduler(
+		&ExecutionQueueSchedulerOptions{
+			MaxQueues:        func() int { return 1 },
+			QueueTTL:         func() time.Duration { return ttl },
+			QueueConcurrency: func() int { return 1 },
+		},
+		executionKeyFn,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	testWG := sync.WaitGroup{}
+	testWG.Add(1)
+
+	// Submit task for key A — creates queue, succeeds immediately
+	mockTaskA := NewMockTask(s.controller)
+	mockTaskA.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTaskA.EXPECT().Execute().Return(nil).Times(1)
+	mockTaskA.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
+	scheduler.Submit(&testExecutionTask{MockTask: mockTaskA, workflowID: "wfA", runID: "run1"})
+	testWG.Wait()
+
+	// Key A's queue is now idle. Submit for key B should block until sweeper frees the slot.
+	submitDone := make(chan struct{})
+	testWG.Add(1)
+
+	mockTaskB := NewMockTask(s.controller)
+	mockTaskB.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTaskB.EXPECT().Execute().Return(nil).Times(1)
+	mockTaskB.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
+
+	go func() {
+		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB, workflowID: "wfB", runID: "run1"})
+		close(submitDone)
+	}()
+
+	// Verify Submit is blocked (hasn't returned yet)
+	select {
+	case <-submitDone:
+		s.Fail("Submit should block when MaxQueues is reached")
+	case <-time.After(20 * time.Millisecond):
+		// Good — still blocked
+	}
+
+	// Wait for sweeper to free key A's queue, which should unblock key B's Submit
+	select {
+	case <-submitDone:
+		// Good — unblocked after sweeper ran
+	case <-time.After(5 * time.Second):
+		s.Fail("Submit should unblock after sweeper frees a queue slot")
+	}
+
+	testWG.Wait()
+}
+
+func (s *executionQueueSchedulerSuite) TestSubmit_UnblocksOnStop() {
+	// Create scheduler with max 1 queue and long TTL (sweeper won't help)
+	scheduler := NewExecutionQueueScheduler(
+		&ExecutionQueueSchedulerOptions{
+			MaxQueues:        func() int { return 1 },
+			QueueTTL:         func() time.Duration { return time.Hour },
+			QueueConcurrency: func() int { return 1 },
+		},
+		executionKeyFn,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
+	)
+	scheduler.Start()
+
+	blockCh := make(chan struct{})
+
+	// Submit task for key A that blocks execution
+	mockTaskA := NewMockTask(s.controller)
+	mockTaskA.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTaskA.EXPECT().Execute().DoAndReturn(func() error {
+		<-blockCh
+		return nil
+	}).MaxTimes(1)
+	mockTaskA.EXPECT().Ack().MaxTimes(1)
+	mockTaskA.EXPECT().Abort().MaxTimes(1)
+	scheduler.Submit(&testExecutionTask{MockTask: mockTaskA, workflowID: "wfA", runID: "run1"})
+
+	// Submit for key B should block (MaxQueues=1, key A's queue exists)
+	submitDone := make(chan struct{})
+	mockTaskB := NewMockTask(s.controller)
+	mockTaskB.EXPECT().Abort().Times(1)
+
+	go func() {
+		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB, workflowID: "wfB", runID: "run1"})
+		close(submitDone)
+	}()
+
+	// Verify Submit is blocked
+	select {
+	case <-submitDone:
+		s.Fail("Submit should block when MaxQueues is reached")
+	case <-time.After(50 * time.Millisecond):
+		// Good — still blocked
+	}
+
+	// Stop the scheduler — should unblock Submit and abort the task
+	close(blockCh)
+	scheduler.Stop()
+
+	select {
+	case <-submitDone:
+		// Good — unblocked after Stop
+	case <-time.After(5 * time.Second):
+		s.Fail("Submit should unblock after Stop is called")
+	}
+}
+
+func (s *executionQueueSchedulerSuite) TestSubmit_MultipleWaitersForSameKey() {
+	// When two Submit callers block for the same key and one creates the queue,
+	// the other should be woken and append to the existing queue.
+	ttl := 50 * time.Millisecond
+	scheduler := NewExecutionQueueScheduler(
+		&ExecutionQueueSchedulerOptions{
+			MaxQueues:        func() int { return 1 },
+			QueueTTL:         func() time.Duration { return ttl },
+			QueueConcurrency: func() int { return 1 },
+		},
+		executionKeyFn,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+		clock.NewRealTimeSource(),
+	)
+	scheduler.Start()
+	defer scheduler.Stop()
+
+	testWG := sync.WaitGroup{}
+	testWG.Add(1)
+
+	// Fill the one queue slot with key A
+	mockTaskA := NewMockTask(s.controller)
+	mockTaskA.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTaskA.EXPECT().Execute().Return(nil).Times(1)
+	mockTaskA.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
+	scheduler.Submit(&testExecutionTask{MockTask: mockTaskA, workflowID: "wfA", runID: "run1"})
+	testWG.Wait()
+
+	// Now submit two tasks for key B — both should block, then both should complete
+	testWG.Add(2)
+	submitsDone := make(chan struct{})
+
+	mockTaskB1 := NewMockTask(s.controller)
+	mockTaskB1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTaskB1.EXPECT().Execute().Return(nil).Times(1)
+	mockTaskB1.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
+
+	mockTaskB2 := NewMockTask(s.controller)
+	mockTaskB2.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
+	mockTaskB2.EXPECT().Execute().Return(nil).Times(1)
+	mockTaskB2.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
+
+	var submitsReturned atomic.Int32
+	go func() {
+		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB1, workflowID: "wfB", runID: "run1"})
+		if submitsReturned.Add(1) == 2 {
+			close(submitsDone)
+		}
+	}()
+	go func() {
+		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB2, workflowID: "wfB", runID: "run1"})
+		if submitsReturned.Add(1) == 2 {
+			close(submitsDone)
+		}
+	}()
+
+	// Both submits should complete after sweeper frees key A's slot
+	select {
+	case <-submitsDone:
+		// Good
+	case <-time.After(5 * time.Second):
+		s.Fail("Both Submit calls for the same key should unblock")
+	}
+
+	testWG.Wait()
+}
+
 func (s *executionQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 	// Create scheduler with max 2 queues
 	scheduler := NewExecutionQueueScheduler(
