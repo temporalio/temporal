@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
-	cnexus "go.temporal.io/server/common/nexus"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/components/nexusoperations"
@@ -654,8 +653,8 @@ func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string)
 	return fmt.Sprintf(
 		"http://%s/%s",
 		address,
-		cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
-			Path(cnexus.NamespaceAndTaskQueue{
+		commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
+			Path(commonnexus.NamespaceAndTaskQueue{
 				Namespace: namespace,
 				TaskQueue: taskQueue,
 			}),
@@ -663,5 +662,5 @@ func getDispatchByNsAndTqURL(address string, namespace string, taskQueue string)
 }
 
 func getDispatchByEndpointURL(address string, endpoint string) string {
-	return fmt.Sprintf("http://%s/%s", address, cnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint))
+	return fmt.Sprintf("http://%s/%s", address, commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint))
 }
