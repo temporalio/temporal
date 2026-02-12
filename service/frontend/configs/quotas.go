@@ -197,6 +197,7 @@ var (
 		// APIs that rely on visibility
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkerTaskReachability":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListSchedules":                     1,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountSchedules":                    1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListBatchOperations":               1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": 1, // note this isn't a real method name
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   1,

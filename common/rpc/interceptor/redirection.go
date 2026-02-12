@@ -94,6 +94,7 @@ var (
 		"PatchSchedule":                    func() any { return &workflowservice.PatchScheduleResponse{} },
 		"DeleteSchedule":                   func() any { return &workflowservice.DeleteScheduleResponse{} },
 		"ListSchedules":                    func() any { return &workflowservice.ListSchedulesResponse{} },
+		"CountSchedules":                   func() any { return &workflowservice.CountSchedulesResponse{} },
 		"ListScheduleMatchingTimes":        func() any { return &workflowservice.ListScheduleMatchingTimesResponse{} },
 		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
 		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
