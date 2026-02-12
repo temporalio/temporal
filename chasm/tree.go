@@ -599,9 +599,11 @@ func (n *Node) isDetached() bool {
 	if componentAttr == nil {
 		return false
 	}
-	if componentAttr.GetTypeId() == CallbackComponentID {
-		// For backward compatibility purpose, we need to special handle callback component,
-		// which is implemented before we detached component is supported by the framework.
+	componentTypeID := componentAttr.GetTypeId()
+	if componentTypeID == CallbackComponentID ||
+		componentTypeID == visibilityComponentTypeID {
+		// For backward compatibility purpose, we need to special handle callback and visibility components,
+		// which are implemented before detached component is properly supported by the framework.
 		return true
 	}
 	return componentAttr.GetDetached()
