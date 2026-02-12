@@ -1887,7 +1887,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	if newVersioning {
@@ -1977,7 +1977,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	startedWf := make(chan struct{}, 1)
