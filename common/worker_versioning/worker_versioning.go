@@ -61,7 +61,6 @@ const (
 	WorkerDeploymentBuildIDFieldName             = "BuildID"
 )
 
-
 // FormatPinnedVersionNotInTaskQueueError formats the error message when a pinned version
 // is not present in a task queue.
 func FormatPinnedVersionNotInTaskQueueError(deploymentName, buildID, taskQueue string, taskQueueType enumspb.TaskQueueType) string {
