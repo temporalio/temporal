@@ -82,6 +82,7 @@ func NewPrioritySemaphore(n int) *PrioritySemaphoreImpl {
 // ctx.Err() and leaves the semaphore unchanged.
 func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, n int) error {
 	if priority >= NumPriorities {
+		// nolint:forbidigo
 		panic(fmt.Sprintf("semaphore: invalid priority %v, priority must be less than %v", priority, NumPriorities))
 	}
 
@@ -158,6 +159,7 @@ func (s *PrioritySemaphoreImpl) Acquire(ctx context.Context, priority Priority, 
 // On success, returns true. On failure, returns false and leaves the semaphore unchanged.
 func (s *PrioritySemaphoreImpl) TryAcquire(priority Priority, n int) bool {
 	if priority >= NumPriorities {
+		// nolint:forbidigo
 		panic(fmt.Sprintf("semaphore: invalid priority %v, priority must be less than %v", priority, NumPriorities))
 	}
 
