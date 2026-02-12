@@ -53,11 +53,8 @@ func (t *transferQueueActiveTaskExecutor) processCancelActivityTask(
 		return nil
 	}
 
-	controlQueueName, err := getNexusTaskQueue(mutableState, task.ScheduledEventIDs)
-	if err != nil {
-		return err
-	}
-	if controlQueueName == "" {
+	// If control queue is not set, it means the worker that this activity belongs to does not support Nexus tasks.
+	if task.WorkerControlTaskQueue == "" {
 		return nil
 	}
 
@@ -69,30 +66,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelActivityTask(
 		return nil
 	}
 
-	return t.dispatchCancelTaskToWorker(ctx, task.NamespaceID, controlQueueName, taskTokens)
-}
-
-// getNexusTaskQueue returns the Nexus control queue for a batch of activities.
-// All activities in a batch share the same control queue. Returns error if control queues are inconsistent.
-func getNexusTaskQueue(
-	mutableState historyi.MutableState,
-	scheduledEventIDs []int64,
-) (string, error) {
-	var controlQueueName string
-	for _, scheduledEventID := range scheduledEventIDs {
-		ai, ok := mutableState.GetActivityInfo(scheduledEventID)
-		if !ok {
-			continue
-		}
-		if controlQueueName == "" {
-			controlQueueName = ai.WorkerControlTaskQueue
-		} else if controlQueueName != ai.WorkerControlTaskQueue {
-			return "", serviceerror.NewInternal(fmt.Sprintf(
-				"activities in batch have inconsistent control queues: %q vs %q",
-				controlQueueName, ai.WorkerControlTaskQueue))
-		}
-	}
-	return controlQueueName, nil
+	return t.dispatchCancelTaskToWorker(ctx, task.NamespaceID, task.WorkerControlTaskQueue, taskTokens)
 }
 
 // buildActivityTaskTokens builds task tokens for activities that need cancellation.
