@@ -2401,9 +2401,9 @@ func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb
 // 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
-func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSuggestCaNOnNewTargetVersion bool) {
-	if enableSuggestCaNOnNewTargetVersion {
-		s.OverrideDynamicConfig(dynamicconfig.EnableSuggestCaNOnNewTargetVersion, true)
+func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSendTargetVersionChanged bool) {
+	if !enableSendTargetVersionChanged {
+		s.OverrideDynamicConfig(dynamicconfig.EnableSendTargetVersionChanged, false)
 	}
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2472,17 +2472,19 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				if enableSuggestCaNOnNewTargetVersion {
+				if enableSendTargetVersionChanged {
 					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
 					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						if i == len(wfTaskStartedEvents)-1 { // last event
-							s.True(attr.GetSuggestContinueAsNew())
-							s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
+							s.False(attr.GetSuggestContinueAsNew())
+							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.True(attr.GetTargetWorkerDeploymentVersionChanged())
 						} else { // earlier events
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 						}
 					}
 				} else {
@@ -2490,6 +2492,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
 						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 					}
 				}
 

@@ -13,6 +13,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CountActivityExecutionsResponse:
 		return nil
+	case *workflowservice.CountSchedulesRequest:
+		return nil
+	case *workflowservice.CountSchedulesResponse:
+		return nil
 	case *workflowservice.CountWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.CountWorkflowExecutionsResponse:

@@ -125,6 +125,7 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, startTime)
 	event.Attributes = &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{
@@ -137,6 +138,8 @@ func (b *EventFactory) CreateWorkflowTaskStartedEvent(
 			HistorySizeBytes:            historySizeBytes,
 			WorkerVersion:               versioningStamp,
 			BuildIdRedirectCounter:      buildIdRedirectCounter,
+
+			TargetWorkerDeploymentVersionChanged: targetWorkerDeploymentVersionChanged,
 		},
 	}
 	return event
