@@ -19,7 +19,7 @@ const testTimeout = time.Second * 5
 const testService = "Ser/vic e"
 const getResultMaxTimeout = time.Millisecond * 300
 
-func setupCustom(t *testing.T, handler nexus.Handler, serializer nexus.Serializer, failureConverter nexus.FailureConverter) (ctx context.Context, client *nexusrpc.HTTPClient, teardown func()) {
+func setupCustom(t *testing.T, handler nexus.Handler, serializer nexus.Serializer, failureConverter nexusrpc.FailureConverter) (ctx context.Context, client *nexusrpc.HTTPClient, teardown func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 
 	httpHandler := nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
@@ -55,7 +55,7 @@ func setup(t *testing.T, handler nexus.Handler) (ctx context.Context, client *ne
 	return setupCustom(t, handler, nil, nil)
 }
 
-func setupForCompletion(t *testing.T, handler nexusrpc.CompletionHandler, serializer nexus.Serializer, failureConverter nexus.FailureConverter) (ctx context.Context, callbackURL string, teardown func()) {
+func setupForCompletion(t *testing.T, handler nexusrpc.CompletionHandler, serializer nexus.Serializer, failureConverter nexusrpc.FailureConverter) (ctx context.Context, callbackURL string, teardown func()) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 
 	httpHandler := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
@@ -112,19 +112,20 @@ type customFailureConverter struct{}
 var errCustom = errors.New("custom")
 
 // ErrorToFailure implements FailureConverter.
-func (c customFailureConverter) ErrorToFailure(err error) nexus.Failure {
+func (c customFailureConverter) ErrorToFailure(err error) (nexus.Failure, error) {
 	return nexus.Failure{
 		Message: err.Error(),
 		Metadata: map[string]string{
 			"type": "custom",
 		},
-	}
+	}, nil
 }
 
 // FailureToError implements FailureConverter.
-func (c customFailureConverter) FailureToError(f nexus.Failure) error {
+// nolint:revive // unnamed results of the same type is fine for test
+func (c customFailureConverter) FailureToError(f nexus.Failure) (error, error) {
 	if f.Metadata["type"] != "custom" {
-		return errors.New(f.Message)
+		return errors.New(f.Message), nil
 	}
-	return fmt.Errorf("%w: %s", errCustom, f.Message)
+	return fmt.Errorf("%w: %s", errCustom, f.Message), nil
 }
