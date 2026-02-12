@@ -238,11 +238,11 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTime), opTimeout)
 	}
 	header := nexus.Header(args.header)
+	if header == nil {
+		header = make(nexus.Header, 1) // It's most likely that we'll only be setting the new wire format header.
+	}
 	// Set the operation timeout header if not already set.
 	if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeout != maxDuration && opTimeoutHeader == "" {
-		if header == nil {
-			header = make(nexus.Header, 1)
-		}
 		header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(opTimeout)
 	}
 	if e.Config.UseNewFailureWireFormat(ns.Name().String()) {

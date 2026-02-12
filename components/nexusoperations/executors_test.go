@@ -577,6 +577,7 @@ func TestProcessInvocationTask(t *testing.T) {
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
 					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
+					UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -1009,6 +1010,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
+					UseNewFailureWireFormat:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -1083,8 +1085,9 @@ func TestProcessCancelationTask_OperationCompleted(t *testing.T) {
 
 	require.NoError(t, nexusoperations.RegisterExecutor(reg, nexusoperations.TaskExecutorOptions{
 		Config: &nexusoperations.Config{
-			Enabled:        dynamicconfig.GetBoolPropertyFn(true),
-			RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+			Enabled:                 dynamicconfig.GetBoolPropertyFn(true),
+			RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Hour),
+			UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 			RetryPolicy: func() backoff.RetryPolicy {
 				return backoff.NewExponentialRetryPolicy(time.Second)
 			},
