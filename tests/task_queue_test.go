@@ -1002,4 +1002,15 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 		s.NotNil(result.resp)
 		s.Empty(result.resp.GetTaskToken(), "poll should return empty response after shutdown")
 	}
+
+	// Verify poller is removed from DescribeTaskQueue (eager poller history cleanup)
+	descResp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err)
+	for _, poller := range descResp.GetPollers() {
+		s.NotEqual(tv.WorkerIdentity(), poller.GetIdentity(),
+			"poller should be removed from DescribeTaskQueue after shutdown")
+	}
 }
