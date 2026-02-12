@@ -55,7 +55,8 @@ func ReactivateVersionWorkflowIfPinned(
 	}
 
 	// Send the signal asynchronously to avoid adding latency to the caller's request.
-	// Errors are logged by the signaler implementation (e.g. via convertAndRecordError).
+	// Errors are logged by the signaler implementation (e.g. via convertAndRecordError). However,
+	// errors are not propagated to the caller as this is a fire-and-forget operation.
 	go func() {
 		signaler(context.Background(), namespaceEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId()) //nolint:errcheck
 	}()
