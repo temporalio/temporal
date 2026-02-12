@@ -658,6 +658,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		nil,
 		int64(0),
 		nil,
+		true,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -674,6 +675,8 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 				SuggestContinueAsNew:        false,
 				SuggestContinueAsNewReasons: nil,
 				HistorySizeBytes:            123678,
+
+				TargetWorkerDeploymentVersionChanged: true,
 			},
 		},
 	}, event)
