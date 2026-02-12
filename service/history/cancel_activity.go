@@ -32,7 +32,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelActivityTask(
 		return nil
 	}
 
-	if task.WorkerInstanceKey == "" || len(task.ScheduledEventIDs) == 0 {
+	if len(task.ScheduledEventIDs) == 0 {
 		return nil
 	}
 
@@ -73,8 +73,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelActivityTask(
 }
 
 // getNexusTaskQueue returns the Nexus control queue for a batch of activities.
-// All activities in a batch are from the same worker (batched by WorkerInstanceKey),
-// so they share the same control queue. Returns error if control queues are inconsistent.
+// All activities in a batch share the same control queue. Returns error if control queues are inconsistent.
 func getNexusTaskQueue(
 	mutableState historyi.MutableState,
 	scheduledEventIDs []int64,
