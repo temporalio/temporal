@@ -742,7 +742,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 // the default queue's tasks to current and ramping versions) are emitted separately by the
 // partition manager via fetchAndEmitLogicalBacklogMetrics.
 //
-// When version-attributed metrics are disabled (BacklogMetricsEmitInterval == 0), this falls back 
+// When version-attributed metrics are disabled (BacklogMetricsEmitInterval == 0), this falls back
 // to emitting the original approximate_backlog_count and approximate_backlog_age_seconds for
 // all queues (including versioned queues when BreakdownMetricsByBuildID is enabled).
 func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
