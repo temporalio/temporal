@@ -112,6 +112,10 @@ func (e *ChasmEngine) StartExecution(
 		return chasm.StartExecutionResult{}, err
 	}
 
+	if executionRef.RunID != "" {
+		return chasm.StartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for StartExecution")
+	}
+
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
 		ctx,
 		shardContext,
@@ -180,29 +184,142 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 	startFn func(chasm.MutableContext) (chasm.Component, error),
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	opts ...chasm.TransitionOption,
-) (newExecutionKey chasm.ExecutionKey, newExecutionRef []byte, retError error) {
-	return chasm.ExecutionKey{}, nil, serviceerror.NewUnimplemented("UpdateWithStartExecution is not yet supported")
+) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
+	options := e.constructTransitionOptions(opts...)
+
+	shardContext, err := e.getShardContext(executionRef)
+	if err != nil {
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
+	}
+
+	archetypeID, err := executionRef.ArchetypeID(e.registry)
+	if err != nil {
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
+	}
+
+	if executionRef.RunID != "" {
+		return chasm.EngineUpdateWithStartExecutionResult{}, serviceerror.NewUnimplemented("setting runID is not supported for UpdateWithStartExecution")
+	}
+
+	_, executionLease, err := e.getExecutionLease(ctx, executionRef)
+	switch err.(type) {
+	case nil:
+		defer func() {
+			executionLease.GetReleaseFn()(retError)
+		}()
+
+		if executionLease.GetMutableState().IsWorkflowExecutionRunning() {
+			executionKey, executionRef, err := e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn)
+			if err != nil {
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
+			}
+			return chasm.EngineUpdateWithStartExecutionResult{
+				ExecutionKey: executionKey,
+				ExecutionRef: executionRef,
+				Created:      false,
+			}, nil
+		}
+
+		executionKey, executionRef, created, err := e.startNewForClosedExecution(
+			ctx,
+			shardContext,
+			executionLease,
+			executionRef,
+			archetypeID,
+			startFn,
+			updateFn,
+			options,
+		)
+		if err != nil {
+			return chasm.EngineUpdateWithStartExecutionResult{}, err
+		}
+		return chasm.EngineUpdateWithStartExecutionResult{
+			ExecutionKey: executionKey,
+			ExecutionRef: executionRef,
+			Created:      created,
+		}, nil
+	case *serviceerror.NotFound:
+		executionKey, executionRef, created, err := e.startAndUpdateExecution(
+			ctx,
+			shardContext,
+			executionRef,
+			archetypeID,
+			startFn,
+			updateFn,
+			options,
+		)
+		if err != nil {
+			return chasm.EngineUpdateWithStartExecutionResult{}, err
+		}
+		return chasm.EngineUpdateWithStartExecutionResult{
+			ExecutionKey: executionKey,
+			ExecutionRef: executionRef,
+			Created:      created,
+		}, nil
+	default:
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
+	}
 }
 
-// UpdateComponent applies updateFn to the component identified by the supplied component reference,
-// returning the new component reference corresponding to the transition. An error is returned if
-// the state transition specified by the supplied component reference is inconsistent with execution
-// transition history. opts are currently ignored.
-func (e *ChasmEngine) UpdateComponent(
+func (e *ChasmEngine) updateExecution(
 	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionLease api.WorkflowLease,
+	executionRef chasm.ComponentRef,
+	updateFn func(chasm.MutableContext, chasm.Component) error,
+) (chasm.ExecutionKey, []byte, error) {
+	workflowKey := executionLease.GetContext().GetWorkflowKey()
+	actualRef := executionRef
+	actualRef.RunID = workflowKey.RunID
+
+	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, err
+	}
+	return actualRef.ExecutionKey, serializedRef, nil
+}
+
+// startNewForClosedExecution handles starting a new execution when we already hold a lease on a
+// closed execution. It creates the new execution first, then delegates to handleExecutionConflict
+// for policy checks and persistence.
+func (e *ChasmEngine) startNewForClosedExecution(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionLease api.WorkflowLease,
+	executionRef chasm.ComponentRef,
+	archetypeID chasm.ArchetypeID,
+	startFn func(chasm.MutableContext) (chasm.Component, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
+	options chasm.TransitionOptions,
+) (chasm.ExecutionKey, []byte, bool, error) {
+	newExecutionParams, err := e.createNewExecutionWithUpdate(
+		ctx,
+		shardContext,
+		executionRef,
+		archetypeID,
+		startFn,
+		updateFn,
+		options,
+	)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, false, err
+	}
+
+	currentRunInfo := currentExecutionInfoFromMutableState(executionLease.GetMutableState())
+
+	result, err := e.handleExecutionConflict(ctx, shardContext, newExecutionParams, currentRunInfo, options)
+	return result.ExecutionKey, result.ExecutionRef, result.Created, err
+}
+
+// applyUpdateWithLease applies an update function to a component within a held lease,
+// persists the changes, and returns the serialized component reference.
+func (e *ChasmEngine) applyUpdateWithLease(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionLease api.WorkflowLease,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
-	opts ...chasm.TransitionOption,
-) (updatedRef []byte, retError error) {
-
-	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		executionLease.GetReleaseFn()(retError)
-	}()
-
+) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
 	if !ok {
@@ -232,12 +349,86 @@ func (e *ChasmEngine) UpdateComponent(
 		return nil, err
 	}
 
-	newSerializedRef, err := mutableContext.Ref(component)
+	serializedRef, err := mutableContext.Ref(component)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("componentRef: %+v: %s", ref, err)
 	}
 
-	return newSerializedRef, nil
+	return serializedRef, nil
+}
+
+func (e *ChasmEngine) startAndUpdateExecution(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionRef chasm.ComponentRef,
+	archetypeID chasm.ArchetypeID,
+	startFn func(chasm.MutableContext) (chasm.Component, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
+	options chasm.TransitionOptions,
+) (retKey chasm.ExecutionKey, retRef []byte, created bool, retErr error) {
+	currentExecutionReleaseFn, err := e.lockCurrentExecution(
+		ctx,
+		shardContext,
+		namespace.ID(executionRef.NamespaceID),
+		executionRef.BusinessID,
+		archetypeID,
+	)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, false, err
+	}
+	defer func() {
+		currentExecutionReleaseFn(retErr)
+	}()
+
+	newExecutionParams, err := e.createNewExecutionWithUpdate(
+		ctx,
+		shardContext,
+		executionRef,
+		archetypeID,
+		startFn,
+		updateFn,
+		options,
+	)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, false, err
+	}
+
+	currentRunInfo, hasCurrentRun, err := e.persistAsBrandNew(
+		ctx,
+		shardContext,
+		newExecutionParams,
+	)
+	if err != nil {
+		return chasm.ExecutionKey{}, nil, false, err
+	}
+	if hasCurrentRun {
+		return chasm.ExecutionKey{}, nil, false, currentRunInfo.CurrentWorkflowConditionFailedError
+	}
+
+	serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
+
+	return newExecutionParams.executionRef.ExecutionKey, serializedRef, true, err
+}
+
+// UpdateComponent applies updateFn to the component identified by the supplied component reference,
+// returning the new component reference corresponding to the transition. An error is returned if
+// the state transition specified by the supplied component reference is inconsistent with execution
+// transition history. opts are currently ignored.
+func (e *ChasmEngine) UpdateComponent(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	updateFn func(chasm.MutableContext, chasm.Component) error,
+	opts ...chasm.TransitionOption,
+) (updatedRef []byte, retError error) {
+	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		executionLease.GetReleaseFn()(retError)
+	}()
+
+	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn)
 }
 
 // ReadComponent evaluates readFn against the current state of the component identified by the
@@ -422,6 +613,26 @@ func (e *ChasmEngine) createNewExecution(
 	newFn func(chasm.MutableContext) (chasm.Component, error),
 	options chasm.TransitionOptions,
 ) (newExecutionParams, error) {
+	return e.createNewExecutionWithUpdate(
+		ctx,
+		shardContext,
+		executionRef,
+		archetypeID,
+		newFn,
+		nil,
+		options,
+	)
+}
+
+func (e *ChasmEngine) createNewExecutionWithUpdate(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionRef chasm.ComponentRef,
+	archetypeID chasm.ArchetypeID,
+	newFn func(chasm.MutableContext) (chasm.Component, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
+	options chasm.TransitionOptions,
+) (newExecutionParams, error) {
 	executionRef.RunID = primitives.NewUUID().String()
 
 	executionKey := executionRef.ExecutionKey
@@ -452,11 +663,20 @@ func (e *ChasmEngine) createNewExecution(
 	}
 
 	chasmContext := chasm.NewMutableContext(ctx, chasmTree)
+
 	rootComponent, err := newFn(chasmContext)
 	if err != nil {
 		return newExecutionParams{}, err
 	}
-	chasmTree.SetRootComponent(rootComponent)
+	if err := chasmTree.SetRootComponent(rootComponent); err != nil {
+		return newExecutionParams{}, err
+	}
+
+	if updateFn != nil {
+		if err = updateFn(chasmContext, rootComponent); err != nil {
+			return newExecutionParams{}, err
+		}
+	}
 
 	snapshot, events, err := mutableState.CloseTransactionAsSnapshot(ctx, historyi.TransactionPolicyActive)
 	if err != nil {
@@ -523,6 +743,21 @@ func (e *ChasmEngine) persistAsBrandNew(
 		createRequestID:                     createRequestID,
 		CurrentWorkflowConditionFailedError: currentRunConditionFailedError,
 	}, true, nil
+}
+
+func currentExecutionInfoFromMutableState(ms historyi.MutableState) currentExecutionInfo {
+	execState := ms.GetExecutionState()
+	state, status := ms.GetWorkflowStateStatus()
+	return currentExecutionInfo{
+		createRequestID: execState.GetCreateRequestId(),
+		CurrentWorkflowConditionFailedError: &persistence.CurrentWorkflowConditionFailedError{
+			RunID:            ms.GetWorkflowKey().RunID,
+			State:            state,
+			Status:           status,
+			LastWriteVersion: ms.GetCurrentVersion(),
+			RequestIDs:       execState.GetRequestIds(),
+		},
+	}
 }
 
 func (e *ChasmEngine) handleExecutionConflict(
