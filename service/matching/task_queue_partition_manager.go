@@ -1193,9 +1193,10 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 
 // emitZeroLogicalBacklogForQueue zeroes out logical backlog gauges for a single physical queue
 // to prevent stale values after unloading. Called from:
-// - Stop(): after each physical queue is stopped during full partition unload.
-// - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
-//   unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
+//   - Stop(): after each physical queue is stopped during full partition unload.
+//   - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
+//     unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
+//
 // Only zeroes priority keys that actually exist in the queue's subqueues to avoid creating
 // noisy zero-value series.
 func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version PhysicalTaskQueueVersion, pq physicalTaskQueueManager) {
@@ -1210,8 +1211,6 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version 
 	}
 	metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
 }
-
-
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
