@@ -223,7 +223,7 @@ func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
 	rootComponent := &TestComponent{
 		MSPointer: NewMSPointer(s.nodeBackend),
 	}
-	rootNode.SetRootComponent(rootComponent)
+	s.NoError(rootNode.SetRootComponent(rootComponent))
 	s.Equal(testComponentTypeID, rootNode.ArchetypeID())
 	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
 }
@@ -465,7 +465,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
 		}
-		rootNode.SetRootComponent(rootComponent)
+		s.NoError(rootNode.SetRootComponent(rootComponent))
 
 		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
