@@ -241,6 +241,8 @@ func serviceNameToServiceTypeEnum(name primitives.ServiceName) (persistence.Serv
 		return persistence.Matching, nil
 	case primitives.WorkerService:
 		return persistence.Worker, nil
+	case primitives.WorkerControllerService:
+		return persistence.WorkerControllerService, nil
 	default:
 		return persistence.All, fmt.Errorf("unable to parse servicename '%s'", name)
 	}

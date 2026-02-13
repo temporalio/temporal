@@ -104,6 +104,7 @@ type (
 
 		ServiceNames    resource.ServiceNames
 		NamespaceLogger resource.NamespaceLogger
+		ExternalService *ExternalService
 
 		ServiceResolver        resolver.ServiceResolver
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
@@ -139,6 +140,7 @@ var (
 			FrontendServiceProvider,
 			InternalFrontendServiceProvider,
 			WorkerServiceProvider,
+			ExternalServiceProvider,
 			ApplyClusterMetadataConfigProvider,
 		),
 		dynamicconfig.Module,
@@ -288,6 +290,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ServiceNames:    so.serviceNames,
 		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
+		ExternalService: so.externalService,
 
 		ServiceResolver:        so.persistenceServiceResolver,
 		CustomDataStoreFactory: so.customDataStoreFactory,
@@ -346,6 +349,7 @@ type (
 
 		Cfg                        *config.Config
 		ServiceNames               resource.ServiceNames
+		ExternalService            *ExternalService
 		Logger                     log.Logger
 		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
@@ -578,6 +582,19 @@ func WorkerServiceProvider(
 	)
 
 	return NewService(app, serviceName, params.Logger), app.Err()
+}
+
+func ExternalServiceProvider(params ServiceProviderParamsCommon) (ServicesGroupOut, error) {
+	if params.ExternalService == nil {
+		return ServicesGroupOut{}, nil
+	}
+
+	app := fx.New(
+		params.GetCommonServiceOptions(primitives.ServiceName(params.ExternalService.ServiceName)),
+		params.ExternalService.Module,
+	)
+
+	return NewService(app, params.ExternalService.ServiceName, params.Logger), app.Err()
 }
 
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.

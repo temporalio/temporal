@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -57,6 +58,12 @@ func ForServices(names []string) ServerOption {
 		for _, name := range names {
 			s.serviceNames[primitives.ServiceName(name)] = struct{}{}
 		}
+	})
+}
+
+func WithExternalService(serviceName primitives.ServiceName, module fx.Option) ServerOption {
+	return applyFunc(func(s *serverOptions) {
+		s.externalService = &ExternalService{ServiceName: serviceName, Module: module}
 	})
 }
 
