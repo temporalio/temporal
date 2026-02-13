@@ -99,7 +99,13 @@ func (s *standaloneActivityTestSuite) SetupTest() {
 	s.tv = testvars.New(s.T())
 }
 
-func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
+func (s *standaloneActivityTestSuite) TestStartActivityExecution() {
+	s.Run("IDReusePolicy", s.testIDReusePolicy)
+	s.Run("IDConflictPolicy", s.testIDConflictPolicy)
+	s.testStartValidations()
+}
+
+func (s *standaloneActivityTestSuite) testIDReusePolicy() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -172,7 +178,7 @@ func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
+func (s *standaloneActivityTestSuite) testIDConflictPolicy() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -326,7 +332,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	require.NotNil(t, pollTaskResp.TaskToken)
 }
 
-func (s *standaloneActivityTestSuite) TestStart() {
+func (s *standaloneActivityTestSuite) testStartValidations() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -2279,7 +2285,16 @@ func (s *standaloneActivityTestSuite) TestScheduleToStartTimeout() {
 		"expected ScheduleToStartTimeout but is %s", describeResp.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 }
 
-func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
+func (s *standaloneActivityTestSuite) TestDescribeActivityExecution() {
+	s.Run("NoWait", s.testDescribeActivityExecution_NoWait)
+	s.Run("WaitAnyStateChange", s.testDescribeActivityExecution_WaitAnyStateChange)
+	s.Run("Completed", s.testDescribeActivityExecution_Completed)
+	s.Run("DeadlineExceeded", s.testDescribeActivityExecution_DeadlineExceeded)
+	s.Run("NotFound", s.testDescribeActivityExecution_NotFound)
+	s.Run("InvalidArgument", s.testDescribeActivityExecution_InvalidArgument)
+}
+
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_NoWait() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
@@ -2393,7 +2408,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NoWait() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyStateChange() {
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_WaitAnyStateChange() {
 	// Long poll for any state change. PollActivityTaskQueue is used to cause a state change.
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -2511,7 +2526,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_WaitAnyState
 	require.NoError(t, err)
 }
 
-func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_Completed() {
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_Completed() {
 	testCases := []struct {
 		name             string
 		expectedStatus   enumspb.ActivityExecutionStatus
@@ -2745,9 +2760,13 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			tc.completionValidationFn(t, pollActivityResp)
 		})
 	}
+
+	s.Run("EmptyRunID", s.testPollActivityExecution_EmptyRunID)
+	s.Run("NotFound", s.testPollActivityExecution_NotFound)
+	s.Run("InvalidArgument", s.testPollActivityExecution_InvalidArgument)
 }
 
-func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
+func (s *standaloneActivityTestSuite) testPollActivityExecution_EmptyRunID() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	t.Cleanup(cancel)
@@ -2779,7 +2798,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_EmptyRunID() {
 	protorequire.ProtoEqual(t, defaultResult, pollActivityResp.GetOutcome().GetResult())
 }
 
-func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
+func (s *standaloneActivityTestSuite) testPollActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -2841,7 +2860,7 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution_NotFound() {
 	}
 }
 
-func (s *standaloneActivityTestSuite) TestPollActivityExecution_InvalidArgument() {
+func (s *standaloneActivityTestSuite) testPollActivityExecution_InvalidArgument() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -3278,7 +3297,7 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExceeded() {
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_DeadlineExceeded() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -3354,7 +3373,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_DeadlineExce
 	// and caller's client timing out the request. Therefore we do not test this.
 }
 
-func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_NotFound() {
 	t := s.T()
 	ctx := testcore.NewContext()
 
@@ -3437,7 +3456,7 @@ func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_NotFound() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestDescribeActivityExecution_InvalidArgument() {
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_InvalidArgument() {
 
 	t := s.T()
 	ctx := testcore.NewContext()
