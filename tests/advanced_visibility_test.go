@@ -1643,16 +1643,14 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}
-  5 WorkflowTaskScheduled`, historyEvents)
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}`, historyEvents)
 	} else {
 		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace().String()))
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}
-  5 WorkflowTaskScheduled`, s.Namespace().String()), historyEvents)
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.Namespace().String()), historyEvents)
 	}
 }
 
