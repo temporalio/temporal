@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -165,6 +166,10 @@ type (
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
 		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
 		workerInstancePollers workerPollerTracker
+		// shutdownWorkers caches WorkerInstanceKeys of workers that have initiated shutdown.
+		// Polls arriving with a cached key return empty immediately to prevent task dispatch
+		// to a shutting-down worker (handles race where poll arrives after cancellation completes).
+		shutdownWorkers cache.Cache
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -293,6 +298,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		shutdownWorkers:           cache.New(10000, &cache.Options{TTL: config.ShutdownWorkerCacheTTL()}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -650,6 +656,14 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
 
+	// Return empty immediately if this worker has already initiated shutdown.
+	// This guards against polls that arrive after CancelOutstandingWorkerPolls completed.
+	if workerInstanceKey := request.GetWorkerInstanceKey(); workerInstanceKey != "" {
+		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+			return emptyPollWorkflowTaskQueueResponse, nil
+		}
+	}
+
 	// Namespace field is not populated for forwarded requests.
 	if len(request.Namespace) == 0 {
 		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
@@ -952,6 +966,14 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
 
+	// Return empty immediately if this worker has already initiated shutdown.
+	// This guards against polls that arrive after CancelOutstandingWorkerPolls completed.
+	if workerInstanceKey := request.GetWorkerInstanceKey(); workerInstanceKey != "" {
+		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+			return emptyPollActivityTaskQueueResponse, nil
+		}
+	}
+
 	// Namespace field is not populated for forwarded requests.
 	if len(request.Namespace) == 0 {
 		ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
@@ -1212,7 +1234,16 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+	workerInstanceKey := request.WorkerInstanceKey
+	cancelledCount := e.workerInstancePollers.CancelAll(workerInstanceKey)
+
+	// Cache the WorkerInstanceKey to guard against polls that arrive after this
+	// cancellation completes (edge case: poll was already in-flight when shutdown started).
+	// Any new poll with this key will return empty immediately.
+	if workerInstanceKey != "" {
+		e.shutdownWorkers.Put(workerInstanceKey, struct{}{})
+	}
+
 	e.removePollerFromHistory(ctx, request)
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }

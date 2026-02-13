@@ -475,6 +475,13 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 		`PollerHistoryTTL is the time to live for poller histories in the pollerHistory cache of a physical task queue. Poller histories are fetched when
 		requiring a list of pollers that polled a given task queue.`,
 	)
+	ShutdownWorkerCacheTTL = NewGlobalDurationSetting(
+		"matching.ShutdownWorkerCacheTTL",
+		60*time.Second,
+		`ShutdownWorkerCacheTTL is the time to live for entries in the shutdown worker cache. When a worker calls
+		ShutdownWorker, its WorkerInstanceKey is cached for this duration. Any poll arriving with a cached
+		WorkerInstanceKey returns empty immediately, preventing task dispatch to a shutting-down worker.`,
+	)
 	ReachabilityBuildIdVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
 		3*time.Minute,

@@ -72,6 +72,7 @@ type (
 		RedirectRuleMaxUpstreamBuildIDsPerQueue  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		DeletedRuleRetentionTime                 dynamicconfig.DurationPropertyFnWithNamespaceFilter
 		PollerHistoryTTL                         dynamicconfig.DurationPropertyFnWithNamespaceFilter
+		ShutdownWorkerCacheTTL                   dynamicconfig.DurationPropertyFn
 		ReachabilityBuildIdVisibilityGracePeriod dynamicconfig.DurationPropertyFnWithNamespaceFilter
 		ReachabilityCacheOpenWFsTTL              dynamicconfig.DurationPropertyFn
 		ReachabilityCacheClosedWFsTTL            dynamicconfig.DurationPropertyFn
@@ -310,6 +311,7 @@ func NewConfig(
 		RedirectRuleMaxUpstreamBuildIDsPerQueue:  dynamicconfig.RedirectRuleMaxUpstreamBuildIDsPerQueue.Get(dc),
 		DeletedRuleRetentionTime:                 dynamicconfig.MatchingDeletedRuleRetentionTime.Get(dc),
 		PollerHistoryTTL:                         dynamicconfig.PollerHistoryTTL.Get(dc),
+		ShutdownWorkerCacheTTL:                   dynamicconfig.ShutdownWorkerCacheTTL.Get(dc),
 		ReachabilityBuildIdVisibilityGracePeriod: dynamicconfig.ReachabilityBuildIdVisibilityGracePeriod.Get(dc),
 		ReachabilityCacheOpenWFsTTL:              dynamicconfig.ReachabilityCacheOpenWFsTTL.Get(dc),
 		ReachabilityCacheClosedWFsTTL:            dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
