@@ -779,24 +779,20 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 		}
 	}
 
-	if attributionEnabled {
-		for priority, count := range counts {
-			metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
-		}
-		if oldestTime.IsZero() {
-			metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
-		} else {
-			metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
-		}
+	backlogCountGauge := metrics.PhysicalApproximateBacklogCount
+	backlogAgeGauge := metrics.PhysicalApproximateBacklogAgeSeconds
+	if !attributionEnabled {
+		backlogCountGauge = metrics.ApproximateBacklogCount
+		backlogAgeGauge = metrics.ApproximateBacklogAgeSeconds
+	}
+
+	for priority, count := range counts {
+		backlogCountGauge.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
+	}
+	if oldestTime.IsZero() {
+		backlogAgeGauge.With(db.metricsHandler).Record(0)
 	} else {
-		for priority, count := range counts {
-			metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
-		}
-		if oldestTime.IsZero() {
-			metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
-		} else {
-			metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
-		}
+		backlogAgeGauge.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -877,16 +873,16 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 	}
 	db.Unlock()
 
-	if attributionEnabled {
-		for k := range priorities {
-			metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
-		}
-		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
-	} else {
-		for k := range priorities {
-			metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
-		}
-		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+	backlogCountGauge := metrics.PhysicalApproximateBacklogCount
+	backlogAgeGauge := metrics.PhysicalApproximateBacklogAgeSeconds
+	if !attributionEnabled {
+		backlogCountGauge = metrics.ApproximateBacklogCount
+		backlogAgeGauge = metrics.ApproximateBacklogAgeSeconds
 	}
+
+	for k := range priorities {
+		backlogCountGauge.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	}
+	backlogAgeGauge.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }
