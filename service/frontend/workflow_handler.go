@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -64,6 +65,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -144,6 +146,7 @@ type (
 		outstandingPollers              collection.SyncMap[string, collection.SyncMap[string, context.CancelFunc]]
 		httpEnabled                     bool
 		registry                        *chasm.Registry
+		workerDeploymentReadRateLimiter quotas.RequestRateLimiter
 	}
 )
 
@@ -176,6 +179,7 @@ func NewWorkflowHandler(
 	httpEnabled bool,
 	activityHandler activity.FrontendHandler,
 	registry *chasm.Registry,
+	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		FrontendHandler: activityHandler,
@@ -222,15 +226,16 @@ func NewWorkflowHandler(
 			),
 			config.SuppressErrorSetSystemSearchAttribute,
 		),
-		archivalMetadata:    archivalMetadata,
-		healthServer:        healthServer,
-		overrides:           NewOverrides(),
-		membershipMonitor:   membershipMonitor,
-		healthInterceptor:   healthInterceptor,
-		scheduleSpecBuilder: scheduleSpecBuilder,
-		outstandingPollers:  collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
-		httpEnabled:         httpEnabled,
-		registry:            registry,
+		archivalMetadata:                archivalMetadata,
+		healthServer:                    healthServer,
+		overrides:                       NewOverrides(),
+		membershipMonitor:               membershipMonitor,
+		healthInterceptor:               healthInterceptor,
+		scheduleSpecBuilder:             scheduleSpecBuilder,
+		outstandingPollers:              collection.NewSyncMap[string, collection.SyncMap[string, context.CancelFunc]](),
+		httpEnabled:                     httpEnabled,
+		registry:                        registry,
+		workerDeploymentReadRateLimiter: workerDeploymentReadRateLimiter,
 	}
 
 	return handler
@@ -475,7 +480,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, errWorkflowTypeTooLong
 	}
 
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -944,6 +949,28 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 
+	// Handle history from matching response:
+	// 1. If History field is set, use it directly (already processed by history service or matching)
+	// 2. If RawHistory is set, use RawHistory (raw bytes path, needs SA processing)
+	//
+	// When history.sendRawHistoryBytesToMatchingService is enabled, matching service passes raw bytes
+	// through to RawHistory field. The matching client auto-deserializes the repeated bytes into
+	// a History message via gRPC wire compatibility.
+	history := matchingResp.History
+	if matchingResp.RawHistory != nil {
+		history = matchingResp.RawHistory
+		// Process search attributes for raw history since it bypasses the normal processing path.
+		if err := api.ProcessOutgoingSearchAttributes(
+			wh.saProvider,
+			wh.saMapperProvider,
+			history.GetEvents(),
+			namespaceEntry.Name(),
+			wh.visibilityMgr,
+		); err != nil {
+			return nil, err
+		}
+	}
+
 	return &workflowservice.PollWorkflowTaskQueueResponse{
 		TaskToken:                  matchingResp.TaskToken,
 		WorkflowExecution:          matchingResp.WorkflowExecution,
@@ -953,7 +980,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Query:                      matchingResp.Query,
 		BacklogCountHint:           matchingResp.BacklogCountHint,
 		Attempt:                    matchingResp.Attempt,
-		History:                    matchingResp.History,
+		History:                    history,
 		NextPageToken:              matchingResp.NextPageToken,
 		WorkflowExecutionTaskQueue: matchingResp.WorkflowExecutionTaskQueue,
 		ScheduledTime:              matchingResp.ScheduledTime,
@@ -2120,7 +2147,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
 
@@ -2809,42 +2836,136 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 		return nil, errRequestNotSet
 	}
 
-	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	// route heartbeat to the matching service
-	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-			NamespaceId: namespaceId.String(),
-			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace:       request.Namespace,
-				Identity:        request.Identity,
-				WorkerHeartbeat: heartbeats,
-			},
+	// Run all shutdown operations concurrently to minimize latency.
+	var waitGroup sync.WaitGroup
+
+	// Cancel outstanding polls (best-effort)
+	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
+		waitGroup.Go(func() {
+			wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
 		})
-		if err != nil {
-			wh.logger.Error("Failed to record worker heartbeat during shutdown.",
-				tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
-				tag.Error(err))
-		}
 	}
 
+	// Record final heartbeat (best-effort)
+	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
+		waitGroup.Go(func() {
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat},
+				},
+			})
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat during shutdown.",
+					tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+					tag.Error(err))
+			}
+		})
+	}
+
+	// Unload sticky task queue (required - error fails shutdown)
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
-	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
-		NamespaceId: namespaceId.String(),
+	_, unloadError := wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceID.String(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     request.GetStickyTaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
 		},
 	})
-	if err != nil {
-		return nil, err
+
+	waitGroup.Wait()
+
+	if unloadError != nil {
+		return nil, unloadError
 	}
 
 	return &workflowservice.ShutdownWorkerResponse{}, nil
+}
+
+// cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
+// This is a best-effort operation - errors are logged but don't fail the shutdown.
+func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.ShutdownWorkerRequest,
+) {
+	workerInstanceKey := request.GetWorkerInstanceKey()
+	taskQueueName := request.GetTaskQueue()
+	if workerInstanceKey == "" || taskQueueName == "" {
+		return
+	}
+
+	namespaceName := request.GetNamespace()
+
+	// Use task queue types from request, or default to both workflow and activity
+	taskTypes := request.GetTaskQueueTypes()
+	if len(taskTypes) == 0 {
+		taskTypes = []enumspb.TaskQueueType{
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		}
+	}
+
+	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
+	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	if err != nil {
+		wh.logger.Warn("Invalid task queue name for poll cancellation.",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+
+	var waitGroup sync.WaitGroup
+	var totalCancelled atomic.Int32
+	var failedPartitions atomic.Int32
+
+	for _, taskType := range taskTypes {
+		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
+		if numPartitions < 1 {
+			numPartitions = 1
+		}
+
+		tq := tqFamily.TaskQueue(taskType)
+		for partitionID := range numPartitions {
+			partition := tq.NormalPartition(partitionID)
+			waitGroup.Go(func() {
+				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
+					NamespaceId: namespaceID,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: partition.RpcName(),
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType:     taskType,
+					WorkerInstanceKey: workerInstanceKey,
+					WorkerIdentity:    request.GetIdentity(),
+				})
+				if err != nil {
+					failedPartitions.Add(1)
+					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.String("worker-instance-key", workerInstanceKey),
+						tag.Error(err))
+				} else {
+					totalCancelled.Add(resp.CancelledCount)
+				}
+			})
+		}
+	}
+	waitGroup.Wait()
+
+	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
+		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
+			tag.String("worker-instance-key", workerInstanceKey),
+			tag.NewInt32("cancelled-count", totalCancelled.Load()),
+			tag.NewInt32("failed-partitions", failedPartitions.Load()))
+	}
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
@@ -3321,7 +3442,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 	wh.logger.Debug("Received CreateSchedule",
 		tag.ScheduleID(request.ScheduleId),
 		tag.WorkflowNamespace(namespaceName.String()),
-		tag.NewBoolTag("chasm-enabled", useChasmScheduler))
+		tag.Bool("chasm-enabled", useChasmScheduler))
 
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
@@ -3350,6 +3471,17 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 		wh.config.EnableCHASMSchedulerCreation(namespaceName)
 }
 
+// isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
+// indicates that the request should be routed to the legacy (V1) scheduler stack.
+// This accounts for two situations:
+//   - NotFound: the CHASM stack doesn't have a schedule for that ID
+//   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
+//     for the V1 stack)
+func isSchedulerErrorLegacyRoutable(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
+}
+
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
@@ -3371,7 +3503,8 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return errWorkflowTypeTooLong
 	}
 
-	if err := tqid.NormalizeAndValidate(startWorkflow.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
+	// user cannot start internal workflows through schedule
+	if err := tqid.NormalizeAndValidateUserDefined(startWorkflow.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return err
 	}
 
@@ -3447,6 +3580,10 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 
 	if !wh.config.EnableDeploymentVersions(request.Namespace) {
 		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	if err := wh.checkWorkerDeploymentReadRateLimit(ctx, request.GetNamespace(), "DescribeWorkerDeploymentVersion"); err != nil {
+		return nil, err
 	}
 
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
@@ -3646,6 +3783,18 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 		return nil, errRequestNotSet
 	}
 
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	if err := wh.checkWorkerDeploymentReadRateLimit(ctx, request.GetNamespace(), "DescribeWorkerDeployment"); err != nil {
+		return nil, err
+	}
+
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
@@ -3782,8 +3931,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err == nil {
 			return resp, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4029,8 +4177,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4188,8 +4335,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4264,8 +4410,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		if err == nil {
 			return resp, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4356,8 +4501,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4437,7 +4581,25 @@ func (wh *WorkflowHandler) ListSchedules(
 	}
 
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	if err != nil {
+		return nil, err
+	}
 
+	if chasmEnabled {
+		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+	}
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+}
+
+// prepareSchedulerQuery validates a scheduler RPC's query argument, and wraps it
+// in the appropriate base query.
+func (wh *WorkflowHandler) prepareSchedulerQuery(
+	chasmEnabled bool,
+	query string,
+	namespaceName namespace.Name,
+) (string, error) {
 	// Use different base queries based on code path:
 	// - CHASM path uses TemporalSystemExecutionStatus (translated via archetype ID)
 	// - V1 path uses ExecutionStatus directly (no archetype ID available)
@@ -4446,29 +4608,27 @@ func (wh *WorkflowHandler) ListSchedules(
 		baseQuery = scheduler.VisibilityListQueryChasm
 	}
 
-	query := baseQuery
-	if strings.TrimSpace(request.Query) != "" {
+	result := baseQuery
+	if strings.TrimSpace(query) != "" {
 		saNameType, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
-			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+			return "", serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
+
 		if err := scheduler.ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			wh.saMapperProvider,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
-			request.Query,
+			query,
 		); err != nil {
-			return nil, err
+			return "", err
 		}
-		query = fmt.Sprintf("%s AND (%s)", baseQuery, request.Query)
+
+		result = fmt.Sprintf("%s AND (%s)", baseQuery, query)
 	}
 
-	if chasmEnabled {
-		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
-		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
-	}
-	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+	return result, nil
 }
 
 func (wh *WorkflowHandler) listSchedulesChasm(
@@ -4562,6 +4722,103 @@ func (wh *WorkflowHandler) listSchedulesWorkflow(
 	return &workflowservice.ListSchedulesResponse{
 		Schedules:     schedules,
 		NextPageToken: persistenceResp.NextPageToken,
+	}, nil
+}
+
+func (wh *WorkflowHandler) CountSchedules(
+	ctx context.Context,
+	request *workflowservice.CountSchedulesRequest,
+) (_ *workflowservice.CountSchedulesResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.EnableSchedules(request.Namespace) {
+		return nil, errSchedulesNotAllowed
+	}
+
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
+		return nil, errListNotAllowed
+	}
+
+	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Route to CHASM or V1 based on config (same pattern as ListSchedules)
+	if chasmEnabled {
+		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, query)
+	}
+	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, query)
+}
+
+// countSchedulesChasm counts schedules using CHASM APIs
+func (wh *WorkflowHandler) countSchedulesChasm(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	namespaceName namespace.Name,
+	query string,
+) (*workflowservice.CountSchedulesResponse, error) {
+	resp, err := chasm.CountExecutions[*chasmscheduler.Scheduler](ctx, &chasm.CountExecutionsRequest{
+		NamespaceID:   namespaceID.String(),
+		NamespaceName: namespaceName.String(),
+		Query:         query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountSchedulesResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountSchedulesResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountSchedulesResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
+}
+
+// countSchedulesWorkflow counts schedules using direct visibility query (V1 path)
+func (wh *WorkflowHandler) countSchedulesWorkflow(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	namespaceName namespace.Name,
+	query string,
+) (*workflowservice.CountSchedulesResponse, error) {
+	persistenceResp, err := wh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: namespaceID,
+		Namespace:   namespaceName,
+		Query:       query,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountSchedulesResponse_AggregationGroup, 0, len(persistenceResp.Groups))
+	for _, g := range persistenceResp.Groups {
+		groups = append(groups, &workflowservice.CountSchedulesResponse_AggregationGroup{
+			GroupValues: g.GroupValues,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountSchedulesResponse{
+		Count:  persistenceResp.Count,
+		Groups: groups,
 	}, nil
 }
 
@@ -5188,7 +5445,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 	default:
 		operationType = enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED
-		wh.throttledLogger.Warn("Unknown batch operation type", tag.NewStringTag("batch-operation-type", operationTypeString))
+		wh.throttledLogger.Warn("Unknown batch operation type", tag.String("batch-operation-type", operationTypeString))
 	}
 
 	batchOperationResp := &workflowservice.DescribeBatchOperationResponse{
@@ -5303,6 +5560,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
+
 	if err := tqid.NormalizeAndValidate(request.TaskQueue, "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
 	}
@@ -5425,8 +5683,11 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
-	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	// nolint:staticcheck // checking deprecated field for backwards compatibility
+	if opErr := request.GetResponse().GetStartOperation().GetOperationError(); opErr != nil {
+		if details := opErr.GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
 	}
 
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
@@ -5466,8 +5727,16 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
 
-	if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
+	}
+	if request.GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) { // nolint:staticcheck // checking deprecated field for backwards compatibility
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
+	}
+	if request.GetFailure() != nil && request.GetFailure().GetNexusHandlerFailureInfo() == nil {
+		return nil, serviceerror.NewInvalidArgument("request Failure must contain error or failure with NexusHandlerFailureInfo")
 	}
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this
@@ -5549,6 +5818,26 @@ func (wh *WorkflowHandler) validateOnConflictOptions(opts *workflowpb.OnConflict
 	}
 	if opts.AttachCompletionCallbacks && !opts.AttachRequestId {
 		return serviceerror.NewInvalidArgument("attaching request ID is required for attaching completion callbacks")
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Context, namespaceName, apiName string) error {
+	callerInfo := headers.GetCallerInfo(ctx)
+	req := quotas.NewRequest(
+		apiName,
+		1,
+		namespaceName,
+		callerInfo.CallerType,
+		-1,
+		callerInfo.CallOrigin,
+	)
+
+	if !wh.workerDeploymentReadRateLimiter.Allow(time.Now().UTC(), req) {
+		return serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			fmt.Sprintf("Worker Deployment Read API rate limit exceeded for namespace %q", namespaceName),
+		)
 	}
 	return nil
 }

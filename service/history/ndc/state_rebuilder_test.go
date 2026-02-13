@@ -74,7 +74,7 @@ func (s *stateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 	config := tests.NewDynamicConfig()
-	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,

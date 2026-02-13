@@ -48,7 +48,7 @@ func (h *handler) Handle(_ context.Context, record slog.Record) error {
 	tags := make([]tag.Tag, len(h.tags), len(h.tags)+record.NumAttrs())
 	copy(tags, h.tags)
 	record.Attrs(func(attr slog.Attr) bool {
-		tags = append(tags, tag.NewZapTag(convertAttrToField(h.prependGroup(attr))))
+		tags = append(tags, tag.Zap(convertAttrToField(h.prependGroup(attr))))
 		return true
 	})
 	// Not capturing the log location and stack trace here. We seem to not need this functionality since our zapLogger
@@ -72,7 +72,7 @@ func (h *handler) WithAttrs(attrs []slog.Attr) slog.Handler {
 	tags := make([]tag.Tag, len(h.tags), len(h.tags)+len(attrs))
 	copy(tags, h.tags)
 	for _, attr := range attrs {
-		tags = append(tags, tag.NewZapTag(convertAttrToField(h.prependGroup(attr))))
+		tags = append(tags, tag.Zap(convertAttrToField(h.prependGroup(attr))))
 	}
 	return &handler{logger: h.logger, zapLogger: h.zapLogger, tags: tags, group: h.group}
 }

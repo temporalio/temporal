@@ -24,8 +24,8 @@ func newDialTracer(
 ) *dialTracer {
 	l := log.With(
 		logger,
-		tag.NewStringTag("service", "client"),
-		tag.NewStringTag("address", address),
+		tag.String("service", "client"),
+		tag.String("address", address),
 	)
 
 	return &dialTracer{
@@ -61,14 +61,14 @@ func (d *dialTracer) endNetworkDial(ndt *networkDialTrace, dialErr error) {
 
 	if dialErr != nil {
 		fields := []tag.Tag{
-			tag.NewDurationTag("totalDuration", total),
+			tag.Duration("totalDuration", total),
 			tag.Error(dialErr),
 			tag.ErrorType(dialErr),
-			tag.NewDurationTag("connectDuration", ndt.connectDuration),
-			tag.NewStringTag("connectAddr", ndt.connectAddr),
+			tag.Duration("connectDuration", ndt.connectDuration),
+			tag.String("connectAddr", ndt.connectAddr),
 		}
 		if ndt.connectErr != nil {
-			fields = append(fields, tag.NewStringTag("connectErr", ndt.connectErr.Error()))
+			fields = append(fields, tag.String("connectErr", ndt.connectErr.Error()))
 		}
 		d.logger.Warn("network dial error", fields...)
 		metrics.ServiceDialErrorCount.With(d.metricsHandler).Record(1)

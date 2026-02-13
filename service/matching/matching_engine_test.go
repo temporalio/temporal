@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -60,6 +61,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -556,7 +558,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	}, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
-	expectedResp := &matchingservice.PollWorkflowTaskQueueResponse{
+	expectedResp := &matchingservice.PollWorkflowTaskQueueResponseWithRawHistory{
 		TaskToken:              resp.TaskToken,
 		WorkflowExecution:      execution,
 		WorkflowType:           workflowType,
@@ -1899,11 +1901,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordActivityTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.GetScheduledEventId()]; ok {
-				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordActivityTaskStartedRequest", tag.Int64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 				return nil, serviceerror.NewNotFound("already started")
 			}
 
-			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
+			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest", tag.Int64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 			startedTasks[taskRequest.GetScheduledEventId()] = struct{}{}
 			return &historyservice.RecordActivityTaskStartedResponse{
 				Attempt: 1,
@@ -2051,11 +2053,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	s.mockHistoryClient.EXPECT().RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, taskRequest *historyservice.RecordWorkflowTaskStartedRequest, arg2 ...interface{}) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 			if _, ok := startedTasks[taskRequest.GetScheduledEventId()]; ok {
-				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
+				s.logger.Debug("From error function Mock Received DUPLICATED RecordWorkflowTaskStartedRequest", tag.Int64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 				return nil, serviceerrors.NewTaskAlreadyStarted("Workflow")
 			}
 
-			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.NewInt64("scheduled-event-id", taskRequest.GetScheduledEventId()))
+			s.logger.Debug("Mock Received RecordWorkflowTaskStartedRequest", tag.Int64("scheduled-event-id", taskRequest.GetScheduledEventId()))
 			startedTasks[taskRequest.GetScheduledEventId()] = struct{}{}
 			return &historyservice.RecordWorkflowTaskStartedResponse{
 				PreviousStartedEventId: startedEventID,
@@ -2918,18 +2920,41 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 	task.finish(nil, true)
 }
 
+type mockRoutingMatchingClient struct {
+	*matchingservicemock.MockMatchingServiceClient
+	sr membership.ServiceResolver
+}
+
+func (m mockRoutingMatchingClient) Route(p tqid.Partition) (string, error) {
+	key, n := p.RoutingKey(0)
+	hosts := m.sr.LookupN(key, n+1)
+	if len(hosts) == 0 {
+		return "", membership.ErrInsufficientHosts
+	}
+	return hosts[n%len(hosts)].GetAddress(), nil
+}
+
 func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	// need to create a new engine for this test to customize mockServiceResolver
 	s.mockServiceResolver = membership.NewMockServiceResolver(s.controller)
 	s.mockServiceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockServiceResolver.EXPECT().RemoveListener(gomock.Any()).AnyTimes()
 
+	// add Route to MockMatchingServiceClient
+	routingClient := mockRoutingMatchingClient{
+		MockMatchingServiceClient: s.mockMatchingClient,
+		sr:                        s.mockServiceResolver,
+	}
+
 	self := s.mockHostInfoProvider.HostInfo()
 	other := membership.NewHostInfoFromAddress("other")
 
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
-	e := s.newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager)
+
+	e := newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager, s.mockHistoryClient,
+		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
+		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 	e.Start()
 	defer e.Stop()
 
@@ -2948,15 +2973,17 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	s.mockServiceResolver.EXPECT().Lookup(nexusEndpointsTablePartitionRoutingKey).Return(self, nil).AnyTimes()
 
 	// signal membership changed and give time for loop to wake up
-	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
-	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(self, nil)
+	p1key, p1n := p1.RoutingKey(0)
+	p2key, p2n := p2.RoutingKey(0)
+	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
+	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{self})
 	e.membershipChangedCh <- nil
 	time.Sleep(50 * time.Millisecond)
 	s.Equal(2, len(e.getTaskQueuePartitions(1000)), "nothing should be unloaded yet")
 
 	// signal again but p2 doesn't belong to us anymore
-	s.mockServiceResolver.EXPECT().Lookup(p1.RoutingKey()).Return(self, nil)
-	s.mockServiceResolver.EXPECT().Lookup(p2.RoutingKey()).Return(other, nil).Times(2)
+	s.mockServiceResolver.EXPECT().LookupN(p1key, p1n+1).Return([]membership.HostInfo{self})
+	s.mockServiceResolver.EXPECT().LookupN(p2key, p2n+1).Return([]membership.HostInfo{other}).Times(2)
 	e.membershipChangedCh <- nil
 	s.Eventually(func() bool {
 		return len(e.getTaskQueuePartitions(1000)) == 1
@@ -4807,9 +4834,14 @@ type testQueueData struct {
 	tasks    treemap.Map
 	userData *persistencespb.VersionedTaskQueueUserData
 
+	testQueuePersistenceStats
+}
+
+type testQueuePersistenceStats struct {
 	createTaskCount  int
 	getTasksCount    int
 	getUserDataCount int
+	createCount      int
 	updateCount      int
 }
 
@@ -4834,6 +4866,12 @@ func (q *testQueueData) RangeID() int64 {
 	return q.rangeID
 }
 
+func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
+	q.Lock()
+	defer q.Unlock()
+	return q.testQueuePersistenceStats
+}
+
 func (m *testTaskManager) CreateTaskQueue(
 	_ context.Context,
 	request *persistence.CreateTaskQueueRequest,
@@ -4846,6 +4884,8 @@ func (m *testTaskManager) CreateTaskQueue(
 
 	tlm.Lock()
 	defer tlm.Unlock()
+
+	tlm.createCount++
 
 	if tlm.rangeID != 0 {
 		return nil, &persistence.ConditionFailedError{
@@ -5195,6 +5235,408 @@ func (*testTaskManager) CountTaskQueuesByBuildId(context.Context, *persistence.C
 	return 0, nil
 }
 
+func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                            string
+		inputResp                       *matchingservice.PollWorkflowTaskQueueResponse
+		expectHistory                   bool
+		expectSearchAttributeProcessing bool
+	}{
+		{
+			name:      "nil response returns nil",
+			inputResp: nil,
+		},
+		{
+			name: "response with History field only",
+			// History field means it's already processed by history service
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+				History: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+								WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+									SearchAttributes: &commonpb.SearchAttributes{
+										IndexedFields: map[string]*commonpb.Payload{
+											"CustomKeywordField": {Data: []byte("test")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectHistory:                   true,
+			expectSearchAttributeProcessing: false, // History field = already processed
+		},
+		{
+			name: "response with RawHistory field only",
+			// RawHistory field means it came from raw bytes and needs processing
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+				RawHistory: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+								WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+									SearchAttributes: &commonpb.SearchAttributes{
+										IndexedFields: map[string]*commonpb.Payload{
+											"CustomKeywordField": {Data: []byte("test")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expectHistory:                   true,
+			expectSearchAttributeProcessing: true, // RawHistory field = needs processing
+		},
+		{
+			name: "response with both History and RawHistory - History takes precedence",
+			// When both are present, History takes precedence and it's already processed
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+				History: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{
+							EventId:   1,
+							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+							Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+								WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+									SearchAttributes: &commonpb.SearchAttributes{
+										IndexedFields: map[string]*commonpb.Payload{
+											"CustomKeywordField": {Data: []byte("test")},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				RawHistory: &historypb.History{
+					Events: []*historypb.HistoryEvent{
+						{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
+					},
+				},
+			},
+			expectHistory:                   true,
+			expectSearchAttributeProcessing: false, // History field takes precedence = already processed
+		},
+		{
+			name: "response with no history",
+			inputResp: &matchingservice.PollWorkflowTaskQueueResponse{
+				TaskToken: []byte("token"),
+			},
+			expectHistory:                   false,
+			expectSearchAttributeProcessing: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockSAProvider := searchattribute.NewMockProvider(ctrl)
+			mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
+			mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+			engine := &matchingEngineImpl{
+				config:            defaultTestConfig(),
+				saProvider:        mockSAProvider,
+				saMapperProvider:  mockSAMapperProvider,
+				visibilityManager: mockVisibilityManager,
+			}
+
+			// Set up expectations for search attribute processing.
+			// Using Times(1) to verify ProcessOutgoingSearchAttributes is actually called.
+			if tc.expectSearchAttributeProcessing && tc.inputResp != nil {
+				mockVisibilityManager.EXPECT().GetIndexName().Return("test-index").Times(1)
+				mockSAProvider.EXPECT().GetSearchAttributes("test-index", false).Return(searchattribute.NameTypeMap{}, nil).Times(1)
+				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).Times(1)
+			}
+
+			result, err := engine.convertPollWorkflowTaskQueueResponse(tc.inputResp, "test-namespace")
+			require.NoError(t, err)
+
+			if tc.inputResp == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			require.NotNil(t, result)
+			assert.Equal(t, tc.inputResp.TaskToken, result.TaskToken)
+
+			if tc.expectHistory {
+				assert.NotNil(t, result.History)
+				// When both History and RawHistory are present, History takes precedence
+				if tc.inputResp.History != nil {
+					assert.Equal(t, tc.inputResp.History.Events[0].EventId, result.History.Events[0].EventId)
+				} else if tc.inputResp.RawHistory != nil {
+					assert.Equal(t, tc.inputResp.RawHistory.Events[0].EventId, result.History.Events[0].EventId)
+				}
+			} else {
+				assert.Nil(t, result.History)
+			}
+		})
+	}
+}
+
+func TestConvertPollWorkflowTaskQueueResponse_FieldMapping(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockSAProvider := searchattribute.NewMockProvider(ctrl)
+	mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
+	mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+	engine := &matchingEngineImpl{
+		config:            defaultTestConfig(),
+		saProvider:        mockSAProvider,
+		saMapperProvider:  mockSAMapperProvider,
+		visibilityManager: mockVisibilityManager,
+	}
+
+	inputResp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token"),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "wf-id",
+			RunId:      "run-id",
+		},
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "test-workflow",
+		},
+		PreviousStartedEventId: 5,
+		StartedEventId:         10,
+		Attempt:                2,
+		NextEventId:            15,
+		BacklogCountHint:       100,
+		StickyExecutionEnabled: true,
+		Query: &querypb.WorkflowQuery{
+			QueryType: "test-query",
+		},
+		BranchToken:   []byte("branch-token"),
+		NextPageToken: []byte("next-page-token"),
+		History: &historypb.History{
+			Events: []*historypb.HistoryEvent{
+				{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			},
+		},
+	}
+
+	result, err := engine.convertPollWorkflowTaskQueueResponse(inputResp, "test-namespace")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify all fields are correctly mapped
+	assert.Equal(t, inputResp.TaskToken, result.TaskToken)
+	assert.Equal(t, inputResp.WorkflowExecution.WorkflowId, result.WorkflowExecution.WorkflowId)
+	assert.Equal(t, inputResp.WorkflowExecution.RunId, result.WorkflowExecution.RunId)
+	assert.Equal(t, inputResp.WorkflowType.Name, result.WorkflowType.Name)
+	assert.Equal(t, inputResp.PreviousStartedEventId, result.PreviousStartedEventId)
+	assert.Equal(t, inputResp.StartedEventId, result.StartedEventId)
+	assert.Equal(t, inputResp.Attempt, result.Attempt)
+	assert.Equal(t, inputResp.NextEventId, result.NextEventId)
+	assert.Equal(t, inputResp.BacklogCountHint, result.BacklogCountHint)
+	assert.Equal(t, inputResp.StickyExecutionEnabled, result.StickyExecutionEnabled)
+	assert.Equal(t, inputResp.Query.QueryType, result.Query.QueryType)
+	assert.Equal(t, inputResp.BranchToken, result.BranchToken)
+	assert.Equal(t, inputResp.NextPageToken, result.NextPageToken)
+	assert.Equal(t, inputResp.History.Events[0].EventId, result.History.Events[0].EventId)
+}
+
+func TestGetHistoryForQueryTask(t *testing.T) {
+	t.Parallel()
+
+	nsID := namespace.ID("test-namespace-id")
+	nsName := namespace.Name("test-namespace")
+	workflowID := "test-workflow-id"
+	runID := "test-run-id"
+
+	tests := []struct {
+		name                                 string
+		isStickyEnabled                      bool
+		sendRawHistoryBytesToMatchingService bool
+		setupMocks                           func(*historyservicemock.MockHistoryServiceClient, *namespace.MockRegistry)
+		expectHistory                        bool
+		expectRawHistoryBytes                bool
+		expectNextPageToken                  bool
+		expectError                          bool
+	}{
+		{
+			name:                                 "sticky enabled returns empty history",
+			isStickyEnabled:                      true,
+			sendRawHistoryBytesToMatchingService: false,
+			setupMocks:                           func(_ *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {},
+			expectHistory:                        true, // empty history
+		},
+		{
+			name:                                 "SendRawHistoryBytesToMatchingService disabled uses GetWorkflowExecutionHistory",
+			isStickyEnabled:                      false,
+			sendRawHistoryBytesToMatchingService: false,
+			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, mockNsRegistry *namespace.MockRegistry) {
+				mockNsRegistry.EXPECT().GetNamespaceName(nsID).Return(nsName, nil).Times(1)
+				mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(
+					&historyservice.GetWorkflowExecutionHistoryResponse{
+						Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
+							History: &historypb.History{
+								Events: []*historypb.HistoryEvent{
+									{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+								},
+							},
+							NextPageToken: []byte("next-token"),
+						},
+					}, nil).Times(1)
+			},
+			expectHistory:       true,
+			expectNextPageToken: true,
+		},
+		{
+			name:                                 "SendRawHistoryBytesToMatchingService enabled uses GetWorkflowExecutionRawHistory",
+			isStickyEnabled:                      false,
+			sendRawHistoryBytesToMatchingService: true,
+			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
+				mockHistoryClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), gomock.Any()).Return(
+					&historyservice.GetWorkflowExecutionRawHistoryResponse{
+						Response: &adminservice.GetWorkflowExecutionRawHistoryResponse{
+							HistoryBatches: []*commonpb.DataBlob{
+								{Data: []byte("raw-history-batch-1")},
+								{Data: []byte("raw-history-batch-2")},
+							},
+							NextPageToken: []byte("raw-next-token"),
+						},
+					}, nil).Times(1)
+			},
+			expectRawHistoryBytes: true,
+			expectNextPageToken:   true,
+		},
+		{
+			name:                                 "GetWorkflowExecutionRawHistory error is propagated",
+			isStickyEnabled:                      false,
+			sendRawHistoryBytesToMatchingService: true,
+			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
+				mockHistoryClient.EXPECT().GetWorkflowExecutionRawHistory(gomock.Any(), gomock.Any()).Return(
+					nil, errors.New("history service error")).Times(1)
+			},
+			expectError: true,
+		},
+		{
+			name:                                 "GetWorkflowExecutionHistory error is propagated",
+			isStickyEnabled:                      false,
+			sendRawHistoryBytesToMatchingService: false,
+			setupMocks: func(mockHistoryClient *historyservicemock.MockHistoryServiceClient, _ *namespace.MockRegistry) {
+				mockHistoryClient.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), gomock.Any()).Return(
+					nil, errors.New("history service error")).Times(1)
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
+			mockNsRegistry := namespace.NewMockRegistry(ctrl)
+			mockSAProvider := searchattribute.NewMockProvider(ctrl)
+			mockSAMapperProvider := searchattribute.NewMockMapperProvider(ctrl)
+			mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+			// Set up config
+			config := defaultTestConfig()
+			config.SendRawHistoryBytesToMatchingService = dynamicconfig.GetBoolPropertyFn(tc.sendRawHistoryBytesToMatchingService)
+
+			// Set up mock expectations for ProcessInternalRawHistory when using old path
+			if !tc.isStickyEnabled && !tc.sendRawHistoryBytesToMatchingService && !tc.expectError {
+				mockVisibilityManager.EXPECT().GetIndexName().Return("test-index").AnyTimes()
+				mockSAProvider.EXPECT().GetSearchAttributes("test-index", false).Return(searchattribute.NameTypeMap{}, nil).AnyTimes()
+				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+			}
+
+			engine := &matchingEngineImpl{
+				config:            config,
+				historyClient:     mockHistoryClient,
+				namespaceRegistry: mockNsRegistry,
+				saProvider:        mockSAProvider,
+				saMapperProvider:  mockSAMapperProvider,
+				visibilityManager: mockVisibilityManager,
+				logger:            log.NewNoopLogger(),
+			}
+
+			tc.setupMocks(mockHistoryClient, mockNsRegistry)
+
+			// Create a mock task
+			task := &internalTask{
+				namespace: nsName,
+				event: &genericTaskInfo{
+					AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
+						Data: &persistencespb.TaskInfo{
+							NamespaceId: nsID.String(),
+							WorkflowId:  workflowID,
+							RunId:       runID,
+						},
+					},
+				},
+			}
+
+			hist, rawHistoryBytes, nextPageToken, err := engine.getHistoryForQueryTask(
+				context.Background(),
+				nsID,
+				task,
+				tc.isStickyEnabled,
+			)
+
+			if tc.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tc.isStickyEnabled {
+				// Sticky enabled should return empty history
+				assert.NotNil(t, hist)
+				assert.Empty(t, hist.Events)
+				assert.Nil(t, rawHistoryBytes)
+				assert.Nil(t, nextPageToken)
+				return
+			}
+
+			if tc.expectRawHistoryBytes {
+				assert.Nil(t, hist)
+				assert.NotNil(t, rawHistoryBytes)
+				assert.Len(t, rawHistoryBytes, 2)
+				assert.Equal(t, []byte("raw-history-batch-1"), rawHistoryBytes[0])
+				assert.Equal(t, []byte("raw-history-batch-2"), rawHistoryBytes[1])
+			}
+
+			if tc.expectHistory {
+				assert.NotNil(t, hist)
+				assert.Nil(t, rawHistoryBytes)
+			}
+
+			if tc.expectNextPageToken {
+				assert.NotNil(t, nextPageToken)
+			}
+		})
+	}
+}
+
 func validateTimeRange(t time.Time, expectedDuration time.Duration) bool {
 	currentTime := time.Now().UTC()
 	diff := time.Duration(currentTime.UnixNano() - t.UnixNano())
@@ -5249,4 +5691,98 @@ func useFairness(config *Config) {
 
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
+}
+
+func TestCancelOutstandingWorkerPolls(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unknown worker key succeeds", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "unknown-worker",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(0), resp.CancelledCount)
+	})
+
+	t.Run("cancels all polls for worker", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		workerKey := "test-worker"
+		cancelledCount := 0
+
+		// Set up 3 pollers for this worker
+		engine.workerInstancePollers.Add(workerKey, "poller-0", func() { cancelledCount++ })
+		engine.workerInstancePollers.Add(workerKey, "poller-1", func() { cancelledCount++ })
+		engine.workerInstancePollers.Add(workerKey, "poller-2", func() { cancelledCount++ })
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(3), resp.CancelledCount)
+		require.Equal(t, 3, cancelledCount)
+	})
+
+	t.Run("does not affect other workers", func(t *testing.T) {
+		t.Parallel()
+		worker1Cancelled := false
+		worker2Cancelled := false
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		// Set up pollers for worker1 and worker2
+		engine.workerInstancePollers.Add("worker-1", "poller-1", func() { worker1Cancelled = true })
+		engine.workerInstancePollers.Add("worker-2", "poller-2", func() { worker2Cancelled = true })
+
+		// Cancel worker1's polls only
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "worker-1",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(1), resp.CancelledCount)
+		require.True(t, worker1Cancelled)
+		require.False(t, worker2Cancelled)
+	})
+
+	t.Run("cancels forwarded polls with same pollerID on different partitions", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+
+		workerKey := "test-worker"
+		pollerID := "same-poller-id"
+		childCancelled := false
+		parentCancelled := false
+
+		// Simulate forwarding: same pollerID registered on child and parent partitions.
+		// The key includes partition name to prevent parent from overwriting child.
+		engine.workerInstancePollers.Add(workerKey, "/_sys/test-queue/1:"+pollerID, func() { childCancelled = true })
+		engine.workerInstancePollers.Add(workerKey, "test-queue:"+pollerID, func() { parentCancelled = true })
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp.CancelledCount)
+		require.True(t, childCancelled, "child partition poll should be cancelled")
+		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
 }

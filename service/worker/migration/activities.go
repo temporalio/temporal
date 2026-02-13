@@ -245,17 +245,17 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
 			}
 			a.logger.Info("Wait catchup not ready",
-				tag.NewInt32("ShardId", shard.ShardId),
-				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
-				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
-				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
-				tag.NewTimeTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
-				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
-				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
+				tag.Int32("ShardId", shard.ShardId),
+				tag.String("RemoteCluster", waitRequest.RemoteCluster),
+				tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.Int64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+				tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
+				tag.Duration("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
+				tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.Time("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
+				tag.Time("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
+				tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
+				tag.Int64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 		}
 	}
@@ -327,12 +327,12 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 				a.logger.Info("Wait handover missing handover namespace info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster), tag.WorkflowNamespace(waitRequest.Namespace))
 			} else {
 				a.logger.Info("Wait handover not ready",
-					tag.NewInt32("ShardId", shard.ShardId),
-					tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-					tag.NewInt64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
-					tag.NewStringTag("Namespace", waitRequest.Namespace),
-					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-					tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+					tag.Int32("ShardId", shard.ShardId),
+					tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
+					tag.Int64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
+					tag.String("Namespace", waitRequest.Namespace),
+					tag.String("RemoteCluster", waitRequest.RemoteCluster),
+					tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
 				)
 			}
 		}
@@ -345,9 +345,9 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		metrics.TargetClusterTag(waitRequest.RemoteCluster),
 		metrics.NamespaceTag(waitRequest.Namespace))
 	a.logger.Info("Wait handover ready shard count.",
-		tag.NewInt("ReadyShards", readyShardCount),
-		tag.NewStringTag("Namespace", waitRequest.Namespace),
-		tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster))
+		tag.Int("ReadyShards", readyShardCount),
+		tag.String("Namespace", waitRequest.Namespace),
+		tag.String("RemoteCluster", waitRequest.RemoteCluster))
 
 	return readyShardCount == len(resp.Shards), nil
 }
@@ -489,18 +489,16 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	executions := make([]*ExecutionInfo, 0, len(resp.Executions))
 	for _, e := range resp.Executions {
 		executionInfo := &ExecutionInfo{
-			executionInfoNewJSON: executionInfoNewJSON{
-				BusinessID: e.Execution.GetWorkflowId(),
-				RunID:      e.Execution.GetRunId(),
-				// Ideally we should use chasm.WorkflowArchetypeID by default,
-				// but for backward compatibility reason we need this field to be 0
-				// to avoid unmarshaling errors since the previous type returned in
-				// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
-				// which does not have ArchetypeId field.
-				//
-				// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
-				ArchetypeID: chasm.UnspecifiedArchetypeID,
-			},
+			BusinessID: e.Execution.GetWorkflowId(),
+			RunID:      e.Execution.GetRunId(),
+			// Ideally we should use chasm.WorkflowArchetypeID by default,
+			// but for backward compatibility reason we need this field to be 0
+			// to avoid unmarshaling errors since the previous type returned in
+			// ListWorkflowExecutions.Executions is commonpb.WorkflowExecution
+			// which does not have ArchetypeId field.
+			//
+			// TODO: switch to chasm.WorkflowArchetypeID in release 1.31.0
+			ArchetypeID: chasm.UnspecifiedArchetypeID,
 		}
 
 		archetypeID, err := workercommon.ArchetypeIDFromExecutionInfo(e)
@@ -1037,17 +1035,17 @@ func (a *activities) checkReplicationOnRemoteCluster(ctx context.Context, waitRe
 			}
 
 			a.logger.Info("Wait catchup not ready",
-				tag.NewInt32("ShardId", shard.ShardId),
-				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-				tag.NewStringTag("Namespace", waitRequest.Namespace),
-				tag.NewStringTag("CatchupCluster", waitRequest.CatchupCluster),
-				tag.NewStringTag("TargetCluster", waitRequest.TargetCluster),
-				tag.NewInt64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
-				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
-				tag.NewDurationTag("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
-				tag.NewTimeTag("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
-				tag.NewTimeTag("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
-				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
+				tag.Int32("ShardId", shard.ShardId),
+				tag.Int64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.String("Namespace", waitRequest.Namespace),
+				tag.String("CatchupCluster", waitRequest.CatchupCluster),
+				tag.String("TargetCluster", waitRequest.TargetCluster),
+				tag.Int64("targetAckIDOnShard", targetAckIDOnShard[shard.ShardId]),
+				tag.Int64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.Duration("ActualLagging", shard.MaxReplicationTaskVisibilityTime.AsTime().Sub(clusterInfo.AckedTaskVisibilityTime.AsTime())),
+				tag.Time("MaxReplicationTaskVisibilityTime", shard.MaxReplicationTaskVisibilityTime.AsTime()),
+				tag.Time("AckedTaskVisibilityTime", clusterInfo.AckedTaskVisibilityTime.AsTime()),
+				tag.Int64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 
 		}

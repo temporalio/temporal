@@ -2,6 +2,7 @@
 package replication
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -16,8 +17,15 @@ type (
 		taskTrackingCount  int
 		lastSlowSubmission time.Time
 	}
+
+	// FlowControlInfo holds the flow control command and an optional cause string for logging when command is PAUSE.
+	FlowControlInfo struct {
+		Command enumsspb.ReplicationFlowControlCommand
+		Cause   string
+	}
+
 	ReceiverFlowController interface {
-		GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand
+		GetFlowControlInfo(priority enumsspb.TaskPriority) FlowControlInfo
 	}
 	streamReceiverFlowControllerImpl struct {
 		signalsProvider map[enumsspb.TaskPriority]FlowControlSignalProvider
@@ -32,21 +40,28 @@ func NewReceiverFlowControl(signals map[enumsspb.TaskPriority]FlowControlSignalP
 	}
 }
 
-func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enumsspb.TaskPriority) enumsspb.ReplicationFlowControlCommand {
+func (s *streamReceiverFlowControllerImpl) GetFlowControlInfo(priority enumsspb.TaskPriority) FlowControlInfo {
 	if signal, ok := s.signalsProvider[priority]; ok {
 		signalData := signal()
+		limit := s.config.ReplicationReceiverMaxOutstandingTaskCount()
 
-		if signalData.taskTrackingCount > s.config.ReplicationReceiverMaxOutstandingTaskCount() {
-			return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+		if signalData.taskTrackingCount > limit {
+			return FlowControlInfo{
+				Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+				Cause:   fmt.Sprintf("task count %d > limit %d", signalData.taskTrackingCount, limit),
+			}
 		}
 
 		if s.config.EnableReplicationReceiverSlowSubmissionFlowControl() {
 			now := time.Now()
 			slowSubmissionWindow := now.Add(-s.config.ReplicationReceiverSlowSubmissionWindow())
 			if signalData.lastSlowSubmission.After(slowSubmissionWindow) {
-				return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE
+				return FlowControlInfo{
+					Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE,
+					Cause:   fmt.Sprintf("slow submission within window (last at %v)", signalData.lastSlowSubmission),
+				}
 			}
 		}
 	}
-	return enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME
+	return FlowControlInfo{Command: enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_RESUME}
 }

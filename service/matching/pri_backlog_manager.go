@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -230,6 +231,11 @@ func (c *priBacklogManagerImpl) periodicSync() {
 			err := c.db.SyncState(ctx)
 			cancel()
 			c.signalIfFatal(err)
+
+			if c.hasFinishedDraining() {
+				c.pqMgr.FinishedDraining()
+				return
+			}
 		}
 	}
 }
@@ -389,6 +395,38 @@ func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *priBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+// hasFinishedDraining returns true if this is a draining backlog manager and all tasks have
+// been fully drained (read and acked).
+func (c *priBacklogManagerImpl) hasFinishedDraining() bool {
+	if !c.isDraining {
+		return false
+	}
+
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	for _, r := range c.subqueues {
+		if !r.isDrained() {
+			return false
+		}
+	}
+	return true
+}
+
+// FinalGC does a final gc pass on all subqueues.
+func (c *priBacklogManagerImpl) FinalGC() {
+	if !softassert.That(c.logger, c.isDraining, "FinalGC called on non-draining backlog manager") {
+		return
+	}
+	c.subqueueLock.Lock()
+	subqueues := slices.Clone(c.subqueues)
+	c.subqueueLock.Unlock()
+
+	for _, r := range subqueues {
+		r.finalGC()
+	}
 }
 
 func (c *priBacklogManagerImpl) setPriority(task *internalTask) {

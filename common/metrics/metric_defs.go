@@ -44,6 +44,8 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+	VersionReactivationSignalCacheTypeTagValue        = "version_reactivation_signal"
+	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
 	InvalidHistoryURITagValue    = "invalid_history_uri"
@@ -457,6 +459,12 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
+	// VersionReactivationSignalCacheShouldSendScope is the scope used by version reactivation signal cache
+	VersionReactivationSignalCacheShouldSendScope = "VersionReactivationSignalCacheShouldSend"
+	// RoutingInfoCacheGetScope is the scope used by routing info cache
+	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
+	// RoutingInfoCachePutScope is the scope used by routing info cache
+	RoutingInfoCachePutScope = "RoutingInfoCachePut"
 )
 
 // Matching Scope
@@ -598,6 +606,9 @@ const (
 const (
 	ScheduleActionTypeTag       = "schedule_action"
 	ScheduleActionStartWorkflow = "start_workflow"
+	ScheduleBackendTag          = "scheduler_backend"
+	ScheduleBackendChasm        = "chasm"
+	ScheduleBackendLegacy       = "legacy"
 )
 
 var (
@@ -1005,6 +1016,9 @@ var (
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
+	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
+	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -1134,6 +1148,8 @@ var (
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	PhysicalApproximateBacklogCount        = NewGaugeDef("physical_approximate_backlog_count")
+	PhysicalApproximateBacklogAgeSeconds   = NewGaugeDef("physical_approximate_backlog_age_seconds")
 	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
@@ -1326,6 +1342,7 @@ var (
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
+	WorkflowTargetVersionChangedCount                 = NewCounterDef("workflow_target_version_changed_count")
 
 	// Continue-as-new
 	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")

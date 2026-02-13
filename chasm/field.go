@@ -39,8 +39,14 @@ func NewComponentField[C Component](
 	c C,
 	options ...ComponentFieldOption,
 ) Field[C] {
+	opts := &componentFieldOptions{}
+	for _, o := range options {
+		o(opts)
+	}
+	internal := newFieldInternalWithValue(fieldTypeComponent, c)
+	internal.detached = opts.detached
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypeComponent, c),
+		Internal: internal,
 	}
 }
 

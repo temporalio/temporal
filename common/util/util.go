@@ -100,6 +100,17 @@ func GetOrSetMap[M ~map[K]M2, M2 ~map[K2]V, K, K2 comparable, V any](m M, k K) M
 	return m2
 }
 
+// DeleteFromMap deletes k2 from the nested map m[k]. If the inner map becomes empty
+// after deletion, k is also removed from m to prevent memory leaks.
+func DeleteFromMap[M ~map[K]M2, M2 ~map[K2]V, K, K2 comparable, V any](m M, k K, k2 K2) {
+	if m2, ok := m[k]; ok {
+		delete(m2, k2)
+		if len(m2) == 0 {
+			delete(m, k)
+		}
+	}
+}
+
 // MapConcurrent concurrently maps a function over input and fails fast on error.
 func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([]OUT, error) {
 	errorsCh := make(chan error, len(input))

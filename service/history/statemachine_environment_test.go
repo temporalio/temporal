@@ -62,7 +62,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
 	s.controller = gomock.NewController(t)
 	config := tests.NewDynamicConfig()
-	config.EnableTransitionHistory = func() bool { return enableTransitionHistory }
+	config.EnableTransitionHistory = func(string) bool { return enableTransitionHistory }
 	s.version = s.namespaceEntry.FailoverVersion(namespace.EmptyBusinessID)
 
 	s.mockShard = shard.NewTestContextWithTimeSource(

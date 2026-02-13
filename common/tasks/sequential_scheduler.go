@@ -15,6 +15,10 @@ import (
 
 var _ Scheduler[Task] = (*SequentialScheduler[Task])(nil)
 
+const (
+	trySubmitLockTimeout = 200 * time.Millisecond
+)
+
 type (
 	SequentialSchedulerOptions struct {
 		QueueSize   int
@@ -28,6 +32,8 @@ type (
 
 		workerLock       sync.Mutex
 		workerShutdownCh []chan struct{}
+
+		trySubmitLock sync.Mutex
 
 		workerCountSubscriptionCancelFn func()
 
@@ -134,7 +140,32 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 	}
 }
 
+// TrySubmit use mu locking to make it thread safe which has higher latency and not suitable for high throughput
 func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
+	// Try to acquire lock with timeout to prevent concurrent TrySubmit race condition
+	lockCh := make(chan struct{}, 1)
+	unlockCh := make(chan struct{})
+	go func() {
+		s.trySubmitLock.Lock()
+		defer s.trySubmitLock.Unlock()
+		select {
+		case lockCh <- struct{}{}:
+			// Successfully notified main goroutine
+			<-unlockCh // Wait for signal to unlock
+		case <-unlockCh:
+			// Main goroutine timed out, just unlock and exit
+		}
+	}()
+
+	defer close(unlockCh) // Always signal goroutine when we're done
+
+	select {
+	case <-lockCh:
+		// Lock acquired, proceed with submission
+	case <-time.After(trySubmitLockTimeout):
+		return false
+	}
+
 	queue := s.queueFactory(task)
 	queue.Add(task)
 

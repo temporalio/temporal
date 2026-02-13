@@ -342,7 +342,7 @@ func NewMutableState(
 		appliedEvents:                make(map[string]struct{}),
 		InsertTasks:                  make(map[tasks.Category][]tasks.Task),
 		BestEffortDeleteTasks:        make(map[tasks.Category][]tasks.Key),
-		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(),
+		transitionHistoryEnabled:     shard.GetConfig().EnableTransitionHistory(namespaceName),
 		visibilityUpdated:            false,
 		executionStateUpdated:        false,
 		workflowTaskUpdated:          false,
@@ -696,7 +696,9 @@ func (ms *MutableStateImpl) ensureChasmWorkflowComponent(ctx context.Context) {
 
 	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
 		mutableContext := chasm.NewMutableContext(ctx, root)
-		root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms)))
+		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
+			softassert.Fail(ms.logger, "SetRootComponent failed", tag.Error(err))
+		}
 	}
 }
 
@@ -722,10 +724,10 @@ func (ms *MutableStateImpl) ChasmWorkflowComponentReadOnly(ctx context.Context) 
 func (ms *MutableStateImpl) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexusrpc.OperationCompletion, error) {
+) (nexusrpc.CompleteOperationOptions, error) {
 	ce, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
-		return nil, err
+		return nexusrpc.CompleteOperationOptions{}, err
 	}
 
 	// Create the link information about the workflow to be attached to fabricated started event if completion is
@@ -734,24 +736,25 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 		Namespace:  ms.namespaceEntry.Name().String(),
 		WorkflowId: ms.executionInfo.WorkflowId,
 		RunId:      ms.executionState.RunId,
-		// Backwards compatibility: this is the default link type.
-		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+	}
+	requestIDInfo := ms.executionState.RequestIds[requestID]
+	// For a callback that is attached to a running workflow, we create a RequestIdReference link since the event may be
+	// buffered and not have a final event ID yet.
+	if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
+		// If the callback was attached, then replace with RequestIdReference.
+		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: requestID,
+				EventType: requestIDInfo.GetEventType(),
+			},
+		}
+	} else {
+		// For a callback that is attached on workflow start, we create an EventReference link.
+		link.Reference = &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 				EventId:   common.FirstEventID,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			},
-		},
-	}
-	if ms.config.EnableRequestIdRefLinks() {
-		requestIDInfo := ms.executionState.RequestIds[requestID]
-		if requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED {
-			// If the callback was attached, then replace with RequestIdReference.
-			link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-				RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-					RequestId: requestID,
-					EventType: requestIDInfo.GetEventType(),
-				},
-			}
 		}
 	}
 	startLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(link)
@@ -766,30 +769,33 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			// Nexus does not support it.
 			p = payloads[0]
 		}
-		completion, err := nexusrpc.NewOperationCompletionSuccessful(p, nexusrpc.OperationCompletionSuccessfulOptions{
-			Serializer: commonnexus.PayloadSerializer,
-			StartTime:  ms.executionState.GetStartTime().AsTime(),
-			CloseTime:  ce.GetEventTime().AsTime(),
-			Links:      []nexus.Link{startLink},
-		})
-		if err != nil {
-			return nil, serviceerror.NewInternalf("failed to construct Nexus completion: %v", err)
-		}
-		return completion, nil
+		return nexusrpc.CompleteOperationOptions{
+			Result:    p,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		f, err := commonnexus.APIFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
+		f, err := commonnexus.TemporalFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			Message: "operation failed",
+			State:   nexus.OperationStateFailed,
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
+		return nexusrpc.CompleteOperationOptions{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
+		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation canceled",
 			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
 				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
@@ -798,37 +804,48 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{
-				State: nexus.OperationStateCanceled,
-				Cause: &nexus.FailureError{Failure: f},
-			},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			State:   nexus.OperationStateCanceled,
+			Message: "operation canceled",
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
+		return nexusrpc.CompleteOperationOptions{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
+		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation terminated",
 			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
 				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			State:   nexus.OperationStateFailed,
+			Message: "operation failed",
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
+		return nexusrpc.CompleteOperationOptions{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		f, err := commonnexus.APIFailureToNexusFailure(&failurepb.Failure{
+		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
 			Message: "operation exceeded internal timeout",
 			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
 				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -838,20 +855,24 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 			},
 		})
 		if err != nil {
-			return nil, err
+			return nexusrpc.CompleteOperationOptions{}, err
 		}
-		return nexusrpc.NewOperationCompletionUnsuccessful(
-			&nexus.OperationError{
-				State: nexus.OperationStateFailed,
-				Cause: &nexus.FailureError{Failure: f},
-			},
-			nexusrpc.OperationCompletionUnsuccessfulOptions{
-				StartTime: ms.executionState.GetStartTime().AsTime(),
-				CloseTime: ce.GetEventTime().AsTime(),
-				Links:     []nexus.Link{startLink},
-			})
+		opErr := &nexus.OperationError{
+			State:   nexus.OperationStateFailed,
+			Message: "operation failed",
+			Cause:   &nexus.FailureError{Failure: f},
+		}
+		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
+		return nexusrpc.CompleteOperationOptions{
+			Error:     opErr,
+			StartTime: ms.executionState.GetStartTime().AsTime(),
+			CloseTime: ce.GetEventTime().AsTime(),
+			Links:     []nexus.Link{startLink},
+		}, nil
 	}
-	return nil, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
+	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
 }
 
 // GetHSMCallbackArg converts a workflow completion event into a [persistencespb.HSMCallbackArg].
@@ -3250,10 +3271,11 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskStartedEvent(
 	versioningStamp *commonpb.WorkerVersionStamp,
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) (*historyi.WorkflowTaskInfo, error) {
 	return ms.workflowTaskManager.ApplyWorkflowTaskStartedEvent(workflowTask, version, scheduledEventID,
 		startedEventID, requestID, timestamp, suggestContinueAsNew, historySizeBytes, versioningStamp, redirectCounter,
-		suggestContinueAsNewReasons)
+		suggestContinueAsNewReasons, targetWorkerDeploymentVersionChanged)
 }
 
 // TODO (alex-update): 	Transient needs to be renamed to "TransientOrSpeculative"
@@ -4166,7 +4188,7 @@ func (ms *MutableStateImpl) AddActivityTaskCompletedEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowStartedEventID(startedEventID))
 		return nil, ms.createInternalServerError(opTag)
@@ -4215,7 +4237,7 @@ func (ms *MutableStateImpl) AddActivityTaskFailedEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID),
 			tag.WorkflowStartedEventID(startedEventID))
 		return nil, ms.createInternalServerError(opTag)
@@ -4266,7 +4288,7 @@ func (ms *MutableStateImpl) AddActivityTaskTimedOutEvent(
 		ms.logger.Warn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(ai.ScheduledEventId),
 			tag.WorkflowStartedEventID(ai.StartedEventId),
 			tag.WorkflowTimeoutType(timeoutType))
@@ -4317,7 +4339,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 			ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 				tag.WorkflowEventID(ms.GetNextEventID()),
 				tag.ErrorTypeInvalidHistoryAction,
-				tag.Bool(ok),
+				tag.Bool("hasActivityInfo", ok),
 				tag.WorkflowScheduledEventID(scheduledEventID))
 
 			return nil, nil, ms.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
@@ -4329,7 +4351,7 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasActivityInfo", ok),
 			tag.WorkflowScheduledEventID(scheduledEventID))
 
 		return nil, nil, ms.createCallerError(opTag, fmt.Sprintf("ScheduledEventID: %d", scheduledEventID))
@@ -4586,7 +4608,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowState(ms.executionState.State),
-			tag.Bool(ms.executionInfo.CancelRequested),
+			tag.Bool("cancelRequested", ms.executionInfo.CancelRequested),
 			tag.Key(ms.executionInfo.CancelRequestId),
 		)
 		return nil, ms.createInternalServerError(opTag)
@@ -5542,7 +5564,7 @@ func (ms *MutableStateImpl) updateVersioningOverride(
 		}
 	}
 
-	return requestReschedulePendingWorkflowTask, ms.reschedulePendingActivities()
+	return requestReschedulePendingWorkflowTask, ms.reschedulePendingActivities(0)
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTerminatedEvent(
@@ -5851,7 +5873,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -5912,7 +5934,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -5957,7 +5979,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6005,7 +6027,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(!ok),
+			tag.Bool("doesntHaveChildInfo", !ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6054,7 +6076,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6101,7 +6123,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6148,7 +6170,7 @@ func (ms *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 		ms.logWarn(mutableStateInvalidHistoryActionMsg, opTag,
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
-			tag.Bool(ok),
+			tag.Bool("hasChildInfo", ok),
 			tag.WorkflowInitiatedID(initiatedID))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6496,16 +6518,16 @@ func (ms *MutableStateImpl) logReportedProblemsChange(oldPayload, newPayload []s
 	if oldPayload == nil && newPayload != nil {
 		// Adding search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute added",
-			tag.NewStringsTag("reported-problems", newPayload))
+			tag.Strings("reported-problems", newPayload))
 	} else if oldPayload != nil && newPayload == nil {
 		// Removing search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute removed",
-			tag.NewStringsTag("previous-reported-problems", oldPayload))
+			tag.Strings("previous-reported-problems", oldPayload))
 	} else if oldPayload != nil && newPayload != nil {
 		// Updating search attribute
 		ms.logger.Info("TemporalReportedProblems search attribute updated",
-			tag.NewStringsTag("previous-reported-problems", oldPayload),
-			tag.NewStringsTag("reported-problems", newPayload))
+			tag.Strings("previous-reported-problems", oldPayload),
+			tag.Strings("reported-problems", newPayload))
 	}
 }
 
@@ -6835,7 +6857,7 @@ func (ms *MutableStateImpl) StartTransaction(
 		return false, serviceerror.NewUnavailable("MutableState encountered dirty transaction")
 	}
 
-	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory()
+	ms.transitionHistoryEnabled = ms.config.EnableTransitionHistory(namespaceEntry.Name().String())
 
 	namespaceEntry, err := ms.startTransactionHandleNamespaceMigration(namespaceEntry)
 	if err != nil {
@@ -6992,19 +7014,19 @@ type closeTransactionResult struct {
 	chasmNodesMutation chasm.NodesMutation
 }
 
-func (ms *MutableStateImpl) setMetaDataMap(
+func (ms *MutableStateImpl) SetContextMetadata(
 	ctx context.Context,
 ) {
 	switch ms.chasmTree.ArchetypeID() {
 	case chasm.WorkflowArchetypeID, chasm.UnspecifiedArchetypeID:
 		// Set workflow type
 		if wfType := ms.GetWorkflowType(); wfType != nil && wfType.GetName() != "" {
-			contextutil.ContextMetadataSet(ctx, "workflow-type", wfType.GetName())
+			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowType, wfType.GetName())
 		}
 
 		// Set workflow task queue
 		if ms.executionInfo != nil && ms.executionInfo.TaskQueue != "" {
-			contextutil.ContextMetadataSet(ctx, "workflow-task-queue", ms.executionInfo.TaskQueue)
+			contextutil.ContextMetadataSet(ctx, contextutil.MetadataKeyWorkflowTaskQueue, ms.executionInfo.TaskQueue)
 		}
 
 		// TODO: To set activity_type/activity_task_queue metadata, the history gRPC handler should
@@ -7018,7 +7040,7 @@ func (ms *MutableStateImpl) closeTransaction(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
 ) (closeTransactionResult, error) {
-	ms.setMetaDataMap(ctx)
+	ms.SetContextMetadata(ctx)
 
 	if err := ms.closeTransactionWithPolicyCheck(
 		transactionPolicy,
@@ -8695,11 +8717,12 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 			OriginalScheduledTime: incoming.WorkflowTaskOriginalScheduledTime.AsTime(),
 			Type:                  incoming.WorkflowTaskType,
 
-			SuggestContinueAsNew:        incoming.WorkflowTaskSuggestContinueAsNew,
-			SuggestContinueAsNewReasons: incoming.WorkflowTaskSuggestContinueAsNewReasons,
-			HistorySizeBytes:            incoming.WorkflowTaskHistorySizeBytes,
-			BuildId:                     incoming.WorkflowTaskBuildId,
-			BuildIdRedirectCounter:      incoming.WorkflowTaskBuildIdRedirectCounter,
+			SuggestContinueAsNew:                 incoming.WorkflowTaskSuggestContinueAsNew,
+			SuggestContinueAsNewReasons:          incoming.WorkflowTaskSuggestContinueAsNewReasons,
+			TargetWorkerDeploymentVersionChanged: incoming.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+			HistorySizeBytes:                     incoming.WorkflowTaskHistorySizeBytes,
+			BuildId:                              incoming.WorkflowTaskBuildId,
+			BuildIdRedirectCounter:               incoming.WorkflowTaskBuildIdRedirectCounter,
 		})
 		workflowTaskVersionUpdated = true
 	}
@@ -9044,7 +9067,7 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are
 // scheduled against the right queue in matching.
-func (ms *MutableStateImpl) reschedulePendingActivities() error {
+func (ms *MutableStateImpl) reschedulePendingActivities(wftScheduleToClose time.Duration) error {
 	for _, ai := range ms.GetPendingActivityInfos() {
 		if ai.StartedEventId != common.EmptyEventID {
 			// TODO: skip task generation also when activity is in backoff period
@@ -9055,6 +9078,14 @@ func (ms *MutableStateImpl) reschedulePendingActivities() error {
 		// need to update stamp so the passive side regenerate the task
 		err := ms.UpdateActivity(ai.ScheduledEventId, func(info *persistencespb.ActivityInfo, state historyi.MutableState) error {
 			info.Stamp++
+			// Updating scheduled time because we don't want the time spent on the transition wft to
+			// be considered in the schedule-to-start latency calculation.
+			// This is specifically needed for the cases that the activity is blocked not because of a
+			// backlog but because of an ongoing transition. See ActivityStartDuringTransition error usage.
+
+			info.ScheduledTime = timestamppb.New(info.ScheduledTime.AsTime().Add(wftScheduleToClose))
+			// This ensures the schedule to start timer task is regenerate so we don't miss the timout.
+			info.TimerTaskStatus &^= TimerTaskStatusCreatedScheduleToStart
 			return nil
 		})
 		if err != nil {
@@ -9087,8 +9118,16 @@ func (ms *MutableStateImpl) reschedulePendingWorkflowTask() error {
 		ms.logInfo("start transition did not reschedule pending speculative task")
 		return nil
 	}
-	// Reset the attempt; forcing a non-transient workflow task to be scheduled.
-	ms.executionInfo.WorkflowTaskAttempt = 1
+
+	// TODO (shahab): In case of transient task, consider converting it to normal because we want
+	// user to see in the workflow history that we are trying to dispatch workflow tasks
+	// to the new Version (say the old version has a failed WFT event, but the new version
+	// is also failing the tasks, we want another failed WFT event with the info from
+	// the worker in the new version).
+	// The other solution is showing the ongoing transition in the UI and CLI so user knows
+	// we're retrying on the new version.
+	// Note that we cannot simply set attempt to 1 here, because it does not guarantee
+	// generating new tasks all the time automatically by itself.
 
 	// Increase the stamp ("version") to invalidate the pending non-speculative WFT.
 	// We don't invalidate speculative WFTs because they are very latency sensitive.

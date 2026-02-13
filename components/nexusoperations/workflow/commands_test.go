@@ -388,6 +388,128 @@ func TestHandleScheduleCommand(t *testing.T) {
 		})
 	}
 
+	t.Run("invalid schedule-to-start timeout", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "op",
+					ScheduleToStartTimeout: durationpb.New(-1 * time.Second),
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Empty(t, tcx.history.Events)
+	})
+
+	t.Run("invalid start-to-close timeout", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:            "endpoint",
+					Service:             "service",
+					Operation:           "op",
+					StartToCloseTimeout: durationpb.New(-1 * time.Second),
+				},
+			},
+		})
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.Empty(t, tcx.history.Events)
+	})
+
+	t.Run("schedule-to-start timeout trimmed to schedule-to-close timeout", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "op",
+					ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(time.Hour),
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, tcx.history.Events, 1)
+		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
+		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToStartTimeout.AsDuration())
+		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToCloseTimeout.AsDuration())
+	})
+
+	t.Run("start-to-close timeout trimmed to schedule-to-close timeout", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "op",
+					ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(time.Hour),
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, tcx.history.Events, 1)
+		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
+		require.Equal(t, 30*time.Minute, eAttrs.StartToCloseTimeout.AsDuration())
+		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToCloseTimeout.AsDuration())
+	})
+
+	t.Run("both secondary timeouts trimmed to schedule-to-close timeout", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "op",
+					ScheduleToCloseTimeout: durationpb.New(30 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(time.Hour),
+					StartToCloseTimeout:    durationpb.New(2 * time.Hour),
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, tcx.history.Events, 1)
+		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
+		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToStartTimeout.AsDuration())
+		require.Equal(t, 30*time.Minute, eAttrs.StartToCloseTimeout.AsDuration())
+		require.Equal(t, 30*time.Minute, eAttrs.ScheduleToCloseTimeout.AsDuration())
+	})
+
+	t.Run("secondary timeouts not trimmed when less than schedule-to-close timeout", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:               "endpoint",
+					Service:                "service",
+					Operation:              "op",
+					ScheduleToCloseTimeout: durationpb.New(time.Hour),
+					ScheduleToStartTimeout: durationpb.New(20 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(30 * time.Minute),
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, tcx.history.Events, 1)
+		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
+		require.Equal(t, 20*time.Minute, eAttrs.ScheduleToStartTimeout.AsDuration())
+		require.Equal(t, 30*time.Minute, eAttrs.StartToCloseTimeout.AsDuration())
+		require.Equal(t, time.Hour, eAttrs.ScheduleToCloseTimeout.AsDuration())
+	})
+
 	t.Run("sets event attributes with UserMetadata and spawns a child operation machine", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		cAttrs := &commandpb.ScheduleNexusOperationCommandAttributes{

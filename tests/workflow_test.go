@@ -18,6 +18,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/testvars"
@@ -200,7 +202,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	s.OverrideDynamicConfig(callbacks.AllowedAddresses, []any{
 		map[string]any{"Pattern": "some-secure-address", "AllowInsecure": false},
 		map[string]any{"Pattern": "some-random-address", "AllowInsecure": false},
@@ -440,7 +441,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_Dedup() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          tv.RequestID(),
@@ -571,7 +571,6 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOptions_NoDedup() {
-	s.OverrideDynamicConfig(dynamicconfig.EnableRequestIdRefLinks, true)
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
@@ -1300,22 +1299,22 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		dropWorkflowTask := (i%2 == 0)
 		s.Logger.Info(testTag+"iteration starting",
 			tag.Counter(i),
-			tag.NewBoolTag("drop_task", dropWorkflowTask),
-			tag.NewDurationTag("time_since_test_start", time.Since(testStart)),
-			tag.NewDurationTag("time_since_last_drop", time.Since(lastDropTime)))
+			tag.Bool("drop_task", dropWorkflowTask),
+			tag.Duration("time_since_test_start", time.Since(testStart)),
+			tag.Duration("time_since_last_drop", time.Since(lastDropTime)))
 		var err error
 		if dropWorkflowTask {
 			_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithDropTask)
 			lastDropTime = time.Now()
 			s.Logger.Info(testTag+"dropped workflow task",
 				tag.Counter(i),
-				tag.NewDurationTag("poll_duration", time.Since(iterStart)))
+				tag.Duration("poll_duration", time.Since(iterStart)))
 		} else {
 			_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithExpectedAttemptCount(2))
 			s.Logger.Info(testTag+"processed workflow task (expected attempt=2)",
 				tag.Counter(i),
-				tag.NewDurationTag("poll_duration", time.Since(iterStart)),
-				tag.NewDurationTag("time_since_last_drop", time.Since(lastDropTime)),
+				tag.Duration("poll_duration", time.Since(iterStart)),
+				tag.Duration("time_since_last_drop", time.Since(lastDropTime)),
 				tag.Error(err))
 		}
 		if err != nil {
@@ -1331,7 +1330,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 			err = poller.PollAndProcessActivityTask(i%4 == 0)
 			s.Logger.Info(testTag+"activity task poll completed",
 				tag.Counter(i),
-				tag.NewDurationTag("activity_poll_duration", time.Since(activityStart)),
+				tag.Duration("activity_poll_duration", time.Since(activityStart)),
 				tag.Error(err))
 			s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 		}
@@ -1704,6 +1703,103 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 		request := makeRequest(sadefs.BatcherNamespace)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
 		s.NoError(err)
+	})
+
+}
+
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
+	tv := testvars.New(s.T())
+	errorMessageKeyword := "internal per namespace task queue"
+
+	// Test StartWorkflowExecution with internal task queue
+	s.Run("StartWorkflowExecution_PerNSWorkerTaskQueue", func() {
+		tvInternal := tv.WithTaskQueue(primitives.PerNSWorkerTaskQueue)
+		request := &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          s.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tvInternal.TaskQueue(),
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), errorMessageKeyword)
+	})
+
+	// Test SignalWithStartWorkflowExecution with internal task queue
+	s.Run("SignalWithStartWorkflowExecution_PerNSWorkerTaskQueue", func() {
+		tvInternal := tv.WithTaskQueue(primitives.PerNSWorkerTaskQueue)
+		request := &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			RequestId:          uuid.NewString(),
+			Namespace:          s.Namespace().String(),
+			WorkflowId:         testcore.RandomizeStr(s.T().Name()),
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tvInternal.TaskQueue(),
+			Input:              nil,
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+			SignalName:         "test-signal",
+		}
+		_, err := s.FrontendClient().SignalWithStartWorkflowExecution(testcore.NewContext(), request)
+		s.Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), errorMessageKeyword)
+	})
+
+	// Test ExecuteMultiOperation with internal task queue
+	s.Run("multiOp", func() {
+		tvInternal := tv.WithTaskQueue(primitives.PerNSWorkerTaskQueue)
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		request := &workflowservice.ExecuteMultiOperationRequest{
+			Namespace: s.Namespace().String(),
+			Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+				{
+					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+						StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+							RequestId:          uuid.NewString(),
+							Namespace:          s.Namespace().String(),
+							WorkflowId:         workflowID,
+							WorkflowType:       tv.WorkflowType(),
+							TaskQueue:          tvInternal.TaskQueue(),
+							Input:              nil,
+							WorkflowRunTimeout: durationpb.New(100 * time.Second),
+							Identity:           tv.WorkerIdentity(),
+						},
+					},
+				},
+				{
+					Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+						UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+							Namespace: s.Namespace().String(),
+							WorkflowExecution: &commonpb.WorkflowExecution{
+								WorkflowId: workflowID,
+							},
+							Request: &updatepb.Request{
+								Meta: &updatepb.Meta{
+									UpdateId: uuid.NewString(),
+								},
+								Input: &updatepb.Input{
+									Name: "update-name",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		_, err := s.FrontendClient().ExecuteMultiOperation(testcore.NewContext(), request)
+		s.Error(err)
+		var multiOpErr *serviceerror.MultiOperationExecution
+		s.ErrorAs(err, &multiOpErr)
+		s.Equal("Update-with-Start could not be executed.", err.Error())
+		opErrs := multiOpErr.OperationErrors()
+		s.Contains(opErrs[0].Error(), errorMessageKeyword)
 	})
 
 }

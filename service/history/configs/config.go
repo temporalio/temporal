@@ -62,10 +62,9 @@ type Config struct {
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
-	EnableTransitionHistory               dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCHASMCallbacksPerWorkflow          dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableRequestIdRefLinks               dynamicconfig.BoolPropertyFn
 	EnableChasm                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks             dynamicconfig.IntPropertyFn
@@ -383,6 +382,7 @@ type Config struct {
 	EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	SendRawHistoryBetweenInternalServices dynamicconfig.BoolPropertyFn
+	SendRawHistoryBytesToMatchingService  dynamicconfig.BoolPropertyFn
 	SendRawWorkflowHistory                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -401,9 +401,16 @@ type Config struct {
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Worker-Versioning related settings
-	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VersionMembershipCacheTTL            dynamicconfig.DurationPropertyFn
-	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
+	EnableSuggestCaNOnNewTargetVersion    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSendTargetVersionChanged        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	UseRevisionNumberForWorkerVersioning  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VersionMembershipCacheTTL             dynamicconfig.DurationPropertyFn
+	VersionMembershipCacheMaxSize         dynamicconfig.IntPropertyFn
+	VersionReactivationSignalCacheTTL     dynamicconfig.DurationPropertyFn
+	VersionReactivationSignalCacheMaxSize dynamicconfig.IntPropertyFn
+	EnableVersionReactivationSignals      dynamicconfig.BoolPropertyFn
+	RoutingInfoCacheTTL                   dynamicconfig.DurationPropertyFn
+	RoutingInfoCacheMaxSize               dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -464,7 +471,6 @@ func NewConfig(
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		MaxCHASMCallbacksPerWorkflow:          dynamicconfig.MaxCHASMCallbacksPerWorkflow.Get(dc),
-		EnableRequestIdRefLinks:               dynamicconfig.EnableRequestIdRefLinks.Get(dc),
 		EnableChasm:                           dynamicconfig.EnableChasm.Get(dc),
 		ChasmMaxInMemoryPureTasks:             dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
 
@@ -749,6 +755,7 @@ func NewConfig(
 		EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort:      dynamicconfig.EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort.Get(dc),
 
 		SendRawHistoryBetweenInternalServices:    dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
+		SendRawHistoryBytesToMatchingService:     dynamicconfig.SendRawHistoryBytesToMatchingService.Get(dc),
 		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
@@ -765,9 +772,16 @@ func NewConfig(
 		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
 
 		// Worker-Versioning related
-		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
-		VersionMembershipCacheTTL:            dynamicconfig.VersionMembershipCacheTTL.Get(dc),
-		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
+		UseRevisionNumberForWorkerVersioning:  dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		EnableSuggestCaNOnNewTargetVersion:    dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
+		EnableSendTargetVersionChanged:        dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
+		VersionMembershipCacheTTL:             dynamicconfig.VersionMembershipCacheTTL.Get(dc),
+		VersionMembershipCacheMaxSize:         dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
+		VersionReactivationSignalCacheTTL:     dynamicconfig.VersionReactivationSignalCacheTTL.Get(dc),
+		VersionReactivationSignalCacheMaxSize: dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc),
+		EnableVersionReactivationSignals:      dynamicconfig.EnableVersionReactivationSignals.Get(dc),
+		RoutingInfoCacheTTL:                   dynamicconfig.RoutingInfoCacheTTL.Get(dc),
+		RoutingInfoCacheMaxSize:               dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 	}
 
 	return cfg

@@ -130,7 +130,12 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				&cli.StringFlag{
 					Name:  FlagOutputFilename,
 					Usage: "output file",
-				}},
+				},
+				&cli.BoolFlag{
+					Name:  FlagDecode,
+					Usage: "Automatically decode payload data to JSON",
+				},
+			},
 			Action: func(c *cli.Context) error {
 				return AdminShowWorkflow(c, clientFactory)
 			},

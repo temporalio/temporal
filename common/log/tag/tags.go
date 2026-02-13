@@ -537,11 +537,6 @@ func NextNumber(n int64) ZapTag {
 	return NewInt64("next-number", n)
 }
 
-// Bool returns tag for Bool
-func Bool(b bool) ZapTag {
-	return NewBoolTag("bool", b)
-}
-
 // ServerName returns tag for ServerName
 func ServerName(serverName string) ZapTag {
 	return NewStringTag("server-name", serverName)

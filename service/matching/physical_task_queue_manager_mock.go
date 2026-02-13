@@ -60,9 +60,11 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(task any) *go
 }
 
 // AddSpooledTaskToMatcher mocks base method.
-func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) {
+func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret := m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // AddSpooledTaskToMatcher indicates an expected call of AddSpooledTaskToMatcher.
@@ -113,6 +115,18 @@ func (m *MockphysicalTaskQueueManager) DispatchSpooledTask(ctx context.Context, 
 func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchSpooledTask(ctx, task, userDataChanged any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchSpooledTask), ctx, task, userDataChanged)
+}
+
+// FinishedDraining mocks base method.
+func (m *MockphysicalTaskQueueManager) FinishedDraining() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "FinishedDraining")
+}
+
+// FinishedDraining indicates an expected call of FinishedDraining.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) FinishedDraining() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishedDraining", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).FinishedDraining))
 }
 
 // GetAllPollerInfo mocks base method.
@@ -266,6 +280,30 @@ func (m *MockphysicalTaskQueueManager) QueueKey() *PhysicalTaskQueueKey {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
+}
+
+// RemovePoller mocks base method.
+func (m *MockphysicalTaskQueueManager) RemovePoller(arg0 pollerIdentity) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RemovePoller", arg0)
+}
+
+// RemovePoller indicates an expected call of RemovePoller.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RemovePoller(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePoller", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RemovePoller), arg0)
+}
+
+// ReprocessRedirectedTasksAfterStop mocks base method.
+func (m *MockphysicalTaskQueueManager) ReprocessRedirectedTasksAfterStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReprocessRedirectedTasksAfterStop")
+}
+
+// ReprocessRedirectedTasksAfterStop indicates an expected call of ReprocessRedirectedTasksAfterStop.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) ReprocessRedirectedTasksAfterStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReprocessRedirectedTasksAfterStop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ReprocessRedirectedTasksAfterStop))
 }
 
 // SetupDraining mocks base method.

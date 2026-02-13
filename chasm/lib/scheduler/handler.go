@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
@@ -28,7 +29,7 @@ func newHandler(logger log.Logger, specBuilder *legacyscheduler.SpecBuilder) *ha
 func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateScheduleRequest) (resp *schedulerpb.CreateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
-	result, err := chasm.StartExecution(
+	_, err = chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
 			NamespaceID: req.NamespaceId,
@@ -41,10 +42,37 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 
 	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 	if errors.As(err, &alreadyStartedErr) {
+		// Check if the existing schedule is a sentinel.
+		//
+		// TODO lina@ - this can be removed (as well as all other sentinel business)
+		// after fully migrated to CHASM schedulers.
+		_, readErr := chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Scheduler](
+				chasm.ExecutionKey{
+					NamespaceID: req.NamespaceId,
+					BusinessID:  req.FrontendRequest.ScheduleId,
+				},
+			),
+			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+				if s.IsSentinel() {
+					return nil, ErrSentinel
+				}
+				return nil, nil
+			},
+			(*struct{})(nil),
+		)
+		if readErr != nil {
+			return nil, readErr // Returns ErrSentinel (404) if sentinel
+		}
 		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", req.FrontendRequest.ScheduleId)
 	}
 
-	return result.Output, nil
+	return &schedulerpb.CreateScheduleResponse{
+		FrontendResponse: &workflowservice.CreateScheduleResponse{
+			ConflictToken: initialSerializedConflictToken,
+		},
+	}, err
 }
 
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {

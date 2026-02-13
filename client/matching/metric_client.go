@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -161,7 +162,7 @@ func (c *metricClient) emitForwardedSourceStats(
 		// it means some mangled name come here; need to check why
 		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
 		if err != nil {
-			c.logger.Info("invalid tq name", tag.Error(err), tag.NewStringsTag("proto", []string{taskQueue.GetName()}))
+			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueue.GetName()))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}
@@ -199,4 +200,15 @@ func (c *metricClient) finishMetricsRecording(
 		metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 	}
 	metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+}
+
+func (c *metricClient) Route(p tqid.Partition) (string, error) {
+	// Ideally we wouldn't do a type-check here and require c.client to have
+	// Route, but it would require changing too many types all over the place.
+	// This isn't called in a hot path.
+	rc, ok := c.client.(RoutingClient)
+	if !ok {
+		return "", errors.New("not routing client")
+	}
+	return rc.Route(p)
 }

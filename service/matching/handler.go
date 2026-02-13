@@ -233,7 +233,7 @@ func (h *Handler) PollActivityTaskQueue(
 func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
+) (_ *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -300,6 +300,13 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	defer log.CapturePanic(h.logger, &retError)
 	err := h.engine.CancelOutstandingPoll(ctx, request)
 	return &matchingservice.CancelOutstandingPollResponse{}, err
+}
+
+// CancelOutstandingWorkerPolls cancels all outstanding polls for a given worker instance key.
+func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest) (_ *matchingservice.CancelOutstandingWorkerPollsResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CancelOutstandingWorkerPolls(ctx, request)
 }
 
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the

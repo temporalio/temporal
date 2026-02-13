@@ -140,6 +140,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		cf.metricsHandler,
 		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
+		dynamicconfig.MatchingSpreadRoutingBatchSize.Get(cf.dynConfig),
 	)
 
 	if cf.metricsHandler != nil {
@@ -217,12 +218,18 @@ func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResol
 	}
 }
 
-func (r *serviceKeyResolverImpl) Lookup(key string) (string, error) {
-	host, err := r.resolver.Lookup(key)
-	if err != nil {
-		return "", err
+// Lookup returns the address for a node within a batch. key contains the key (including batch
+// number), and index is the index within the batch. If not using batches, index should be 0.
+// Note that Lookup(key) and LookupN(key, n)[0] are equal.
+func (r *serviceKeyResolverImpl) Lookup(key string, index int) (string, error) {
+	hosts := r.resolver.LookupN(key, index+1)
+	if len(hosts) == 0 {
+		return "", membership.ErrInsufficientHosts
 	}
-	return host.GetAddress(), nil
+	if index >= len(hosts) {
+		index %= len(hosts)
+	}
+	return hosts[index].GetAddress(), nil
 }
 
 func (r *serviceKeyResolverImpl) GetAllAddresses() ([]string, error) {
