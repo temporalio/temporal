@@ -1,4 +1,4 @@
-package scheduler
+package schedules
 
 import (
 	"fmt"
@@ -6,32 +6,25 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	schedulespb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 )
 
 func TestGenerateWorkflowID(t *testing.T) {
 	baseWorkflowID := "my-workflow"
 	nominalTime := time.Date(2024, 6, 15, 10, 30, 45, 123456789, time.UTC)
 
-	actual := generateWorkflowID(baseWorkflowID, nominalTime)
+	actual := GenerateWorkflowID(baseWorkflowID, nominalTime)
 	require.Equal(t, "my-workflow-2024-06-15T10:30:45Z", actual)
 }
 
 func TestGenerateRequestID(t *testing.T) {
-	scheduler := &Scheduler{
-		SchedulerState: &schedulespb.SchedulerState{
-			Namespace:     "ns",
-			NamespaceId:   "nsid",
-			ScheduleId:    "mysched",
-			ConflictToken: 10,
-		},
-	}
 	nominalTime := time.Now()
 	actualTime := time.Now()
 
 	// No backfill ID given.
-	actual := generateRequestID(
-		scheduler,
+	actual := GenerateRequestID(
+		"nsid",
+		"mysched",
+		10,
 		"",
 		nominalTime,
 		actualTime,
@@ -44,8 +37,10 @@ func TestGenerateRequestID(t *testing.T) {
 	require.Equal(t, expected, actual)
 
 	// Backfill ID given.
-	actual = generateRequestID(
-		scheduler,
+	actual = GenerateRequestID(
+		"nsid",
+		"mysched",
+		10,
 		"backfillid",
 		nominalTime,
 		actualTime,

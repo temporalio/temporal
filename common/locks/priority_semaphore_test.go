@@ -52,12 +52,12 @@ func (s *prioritySemaphoreSuite) SetupSuite() {
 
 func (s *prioritySemaphoreSuite) TestTryAcquire() {
 	semaphore := NewPrioritySemaphore(2)
-	s.True(semaphore.TryAcquire(1))
-	s.True(semaphore.TryAcquire(1))
-	s.False(semaphore.TryAcquire(1))
-	s.False(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
 	semaphore.Release(2)
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 }
 
 func (s *prioritySemaphoreSuite) TestAcquire_High_Success() {
@@ -65,9 +65,9 @@ func (s *prioritySemaphoreSuite) TestAcquire_High_Success() {
 	ctx := context.Background()
 	err := semaphore.Acquire(ctx, PriorityHigh, 1)
 	s.NoError(err)
-	s.False(semaphore.TryAcquire(1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
 	semaphore.Release(1)
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 }
 
 func (s *prioritySemaphoreSuite) TestAcquire_Low_Success() {
@@ -75,9 +75,9 @@ func (s *prioritySemaphoreSuite) TestAcquire_Low_Success() {
 	ctx := context.Background()
 	err := semaphore.Acquire(ctx, PriorityLow, 1)
 	s.NoError(err)
-	s.False(semaphore.TryAcquire(1))
+	s.False(semaphore.TryAcquire(PriorityHigh, 1))
 	semaphore.Release(1)
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 }
 
 func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
@@ -85,7 +85,9 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAfterWaiting() {
 	cLock := make(chan struct{})
 	go func() {
 		// Acquire the function to make the next call blocking.
-		s.True(semaphore.TryAcquire(1))
+		// nolint:testifylint
+		// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
+		s.Assert().True(semaphore.TryAcquire(PriorityHigh, 1))
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
@@ -102,7 +104,9 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_LowAfterWaiting() {
 	cLock := make(chan struct{})
 	go func() {
 		// Acquire the function to make the next call blocking.
-		s.True(semaphore.TryAcquire(1))
+		// nolint:testifylint
+		// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
+		s.Assert().True(semaphore.TryAcquire(PriorityHigh, 1))
 		// Let the other thread start which will block on this semaphore.
 		cLock <- struct{}{}
 		// Wait for other thread to block on this semaphore.
@@ -117,7 +121,7 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_LowAfterWaiting() {
 func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	semaphore := NewPrioritySemaphore(1)
 	wg := sync.WaitGroup{}
-	s.True(semaphore.TryAcquire(1))
+	s.True(semaphore.TryAcquire(PriorityHigh, 1))
 	wg.Add(1)
 	go func() {
 		s.waitUntilBlockedInSemaphore(2)
@@ -127,7 +131,9 @@ func (s *prioritySemaphoreSuite) TestTryAcquire_HighAllowedBeforeLow() {
 	wg.Add(1)
 	lowAcquired := false
 	go func() {
-		s.NoError(semaphore.Acquire(context.Background(), PriorityLow, 1))
+		// nolint:testifylint
+		// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
+		s.Assert().NoError(semaphore.Acquire(context.Background(), PriorityLow, 1))
 		lowAcquired = true
 		wg.Done()
 	}()
@@ -150,13 +156,17 @@ func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
 	wg.Add(10)
 	for i := 0; i < 5; i++ {
 		go func() {
-			s.NoError(semaphore.Acquire(ctx, PriorityHigh, 1))
+			// nolint:testifylint
+			// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
+			s.Assert().NoError(semaphore.Acquire(ctx, PriorityHigh, 1))
 			wg.Done()
 		}()
 	}
 	for i := 5; i < 10; i++ {
 		go func() {
-			s.NoError(semaphore.Acquire(ctx, PriorityLow, 1))
+			// nolint:testifylint
+			// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
+			s.Assert().NoError(semaphore.Acquire(ctx, PriorityLow, 1))
 			wg.Done()
 		}()
 	}
@@ -201,7 +211,9 @@ func (s *prioritySemaphoreSuite) Test_AcquireMoreThanAvailable() {
 func (s *prioritySemaphoreSuite) waitUntilBlockedInSemaphore(n int) {
 	pattern := `\[select\]\:\n\S*\(\*PrioritySemaphoreImpl\)\.Acquire`
 	re := regexp.MustCompile(pattern)
-	s.Eventually(
+	// nolint:testifylint
+	// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.
+	s.Assert().Eventually(
 		func() bool {
 			buf := make([]byte, 100000)
 			size := runtime.Stack(buf, true)

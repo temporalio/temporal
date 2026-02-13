@@ -504,3 +504,17 @@ message WorkerDeploymentSummary {
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary current_version_summary = 5;
     temporal.api.deployment.v1.WorkerDeploymentInfo.WorkerDeploymentVersionSummary ramping_version_summary = 6;
 }
+
+// Signal input for force-continue-as-new on Deployment workflow
+message ForceCANDeploymentSignalArgs {
+    // If provided, this state will be used instead of the current state
+    // when performing continue-as-new.
+    WorkerDeploymentLocalState override_state = 1;
+}
+
+// Signal input for force-continue-as-new on Version workflow
+message ForceCANVersionSignalArgs {
+    // If provided, this state will be used instead of the current state
+    // when performing continue-as-new.
+    VersionLocalState override_state = 1;
+}

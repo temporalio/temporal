@@ -14,12 +14,14 @@ type (
 		componentType string
 		goType        reflect.Type
 
-		// Those two fields are initialized when the component is registered to a library.
+		// Following three fields are initialized when the component is registered to a library.
 		library     namer
 		componentID uint32
+		fqn         string
 
 		ephemeral     bool
 		singleCluster bool
+		detached      bool
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 	}
@@ -52,6 +54,22 @@ func WithSingleCluster() RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.singleCluster = true
 	}
+}
+
+// WithDetached marks the registrable component as detached. Detached components ignore
+// parent lifecycle validation, allowing them to continue operating when their
+// parent is closed/terminated.
+// If a registrable component is not detached by default, a component definition
+// can specify its child as detached via ComponentFieldDetached() option.
+func WithDetached() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.detached = true
+	}
+}
+
+// IsDetached returns true if the component type is registered as detached.
+func (rc *RegistrableComponent) IsDetached() bool {
+	return rc.detached
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.
@@ -144,10 +162,9 @@ func (rc *RegistrableComponent) registerToLibrary(
 	}
 
 	rc.library = library
-
-	fqn := rc.fqType()
-	rc.componentID = GenerateTypeID(fqn)
-	return fqn, rc.componentID, nil
+	rc.fqn = FullyQualifiedName(rc.library.Name(), rc.componentType)
+	rc.componentID = GenerateTypeID(rc.fqn)
+	return rc.fqn, rc.componentID, nil
 }
 
 // SearchAttributesMapper returns the search attributes mapper for this component.
@@ -181,9 +198,9 @@ func (rc *RegistrableComponent) GoType() reflect.Type {
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
 func (rc *RegistrableComponent) fqType() string {
-	if rc.library == nil {
+	if rc.fqn == "" {
 		// this should never happen because the component is only accessible from the library.
 		panic("component is not registered to a library")
 	}
-	return FullyQualifiedName(rc.library.Name(), rc.componentType)
+	return rc.fqn
 }

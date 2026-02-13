@@ -47,6 +47,8 @@ type (
 		stateChanged  bool
 		signalHandler *SignalHandler
 		forceCAN      bool
+		// Optional override state for force-CaN
+		overrideState *deploymentspb.WorkerDeploymentLocalState
 		// workflowVersion is set at workflow start based on the dynamic config of the worker
 		// that completes the first task. It remains constant for the lifetime of the run and
 		// only updates when the workflow performs continue-as-new.
@@ -102,8 +104,15 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
-		c.Receive(ctx, nil)
+
+		var args *deploymentspb.ForceCANDeploymentSignalArgs
+		c.Receive(ctx, &args)
 		d.forceCAN = true
+
+		// Apply override state if provided
+		if args.GetOverrideState() != nil {
+			d.overrideState = args.GetOverrideState()
+		}
 	})
 	d.signalHandler.signalSelector.AddReceive(syncVersionSummaryChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
@@ -379,6 +388,11 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// we pass the current state as input to the next workflow execution, resulting in a new
 	// workflow history with just two initial events. This minimizes the risk of NDE (Non-Deterministic Execution)
 	// errors during server rollbacks.
+
+	// Apply override state if provided during force-CaN
+	if d.overrideState != nil {
+		d.State = d.overrideState
+	}
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentWorkflowType, d.WorkerDeploymentWorkflowArgs)
 }
 

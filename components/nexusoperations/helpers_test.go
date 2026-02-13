@@ -13,11 +13,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/converter"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/workflow"
-	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -72,23 +72,33 @@ func (root) IsTransitionHistoryEnabled() bool {
 	return false
 }
 
-func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historypb.HistoryEvent {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload("input")
-	if err != nil {
-		panic(err)
+func mustNewScheduledEvent(schedTime time.Time, defaults *historypb.NexusOperationScheduledEventAttributes) *historypb.HistoryEvent {
+	if defaults == nil {
+		defaults = &historypb.NexusOperationScheduledEventAttributes{}
 	}
-
-	attr := &historypb.NexusOperationScheduledEventAttributes{
-		EndpointId: "endpoint-id",
-		Endpoint:   "endpoint",
-		Service:    "service",
-		Operation:  "operation",
-		Input:      payload,
-		RequestId:  uuid.NewString(),
+	attrs := common.CloneProto(defaults)
+	if attrs.EndpointId == "" {
+		attrs.EndpointId = "endpoint-id"
 	}
-	if timeout > 0 {
-		attr.ScheduleToCloseTimeout = durationpb.New(timeout)
+	if attrs.Endpoint == "" {
+		attrs.Endpoint = "endpoint"
+	}
+	if attrs.Service == "" {
+		attrs.Service = "service"
+	}
+	if attrs.Operation == "" {
+		attrs.Operation = "operation"
+	}
+	if attrs.Input == nil {
+		conv := converter.GetDefaultDataConverter()
+		payload, err := conv.ToPayload("input")
+		if err != nil {
+			panic(err)
+		}
+		attrs.Input = payload
+	}
+	if attrs.RequestId == "" {
+		attrs.RequestId = uuid.NewString()
 	}
 
 	return &historypb.HistoryEvent{
@@ -96,7 +106,7 @@ func mustNewScheduledEvent(schedTime time.Time, timeout time.Duration) *historyp
 		EventId:   1,
 		EventTime: timestamppb.New(schedTime),
 		Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
-			NexusOperationScheduledEventAttributes: attr,
+			NexusOperationScheduledEventAttributes: attrs,
 		},
 	}
 }

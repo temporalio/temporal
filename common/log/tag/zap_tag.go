@@ -33,7 +33,7 @@ func (t ZapTag) Key() string {
 	return t.field.Key
 }
 
-func (t ZapTag) Value() interface{} {
+func (t ZapTag) Value() any {
 	// Not for production use.
 	enc := zapcore.NewMapObjectEncoder()
 	t.field.AddTo(enc)
@@ -105,6 +105,12 @@ func NewUInt32(key string, value uint32) ZapTag {
 	}
 }
 
+func NewUInt64(key string, value uint64) ZapTag {
+	return ZapTag{
+		field: zap.Uint64(key, value),
+	}
+}
+
 func NewFloat64(key string, value float64) ZapTag {
 	return ZapTag{
 		field: zap.Float64(key, value),
@@ -147,7 +153,7 @@ func NewTimePtrTag(key string, value *timestamppb.Timestamp) ZapTag {
 	}
 }
 
-func NewAnyTag(key string, value interface{}) ZapTag {
+func NewAnyTag(key string, value any) ZapTag {
 	return ZapTag{
 		field: zap.Any(key, value),
 	}
@@ -156,5 +162,81 @@ func NewAnyTag(key string, value interface{}) ZapTag {
 func NewBinaryTag(key string, value []byte) ZapTag {
 	return ZapTag{
 		field: zap.Binary(key, value),
+	}
+}
+
+// Shorter helpers (aliases for the New* functions above)
+
+func String(key string, value string) ZapTag {
+	return NewStringTag(key, value)
+}
+
+func Strings(key string, value []string) ZapTag {
+	return NewStringsTag(key, value)
+}
+
+func Stringer(key string, value fmt.Stringer) ZapTag {
+	return NewStringerTag(key, value)
+}
+
+func Stringers(key string, value []fmt.Stringer) ZapTag {
+	return NewStringersTag(key, value)
+}
+
+func Int64(key string, value int64) ZapTag {
+	return NewInt64(key, value)
+}
+
+func Int(key string, value int) ZapTag {
+	return NewInt(key, value)
+}
+
+func Int32(key string, value int32) ZapTag {
+	return NewInt32(key, value)
+}
+
+func UInt32(key string, value uint32) ZapTag {
+	return NewUInt32(key, value)
+}
+
+func UInt64(key string, value uint64) ZapTag {
+	return NewUInt64(key, value)
+}
+
+func Float64(key string, value float64) ZapTag {
+	return NewFloat64(key, value)
+}
+
+func Duration(key string, value time.Duration) ZapTag {
+	return NewDurationTag(key, value)
+}
+
+func DurationPtr(key string, value *durationpb.Duration) ZapTag {
+	return NewDurationPtrTag(key, value)
+}
+
+func Time(key string, value time.Time) ZapTag {
+	return NewTimeTag(key, value)
+}
+
+func TimePtr(key string, value *timestamppb.Timestamp) ZapTag {
+	return NewTimePtrTag(key, value)
+}
+
+func Any(key string, value any) ZapTag {
+	return NewAnyTag(key, value)
+}
+
+func Binary(key string, value []byte) ZapTag {
+	return NewBinaryTag(key, value)
+}
+
+func Bool(key string, b bool) ZapTag {
+	return NewBoolTag(key, b)
+}
+
+func Zap(field zap.Field) ZapTag {
+	return ZapTag{
+		field: field,
 	}
 }

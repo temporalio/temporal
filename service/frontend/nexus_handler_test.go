@@ -162,6 +162,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.headersBlacklist = dynamicconfig.GetTypedPropertyFn(re)
 	oc.redirectionInterceptor = interceptor.NewRedirection(
 		nil,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		nil,
 		config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
 		oc.logger,
@@ -188,7 +189,7 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeBadRequest, handlerError.Type)
-	require.Equal(t, "bad request", handlerError.Cause.Error())
+	require.Equal(t, "bad request", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -212,7 +213,7 @@ func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExha
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "resource exhausted", handlerError.Cause.Error())
+	require.Equal(t, "resource exhausted", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -236,7 +237,7 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "namespace rate limit exceeded", handlerError.Cause.Error())
+	require.Equal(t, "namespace rate limit exceeded", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)
@@ -260,7 +261,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 	var handlerError *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerError)
 	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
-	require.Equal(t, "service rate limit exceeded", handlerError.Cause.Error())
+	require.Equal(t, "service rate limit exceeded", handlerError.Message)
 	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
 	capture := mh.StartCapture()
 	oc.metricsHandler.Counter("test").Record(1)

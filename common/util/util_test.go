@@ -98,6 +98,46 @@ func TestGetOrSetMap_ReturnsSame(t *testing.T) {
 	require.Equal(t, "value", m["key"][1])
 }
 
+func TestDeleteFromMap_DeletesInnerKey(t *testing.T) {
+	m := map[string]map[int]string{
+		"outer": {1: "one", 2: "two"},
+	}
+
+	DeleteFromMap(m, "outer", 1)
+	require.NotContains(t, m["outer"], 1)
+	require.Contains(t, m["outer"], 2)
+	require.Contains(t, m, "outer")
+}
+
+func TestDeleteFromMap_CleansUpEmptyOuter(t *testing.T) {
+	m := map[string]map[int]string{
+		"outer": {1: "one"},
+	}
+
+	DeleteFromMap(m, "outer", 1)
+	require.NotContains(t, m, "outer")
+}
+
+func TestDeleteFromMap_NonExistentOuterKey(t *testing.T) {
+	m := map[string]map[int]string{
+		"outer": {1: "one"},
+	}
+
+	DeleteFromMap(m, "nonexistent", 1)
+	require.Contains(t, m, "outer")
+	require.Equal(t, "one", m["outer"][1])
+}
+
+func TestDeleteFromMap_NonExistentInnerKey(t *testing.T) {
+	m := map[string]map[int]string{
+		"outer": {1: "one", 2: "two"},
+	}
+
+	DeleteFromMap(m, "outer", 999)
+	require.Contains(t, m, "outer")
+	require.Len(t, m["outer"], 2)
+}
+
 func TestMapSlice(t *testing.T) {
 	t.Run("when given nil as slice should return nil", func(t *testing.T) {
 		ys := MapSlice(nil, func(x int) uint32 { return uint32(x) })

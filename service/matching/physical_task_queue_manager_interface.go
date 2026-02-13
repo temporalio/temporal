@@ -18,6 +18,11 @@ type (
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		SetupDraining()
+		// FinishedDraining is called by a draining backlog manager when it has fully drained.
+		FinishedDraining()
+		// ReprocessRedirectedTasksAfterStop sends tasks in the matcher that came from other
+		// physical queues back to be reprocessed. Note this is called after Stop.
+		ReprocessRedirectedTasksAfterStop()
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
@@ -35,7 +40,7 @@ type (
 		// TODO(pri): old matcher cleanup
 		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
 		AddSpooledTask(task *internalTask) error
-		AddSpooledTaskToMatcher(task *internalTask)
+		AddSpooledTaskToMatcher(task *internalTask) error
 		UserDataChanged()
 		// DispatchQueryTask will dispatch query to local or remote poller. If forwarded then result or error is returned,
 		// if dispatched to local poller then nil and nil is returned.

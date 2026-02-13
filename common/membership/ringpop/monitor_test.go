@@ -77,6 +77,11 @@ func (s *RpoSuite) TestMonitor() {
 		host, err = r.Lookup(fmt.Sprintf("key%d", k))
 		s.Nil(err, "Ringpop monitor failed to find host for key")
 		s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")
+
+		// check that LookupN[0] is the same as Lookup
+		hosts := r.LookupN(fmt.Sprintf("key%d", k), 1)
+		s.Len(hosts, 1)
+		s.Equal(host.GetAddress(), hosts[0].GetAddress())
 	}
 	s.Equal(2, len(r.Members()))
 	s.Equal(2, len(r.AvailableMembers()))

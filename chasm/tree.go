@@ -108,9 +108,14 @@ type (
 		// When terminated is true, regardless of the Lifecycle state of the component,
 		// the component will be considered as closed.
 		//
-		// This right now only applies to the root node and used to update MutableState
-		// executionState and executionStatus and trigger retention timers.
-		// We could consider extending the force terminate concept to sub-components as well.
+		// NOTE: this is an in-memory only field and will be lost upon mutable state reload or replication.
+		// The purpose of this field is only for the transaction that force terminates the execution to
+		// update executionState & State in mutable state and generate retention timers, so it only needs to be
+		// in-memory and on the active side.
+		// If your logic needs to check if an execution is ever force terminated, check both this field (for the current
+		// transaction) and also the executionState from backend (for previous transactions).
+		//
+		// We can consider extending the force terminate concept to sub-components as well, and make the field durable.
 		terminated bool
 	}
 
@@ -199,7 +204,7 @@ type (
 		GetNexusCompletion(
 			ctx context.Context,
 			requestID string,
-		) (nexusrpc.OperationCompletion, error)
+		) (nexusrpc.CompleteOperationOptions, error)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -414,13 +419,8 @@ func (n *Node) Component(
 			fmt.Errorf("%s", reflect.TypeOf(node.value).String()))
 	}
 
-	// Access check always begins on the target node's parent, and ignored for nodes
-	// without ancestors.
-	if node.parent != nil {
-		err := node.parent.validateAccess(validationContext)
-		if err != nil {
-			return nil, err
-		}
+	if err := node.validateAccess(validationContext); err != nil {
+		return nil, err
 	}
 
 	if ref.validationFn != nil {
@@ -440,7 +440,7 @@ func (n *Node) Component(
 //
 // When the context's intent is OperationIntentProgress, This check validates that
 // all of a node's ancestors are still in a running state, and can accept writes. In
-// the case of a newly-created node, a detached node, or an OperationIntentObserve
+// the case of a newly created node, a detached node, or an OperationIntentObserve
 // intent, the check is skipped.
 func (n *Node) validateAccess(ctx Context) error {
 	intent := operationIntentFromContext(ctx.getContext())
@@ -449,11 +449,21 @@ func (n *Node) validateAccess(ctx Context) error {
 		return nil
 	}
 
-	// TODO - check if this is a detached node, operations are always allowed.
+	// Detached nodes skip ancestor validation entirely.
+	if n.isDetached() || n.parent == nil {
+		return nil
+	}
 
-	if n.parent != nil {
-		err := n.parent.validateAccess(ctx)
-		if err != nil {
+	return n.parent.validateAccessHelper(ctx)
+}
+
+// validateAccessHelper is a helper method that validates both the current
+// node's lifecycle state AND its ancestors recursively.
+// Do not call this method directly, call validateAccess instead.
+func (n *Node) validateAccessHelper(ctx Context) error {
+	// Check ancestors first (if not detached).
+	if !n.isDetached() && n.parent != nil {
+		if err := n.parent.validateAccessHelper(ctx); err != nil {
 			return err
 		}
 	}
@@ -464,8 +474,7 @@ func (n *Node) validateAccess(ctx Context) error {
 	}
 
 	// Hydrate the component so we can access its LifecycleState.
-	err := n.prepareComponentValue(ctx)
-	if err != nil {
+	if err := n.prepareComponentValue(ctx); err != nil {
 		return err
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
@@ -476,6 +485,13 @@ func (n *Node) validateAccess(ctx Context) error {
 
 	if n.terminated {
 		// Terminated nodes can never be written to.
+		// This handles the case where root is terminated in the current transaction.
+		return errAccessCheckFailed
+	}
+
+	// terminated field check above is in memory only, so handle the case where root is terminated (closed)
+	// in a previous transaction and we have a mutable state reload which clears the field.
+	if n.parent == nil && n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return errAccessCheckFailed
 	}
 
@@ -576,6 +592,21 @@ func (n *Node) isData() bool {
 
 func (n *Node) isMap() bool {
 	return n.serializedNode.GetMetadata().GetCollectionAttributes() != nil
+}
+
+func (n *Node) isDetached() bool {
+	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
+	if componentAttr == nil {
+		return false
+	}
+	componentTypeID := componentAttr.GetTypeId()
+	if componentTypeID == CallbackComponentID ||
+		componentTypeID == visibilityComponentTypeID {
+		// For backward compatibility purpose, we need to special handle callback and visibility components,
+		// which are implemented before detached component is properly supported by the framework.
+		return true
+	}
+	return componentAttr.GetDetached()
 }
 
 func (n *Node) fieldType() fieldType {
@@ -1014,6 +1045,15 @@ func (n *Node) syncSubField(
 			}
 
 			childNode.setValueState(valueStateNeedSyncStructure)
+
+			// Set detached flag from field option or component type registration.
+			componentAttr := childNode.serializedNode.GetMetadata().GetComponentAttributes()
+			componentAttr.Detached = internal.detached
+			if !componentAttr.Detached {
+				if rc, ok := n.registry.componentFor(fieldValue); ok {
+					componentAttr.Detached = rc.IsDetached()
+				}
+			}
 		case fieldTypeData:
 			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
 				return
@@ -1167,7 +1207,7 @@ func (n *Node) deserializeComponentNode(
 			softassert.Fail(
 				n.logger,
 				"field.kind can be unspecified only if err is not nil, and there is a check for it above",
-				tag.NewStringTag("node name", n.nodeName))
+				tag.String("node name", n.nodeName))
 		case fieldKindData:
 			value, err := unmarshalProto(n.serializedNode.GetData(), field.typ)
 			if err != nil {
@@ -1469,10 +1509,16 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 		return false, nil
 	}
 
+	if n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Already in completed state, no need to update lifecycle state.
+		return false, nil
+	}
+
 	if n.terminated {
 		return n.backend.UpdateWorkflowStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		)
 	}
 
 	chasmContext := NewContext(context.Background(), n)
@@ -1742,7 +1788,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 func (n *Node) deserializeComponentTask(
 	componentTask *persistencespb.ChasmComponentAttributes_Task,
 ) (any, error) {
-	registableTask, ok := n.registry.taskByID(componentTask.TypeId)
+	registableTask, ok := n.registry.TaskByID(componentTask.TypeId)
 	if !ok {
 		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
@@ -1773,16 +1819,11 @@ func (n *Node) validateTask(
 			fmt.Errorf("%s", reflect.TypeOf(taskInstance).Name()))
 	}
 
-	// TODO: visibility component should be an (implicitly) detached component.
-	// Remove this special case when detached node is implemented.
-	if registableTask.taskTypeID != visibilityTaskTypeID && n.parent != nil {
-		err := n.parent.validateAccess(validateContext)
+	if err := n.validateAccess(validateContext); err != nil {
 		if errors.Is(err, errAccessCheckFailed) {
 			return false, nil
 		}
-		if err != nil {
-			return false, err
-		}
+		return false, err
 	}
 
 	defer log.CapturePanic(n.logger, &retErr)
@@ -2934,7 +2975,7 @@ func (n *Node) ValidateSideEffectTask(
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := n.registry.taskByID(taskTypeID)
+	registrableTask, ok := n.registry.TaskByID(taskTypeID)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
 			n.logger,
@@ -3019,7 +3060,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := registry.taskByID(taskTypeID)
+	registrableTask, ok := registry.TaskByID(taskTypeID)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
 			n.logger,

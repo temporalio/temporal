@@ -179,8 +179,8 @@ func (l *zapLogger) Fatal(msg string, tags ...tag.Tag) {
 // With() handles the provided tags as "upserts", replacing any matching keys with new values.
 // Note that we distinguish between the following two seemingly identical lines:
 //
-//	logger.With(logger, tag.NewStringTag("foo", "bar")).Info("msg")
-//	logger.Info("msg", tag.NewStringTag("foo", "bar")
+//	logger.With(logger, tag.String("foo", "bar")).Info("msg")
+//	logger.Info("msg", tag.String("foo", "bar")
 //
 // by deduping "foo" against any existing "foo" tags *only in the former*
 func (l *zapLogger) With(tags ...tag.Tag) Logger {

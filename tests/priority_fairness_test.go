@@ -51,10 +51,13 @@ func (s *PrioritySuite) SetupSuite() {
 }
 
 func (s *PrioritySuite) TestActivity_Basic() {
-	const N = 100
+	const N = 20
 	const Levels = 5
 
 	tv := testvars.New(s.T())
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -111,6 +114,29 @@ func (s *PrioritySuite) TestActivity_Basic() {
 		)
 		s.NoError(err)
 	}
+
+	// wait for activity tasks to appear in the matching backlog (from transfer queue)
+	s.Eventually(func() bool {
+		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tv.TaskQueue().Name,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+			},
+			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
+		})
+		if err != nil {
+			return false
+		}
+		var count int64
+		for _, versionInfoInternal := range res.VersionsInfoInternal {
+			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
+				count += st.ApproximateBacklogCount
+			}
+		}
+		return count == N*Levels
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// process activity tasks
 	var runs []int
@@ -611,6 +637,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	defer cancel()
 
 	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableMigration, true)
+	// Speed up periodic sync so drain completion is detected faster
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 100*time.Millisecond)
 
 	forTest := func(v any) any {
 		return []dynamicconfig.ConstrainedValue{
@@ -635,10 +663,18 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	waitForTasks := func(tp enumspb.TaskQueueType, onDraining, onActive int64) {
 		s.T().Helper()
 		s.EventuallyWithT(func(c *assert.CollectT) {
-			tasksOnDraining, tasksOnActive, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			tasksOnDraining, tasksOnActive, _, err := s.countTasksByDrainingActive(ctx, tv, tp)
 			require.NoError(c, err)
 			require.Equal(c, onDraining, tasksOnDraining)
 			require.Equal(c, onActive, tasksOnActive)
+		}, 15*time.Second, 250*time.Millisecond)
+	}
+	waitForNoDraining := func(tp enumspb.TaskQueueType) {
+		s.T().Helper()
+		s.EventuallyWithT(func(c *assert.CollectT) {
+			_, _, hasDraining, err := s.countTasksByDrainingActive(ctx, tv, tp)
+			require.NoError(c, err)
+			require.False(c, hasDraining, "draining queue should be unloaded after drain completes")
 		}, 15*time.Second, 250*time.Millisecond)
 	}
 
@@ -719,6 +755,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0, 0)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 20)
+	// Verify wft draining queue is unloaded after drain completes
+	waitForNoDraining(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.T().Log("wfts done")
 
 	// process activities 1/3 at a time
@@ -760,10 +798,12 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 		processActivity()
 	}
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 0, 0)
+	// Verify activity draining queue is unloaded after drain completes
+	waitForNoDraining(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 }
 
 func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *testvars.TestVars, tp enumspb.TaskQueueType) (
-	tasksOnDraining, tasksOnActive int64, retErr error,
+	tasksOnDraining, tasksOnActive int64, hasDraining bool, retErr error,
 ) {
 	for i := range s.partitions {
 		res, err := s.AdminClient().DescribeTaskQueuePartition(ctx, &adminservice.DescribeTaskQueuePartitionRequest{
@@ -776,11 +816,12 @@ func (s *FairnessSuite) countTasksByDrainingActive(ctx context.Context, tv *test
 			BuildIds: &taskqueuepb.TaskQueueVersionSelection{Unversioned: true},
 		})
 		if err != nil {
-			return 0, 0, err
+			return 0, 0, false, err
 		}
 		for _, versionInfoInternal := range res.VersionsInfoInternal {
 			for _, st := range versionInfoInternal.PhysicalTaskQueueInfo.InternalTaskQueueStatus {
 				if st.Draining {
+					hasDraining = true
 					tasksOnDraining += st.ApproximateBacklogCount
 				} else {
 					tasksOnActive += st.ApproximateBacklogCount

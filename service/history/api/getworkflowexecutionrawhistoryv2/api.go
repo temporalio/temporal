@@ -201,7 +201,17 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		endItem := versionhistory.NewVersionHistoryItem(req.GetEndEventId(), req.GetEndEventVersion())
 		idx, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
 		if err != nil {
-			return nil, err
+			// Since the API is exclusive-exclusive, EndEventId is the first event we don't want.
+			// If {EndEventId, EndEventVersion} is not found, it might be because the branch ends
+			// exactly at EndEventId-1. In that case, try to find a branch containing {EndEventId-1, EndEventVersion}.
+			actualLastEventID := req.GetEndEventId() - 1
+			if actualLastEventID >= common.FirstEventID {
+				endItem = versionhistory.NewVersionHistoryItem(actualLastEventID, req.GetEndEventVersion())
+				idx, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		targetBranch, err = versionhistory.GetVersionHistory(versionHistories, idx)

@@ -352,7 +352,11 @@ func setHistoryForRecordWfTaskStartedResp(
 		for i, blob := range rawHistory {
 			historyBlobs[i] = blob.Data
 		}
-		response.RawHistory = historyBlobs
+		if shardContext.GetConfig().SendRawHistoryBytesToMatchingService() {
+			response.RawHistoryBytes = historyBlobs
+		} else {
+			response.RawHistory = historyBlobs //nolint:staticcheck // SA1019: Using deprecated field for backwards compatibility during rollout
+		}
 	} else {
 		response.History = history
 	}
@@ -372,7 +376,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 	if err != nil {
 		return nil, err
 	}
-	resp := &historyservice.RecordWorkflowTaskStartedResponse{
+	return &historyservice.RecordWorkflowTaskStartedResponse{
 		WorkflowType:               rawResp.WorkflowType,
 		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
 		ScheduledEventId:           rawResp.ScheduledEventId,
@@ -390,8 +394,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Messages:                   rawResp.Messages,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
-	}
-	return resp, nil
+	}, nil
 }
 
 func CreateRecordWorkflowTaskStartedResponseWithRawHistory(

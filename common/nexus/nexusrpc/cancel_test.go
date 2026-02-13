@@ -23,19 +23,19 @@ func (h *asyncWithCancelHandler) StartOperation(ctx context.Context, service, op
 
 func (h *asyncWithCancelHandler) CancelOperation(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 	if service != testService {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected service: %s", service)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected service: %s", service)
 	}
 	if operation != "f/o/o" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation to be 'foo', got: %s", operation)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation to be 'foo', got: %s", operation)
 	}
 	if token != "a/sync" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation ID to be 'async', got: %s", token)
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation ID to be 'async', got: %s", token)
 	}
 	if h.expectHeader && options.Header.Get("foo") != "bar" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'foo' request header")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'foo' request header")
 	}
 	if options.Header.Get("User-Agent") != "temporalio/server" {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid 'User-Agent' header: %q", options.Header.Get("User-Agent"))
 	}
 	return nil
 }
@@ -78,14 +78,14 @@ func (h *echoTimeoutAsyncWithCancelHandler) StartOperation(ctx context.Context, 
 func (h *echoTimeoutAsyncWithCancelHandler) CancelOperation(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 	deadline, set := ctx.Deadline()
 	if h.expectedTimeout > 0 && !set {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation to have timeout set but context has no deadline")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation to have timeout set but context has no deadline")
 	}
 	if h.expectedTimeout <= 0 && set {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation to have no timeout but context has deadline set")
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected operation to have no timeout but context has deadline set")
 	}
 	timeout := time.Until(deadline)
 	if timeout > h.expectedTimeout {
-		return nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation has timeout (%s) greater than expected (%s)", timeout.String(), h.expectedTimeout.String())
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation has timeout (%s) greater than expected (%s)", timeout.String(), h.expectedTimeout.String())
 	}
 	return nil
 }

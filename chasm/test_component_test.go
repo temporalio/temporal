@@ -124,7 +124,14 @@ func (tc *TestComponent) Memo(_ Context) proto.Message {
 }
 
 func (tsc1 *TestSubComponent1) LifecycleState(_ Context) LifecycleState {
-	return LifecycleStateRunning
+	switch tsc1.SubComponent1Data.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	default:
+		return LifecycleStateFailed
+	}
 }
 
 func (tsc1 *TestSubComponent1) GetData() string {
@@ -132,7 +139,14 @@ func (tsc1 *TestSubComponent1) GetData() string {
 }
 
 func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
-	return LifecycleStateRunning
+	switch tsc11.SubComponent11Data.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	default:
+		return LifecycleStateFailed
+	}
 }
 
 func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {

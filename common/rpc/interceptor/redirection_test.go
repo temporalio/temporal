@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/temporalapi"
@@ -62,6 +63,7 @@ func (s *redirectionInterceptorSuite) SetupTest() {
 
 	s.redirector = NewRedirection(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		s.namespaceCache,
 		config.DCRedirectionPolicy{
 			Policy: DCRedirectionPolicyAllAPIsForwarding,
@@ -151,6 +153,7 @@ func (s *redirectionInterceptorSuite) TestGlobalAPI() {
 		"PatchSchedule":                    {},
 		"DeleteSchedule":                   {},
 		"ListSchedules":                    {},
+		"CountSchedules":                   {},
 		"ListScheduleMatchingTimes":        {},
 		"UpdateWorkerBuildIdCompatibility": {},
 		"GetWorkerBuildIdCompatibility":    {},
@@ -408,4 +411,271 @@ func (s *mockClientConnInterface) NewStream(
 	_ ...grpc.CallOption,
 ) (grpc.ClientStream, error) {
 	panic("implement me")
+}
+
+// Test that local API invocations do not emit redirection metrics
+func (s *redirectionInterceptorSuite) TestHandleLocalAPIInvocation_NoRedirectionMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	ctx := context.Background()
+	req := &workflowservice.RegisterNamespaceRequest{}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return &workflowservice.RegisterNamespaceResponse{}, nil
+	}
+	methodName := "RegisterNamespace"
+
+	_, err := redirector.handleLocalAPIInvocation(ctx, req, handler, methodName)
+	s.NoError(err)
+
+	// Verify no redirection metrics were emitted
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should not be emitted for local API")
+	s.Empty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should not be emitted for local API")
+	s.Empty(snapshot[metrics.ClientRedirectionFailures.Name()], "ClientRedirectionFailures should not be emitted for local API")
+}
+
+// Test that global API with local routing does not emit redirection metrics
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_LocalRouting_NoRedirectionMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return &workflowservice.SignalWithStartWorkflowExecutionResponse{}, nil
+	}
+	namespaceName := namespace.Name("test-namespace")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName, // Active in current cluster
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	_, err := redirector.handleRedirectAPIInvocation(
+		ctx, req, info, handler, methodName,
+		globalAPIResponses[methodName], namespaceName,
+	)
+	s.NoError(err)
+
+	// Verify no redirection metrics were emitted
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should not be emitted for local routing")
+	s.Empty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should not be emitted for local routing")
+	s.Empty(snapshot[metrics.ClientRedirectionFailures.Name()], "ClientRedirectionFailures should not be emitted for local routing")
+}
+
+// Test that global API with remote routing emits redirection metrics
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_RemoteRouting_EmitsRedirectionMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution",
+	}
+	namespaceName := namespace.Name("test-namespace")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName, // Active in remote cluster
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	grpcConn := &mockClientConnInterface{
+		Suite:          &s.Suite,
+		targetMethod:   info.FullMethod,
+		targetResponse: &workflowservice.SignalWithStartWorkflowExecutionResponse{},
+	}
+	s.clientBean.EXPECT().GetRemoteFrontendClient(cluster.TestAlternativeClusterName).Return(grpcConn, nil, nil).Times(1)
+
+	_, err := redirector.handleRedirectAPIInvocation(
+		ctx, req, info, nil, methodName,
+		globalAPIResponses[methodName], namespaceName,
+	)
+	s.NoError(err)
+
+	// Verify redirection metrics WERE emitted
+	snapshot := capture.Snapshot()
+	s.NotEmpty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should be emitted for remote routing")
+	s.NotEmpty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should be emitted for remote routing")
+
+	// Verify the request count is 1
+	requestMetrics := snapshot[metrics.ClientRedirectionRequests.Name()]
+	s.Len(requestMetrics, 1)
+	s.Equal(int64(1), requestMetrics[0].Value)
+}
+
+// Test that local routing with error does not emit failure metrics
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_LocalRoutingWithError_NoFailureMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{}
+	expectedError := serviceerror.NewInternal("local processing error")
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return nil, expectedError
+	}
+	namespaceName := namespace.Name("test-namespace")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName, // Active in current cluster
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	_, err := redirector.handleRedirectAPIInvocation(
+		ctx, req, info, handler, methodName,
+		globalAPIResponses[methodName], namespaceName,
+	)
+	s.Error(err)
+	s.Equal(expectedError, err)
+
+	// Verify NO redirection metrics were emitted (including failures)
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should not be emitted for local routing")
+	s.Empty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should not be emitted for local routing")
+	s.Empty(snapshot[metrics.ClientRedirectionFailures.Name()], "ClientRedirectionFailures should not be emitted for local routing even with error")
+}
+
+// Test that remote routing with error emits failure metrics
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_RemoteRoutingWithError_EmitsFailureMetrics() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution",
+	}
+	namespaceName := namespace.Name("test-namespace")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName, // Active in remote cluster
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	// Setup mock remote client to return error
+	expectedError := serviceerror.NewUnavailable("remote cluster unavailable")
+	s.clientBean.EXPECT().GetRemoteFrontendClient(cluster.TestAlternativeClusterName).Return(nil, nil, expectedError).Times(1)
+
+	_, err := redirector.handleRedirectAPIInvocation(
+		ctx, req, info, nil, methodName,
+		globalAPIResponses[methodName], namespaceName,
+	)
+	s.Error(err)
+
+	// Verify all redirection metrics including failures were emitted
+	snapshot := capture.Snapshot()
+	s.NotEmpty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should be emitted for remote routing")
+	s.NotEmpty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should be emitted for remote routing")
+	s.NotEmpty(snapshot[metrics.ClientRedirectionFailures.Name()], "ClientRedirectionFailures should be emitted for remote routing with error")
+
+	// Verify the failure count is 1
+	failureMetrics := snapshot[metrics.ClientRedirectionFailures.Name()]
+	s.Len(failureMetrics, 1)
+	s.Equal(int64(1), failureMetrics[0].Value)
 }

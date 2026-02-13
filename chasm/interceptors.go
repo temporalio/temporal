@@ -2,14 +2,11 @@ package chasm
 
 import (
 	"context"
-	"strings"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"google.golang.org/grpc"
 )
-
-const chasmRequestPrefix = "/temporal.server.chasm"
 
 // ChasmEngineInterceptor Interceptor that intercepts RPC requests,
 // detects CHASM-specific calls and does additional boilerplate processing before
@@ -17,19 +14,19 @@ const chasmRequestPrefix = "/temporal.server.chasm"
 // ChasmVisibilityInterceptor.
 type ChasmEngineInterceptor struct {
 	engine         Engine
-	logger         log.Logger
+	logger         log.SnTaggedLogger
 	metricsHandler metrics.Handler
 }
 
 func (i *ChasmEngineInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (resp interface{}, retError error) {
-	if strings.HasPrefix(info.FullMethod, chasmRequestPrefix) {
-		defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
-	}
+) (resp any, retError error) {
+	// Capture panics for any handler method, not just CHASM-specific ones. This could have gone into a separate
+	// interceptor, but having it here avoids the overhead of adding another layer to the interceptor chain.
+	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 
 	ctx = NewEngineContext(ctx, i.engine)
 	return handler(ctx, req)

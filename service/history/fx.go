@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -85,6 +86,9 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
 	fx.Provide(VersionMembershipCacheProvider),
+	fx.Provide(ReactivationSignalCacheProvider),
+	fx.Provide(workerdeployment.ClientProvider),
+	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
@@ -387,4 +391,38 @@ func VersionMembershipCacheProvider(
 		},
 	})
 	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
+}
+
+func ReactivationSignalCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.ReactivationSignalCache {
+	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
+}
+
+func RoutingInfoCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.RoutingInfoCache {
+	c := commoncache.New(serviceConfig.RoutingInfoCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.RoutingInfoCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewRoutingInfoCache(c, metricsHandler)
 }

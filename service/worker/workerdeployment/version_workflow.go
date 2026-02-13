@@ -47,6 +47,8 @@ type (
 		signalHandler                *SignalHandler
 		drainageStatusSyncInProgress bool
 		forceCAN                     bool
+		// Optional override state for force-CaN
+		overrideState *deploymentspb.VersionLocalState
 		// Track if async propagations are in progress (prevents CaN)
 		asyncPropagationsInProgress int
 		// When true, all the ongoing propagations should cancel themselves
@@ -99,9 +101,15 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 	d.signalHandler.signalSelector.AddReceive(forceCANSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
 		defer func() { d.signalHandler.processingSignals-- }()
-		// Process Signal
-		c.Receive(ctx, nil)
+
+		var args *deploymentspb.ForceCANVersionSignalArgs
+		c.Receive(ctx, &args)
 		d.forceCAN = true
+
+		// Apply override state if provided
+		if args.GetOverrideState() != nil {
+			d.overrideState = args.GetOverrideState()
+		}
 	})
 	d.signalHandler.signalSelector.AddReceive(drainageStatusSignalChannel, func(c workflow.ReceiveChannel, more bool) {
 		d.signalHandler.processingSignals++
@@ -132,6 +140,39 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		}
 		d.syncSummary(ctx)
 	})
+
+	// Version gate for reactivation signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "reactivation-signal", workflow.DefaultVersion, 0) >= 0 {
+		reactivateSignalChannel := workflow.GetSignalChannel(ctx, ReactivateVersionSignalName)
+
+		// Add reactivation signal handler
+		d.signalHandler.signalSelector.AddReceive(reactivateSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			c.Receive(ctx, nil) // No payload needed
+
+			// Only reactivate if DRAINED or INACTIVE
+			if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED ||
+				d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE {
+
+				// Set up drainage info for monitoring
+				d.VersionState.DrainageInfo = &deploymentpb.VersionDrainageInfo{
+					Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINING,
+					LastChangedTime: timestamppb.New(workflow.Now(ctx)),
+					LastCheckedTime: timestamppb.New(workflow.Now(ctx)),
+				}
+
+				d.deleteVersion = false // Clear deletion flag if set
+
+				// Use existing function to update status and sync to task queues
+				d.updateVersionStatusAfterDrainageStatusChange(ctx, enumspb.VERSION_DRAINAGE_STATUS_DRAINING)
+				d.syncSummary(ctx)  // Notify parent deployment workflow of the status change
+				d.setStateChanged() // Trigger CaN
+			}
+		})
+	}
+
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
 		d.signalHandler.signalSelector.Select(ctx)
@@ -245,7 +286,10 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 
 	d.logger.Debug("Version doing continue-as-new")
 	nextArgs := d.WorkerDeploymentVersionWorkflowArgs
-	nextArgs.VersionState = d.VersionState
+	// Apply override state if provided during force-CaN
+	if d.overrideState != nil {
+		nextArgs.VersionState = d.overrideState
+	}
 	return workflow.NewContinueAsNewError(ctx, WorkerDeploymentVersionWorkflowType, nextArgs)
 }
 
@@ -848,7 +892,6 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	if d.VersionState.GetDrainageInfo().GetStatus() != enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
 		return // only refresh when status is draining
 	}
-
 	defer func() {
 		// regardless of results mark state as dirty so we CaN in the first opportunity now that some
 		// history events are made.

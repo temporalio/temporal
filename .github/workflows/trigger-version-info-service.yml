@@ -4,6 +4,8 @@ on:
   release:
     types:
       - published
+permissions:
+  contents: read
 
 jobs:
   trigger-vis:
@@ -22,7 +24,8 @@ jobs:
           app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: version-info-service
+          repositories: |
+            version-info-service
 
       - name: Dispatch version-info-service Github Action
         env:

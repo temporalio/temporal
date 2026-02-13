@@ -14,7 +14,6 @@ type (
 		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered actions pending execution in total
 		GeneratorBufferReserveSize        int           // Minimum number of spaces in `BufferedStarts` reserved for automated actions.
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
-		RecentActionCount                 int           // Number of recent actions taken (workflow execution results) recorded in the ScheduleInfo metadata.
 		MaxActionsPerExecution            int           // Limits the number of actions (startWorkflow, terminate/cancel) taken by ExecuteTask in a single iteration
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 	}
@@ -29,24 +28,24 @@ type (
 
 var (
 	CurrentTweakables = dynamicconfig.NewNamespaceTypedSetting(
-		"chasm.scheduler.tweakables",
+		"scheduler.tweakables",
 		DefaultTweakables,
 		"A set of tweakable parameters for the CHASM scheduler.")
 
 	RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-		"chasm.scheduler.retryPolicy.initialInterval",
+		"scheduler.retryPolicy.initialInterval",
 		time.Second,
 		`The initial backoff interval when retrying a failed task.`,
 	)
 
 	RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-		"chasm.scheduler.retryPolicy.maxInterval",
+		"scheduler.retryPolicy.maxInterval",
 		time.Minute,
 		`The maximum backoff interval when retrying a failed task.`,
 	)
 
 	ServiceCallTimeout = dynamicconfig.NewGlobalDurationSetting(
-		"chasm.scheduler.serviceCallTimeout",
+		"scheduler.serviceCallTimeout",
 		2*time.Second,
 		`The upper bound on how long a service call can take before being timed out.`,
 	)
@@ -57,7 +56,6 @@ var (
 		MaxBufferSize:                     1000,
 		GeneratorBufferReserveSize:        50,
 		CanceledTerminatedCountAsFailures: false,
-		RecentActionCount:                 10,
 		MaxActionsPerExecution:            5,
 		IdleTime:                          7 * 24 * time.Hour,
 	}

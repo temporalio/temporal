@@ -5,7 +5,7 @@
 # cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
 ARG ALPINE_TAG=3.23
 
-FROM --platform=$TARGETPLATFORM alpine:${ALPINE_TAG}
+FROM alpine:${ALPINE_TAG}
 
 ARG TARGETARCH
 
