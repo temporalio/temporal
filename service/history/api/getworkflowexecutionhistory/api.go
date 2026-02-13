@@ -29,6 +29,94 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+// appendTransientEvents queries mutable state for transient/speculative events and appends them to the response.
+// This function attempts to use cached transient tasks from the initial mutable state call to avoid a second call.
+// If cached tasks are nil or stale (validation fails), it falls back to querying mutable state.
+// Validation of event IDs is handled by validateTransientWorkflowTaskEvents.
+func appendTransientTasks(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	eventNotifier events.Notifier,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	useRawHistory bool,
+	history *historypb.History,
+	historyBlob *[]*commonpb.DataBlob,
+	cachedTransientTasks *historyspb.TransientWorkflowTaskInfo,
+	nextEventID int64,
+) {
+	// CLI and UI clients should not receive transient events for backward compatibility
+	// Check this FIRST before doing any work
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
+		return
+	}
+
+	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
+
+	// Try cached tasks first
+	if cachedTransientTasks != nil {
+		// Validate cached tasks are still valid (not stale)
+		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, cachedTransientTasks); err == nil {
+			// Cache is valid, use it (FAST PATH - no second mutable state call)
+			transientWorkflowTask = cachedTransientTasks
+		} else {
+			// Cache is stale, log and fall through to refetch
+			shardContext.GetLogger().Warn("Cached transient tasks are stale, refetching",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+		}
+	}
+
+	// Fallback: If no cache or cache is stale, make the query
+	if transientWorkflowTask == nil {
+		msResp, err := api.GetOrPollWorkflowMutableState(
+			ctx,
+			shardContext,
+			&historyservice.GetMutableStateRequest{
+				NamespaceId: namespaceID.String(),
+				Execution:   execution,
+			},
+			workflowConsistencyChecker,
+			eventNotifier,
+		)
+		if err != nil || msResp.GetTransientOrSpeculativeTasks() == nil {
+			// Transient events don't exist or are already committed - this is OK
+			// Just return without appending (events are in persisted history)
+			if err != nil {
+				shardContext.GetLogger().Warn("Failed to refetch transient events",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.Error(err))
+			}
+			return
+		}
+		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
+	}
+
+	// Manually append transient events to the response
+	if useRawHistory {
+		transientEventsBlob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTask.GetHistorySuffix())
+		if err == nil {
+			*historyBlob = append(*historyBlob, transientEventsBlob)
+		} else {
+			softassert.Fail(shardContext.GetLogger(), "GetWorkflowExecutionHistory could not serialize transient workflow tasks")
+			shardContext.GetLogger().Error("Failed to serialize transient workflow tasks",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err),
+			)
+		}
+	} else {
+		history.Events = append(history.Events, transientWorkflowTask.GetHistorySuffix()...)
+	}
+}
+
 func Invoke(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -47,22 +135,24 @@ func Invoke(
 
 	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 
-	// this function returns the following 7 things,
-	// 1. the current branch token (to use to retrieve history events)
-	// 2. the workflow run ID
-	// 3. the last first event ID (the event ID of the last batch of events in the history)
-	// 4. the last first event transaction id
-	// 5. the next event ID
-	// 6. whether the workflow is running
-	// 7. error if any
-	queryHistory := func(
+	queryMutableState := func(
 		namespaceUUID namespace.ID,
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
 		versionHistoryItem *historyspb.VersionHistoryItem,
 		versionedTransition *persistencespb.VersionedTransition,
-	) ([]byte, string, int64, int64, bool, *historyspb.VersionHistoryItem, *persistencespb.VersionedTransition, error) {
+	) (
+		[]byte, // current branch token (to use to retrieve history events)
+		string, // workflow run ID
+		int64, // last first event ID (the event ID of the last batch of events in the history)
+		int64, // last first event transaction id
+		bool, // whether the workflow is running
+		*historyspb.VersionHistoryItem, // version history item for the current branch
+		*persistencespb.VersionedTransition, // last versioned transition
+		*historyspb.TransientWorkflowTaskInfo, // transient workflow task info
+		error, // error if any
+	) {
 		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
@@ -103,17 +193,17 @@ func Invoke(
 			)
 		}
 		if err != nil {
-			return nil, "", 0, 0, false, nil, nil, err
+			return nil, "", 0, 0, false, nil, nil, nil, err
 		}
 
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
 		if err != nil {
-			return nil, "", 0, 0, false, nil, nil, err
+			return nil, "", 0, 0, false, nil, nil, nil, err
 		}
 		lastVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 		if err != nil {
-			return nil, "", 0, 0, false, nil, nil, err
+			return nil, "", 0, 0, false, nil, nil, nil, err
 		}
 
 		lastVersionedTransition := transitionhistory.LastVersionedTransition(response.GetTransitionHistory())
@@ -124,6 +214,7 @@ func Invoke(
 			isWorkflowRunning,
 			lastVersionHistoryItem,
 			lastVersionedTransition,
+			response.GetTransientOrSpeculativeTasks(),
 			nil
 	}
 
@@ -135,6 +226,7 @@ func Invoke(
 	lastFirstEventID := common.FirstEventID
 	var nextEventID int64
 	var isWorkflowRunning bool
+	var cachedTransientTasks *historyspb.TransientWorkflowTaskInfo
 
 	// process the token for paging
 	queryNextEventID := common.EndEventID
@@ -149,13 +241,16 @@ func Invoke(
 
 		execution.RunId = continuationToken.GetRunId()
 
+		// Set isWorkflowRunning from continuation token for pagination
+		isWorkflowRunning = continuationToken.IsWorkflowRunning
+
 		// we need to update the current next event ID and whether workflow is running
 		if len(continuationToken.PersistenceToken) == 0 && isLongPoll && continuationToken.IsWorkflowRunning {
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, cachedTransientTasks, err =
+				queryMutableState(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
 			if err != nil {
 				return nil, err
 			}
@@ -168,8 +263,8 @@ func Invoke(
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil, nil, nil)
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition, cachedTransientTasks, err =
+			queryMutableState(namespaceID, execution, queryNextEventID, nil, nil, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -220,8 +315,9 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
+					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -239,9 +335,10 @@ func Invoke(
 					nextEventID,
 					request.Request.GetMaximumPageSize(),
 					nil,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
+					continuationToken.IsWorkflowRunning,
 				)
 				if err != nil {
 					return nil, err
@@ -299,8 +396,9 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
+					continuationToken.IsWorkflowRunning,
 				)
 			} else {
 				history, continuationToken.PersistenceToken, err = api.GetHistory(
@@ -313,14 +411,32 @@ func Invoke(
 					continuationToken.NextEventId,
 					request.Request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
-					continuationToken.TransientWorkflowTask,
+					nil,
 					continuationToken.BranchToken,
 					persistenceVisibilityMgr,
+					continuationToken.IsWorkflowRunning,
 				)
 			}
 
 			if err != nil {
 				return nil, err
+			}
+
+			// Query and append transient/speculative tasks if on last page
+			if isWorkflowRunning && len(continuationToken.PersistenceToken) == 0 {
+				appendTransientTasks(
+					ctx,
+					shardContext,
+					workflowConsistencyChecker,
+					eventNotifier,
+					namespaceID,
+					execution,
+					sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices,
+					history,
+					&historyBlob,
+					cachedTransientTasks,
+					continuationToken.NextEventId,
+				)
 			}
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
@@ -357,6 +473,7 @@ func Invoke(
 		}
 		historyBlob = nil
 	}
+
 	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
 			History:       history,

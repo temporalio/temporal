@@ -154,6 +154,9 @@ message GetMutableStateResponse {
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
+    // Transient or speculative workflow task events which are not yet persisted in the history.
+    // These events should be appended to the history when it is returned to the worker.
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
 }
 
 message PollMutableStateRequest {

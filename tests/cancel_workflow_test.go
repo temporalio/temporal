@@ -616,7 +616,8 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
   2 WorkflowTaskScheduled
   3 WorkflowExecutionCancelRequested
   4 WorkflowTaskStarted
-  5 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+  5 WorkflowTaskFailed
+  6 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 		WorkflowId: id,
 	}))
 

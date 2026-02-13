@@ -15,7 +15,7 @@ message HistoryContinuation {
     int64 next_event_id = 3;
     bool is_workflow_running = 5;
     bytes persistence_token = 6;
-    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_workflow_task = 7;
+    reserved 7; // Was: transient_workflow_task - no longer passed through continuation token
     bytes branch_token = 8;
     reserved 9;
     temporal.server.api.history.v1.VersionHistoryItem version_history_item = 10;
