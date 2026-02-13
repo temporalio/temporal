@@ -883,6 +883,23 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return pm.describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, false)
+}
+
+// Describe returns information about physical queues for the requested versions, including
+// pollers, stats (with "versioning attribution", which means the default queue backlog is
+// proportionally attributed to the Current and Ramping versioned backlog counts based on
+// routing config), and internal status. When Describe is called by external clients, each
+// described queue is marked alive to reset its idle timeout and prevent it from being unloaded.
+// When we describe the task queue from inside the partition manager to expose periodic metrics,
+// we pass skipMarkAlive=true to suppress this side effect and avoid preventing idle queue unloading.
+//
+//nolint:revive // cognitive complexity 67 (> max enabled 25) but this is just a renaming of an existing function.
+func (pm *taskQueuePartitionManagerImpl) describe(
+	ctx context.Context,
+	buildIds map[string]bool,
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 
 	versions := make(map[PhysicalTaskQueueVersion]bool)
@@ -1065,7 +1082,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		versionsInfo[bid] = vInfo
 
-		physicalQueue.MarkAlive() // Count Describe for liveness
+		if !skipMarkAlive {
+			// Skipped by periodic metrics emission to avoid resetting the idle timeout,
+			// which would prevent queues from ever being unloaded.
+			physicalQueue.MarkAlive()
+		}
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
@@ -1170,7 +1191,7 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
-	resp, err := pm.Describe(ctx, buildIds, true, true, false, false)
+	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
 	if err != nil {
 		return
 	}
