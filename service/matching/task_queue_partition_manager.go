@@ -876,6 +876,8 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 // described queue is marked alive to reset its idle timeout and prevent it from being unloaded.
 // When we describe the task queue from inside the partition manager to expose periodic metrics,
 // we pass skipMarkAlive=true to suppress this side effect and avoid preventing idle queue unloading.
+//
+//nolint:revive // cognitive complexity 67 (> max enabled 25) but this is just a renaming of an existing function.
 func (pm *taskQueuePartitionManagerImpl) describe(
 	ctx context.Context,
 	buildIds map[string]bool,
