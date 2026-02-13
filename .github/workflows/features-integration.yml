@@ -79,7 +79,7 @@ jobs:
 
   feature-tests-ts:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/typescript.yaml@main
+    uses: temporalio/features/.github/workflows/typescript.yaml@spk/update-bug
     with:
       # This field is not actually used by these workflow if docker-image-artifact-name
       # is set, but it's marked as required, so supply some string.
