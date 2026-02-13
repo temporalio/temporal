@@ -179,6 +179,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetMatchingClient(),
 		nil,
+		nil,
 		nil, // Not initializing the scheduler client here.
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetPayloadSerializer(),
@@ -2906,7 +2907,6 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 				request *historyservice.DescribeWorkflowExecutionRequest,
 				_ ...grpc.CallOption,
 			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-
 				statsPayload, err := payload.Encode(batcher.BatchOperationStats{
 					NumSuccess: 2,
 					NumFailure: 1,
@@ -3025,7 +3025,6 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 			request *historyservice.DescribeWorkflowExecutionRequest,
 			_ ...grpc.CallOption,
 		) (*historyservice.DescribeWorkflowExecutionResponse, error) {
-
 			return &historyservice.DescribeWorkflowExecutionResponse{
 				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
 					Execution: &commonpb.WorkflowExecution{
@@ -3093,9 +3092,10 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 			s.Contains(request.Query, sadefs.TemporalNamespaceDivision)
 			return &manager.ListWorkflowExecutionsResponse{
 				Executions: []*workflowpb.WorkflowExecutionInfo{
-					{Execution: &commonpb.WorkflowExecution{
-						WorkflowId: jobID,
-					},
+					{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
 						StartTime:     now,
 						CloseTime:     now,
 						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,

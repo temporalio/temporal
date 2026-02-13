@@ -39,7 +39,7 @@ type perNsWorkerManagerSuite struct {
 	cmp1 *workercommon.MockPerNSWorkerComponent
 	cmp2 *workercommon.MockPerNSWorkerComponent
 
-	manager *perNamespaceWorkerManager
+	manager *PerNamespaceWorkerManager
 }
 
 func TestPerNsWorkerManager(t *testing.T) {

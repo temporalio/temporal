@@ -1029,6 +1029,16 @@ func (c *clientImpl) UpdateWorkerDeploymentVersionMetadata(
 	return c.client.UpdateWorkerDeploymentVersionMetadata(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateWorkerDeploymentVersionComputeProvider(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeProviderRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerDeploymentVersionComputeProviderResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateWorkerDeploymentVersionComputeProvider(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateWorkerVersioningRules(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerVersioningRulesRequest,
