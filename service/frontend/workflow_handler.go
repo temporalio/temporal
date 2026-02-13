@@ -3470,6 +3470,17 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 		wh.config.EnableCHASMSchedulerCreation(namespaceName)
 }
 
+// isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
+// indicates that the request should be routed to the legacy (V1) scheduler stack.
+// This accounts for two situations:
+//   - NotFound: the CHASM stack doesn't have a schedule for that ID
+//   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
+//     for the V1 stack)
+func isSchedulerErrorLegacyRoutable(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
+}
+
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
@@ -3919,8 +3930,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err == nil {
 			return resp, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4166,8 +4176,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4325,8 +4334,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4401,8 +4409,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		if err == nil {
 			return resp, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4493,8 +4500,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -5676,8 +5682,11 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
-	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	// nolint:staticcheck // checking deprecated field for backwards compatibility
+	if opErr := request.GetResponse().GetStartOperation().GetOperationError(); opErr != nil {
+		if details := opErr.GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
 	}
 
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
@@ -5717,8 +5726,16 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
 
-	if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
+	}
+	if request.GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) { // nolint:staticcheck // checking deprecated field for backwards compatibility
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
+	}
+	if request.GetFailure() != nil && request.GetFailure().GetNexusHandlerFailureInfo() == nil {
+		return nil, serviceerror.NewInvalidArgument("request Failure must contain error or failure with NexusHandlerFailureInfo")
 	}
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this

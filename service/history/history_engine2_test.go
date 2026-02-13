@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -96,6 +97,15 @@ type (
 		tv            *testvars.TestVars
 	}
 )
+
+// noopWorkerDeploymentClient is a minimal stub for workerdeployment.Client used in tests.
+// Only SignalVersionReactivation is implemented since it's the only method referenced
+// by the history engine as a function value.
+type noopWorkerDeploymentClient struct{ workerdeployment.Client }
+
+func (noopWorkerDeploymentClient) SignalVersionReactivation(context.Context, *namespace.Namespace, string, string) error {
+	return nil
+}
 
 func TestEngine2Suite(t *testing.T) {
 	s := new(engine2Suite)
@@ -212,6 +222,7 @@ func (s *engine2Suite) SetupTest() {
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
 		nDCWorkflowStateReplicator: s.mockWorkflowStateReplicator,
+		workerDeploymentClient:     noopWorkerDeploymentClient{},
 	}
 	s.mockShard.SetEngineForTesting(h)
 

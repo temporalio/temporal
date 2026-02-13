@@ -229,6 +229,7 @@ func (s *engineSuite) SetupTest() {
 		throttledLogger:            log.NewNoopLogger(),
 		persistenceVisibilityMgr:   s.mockVisibilityMgr,
 		versionChecker:             headers.NewDefaultVersionChecker(),
+		workerDeploymentClient:     noopWorkerDeploymentClient{},
 	}
 	s.mockShard.SetEngineForTesting(h)
 
