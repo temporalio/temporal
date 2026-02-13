@@ -225,6 +225,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	queue, err := pm.defaultQueueFuture.Get(context.Background())
 	if err == nil {
 		queue.Stop(unloadCause)
+		pm.emitZeroLogicalBacklogForQueue(queue.QueueKey().Version(), queue)
 	}
 
 	if pm.cancelFairnessSub != nil {
@@ -235,9 +236,9 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 
 	pm.versionedQueuesLock.Lock()
-	// First, stop all queues to wrap up ongoing operations.
-	for _, vq := range pm.versionedQueues {
+	for version, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
+		pm.emitZeroLogicalBacklogForQueue(version, vq)
 	}
 	pm.versionedQueuesLock.Unlock()
 
@@ -1190,6 +1191,28 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 }
 
+// emitZeroLogicalBacklogForQueue zeroes out logical backlog gauges for a single physical queue
+// to prevent stale values after unloading. Called from:
+// - Stop(): after each physical queue is stopped during full partition unload.
+// - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
+//   unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
+// Only zeroes priority keys that actually exist in the queue's subqueues to avoid creating
+// noisy zero-value series.
+func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version PhysicalTaskQueueVersion, pq physicalTaskQueueManager) {
+	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
+		return
+	}
+	handler := pm.metricsHandler.WithTags(
+		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
+	)
+	for pri := range pq.GetStatsByPriority(false) {
+		metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
+	}
+	metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
+}
+
+
+
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
@@ -1468,6 +1491,8 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	pm.versionedQueuesLock.Lock()
 	foundDbq, ok := pm.versionedQueues[version]
 	if ok && foundDbq == unloadedDbq {
+		// Zero logical backlog metrics before removing from map to prevent stale gauges.
+		pm.emitZeroLogicalBacklogForQueue(version, foundDbq)
 		delete(pm.versionedQueues, version)
 	}
 	pm.versionedQueuesLock.Unlock()

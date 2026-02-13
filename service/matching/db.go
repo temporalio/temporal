@@ -734,10 +734,12 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 }
 
 // emitPhysicalBacklogGaugesLocked emits the physical_approximate_backlog_count,
-// physical_approximate_backlog_age_seconds, and the legacy task_lag_per_tl gauges.
+// physical_approximate_backlog_age_seconds, and the legacy task_lag_per_tl gauges
+// tagged by priority key.
 // Physical backlog metrics are only emitted for the default (unversioned) queue.
-// Attributed backlog metrics for all versions (including current/ramping attribution)
-// are emitted separately by the partition manager via fetchAndEmitLogicalBacklogMetrics.
+// Version-attributed backlog metrics for all worker versions (including appropriate
+// attribution of the default queue's tasks to current and ramping versions) are emitted
+// separately by the partition manager via fetchAndEmitLogicalBacklogMetrics.
 func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 	if !db.config.BreakdownMetricsByTaskQueue() ||
 		!db.config.BreakdownMetricsByPartition() ||

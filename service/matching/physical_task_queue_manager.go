@@ -324,20 +324,9 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	// added to the backlog after we have emitted the zero values inside of the backlogMgr.Stop() call. This happens
 	// since task reader's and writer's contexts are cancelled after the backlogMgr.Stop() call.
 	c.backlogMgr.getDB().emitZeroPhysicalBacklogGauges()
-	c.emitZeroLogicalBacklogMetrics()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
-}
-
-func (c *physicalTaskQueueManagerImpl) emitZeroLogicalBacklogMetrics() {
-	if !c.config.BreakdownMetricsByTaskQueue() || !c.config.BreakdownMetricsByPartition() {
-		return
-	}
-	for pri := range c.GetStatsByPriority(false) {
-		metrics.ApproximateBacklogCount.With(c.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(pri))
-	}
-	metrics.ApproximateBacklogAgeSeconds.With(c.metricsHandler).Record(0)
 }
 
 // getDrainBacklogMgr returns the draining backlog manager, or nil if none.
