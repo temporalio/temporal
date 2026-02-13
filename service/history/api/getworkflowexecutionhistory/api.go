@@ -46,6 +46,13 @@ func appendTransientTasks(
 	cachedTransientTasks *historyspb.TransientWorkflowTaskInfo,
 	nextEventID int64,
 ) {
+	// CLI and UI clients should not receive transient events for backward compatibility
+	// Check this FIRST before doing any work
+	clientName, _ := headers.GetClientNameAndVersion(ctx)
+	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
+		return
+	}
+
 	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
 
 	// Try cached tasks first
@@ -77,16 +84,18 @@ func appendTransientTasks(
 			eventNotifier,
 		)
 		if err != nil || msResp.GetTransientOrSpeculativeTasks() == nil {
-			// Ignore errors - if we can't get transient events, continue without them
+			// Transient events don't exist or are already committed - this is OK
+			// Just return without appending (events are in persisted history)
+			if err != nil {
+				shardContext.GetLogger().Warn("Failed to refetch transient events",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.Error(err))
+			}
 			return
 		}
 		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
-	}
-
-	// CLI and UI clients should not receive transient events for backward compatibility
-	clientName, _ := headers.GetClientNameAndVersion(ctx)
-	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
-		return
 	}
 
 	// Manually append transient events to the response
