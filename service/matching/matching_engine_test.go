@@ -5832,3 +5832,52 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Nil(t, shutdownCache.Get(""))
 	})
 }
+
+func TestPollReturnsEmptyAfterWorkerShutdown(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	shutdownCache := cache.New(100, &cache.Options{TTL: time.Minute})
+	workerKey := "shutdown-worker-key"
+
+	// Pre-populate shutdown cache (simulating CancelOutstandingWorkerPolls was called)
+	shutdownCache.Put(workerKey, struct{}{})
+
+	engine := &matchingEngineImpl{
+		shutdownWorkers:   shutdownCache,
+		namespaceRegistry: mockNamespaceCache,
+	}
+
+	t.Run("PollWorkflowTaskQueue returns empty for shutdown worker", func(t *testing.T) {
+		resp, err := engine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
+			NamespaceId: "test-namespace-id",
+			PollerId:    "poller-1",
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace:         "test-namespace",
+				WorkerInstanceKey: workerKey,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue"},
+			},
+		}, metrics.NoopMetricsHandler)
+
+		require.NoError(t, err)
+		require.Equal(t, emptyPollWorkflowTaskQueueResponse, resp)
+	})
+
+	t.Run("PollActivityTaskQueue returns empty for shutdown worker", func(t *testing.T) {
+		resp, err := engine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+			NamespaceId: "test-namespace-id",
+			PollerId:    "poller-1",
+			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+				Namespace:         "test-namespace",
+				WorkerInstanceKey: workerKey,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue"},
+			},
+		}, metrics.NoopMetricsHandler)
+
+		require.NoError(t, err)
+		require.Equal(t, emptyPollActivityTaskQueueResponse, resp)
+	})
+}
