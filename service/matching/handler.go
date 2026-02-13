@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/matching/workers"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
@@ -70,6 +71,7 @@ type (
 		RateLimiter                   TaskDispatchRateLimiter `optional:"true"`
 		WorkersRegistry               workers.Registry
 		Serializer                    serialization.Serializer
+		TaskMatchHooks                []hooks.TaskMatchHook `group:"TaskMatchHooks"`
 	}
 )
 
@@ -112,6 +114,7 @@ func NewHandler(
 			params.SearchAttributeMapperProvider,
 			params.RateLimiter,
 			params.Serializer,
+			params.TaskMatchHooks,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,
