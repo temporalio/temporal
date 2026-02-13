@@ -1799,9 +1799,9 @@ When this limit is reached, new workflows will fall back to the base FIFO schedu
 
 	TaskSchedulerExecutionQueueSchedulerQueueConcurrency = NewGlobalIntSetting(
 		"history.taskSchedulerExecutionQueueSchedulerQueueConcurrency",
-		1,
+		2,
 		`TaskSchedulerExecutionQueueSchedulerQueueConcurrency is the max number of worker goroutines per workflow queue.
-Defaults to 1 (strictly sequential). Higher values allow limited parallelism per workflow.`,
+Higher values allow limited parallelism per workflow. Values <= 0 are capped to 1.`,
 	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
