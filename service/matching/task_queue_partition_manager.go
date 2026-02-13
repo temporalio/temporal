@@ -498,10 +498,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 	}
 
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+	identity, hasIdentity := ctx.Value(identityKey).(string)
+	if hasIdentity && identity != "" {
 		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	// The desired global rate limit for the task queue can come from multiple sources:
@@ -518,6 +517,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+	}
+
+	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).
+	// Skip on cancellation to avoid re-adding entry after RemovePoller was called.
+	if hasIdentity && identity != "" && ctx.Err() != context.Canceled {
+		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	return task, versionSetUsed, err
@@ -780,6 +785,18 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 		vq.MarkAlive()
 	}
 	return ret
+}
+
+// RemovePoller eagerly removes a poller from history for graceful shutdown.
+func (pm *taskQueuePartitionManagerImpl) RemovePoller(identity pollerIdentity) {
+	if dbq := pm.defaultQueue(); dbq != nil {
+		dbq.RemovePoller(identity)
+	}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, vq := range pm.versionedQueues {
+		vq.RemovePoller(identity)
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {

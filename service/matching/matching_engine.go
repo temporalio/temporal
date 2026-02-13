@@ -1209,11 +1209,48 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 }
 
 func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
-	_ context.Context,
+	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+	e.removePollerFromHistory(ctx, request)
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// removePollerFromHistory eagerly removes the worker from pollerHistory so
+// DescribeTaskQueue doesn't show stale pollers after worker shutdown.
+func (e *matchingEngineImpl) removePollerFromHistory(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) {
+	workerIdentity := request.GetWorkerIdentity()
+	if workerIdentity == "" {
+		return
+	}
+
+	taskQueueName := request.GetTaskQueue().GetName()
+	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		e.logger.Warn("Invalid task queue for poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
+	if err != nil {
+		e.logger.Warn("Failed to get task queue partition manager for poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+	if pm == nil {
+		e.logger.Debug("Partition manager not loaded, skipping poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName))
+		return
+	}
+
+	pm.RemovePoller(pollerIdentity(workerIdentity))
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueue(
