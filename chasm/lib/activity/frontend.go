@@ -114,7 +114,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := ValidateDescribeActivityExecutionRequest(
+	err := validateDescribeActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)

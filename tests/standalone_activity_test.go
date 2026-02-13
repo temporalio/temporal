@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/tasktoken"
@@ -35,7 +36,6 @@ import (
 const (
 	defaultStartToCloseTimeout = 1 * time.Minute
 	defaultIdentity            = "test-worker"
-	defaultMaxIDLengthLimit    = 1000
 )
 
 var (
@@ -70,6 +70,8 @@ var (
 		Summary: payload.EncodeString("test-summary"),
 		Details: payload.EncodeString("test-details"),
 	}
+	defaultMaxIDLengthLimit = dynamicconfig.MaxIDLengthLimit.Get(
+		dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))()
 )
 
 type standaloneActivityTestSuite struct {

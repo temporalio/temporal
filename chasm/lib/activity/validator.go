@@ -225,8 +225,7 @@ func validateAndNormalizeSearchAttributes(
 	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
-// ValidateDescribeActivityExecutionRequest validates DescribeActivityExecutionRequest.
-func ValidateDescribeActivityExecutionRequest(
+func validateDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -252,7 +251,6 @@ func ValidateDescribeActivityExecutionRequest(
 	return nil
 }
 
-// validatePollActivityExecutionRequest validates PollActivityExecutionRequest.
 func validatePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
@@ -273,7 +271,6 @@ func validatePollActivityExecutionRequest(
 	return nil
 }
 
-// validateRequestCancelActivityExecutionRequest validates RequestCancelActivityExecutionRequest.
 func validateRequestCancelActivityExecutionRequest(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 	maxIDLengthLimit int,
@@ -322,7 +319,6 @@ func validateRequestCancelActivityExecutionRequest(
 	return nil
 }
 
-// validateTerminateActivityExecutionRequest validates TerminateActivityExecutionRequest.
 func validateTerminateActivityExecutionRequest(
 	req *workflowservice.TerminateActivityExecutionRequest,
 	maxIDLengthLimit int,
