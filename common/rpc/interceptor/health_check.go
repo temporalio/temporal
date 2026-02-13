@@ -47,7 +47,9 @@ var excludedAPIsForHealthSignal = map[string]struct{}{
 	"PollWorkflowExecutionUpdate":  {},
 	"PollWorkflowExecutionHistory": {},
 	"UpdateWorkflowExecution":      {},
+	"QueryWorkflow":                {},
 }
+
 var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
 
 // NewHealthCheckInterceptor creates a new health check interceptor
