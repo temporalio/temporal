@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -157,6 +158,10 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) error {
+	if activity.ShouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

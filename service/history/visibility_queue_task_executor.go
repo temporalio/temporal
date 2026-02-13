@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -314,6 +315,10 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	ctx context.Context,
 	task *tasks.DeleteExecutionVisibilityTask,
 ) (retError error) {
+	if activity.ShouldDropStandaloneActivityTask(task.ArchetypeID) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
@@ -346,6 +351,10 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
 ) (retError error) {
+	if activity.ShouldDropStandaloneActivityTask(task.Info.ArchetypeId) {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
