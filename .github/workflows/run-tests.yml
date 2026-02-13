@@ -33,7 +33,6 @@ jobs:
     outputs:
       job_matrix: ${{ steps.build_matrix.outputs.job_matrix }}
       full_test_reason: ${{ steps.determine_scope.outputs.full_test_reason }}
-      runner_x64: ${{ steps.configure_runners.outputs.runner_x64 }}
       runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
       - name: Checkout Code
@@ -103,17 +102,11 @@ jobs:
         run: |
           # Use 8-core runners for temporalio org, standard runners for forks
           if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_x64="ubuntu-latest-8-cores"
             runner_arm="ubuntu-24.04-arm64-8-cores"
           else
-            runner_x64="ubuntu-latest"
             runner_arm="ubuntu-24.04-arm"
           fi
-
-          {
-            echo "runner_x64=$runner_x64"
-            echo "runner_arm=$runner_arm"
-          } >> "$GITHUB_OUTPUT"
+          echo "runner_arm=$runner_arm" >> "$GITHUB_OUTPUT"
 
       # Primary DBs always get full tests, extended DBs get smoke tests (1 job) in abridged PRs.
       - name: Build job matrix
@@ -125,7 +118,6 @@ jobs:
               persistence_type: nosql
               persistence_driver: cassandra
               containers: [cassandra, elasticsearch]
-              arch: arm
               required: true
             cass_es8:
               persistence_type: nosql
@@ -143,7 +135,6 @@ jobs:
               persistence_type: sql
               persistence_driver: sqlite
               containers: []
-              arch: arm
             mysql8:
               persistence_type: sql
               persistence_driver: mysql8
@@ -152,7 +143,6 @@ jobs:
               persistence_type: sql
               persistence_driver: postgres12
               containers: [postgresql]
-              arch: arm
               required: true
             postgres12_pgx:
               persistence_type: sql
@@ -222,12 +212,9 @@ jobs:
           echo "Generated $(jq length <<< "$MATRIX") jobs"
 
   pre-build:
-    name: Pre-build for cache (${{ matrix.arch }})
+    name: Pre-build for cache
     needs: test-setup
-    strategy:
-      matrix:
-        arch: [x64, arm]
-    runs-on: ${{ matrix.arch == 'arm' && needs.test-setup.outputs.runner_arm || needs.test-setup.outputs.runner_x64 }}
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -380,7 +367,7 @@ jobs:
   integration-test:
     name: Integration test
     needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_x64 }}
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -479,7 +466,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.test-setup.outputs.job_matrix) }}
-    runs-on: ${{ matrix.arch == 'arm' && needs.test-setup.outputs.runner_arm || needs.test-setup.outputs.runner_x64 }}
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}

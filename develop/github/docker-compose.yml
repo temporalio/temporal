@@ -44,7 +44,7 @@ services:
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
 
   elasticsearch8:
-    image: elasticsearch:8.0.0
+    image: elasticsearch:8.5.0
     ports:
       - "9200:9200"
     environment:
