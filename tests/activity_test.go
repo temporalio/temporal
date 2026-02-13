@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -191,7 +192,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	activityFn := func(ctx context.Context) error {
 		info := activity.GetInfo(ctx)
-		if info.ActivityID == "Heartbeat" {
+		if strings.HasPrefix(info.ActivityID, "Heartbeat") {
 			go func() {
 				// NOTE: due to client side heartbeat batching, heartbeat may be sent
 				// later than expected.
@@ -217,7 +218,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	var err1, err2, err3, err4, err5, err6 error
+	var err1, err2, err3, err4, err5, err6, err7, err8 error
 	workflowFn := func(ctx workflow.Context) error {
 		noRetryPolicy := &temporal.RetryPolicy{
 			MaximumAttempts: 1, // disable retry
@@ -269,13 +270,31 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		})
 		f6 := workflow.ExecuteActivity(ctx6, activityFn)
 
+		ctx7 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "HeartbeatWithScheduleToClose",
+			ScheduleToCloseTimeout: 2 * time.Second,
+			HeartbeatTimeout:       1 * time.Second,
+		})
+		f7 := workflow.ExecuteActivity(ctx7, activityFn)
+
+		ctx8 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             "StartToCloseWithScheduleToClose",
+			ScheduleToCloseTimeout: 3 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: 2 * time.Second,
+			},
+		})
+		f8 := workflow.ExecuteActivity(ctx8, activityFn)
+
 		err1 = f1.Get(ctx1, nil)
 		err2 = f2.Get(ctx2, nil)
 		err3 = f3.Get(ctx3, nil)
 		err4 = f4.Get(ctx4, nil)
 		err5 = f5.Get(ctx5, nil)
 		err6 = f6.Get(ctx6, nil)
-
+		err7 = f7.Get(ctx7, nil)
+		err8 = f8.Get(ctx8, nil)
 		return nil
 	}
 
@@ -349,6 +368,28 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	var v int
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
+
+	s.Error(err7)
+	activityErr, ok = err7.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("HeartbeatWithScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	s.Equal("not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
+	s.True(timeoutErr.HasLastHeartbeatDetails())
+	v = 0
+	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
+	s.Equal(2, v)
+
+	s.Error(err8)
+	activityErr, ok = err8.(*temporal.ActivityError)
+	s.True(ok)
+	s.Equal("StartToCloseWithScheduleToClose", activityErr.ActivityID())
+	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
+	s.Equal("not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
@@ -1480,59 +1521,6 @@ func (s *ActivityTestSuite) mockWorkflowWithErrorActivity(activityInfo chan<- ac
 	w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
 	w.RegisterActivity(mockErrorActivity)
 	return w, wf
-}
-
-func (s *ActivityClientTestSuite) TestActivityScheduleToClose_NoTimeForNextAttempt_FirstAttemptTimedOut() {
-	activityFunction := func(ctx context.Context) error {
-		timer := time.NewTimer(100 * time.Second)
-		defer timer.Stop()
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timer.C:
-			return nil
-		}
-	}
-
-	workflowFn := func(ctx workflow.Context) error {
-		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			// This will not allow the activit to retry more than once because schedule to close will happen before next retry
-			// is scheduled.
-			StartToCloseTimeout:    1 * time.Second,
-			ScheduleToCloseTimeout: 3 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval: 10 * time.Second,
-			},
-		}), activityFunction).Get(ctx, nil)
-		return err
-	}
-
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
-
-	wfId := testcore.RandomizeStr(s.T().Name())
-	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
-	s.NoError(err)
-
-	err = workflowRun.Get(ctx, nil)
-	var wfExecutionError *temporal.WorkflowExecutionError
-	s.ErrorAs(err, &wfExecutionError)
-	var activityError *temporal.ActivityError
-	s.ErrorAs(wfExecutionError.Unwrap(), &activityError)
-	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
-	var timeoutErr *temporal.TimeoutError
-	s.ErrorAs(activityError.Unwrap(), &timeoutErr)
-	s.Equal("not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
-	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
-
-	history := s.GetHistory(string(s.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})
-	s.ContainsHistory(`ActivityTaskTimedOut`, &historypb.History{Events: history})
 }
 
 func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
