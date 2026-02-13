@@ -2794,6 +2794,27 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
+	VersionReactivationSignalCacheTTL = NewGlobalDurationSetting(
+		"history.versionReactivationSignalCacheTTL",
+		10*time.Second,
+		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
+		draining status to DRAINING from DRAINED/INACTIVE states.`,
+	)
+
+	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
+		"history.versionReactivationSignalCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version reactivation signal cache.`,
+	)
+
+	EnableVersionReactivationSignals = NewGlobalBoolSetting(
+		"history.enableVersionReactivationSignals",
+		true,
+		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
+		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
+		globally if load becomes problematic.`,
+	)
+
 	RoutingInfoCacheTTL = NewGlobalDurationSetting(
 		"history.routingInfoCacheTTL",
 		1*time.Second,
