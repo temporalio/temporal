@@ -19,17 +19,24 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
 type (
+	ExternalService struct {
+		ServiceName primitives.ServiceName
+		Module      fx.Option
+	}
+
 	synchronizationModeParams struct {
 		blockingStart bool
 		interruptCh   <-chan interface{}
 	}
 
 	serverOptions struct {
-		serviceNames map[primitives.ServiceName]struct{}
+		serviceNames    map[primitives.ServiceName]struct{}
+		externalService *ExternalService
 
 		config         *config.Config
 		configDir      string

@@ -12,4 +12,5 @@ const (
 	WorkerService           ServiceName = "worker"
 	ServerService           ServiceName = "server"
 	UnitTestService         ServiceName = "unittest"
+	WorkerControllerService ServiceName = "worker-controller"
 )

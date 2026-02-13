@@ -1442,4 +1442,5 @@ const (
 	Matching
 	Worker
 	InternalFrontend
+	WorkerControllerService
 )
