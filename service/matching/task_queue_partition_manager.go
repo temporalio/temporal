@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching/hooks"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -73,6 +74,8 @@ type (
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
+
+		taskMatchHooks []hooks.TaskMatchHook
 
 		goroGroup goro.Group
 
@@ -113,6 +116,7 @@ func newTaskQueuePartitionManager(
 	throttledLogger log.Logger,
 	metricsHandler metrics.Handler,
 	userDataManager userDataManager,
+	taskMatchHooks []hooks.TaskMatchHook,
 ) (*taskQueuePartitionManagerImpl, error) {
 	rateLimitManager := newRateLimitManager(
 		userDataManager,
@@ -132,6 +136,7 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:      rateLimitManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
+		taskMatchHooks:        taskMatchHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -357,6 +362,20 @@ reredirectTask:
 	if isActive {
 		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
+			for _, l := range pm.taskMatchHooks {
+				var deploymentVersion *deploymentpb.WorkerDeploymentVersion
+				if targetVersion != nil {
+					deploymentVersion = &deploymentpb.WorkerDeploymentVersion{DeploymentName: targetVersion.DeploymentName, BuildId: targetVersion.BuildId}
+				}
+				l.ProcessTaskMatch(ctx, &hooks.TaskMatchHookDetails{
+					Namespace:               pm.ns,
+					TaskQueueName:           pm.partition.TaskQueue().Name(),
+					TaskQueueType:           pm.partition.TaskType(),
+					DeploymentVersion:       deploymentVersion,
+					IsSyncMatch:             syncMatched,
+					TaskQueueStatsRetriever: func() map[int32]*taskqueuepb.TaskQueueStats { return dbq.GetStatsByPriority(true) },
+				})
+			}
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -380,6 +399,21 @@ reredirectTask:
 	if directive.GetUseAssignmentRules() != nil {
 		// return build ID only if a new one is assigned.
 		assignedBuildId = spoolQueue.QueueKey().Version().BuildId()
+	}
+
+	for _, l := range pm.taskMatchHooks {
+		var deploymentVersion *deploymentpb.WorkerDeploymentVersion
+		if targetVersion != nil {
+			deploymentVersion = &deploymentpb.WorkerDeploymentVersion{DeploymentName: targetVersion.DeploymentName, BuildId: targetVersion.BuildId}
+		}
+		l.ProcessTaskMatch(ctx, &hooks.TaskMatchHookDetails{
+			Namespace:               pm.ns,
+			TaskQueueName:           pm.partition.TaskQueue().Name(),
+			TaskQueueType:           pm.partition.TaskType(),
+			DeploymentVersion:       deploymentVersion,
+			IsSyncMatch:             false,
+			TaskQueueStatsRetriever: func() map[int32]*taskqueuepb.TaskQueueStats { return dbq.GetStatsByPriority(true) },
+		})
 	}
 
 	return assignedBuildId, false, spoolQueue.SpoolTask(params.taskInfo)
@@ -960,7 +994,7 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 			unversionedCurrentShareByPriority, unversionedRampingShareByPriority =
 				splitStatsByPriorityByRampPercentage(unversionedStatsByPriority, rampPercentage)
 		} else if currentExists {
-			// If there exist no ramping version, weattribute the entire unversioned backlog to the current version.
+			// If there exist no ramping version, we attribute the entire unversioned backlog to the current version.
 			unversionedCurrentShareByPriority = cloneStatsByPriority(unversionedStatsByPriority)
 		}
 	}
