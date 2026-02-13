@@ -148,6 +148,7 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 	entry := taskEntry[T]{task: task, submitTime: s.timeSource.Now()}
 
 	s.mu.Lock()
+	var q *executionQueue[T]
 	for {
 		if s.isStopped() {
 			s.mu.Unlock()
@@ -155,12 +156,14 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 			metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
 			return
 		}
-		if _, exists := s.queues[key]; exists || len(s.queues) < s.options.MaxQueues() {
+		var exists bool
+		q, exists = s.queues[key]
+		if exists || len(s.queues) < s.options.MaxQueues() {
 			break
 		}
 		s.queueAvailable.Wait()
 	}
-	s.appendTaskLocked(key, entry)
+	s.appendTaskLocked(key, q, entry)
 	s.mu.Unlock()
 	metrics.ExecutionQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
 }
@@ -185,12 +188,13 @@ func (s *ExecutionQueueScheduler[T]) TrySubmit(task T) bool {
 		return true
 	}
 
-	if _, exists := s.queues[key]; !exists && len(s.queues) >= s.options.MaxQueues() {
+	q, exists := s.queues[key]
+	if !exists && len(s.queues) >= s.options.MaxQueues() {
 		s.mu.Unlock()
 		metrics.ExecutionQueueSchedulerSubmitRejected.With(s.metricsHandler).Record(1)
 		return false
 	}
-	s.appendTaskLocked(key, entry)
+	s.appendTaskLocked(key, q, entry)
 	s.mu.Unlock()
 	metrics.ExecutionQueueSchedulerTasksSubmitted.With(s.metricsHandler).Record(1)
 	return true
@@ -198,9 +202,9 @@ func (s *ExecutionQueueScheduler[T]) TrySubmit(task T) bool {
 
 // appendTaskLocked appends a task to the queue for the given key, creating the
 // queue and spawning a worker if needed. Must be called with s.mu held.
-func (s *ExecutionQueueScheduler[T]) appendTaskLocked(key any, entry taskEntry[T]) {
-	q, exists := s.queues[key]
-	if !exists {
+// q is the existing queue for the key, or nil if one needs to be created.
+func (s *ExecutionQueueScheduler[T]) appendTaskLocked(key any, q *executionQueue[T], entry taskEntry[T]) {
+	if q == nil {
 		q = &executionQueue[T]{}
 		s.queues[key] = q
 		metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
