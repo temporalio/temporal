@@ -2508,16 +2508,18 @@ func (h *Handler) StartNexusOperation(
 	if err != nil {
 		var opErr *nexus.OperationError
 		if errors.As(err, &opErr) {
-			// TODO: adapt to new error handling code
+			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+			if convErr != nil {
+				return nil, convErr
+			}
+			temporalFailure, convErr := commonnexus.NexusFailureToTemporalFailure(nexusFailure)
+			if convErr != nil {
+				return nil, convErr
+			}
 			return &historyservice.StartNexusOperationResponse{
 				Response: &nexuspb.StartOperationResponse{
-					Variant: &nexuspb.StartOperationResponse_OperationError{
-						OperationError: &nexuspb.UnsuccessfulOperationError{
-							OperationState: string(opErr.State),
-							Failure: &nexuspb.Failure{
-								Message: opErr.Cause.Error(),
-							},
-						},
+					Variant: &nexuspb.StartOperationResponse_Failure{
+						Failure: temporalFailure,
 					},
 				},
 			}, nil

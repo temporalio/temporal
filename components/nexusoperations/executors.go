@@ -1095,14 +1095,22 @@ func (e taskExecutor) startOnHistoryService(
 			Token:     v.AsyncSuccess.GetOperationToken(),
 			// Ignore the private client field, it's not needed here.
 		}
-	case *nexuspb.StartOperationResponse_OperationError: //nolint:staticcheck
-		failure := commonnexus.ProtoFailureToNexusFailure(v.OperationError.GetFailure()) //nolint:staticcheck
+	case *nexuspb.StartOperationResponse_Failure:
+		state := nexus.OperationStateFailed
+		if v.Failure.GetCanceledFailureInfo() != nil {
+			state = nexus.OperationStateCanceled
+		}
+		nexusFailure, convErr := commonnexus.TemporalFailureToNexusFailure(v.Failure)
+		if convErr != nil {
+			e.Logger.Error("failed to convert temporal failure to nexus failure", tag.Error(convErr), tag.RequestID(args.requestID))
+			he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
+			he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
+			return nil, he
+		}
 		return nil, &nexus.OperationError{
-			State: nexus.OperationState(v.OperationError.GetOperationState()), //nolint:staticcheck
-			Cause: &nexus.FailureError{
-				Failure: failure,
-			},
-			OriginalFailure: &failure,
+			State:           state,
+			Cause:           &nexus.FailureError{Failure: nexusFailure},
+			OriginalFailure: &nexusFailure,
 		}
 	default:
 		e.Logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))

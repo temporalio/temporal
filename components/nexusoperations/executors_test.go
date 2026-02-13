@@ -1551,12 +1551,12 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				mockHistoryClient.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).Return(
 					&historyservice.StartNexusOperationResponse{
 						Response: &nexuspb.StartOperationResponse{
-							Variant: &nexuspb.StartOperationResponse_OperationError{
-								OperationError: &nexuspb.UnsuccessfulOperationError{
-									OperationState: string(nexus.OperationStateFailed),
-									Failure: commonnexus.NexusFailureToProtoFailure(
-										nexus.Failure{Message: "operation failed"},
-									),
+							Variant: &nexuspb.StartOperationResponse_Failure{
+								Failure: &failurepb.Failure{
+									Message: "operation failed",
+									FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+										ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+									},
 								},
 							},
 						},
