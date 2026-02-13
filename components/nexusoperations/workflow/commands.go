@@ -79,7 +79,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
 					return workflow.FailWorkflowTaskError{
 						Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-						Message: handlerErr.Cause.Error(),
+						Message: handlerErr.Message,
 					}
 				}
 			}

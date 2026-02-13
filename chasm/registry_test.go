@@ -91,6 +91,8 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 		chasm.NewRegistrableComponent[*chasm.MockComponent]("DetachedComponent", chasm.WithDetached()),
 	})
 	lib.EXPECT().Tasks().Return(nil)
+	lib.EXPECT().NexusServices().Return(nil)
+	lib.EXPECT().NexusServiceProcessors().Return(nil)
 
 	err := r.Register(lib)
 	s.Require().NoError(err)

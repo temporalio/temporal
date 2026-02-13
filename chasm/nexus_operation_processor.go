@@ -82,7 +82,7 @@ func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I])
 	return func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 		var i I
 		if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{input}}, &i); err != nil {
-			return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
 		}
 		result, err := processor.ProcessInput(ctx, i)
 		if err != nil {
@@ -91,7 +91,7 @@ func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I])
 		if ctx.ReserializeInputPayload {
 			pls, err := payloads.Encode(i)
 			if err != nil {
-				herr := nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "failed to re-encode input payload: %v", err)
+				herr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "failed to re-encode input payload: %v", err)
 				herr.RetryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
 				return nil, herr
 			}
@@ -151,7 +151,7 @@ func (p *NexusServiceProcessor) MustRegisterOperation(name string, op Registerab
 func (p *NexusServiceProcessor) ProcessInput(ctx NexusOperationProcessorContext, opName string, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 	op, ok := p.operations[opName]
 	if !ok {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation %q not found", opName)
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "operation %q not found", opName)
 	}
 
 	return op.processInput(ctx, input)
@@ -195,7 +195,7 @@ func (p *NexusEndpointProcessor) MustRegisterServiceProcessor(processor *NexusSe
 func (p *NexusEndpointProcessor) ProcessInput(ctx NexusOperationProcessorContext, service, operation string, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 	serviceProcessor, ok := p.serviceProcessors[service]
 	if !ok {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "service %q not found", service)
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "service %q not found", service)
 	}
 	return serviceProcessor.ProcessInput(ctx, operation, input)
 }

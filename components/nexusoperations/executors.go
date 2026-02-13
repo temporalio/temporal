@@ -1095,16 +1095,18 @@ func (e taskExecutor) startOnHistoryService(
 			Token:     v.AsyncSuccess.GetOperationToken(),
 			// Ignore the private client field, it's not needed here.
 		}
-	case *nexuspb.StartOperationResponse_OperationError:
+	case *nexuspb.StartOperationResponse_OperationError: //nolint:staticcheck
+		failure := commonnexus.ProtoFailureToNexusFailure(v.OperationError.GetFailure()) //nolint:staticcheck
 		return nil, &nexus.OperationError{
-			State: nexus.OperationState(v.OperationError.GetOperationState()),
+			State: nexus.OperationState(v.OperationError.GetOperationState()), //nolint:staticcheck
 			Cause: &nexus.FailureError{
-				Failure: commonnexus.ProtoFailureToNexusFailure(v.OperationError.GetFailure()),
+				Failure: failure,
 			},
+			OriginalFailure: &failure,
 		}
 	default:
 		e.Logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))
-		he := nexus.HandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
+		he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
 		he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 		return nil, he
 	}

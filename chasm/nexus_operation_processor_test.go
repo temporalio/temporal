@@ -25,7 +25,7 @@ func (o *processableOperation) Name() string {
 
 func (o *processableOperation) ProcessInput(ctx NexusOperationProcessorContext, input *processableInput) (*NexusOperationProcessorResult, error) {
 	if input.Value < 0 {
-		return nil, nexus.HandlerErrorf(nexus.HandlerErrorTypeBadRequest, "value must be non-negative")
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "value must be non-negative")
 	}
 	// Mutate to test overwrite behavior.
 	input.Value += 1
