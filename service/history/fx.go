@@ -157,6 +157,9 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 
 func buildNexusHandler(chasmRegistry *chasm.Registry) (nexus.Handler, error) {
 	nexusServices := chasmRegistry.NexusServices()
+	if len(nexusServices) == 0 {
+		return nil, nil
+	}
 	serviceRegistry := nexus.NewServiceRegistry()
 	for _, svc := range nexusServices {
 		// No chance of collision here since the registry would have errored out earlier.

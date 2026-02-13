@@ -278,7 +278,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		result, callErr = e.startOnHistoryService(callCtx, ns, args, options)
 	} else {
 		client, err := e.ClientProvider(
-			ctx,
+			callCtx,
 			ns.ID().String(),
 			endpoint,
 			args.service,

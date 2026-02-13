@@ -2504,6 +2504,9 @@ func (h *Handler) StartNexusOperation(
 	})
 
 	// Invoke the operation via the handler
+	if h.nexusHandler == nil {
+		return nil, serviceerror.NewUnimplemented("no nexus services registered")
+	}
 	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
 	if err != nil {
 		var opErr *nexus.OperationError
@@ -2584,6 +2587,9 @@ func (h *Handler) CancelNexusOperation(
 	})
 
 	// Invoke the cancel operation via the handler
+	if h.nexusHandler == nil {
+		return nil, serviceerror.NewUnimplemented("no nexus services registered")
+	}
 	err := h.nexusHandler.CancelOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), req.GetRequest().GetOperationToken(), options)
 	if err != nil {
 		// TODO: redact certain errors

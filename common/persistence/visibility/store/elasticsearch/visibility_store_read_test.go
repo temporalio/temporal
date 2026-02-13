@@ -154,6 +154,8 @@ func (s *ESVisibilitySuite) SetupTest() {
 	)
 	library.EXPECT().Components().Return([]*chasm.RegistrableComponent{rc}).AnyTimes()
 	library.EXPECT().Tasks().Return(nil).AnyTimes()
+	library.EXPECT().NexusServices().Return(nil).AnyTimes()
+	library.EXPECT().NexusServiceProcessors().Return(nil).AnyTimes()
 	s.chasmRegistry = chasm.NewRegistry(log.NewNoopLogger())
 	err := s.chasmRegistry.Register(library)
 	s.NoError(err)

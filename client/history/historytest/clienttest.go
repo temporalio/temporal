@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/trace/embedded"
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -139,6 +140,7 @@ func createServer(historyTaskQueueManager persistence.HistoryTaskQueueManager) *
 		TaskQueueManager:     historyTaskQueueManager,
 		TracerProvider:       fakeTracerProvider{},
 		TaskCategoryRegistry: tasks.NewDefaultTaskCategoryRegistry(),
+		ChasmRegistry:        chasm.NewRegistry(log.NewNoopLogger()),
 	})
 	if err != nil {
 		panic(err) // nolint:forbidigo // Panic is acceptable in test setup code.
