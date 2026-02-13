@@ -1526,9 +1526,9 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 	s.Worker().RegisterWorkflow(workflowFn)
 	s.Worker().RegisterActivity(activityFunction)
 
-	wfId := testcore.RandomizeStr(s.T().Name())
+	wfID := testcore.RandomizeStr(s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        wfId,
+		ID:        wfID,
 		TaskQueue: s.TaskQueue(),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
