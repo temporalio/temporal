@@ -298,7 +298,8 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
-		shutdownWorkers:           cache.New(10000, &cache.Options{TTL: config.ShutdownWorkerCacheTTL()}),
+		// 50000 entries ≈ 10MB (each entry ~200 bytes: UUID key + cache overhead)
+		shutdownWorkers:           cache.New(50000, &cache.Options{TTL: config.ShutdownWorkerCacheTTL()}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
