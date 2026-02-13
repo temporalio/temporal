@@ -779,11 +779,11 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 		}
 	}
 
-	backlogCountGauge := metrics.PhysicalApproximateBacklogCount
-	backlogAgeGauge := metrics.PhysicalApproximateBacklogAgeSeconds
-	if !attributionEnabled {
-		backlogCountGauge = metrics.ApproximateBacklogCount
-		backlogAgeGauge = metrics.ApproximateBacklogAgeSeconds
+	backlogCountGauge := metrics.ApproximateBacklogCount
+	backlogAgeGauge := metrics.ApproximateBacklogAgeSeconds
+	if attributionEnabled {
+		backlogCountGauge = metrics.PhysicalApproximateBacklogCount
+		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
 
 	for priority, count := range counts {
@@ -873,11 +873,11 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 	}
 	db.Unlock()
 
-	backlogCountGauge := metrics.PhysicalApproximateBacklogCount
-	backlogAgeGauge := metrics.PhysicalApproximateBacklogAgeSeconds
-	if !attributionEnabled {
-		backlogCountGauge = metrics.ApproximateBacklogCount
-		backlogAgeGauge = metrics.ApproximateBacklogAgeSeconds
+	backlogCountGauge := metrics.ApproximateBacklogCount
+	backlogAgeGauge := metrics.ApproximateBacklogAgeSeconds
+	if attributionEnabled {
+		backlogCountGauge = metrics.PhysicalApproximateBacklogCount
+		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
 
 	for k := range priorities {
