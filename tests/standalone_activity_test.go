@@ -273,65 +273,6 @@ func (s *standaloneActivityTestSuite) testIDConflictPolicy() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
-	t := s.T()
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
-	namespace := s.Namespace().String()
-
-	startToCloseTimeout := durationpb.New(1 * time.Minute)
-	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
-	heartbeatTimeout := durationpb.New(20 * time.Second)
-	priority := &commonpb.Priority{
-		FairnessKey: "test-key",
-	}
-
-	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    namespace,
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout:    startToCloseTimeout,
-		ScheduleToCloseTimeout: scheduleToCloseTimeout,
-		HeartbeatTimeout:       heartbeatTimeout,
-		RequestId:              s.tv.RequestID(),
-		Priority:               priority,
-		Header:                 defaultHeader,
-	})
-	require.NoError(t, err)
-
-	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: s.tv.WorkerIdentity(),
-	})
-	require.NoError(t, err)
-	require.Equal(t, activityID, pollTaskResp.GetActivityId())
-	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
-	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
-	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
-	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
-	require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
-	require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
-	require.EqualValues(t, 1, pollTaskResp.Attempt)
-	protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
-	protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
-	protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
-	protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
-	protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
-	require.NotNil(t, pollTaskResp.TaskToken)
-}
-
 func (s *standaloneActivityTestSuite) testStartValidations() {
 	t := s.T()
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
@@ -431,6 +372,65 @@ func (s *standaloneActivityTestSuite) testStartValidations() {
 			require.ErrorAs(t, err, &invalidArgErr)
 		})
 	})
+}
+
+func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	namespace := s.Namespace().String()
+
+	startToCloseTimeout := durationpb.New(1 * time.Minute)
+	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
+	heartbeatTimeout := durationpb.New(20 * time.Second)
+	priority := &commonpb.Priority{
+		FairnessKey: "test-key",
+	}
+
+	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:    namespace,
+		ActivityId:   activityID,
+		ActivityType: s.tv.ActivityType(),
+		Identity:     s.tv.WorkerIdentity(),
+		Input:        defaultInput,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+		},
+		StartToCloseTimeout:    startToCloseTimeout,
+		ScheduleToCloseTimeout: scheduleToCloseTimeout,
+		HeartbeatTimeout:       heartbeatTimeout,
+		RequestId:              s.tv.RequestID(),
+		Priority:               priority,
+		Header:                 defaultHeader,
+	})
+	require.NoError(t, err)
+
+	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: namespace,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: s.tv.WorkerIdentity(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, activityID, pollTaskResp.GetActivityId())
+	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
+	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
+	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
+	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
+	require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
+	require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
+	require.EqualValues(t, 1, pollTaskResp.Attempt)
+	protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
+	protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
+	protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
+	protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
+	protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
+	require.NotNil(t, pollTaskResp.TaskToken)
 }
 
 func (s *standaloneActivityTestSuite) TestComplete() {
@@ -2661,6 +2661,341 @@ func (s *standaloneActivityTestSuite) testDescribeActivityExecution_Completed() 
 	}
 }
 
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_DeadlineExceeded() {
+	t := s.T()
+	ctx := testcore.NewContext()
+
+	// Start an activity and get initial long-poll state token
+	activityID := s.tv.ActivityID()
+	taskQueue := s.tv.TaskQueue()
+	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
+	require.NoError(t, err)
+	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  s.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+
+	// The DescribeActivityExecution calls below use a long-poll token and will necessarily time out,
+	// because the activity undergoes no further state transitions.
+
+	// The timeout imposed by the server is essentially
+	// Min(CallerTimeout - LongPollBuffer, LongPollTimeout)
+
+	// Case 1: Caller sets a deadline which has room for the buffer. History returns empty success
+	// result with at least buffer remaining before the caller deadline.
+	t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
+		// CallerTimeout - LongPollBuffer is far in the future
+		cleanup1 := s.OverrideDynamicConfig(activity.LongPollBuffer, 1*time.Second)
+		defer cleanup1()
+		ctx, cancel := context.WithTimeout(ctx, 9999*time.Millisecond)
+		defer cancel()
+
+		// DescribeActivityExecution will return when this long poll timeout expires.
+		cleanup2 := s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		defer cleanup2()
+
+		describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     s.Namespace().String(),
+			ActivityId:    activityID,
+			RunId:         startResp.RunId,
+			LongPollToken: describeResp.LongPollToken,
+		})
+		// The server uses an empty non-error response to indicate to the caller that it should resubmit
+		// its long-poll.
+		require.NoError(t, err)
+		require.Empty(t, describeResp.GetInfo())
+	})
+
+	// Case 2: caller does not set a deadline. In practice this is equivalent to them setting a 30s
+	// deadline since that is what Histry receives. In this case History times out the wait at
+	// LongPollTimeout and the caller gets an empty response.
+	t.Run("NoCallerDeadline", func(t *testing.T) {
+		// The caller sets no deadline. However, the ctx received by the history service handler
+		// will have a 30s deadline that was applied by one of the upstream server layers, so we
+		// still must use a buffer < 30s.
+		ctx := context.Background()
+		cleanup1 := s.OverrideDynamicConfig(activity.LongPollBuffer, 29*time.Second)
+		defer cleanup1()
+		// DescribeActivityExecution will return when this long poll timeout expires.
+		cleanup2 := s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
+		defer cleanup2()
+
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     s.Namespace().String(),
+			ActivityId:    activityID,
+			RunId:         startResp.RunId,
+			LongPollToken: describeResp.LongPollToken,
+		})
+		require.NoError(t, err)
+		require.Empty(t, describeResp.GetInfo())
+	})
+
+	// Case 3: caller sets a deadline that is < the buffer. In this case DescribeActivityExecution
+	// will return an empty result immediately, and there is a race between caller receiving that
+	// and caller's client timing out the request. Therefore we do not test this.
+}
+
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_NotFound() {
+	t := s.T()
+	ctx := testcore.NewContext()
+
+	existingActivityID := s.tv.ActivityID()
+	tq := s.tv.TaskQueue()
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
+	require.NoError(t, err)
+	existingRunID := startResp.RunId
+	require.NotEmpty(t, existingRunID)
+	existingNamespace := s.Namespace().String()
+
+	var notFoundErr *serviceerror.NotFound
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+
+	testCases := []struct {
+		name           string
+		request        *workflowservice.DescribeActivityExecutionRequest
+		expectedErr    error
+		expectedErrMsg string
+	}{
+		{
+			name: "NonExistentNamespace",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  "non-existent-namespace",
+				ActivityId: existingActivityID,
+				RunId:      existingRunID,
+			},
+			expectedErr:    namespaceNotFoundErr,
+			expectedErrMsg: "Namespace non-existent-namespace is not found.",
+		},
+		{
+			name: "NonExistentActivityID",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: "non-existent-activity",
+				RunId:      existingRunID,
+			},
+			expectedErr:    notFoundErr,
+			expectedErrMsg: "activity not found for ID: non-existent-activity",
+		},
+		{
+			name: "NonExistentRunID",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
+				RunId:      "11111111-2222-3333-4444-555555555555",
+			},
+			expectedErr:    notFoundErr,
+			expectedErrMsg: fmt.Sprintf("activity not found for ID: %s", existingActivityID),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.FrontendClient().DescribeActivityExecution(ctx, tc.request)
+			require.ErrorAs(t, err, &tc.expectedErr) //nolint:testifylint
+			require.Equal(t, tc.expectedErrMsg, tc.expectedErr.Error())
+		})
+	}
+
+	t.Run("LongPollNonExistentActivity", func(t *testing.T) {
+		// Poll to get a token
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+		})
+		require.NoError(t, err)
+
+		// Use the token with a non-existent activity
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     existingNamespace,
+			ActivityId:    "non-existent-activity",
+			RunId:         existingRunID,
+			LongPollToken: validPollResp.LongPollToken,
+		})
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, "activity not found for ID: non-existent-activity", notFoundErr.Message)
+	})
+}
+
+func (s *standaloneActivityTestSuite) testDescribeActivityExecution_InvalidArgument() {
+
+	t := s.T()
+	ctx := testcore.NewContext()
+
+	existingActivityID := s.tv.ActivityID()
+	tq := s.tv.TaskQueue()
+	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
+	require.NoError(t, err)
+	existingRunID := startResp.RunId
+	require.NotEmpty(t, existingRunID)
+	existingNamespace := s.Namespace().String()
+
+	validActivityID := "activity-id"
+	validRunID := "11111111-2222-3333-4444-555555555555"
+
+	testCases := []struct {
+		name        string
+		request     *workflowservice.DescribeActivityExecutionRequest
+		expectedErr string
+	}{
+		{
+			name: "EmptyNamespace",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  "",
+				ActivityId: validActivityID,
+				RunId:      validRunID,
+			},
+			expectedErr: "Namespace is empty",
+		},
+		{
+			name: "EmptyActivityID",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: "",
+				RunId:      validRunID,
+			},
+			expectedErr: "activity ID is required",
+		},
+		{
+			name: "ActivityIDTooLong",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: string(make([]byte, 2000)),
+				RunId:      validRunID,
+			},
+			expectedErr: "activity ID exceeds length limit",
+		},
+		{
+			name: "InvalidRunID",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: validActivityID,
+				RunId:      "invalid-uuid",
+			},
+			expectedErr: "invalid run id",
+		},
+		{
+			name: "RunIdNotRequiredWhenWaitPolicyAbsent",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
+				RunId:      "",
+			},
+			expectedErr: "",
+		},
+		{
+			name: "RunIdNotRequiredWhenLongPollTokenAbsent",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  existingNamespace,
+				ActivityId: existingActivityID,
+				RunId:      "",
+			},
+			expectedErr: "",
+		},
+		{
+			name: "RunIdRequiredWhenLongPollTokenPresent",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:     existingNamespace,
+				ActivityId:    validActivityID,
+				RunId:         "",
+				LongPollToken: []byte("doesn't-matter"),
+			},
+			expectedErr: "run id is required",
+		},
+		{
+			name: "MalformedLongPollToken",
+			request: &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:     existingNamespace,
+				ActivityId:    existingActivityID,
+				RunId:         existingRunID,
+				LongPollToken: []byte("invalid-token"),
+			},
+			expectedErr: "invalid long poll token",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := s.FrontendClient().DescribeActivityExecution(ctx, tc.request)
+			if tc.expectedErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Contains(t, invalidArgErr.Message, tc.expectedErr)
+		})
+	}
+
+	t.Run("LongPollTokenFromWrongExecution", func(t *testing.T) {
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, validPollResp.LongPollToken)
+
+		activityID2 := s.tv.Any().String()
+		startResp2, err := s.startActivity(ctx, activityID2, tq.Name)
+		require.NoError(t, err)
+		require.NotEmpty(t, startResp2.GetRunId())
+
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     existingNamespace,
+			ActivityId:    activityID2,
+			RunId:         startResp2.GetRunId(),
+			LongPollToken: validPollResp.LongPollToken,
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
+	})
+
+	t.Run("LongPollTokenFromDifferentNamespace", func(t *testing.T) {
+		// Get a valid poll token from activity in main namespace
+		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  existingNamespace,
+			ActivityId: existingActivityID,
+			RunId:      existingRunID,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, validPollResp.LongPollToken)
+
+		// Start an activity in a different namespace
+		externalNamespace := s.ExternalNamespace().String()
+		externalActivityID := s.tv.Any().String()
+		externalStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    externalNamespace,
+			ActivityId:   externalActivityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: tq.Name,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           s.tv.Any().String(),
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, externalStartResp.GetRunId())
+
+		// Try to use main namespace's poll token with external namespace's activity
+		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:     externalNamespace,
+			ActivityId:    externalActivityID,
+			RunId:         externalStartResp.GetRunId(),
+			LongPollToken: validPollResp.LongPollToken,
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
+	})
+}
+
 func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 	testCases := []struct {
 		name                   string
@@ -3294,341 +3629,6 @@ func (s *standaloneActivityTestSuite) TestCountActivityExecutions() {
 			Query:     "",
 		})
 		s.ErrorAs(err, new(*serviceerror.NamespaceNotFound))
-	})
-}
-
-func (s *standaloneActivityTestSuite) testDescribeActivityExecution_DeadlineExceeded() {
-	t := s.T()
-	ctx := testcore.NewContext()
-
-	// Start an activity and get initial long-poll state token
-	activityID := s.tv.ActivityID()
-	taskQueue := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, activityID, taskQueue.Name)
-	require.NoError(t, err)
-	describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		ActivityId: activityID,
-		RunId:      startResp.RunId,
-	})
-	require.NoError(t, err)
-
-	// The DescribeActivityExecution calls below use a long-poll token and will necessarily time out,
-	// because the activity undergoes no further state transitions.
-
-	// The timeout imposed by the server is essentially
-	// Min(CallerTimeout - LongPollBuffer, LongPollTimeout)
-
-	// Case 1: Caller sets a deadline which has room for the buffer. History returns empty success
-	// result with at least buffer remaining before the caller deadline.
-	t.Run("CallerDeadlineNotExceeded", func(t *testing.T) {
-		// CallerTimeout - LongPollBuffer is far in the future
-		cleanup1 := s.OverrideDynamicConfig(activity.LongPollBuffer, 1*time.Second)
-		defer cleanup1()
-		ctx, cancel := context.WithTimeout(ctx, 9999*time.Millisecond)
-		defer cancel()
-
-		// DescribeActivityExecution will return when this long poll timeout expires.
-		cleanup2 := s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
-		defer cleanup2()
-
-		describeResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:     s.Namespace().String(),
-			ActivityId:    activityID,
-			RunId:         startResp.RunId,
-			LongPollToken: describeResp.LongPollToken,
-		})
-		// The server uses an empty non-error response to indicate to the caller that it should resubmit
-		// its long-poll.
-		require.NoError(t, err)
-		require.Empty(t, describeResp.GetInfo())
-	})
-
-	// Case 2: caller does not set a deadline. In practice this is equivalent to them setting a 30s
-	// deadline since that is what Histry receives. In this case History times out the wait at
-	// LongPollTimeout and the caller gets an empty response.
-	t.Run("NoCallerDeadline", func(t *testing.T) {
-		// The caller sets no deadline. However, the ctx received by the history service handler
-		// will have a 30s deadline that was applied by one of the upstream server layers, so we
-		// still must use a buffer < 30s.
-		ctx := context.Background()
-		cleanup1 := s.OverrideDynamicConfig(activity.LongPollBuffer, 29*time.Second)
-		defer cleanup1()
-		// DescribeActivityExecution will return when this long poll timeout expires.
-		cleanup2 := s.OverrideDynamicConfig(activity.LongPollTimeout, 10*time.Millisecond)
-		defer cleanup2()
-
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:     s.Namespace().String(),
-			ActivityId:    activityID,
-			RunId:         startResp.RunId,
-			LongPollToken: describeResp.LongPollToken,
-		})
-		require.NoError(t, err)
-		require.Empty(t, describeResp.GetInfo())
-	})
-
-	// Case 3: caller sets a deadline that is < the buffer. In this case DescribeActivityExecution
-	// will return an empty result immediately, and there is a race between caller receiving that
-	// and caller's client timing out the request. Therefore we do not test this.
-}
-
-func (s *standaloneActivityTestSuite) testDescribeActivityExecution_NotFound() {
-	t := s.T()
-	ctx := testcore.NewContext()
-
-	existingActivityID := s.tv.ActivityID()
-	tq := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
-	require.NoError(t, err)
-	existingRunID := startResp.RunId
-	require.NotEmpty(t, existingRunID)
-	existingNamespace := s.Namespace().String()
-
-	var notFoundErr *serviceerror.NotFound
-	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
-
-	testCases := []struct {
-		name           string
-		request        *workflowservice.DescribeActivityExecutionRequest
-		expectedErr    error
-		expectedErrMsg string
-	}{
-		{
-			name: "NonExistentNamespace",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  "non-existent-namespace",
-				ActivityId: existingActivityID,
-				RunId:      existingRunID,
-			},
-			expectedErr:    namespaceNotFoundErr,
-			expectedErrMsg: "Namespace non-existent-namespace is not found.",
-		},
-		{
-			name: "NonExistentActivityID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: "non-existent-activity",
-				RunId:      existingRunID,
-			},
-			expectedErr:    notFoundErr,
-			expectedErrMsg: "activity not found for ID: non-existent-activity",
-		},
-		{
-			name: "NonExistentRunID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: existingActivityID,
-				RunId:      "11111111-2222-3333-4444-555555555555",
-			},
-			expectedErr:    notFoundErr,
-			expectedErrMsg: fmt.Sprintf("activity not found for ID: %s", existingActivityID),
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.FrontendClient().DescribeActivityExecution(ctx, tc.request)
-			require.ErrorAs(t, err, &tc.expectedErr) //nolint:testifylint
-			require.Equal(t, tc.expectedErrMsg, tc.expectedErr.Error())
-		})
-	}
-
-	t.Run("LongPollNonExistentActivity", func(t *testing.T) {
-		// Poll to get a token
-		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  existingNamespace,
-			ActivityId: existingActivityID,
-			RunId:      existingRunID,
-		})
-		require.NoError(t, err)
-
-		// Use the token with a non-existent activity
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:     existingNamespace,
-			ActivityId:    "non-existent-activity",
-			RunId:         existingRunID,
-			LongPollToken: validPollResp.LongPollToken,
-		})
-		var notFoundErr *serviceerror.NotFound
-		require.ErrorAs(t, err, &notFoundErr)
-		require.Equal(t, "activity not found for ID: non-existent-activity", notFoundErr.Message)
-	})
-}
-
-func (s *standaloneActivityTestSuite) testDescribeActivityExecution_InvalidArgument() {
-
-	t := s.T()
-	ctx := testcore.NewContext()
-
-	existingActivityID := s.tv.ActivityID()
-	tq := s.tv.TaskQueue()
-	startResp, err := s.startActivity(ctx, existingActivityID, tq.Name)
-	require.NoError(t, err)
-	existingRunID := startResp.RunId
-	require.NotEmpty(t, existingRunID)
-	existingNamespace := s.Namespace().String()
-
-	validActivityID := "activity-id"
-	validRunID := "11111111-2222-3333-4444-555555555555"
-
-	testCases := []struct {
-		name        string
-		request     *workflowservice.DescribeActivityExecutionRequest
-		expectedErr string
-	}{
-		{
-			name: "EmptyNamespace",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  "",
-				ActivityId: validActivityID,
-				RunId:      validRunID,
-			},
-			expectedErr: "Namespace is empty",
-		},
-		{
-			name: "EmptyActivityID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: "",
-				RunId:      validRunID,
-			},
-			expectedErr: "activity ID is required",
-		},
-		{
-			name: "ActivityIDTooLong",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: string(make([]byte, 2000)),
-				RunId:      validRunID,
-			},
-			expectedErr: "activity ID exceeds length limit",
-		},
-		{
-			name: "InvalidRunID",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: validActivityID,
-				RunId:      "invalid-uuid",
-			},
-			expectedErr: "invalid run id",
-		},
-		{
-			name: "RunIdNotRequiredWhenWaitPolicyAbsent",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: existingActivityID,
-				RunId:      "",
-			},
-			expectedErr: "",
-		},
-		{
-			name: "RunIdNotRequiredWhenLongPollTokenAbsent",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  existingNamespace,
-				ActivityId: existingActivityID,
-				RunId:      "",
-			},
-			expectedErr: "",
-		},
-		{
-			name: "RunIdRequiredWhenLongPollTokenPresent",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:     existingNamespace,
-				ActivityId:    validActivityID,
-				RunId:         "",
-				LongPollToken: []byte("doesn't-matter"),
-			},
-			expectedErr: "run id is required",
-		},
-		{
-			name: "MalformedLongPollToken",
-			request: &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:     existingNamespace,
-				ActivityId:    existingActivityID,
-				RunId:         existingRunID,
-				LongPollToken: []byte("invalid-token"),
-			},
-			expectedErr: "invalid long poll token",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.FrontendClient().DescribeActivityExecution(ctx, tc.request)
-			if tc.expectedErr == "" {
-				require.NoError(t, err)
-				return
-			}
-			var invalidArgErr *serviceerror.InvalidArgument
-			require.ErrorAs(t, err, &invalidArgErr)
-			require.Contains(t, invalidArgErr.Message, tc.expectedErr)
-		})
-	}
-
-	t.Run("LongPollTokenFromWrongExecution", func(t *testing.T) {
-		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  existingNamespace,
-			ActivityId: existingActivityID,
-			RunId:      existingRunID,
-		})
-		require.NoError(t, err)
-		require.NotEmpty(t, validPollResp.LongPollToken)
-
-		activityID2 := s.tv.Any().String()
-		startResp2, err := s.startActivity(ctx, activityID2, tq.Name)
-		require.NoError(t, err)
-		require.NotEmpty(t, startResp2.GetRunId())
-
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:     existingNamespace,
-			ActivityId:    activityID2,
-			RunId:         startResp2.GetRunId(),
-			LongPollToken: validPollResp.LongPollToken,
-		})
-		var invalidArgErr *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgErr)
-		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
-	})
-
-	t.Run("LongPollTokenFromDifferentNamespace", func(t *testing.T) {
-		// Get a valid poll token from activity in main namespace
-		validPollResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:  existingNamespace,
-			ActivityId: existingActivityID,
-			RunId:      existingRunID,
-		})
-		require.NoError(t, err)
-		require.NotEmpty(t, validPollResp.LongPollToken)
-
-		// Start an activity in a different namespace
-		externalNamespace := s.ExternalNamespace().String()
-		externalActivityID := s.tv.Any().String()
-		externalStartResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-			Namespace:    externalNamespace,
-			ActivityId:   externalActivityID,
-			ActivityType: s.tv.ActivityType(),
-			Identity:     s.tv.WorkerIdentity(),
-			Input:        defaultInput,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tq.Name,
-			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           s.tv.Any().String(),
-		})
-		require.NoError(t, err)
-		require.NotEmpty(t, externalStartResp.GetRunId())
-
-		// Try to use main namespace's poll token with external namespace's activity
-		_, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-			Namespace:     externalNamespace,
-			ActivityId:    externalActivityID,
-			RunId:         externalStartResp.GetRunId(),
-			LongPollToken: validPollResp.LongPollToken,
-		})
-		var invalidArgErr *serviceerror.InvalidArgument
-		require.ErrorAs(t, err, &invalidArgErr)
-		require.Equal(t, "long poll token does not match execution", invalidArgErr.Message)
 	})
 }
 
