@@ -40,7 +40,7 @@ type (
 
 		lock sync.Mutex
 
-		backoffTimer *time.Timer
+		backoffTimer clock.Timer
 		retrier      backoff.Retrier
 
 		backlogAge backlogAgeTracker
@@ -75,7 +75,7 @@ func newPriTaskReader(
 		logger:     backlogMgr.logger,
 		retrier: backoff.NewRetrier(
 			common.CreateReadTaskRetryPolicy(),
-			clock.NewRealTimeSource(),
+			backlogMgr.systemClock,
 		),
 		backlogAge: newBacklogAgeTracker(),
 		addRetries: semaphore.NewWeighted(concurrentAddRetries),
@@ -86,7 +86,7 @@ func newPriTaskReader(
 		ackLevel:         initialAckLevel,
 
 		// gc state
-		lastGCTime: time.Now(),
+		lastGCTime: backlogMgr.systemClock.Now(),
 	}
 }
 
@@ -401,7 +401,7 @@ func (tr *priTaskReader) backoffSignal(duration time.Duration) {
 	defer tr.lock.Unlock()
 
 	if tr.backoffTimer == nil {
-		tr.backoffTimer = time.AfterFunc(duration, func() {
+		tr.backoffTimer = tr.backlogMgr.systemClock.AfterFunc(duration, func() {
 			tr.lock.Lock()
 			defer tr.lock.Unlock()
 
@@ -484,7 +484,7 @@ func (tr *priTaskReader) maybeGCLocked() {
 		return
 	}
 	tr.inGC = true
-	tr.lastGCTime = time.Now()
+	tr.lastGCTime = tr.backlogMgr.systemClock.Now()
 	// gc in new goroutine so poller doesn't have to wait
 	go tr.doGC(tr.ackLevel)
 }
@@ -497,7 +497,7 @@ func (tr *priTaskReader) shouldGCLocked() bool {
 	} else if gcGap >= tr.backlogMgr.config.MaxTaskDeleteBatchSize() {
 		return true
 	}
-	return time.Since(tr.lastGCTime) > tr.backlogMgr.config.TaskDeleteInterval()
+	return tr.backlogMgr.systemClock.Since(tr.lastGCTime) > tr.backlogMgr.config.TaskDeleteInterval()
 }
 
 // called in new goroutine

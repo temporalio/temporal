@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -27,6 +28,7 @@ import (
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -119,6 +121,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		timeSource                clock.TimeSource
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -175,6 +178,7 @@ type (
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		TimeSource               clock.TimeSource
 	}
 
 	listenHostPort string
@@ -222,6 +226,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+		timeSource:                       cmp.Or[clock.TimeSource](params.TimeSource, clock.NewRealTimeSource()),
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -572,6 +577,7 @@ func (c *TemporalImpl) startMatching() {
 			matching.Module,
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
+			fx.Decorate(func() clock.TimeSource { return c.timeSource }),
 			chasmFxOptions,
 			fx.Populate(&namespaceRegistry),
 		)

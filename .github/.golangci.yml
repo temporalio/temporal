@@ -38,6 +38,12 @@ linters:
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"
+        - pattern: time\.NewTimer
+          msg: "Do not use time.NewTimer directly; use TimeSource.NewTimer() for testability with fake time."
+        - pattern: time\.AfterFunc
+          msg: "Do not use time.AfterFunc directly; use TimeSource.AfterFunc() for testability with fake time."
+        - pattern: time\.After\(
+          msg: "Do not use time.After directly; use TimeSource.NewTimer() for testability with fake time."
         - pattern: "^Unix$"
           msg: "Do not use .Unix() for Cassandra timestamps (returns seconds). Use p.UnixMilliseconds() which returns milliseconds."
         - pattern: "^UnixMilli$"
@@ -165,17 +171,26 @@ linters:
         text: "time.Sleep"
         linters:
           - forbidigo
-      - path-except: chasm/lib/.*\.go$
+      - path-except: chasm/lib/.*\.go$|service/matching/.*\.go$
         text: "time.Now"
         linters:
           - forbidigo
-      - path: chasm/lib/.*_test\.go$
+      - path: chasm/lib/.*_test\.go$|service/matching/.*_test\.go$
         text: "time.Now"
         linters:
           - forbidigo
       # Cassandra timestamp rules only apply to cassandra persistence package
       - path-except: common/persistence/cassandra/.*\.go$
         text: "Unix|UnixMilli|UnixNano"
+        linters:
+          - forbidigo
+      # time.NewTimer/AfterFunc/After rules only apply to matching service
+      - path-except: service/matching/.*\.go$
+        text: "time.NewTimer|time.AfterFunc|time.After"
+        linters:
+          - forbidigo
+      - path: service/matching/.*_test\.go$
+        text: "time.NewTimer|time.AfterFunc|time.After"
         linters:
           - forbidigo
       # Allow in tests

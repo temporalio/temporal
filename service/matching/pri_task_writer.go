@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"sync/atomic"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -76,7 +75,7 @@ func (w *priTaskWriter) appendTask(
 		// noop
 	}
 
-	startTime := time.Now().UTC()
+	startTime := w.db.systemClock.Now()
 	ch := make(chan error)
 	req := &writeTaskRequest{
 		taskInfo:   taskInfo,
@@ -88,7 +87,7 @@ func (w *priTaskWriter) appendTask(
 	case w.appendCh <- req:
 		select {
 		case err := <-ch:
-			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(time.Since(startTime))
+			metrics.TaskWriteLatencyPerTaskQueue.With(w.backlogMgr.metricsHandler).Record(w.db.systemClock.Since(startTime))
 			return err
 		case <-w.backlogMgr.tqCtx.Done():
 			// if we are shutting down, this request will never make

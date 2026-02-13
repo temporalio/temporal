@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -230,6 +231,6 @@ func newTestAckMgr(logger log.Logger) *ackManager {
 	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
-	db := newTaskQueueDB(tlCfg, tm, UnversionedQueueKey(prtn), logger, metrics.NoopMetricsHandler, false)
+	db := newTaskQueueDB(tlCfg, tm, UnversionedQueueKey(prtn), logger, metrics.NoopMetricsHandler, false, clock.NewRealTimeSource())
 	return newAckManager(db, logger)
 }

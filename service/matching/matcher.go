@@ -11,6 +11,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -42,6 +43,7 @@ type TaskMatcher struct {
 	backlogTasksCreateTime map[int64]int   // task creation time (unix nanos) -> number of tasks with that time
 	backlogTasksLock       sync.Mutex
 	lastPoller             atomic.Int64 // unix nanos of most recent poll start time
+	systemClock            clock.TimeSource
 }
 
 var (
@@ -52,7 +54,7 @@ var (
 
 // newTaskMatcher returns a task matcher instance. The returned instance can be used by task producers and consumers to
 // find a match. Both sync matches and non-sync matches should use this implementation
-func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler, rateLimiter quotas.RateLimiter) *TaskMatcher {
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler metrics.Handler, rateLimiter quotas.RateLimiter, systemClock clock.TimeSource) *TaskMatcher {
 	return &TaskMatcher{
 		config:                 config,
 		rateLimiter:            rateLimiter,
@@ -62,6 +64,7 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, metricsHandler met
 		queryTaskC:             make(chan *internalTask),
 		closeC:                 make(chan struct{}),
 		backlogTasksCreateTime: make(map[int64]int),
+		systemClock:            systemClock,
 	}
 }
 
@@ -378,7 +381,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 	}
 
 	metrics.TaskDispatchLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-		time.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
+		tm.systemClock.Since(timestamp.TimeValue(task.event.Data.CreateTime)),
 		metrics.StringTag("source", task.source.String()),
 		metrics.StringTag("forwarded", strconv.FormatBool(forwarded)),
 		metrics.StringTag(metrics.TaskPriorityTagName, ""),
@@ -412,14 +415,14 @@ func (tm *TaskMatcher) poll(
 		taskC = nil
 	}
 
-	start := time.Now()
+	start := tm.systemClock.Now()
 	tm.lastPoller.Store(start.UnixNano())
 
 	defer func() {
 		if pollMetadata.forwardedFrom == "" {
 			// Only recording for original polls
 			metrics.PollLatencyPerTaskQueue.With(tm.metricsHandler).Record(
-				time.Since(start),
+				tm.systemClock.Since(start),
 				metrics.StringTag("forwarded", strconv.FormatBool(forwardedPoll)),
 				metrics.StringTag(metrics.TaskPriorityTagName, ""),
 			)
@@ -585,7 +588,7 @@ func (tm *TaskMatcher) getBacklogAge() time.Duration {
 		oldest = min(oldest, createTime)
 	}
 
-	return time.Since(time.Unix(0, oldest))
+	return tm.systemClock.Since(time.Unix(0, oldest))
 }
 
 func (tm *TaskMatcher) emitForwardedSourceStats(
@@ -613,7 +616,7 @@ func (tm *TaskMatcher) emitForwardedSourceStats(
 }
 
 func (tm *TaskMatcher) timeSinceLastPoll() time.Duration {
-	return time.Since(time.Unix(0, tm.lastPoller.Load()))
+	return tm.systemClock.Since(time.Unix(0, tm.lastPoller.Load()))
 }
 
 // contextWithCancelOnChannelClose returns a child Context and CancelFunc just like

@@ -65,7 +65,7 @@ func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 	if !tgc.checkPrecond(ackLevel, batchSize, ignoreTimeCond) {
 		return
 	}
-	tgc.lastDeleteTime = time.Now().UTC()
+	tgc.lastDeleteTime = tgc.db.systemClock.Now()
 
 	ctx, cancel := context.WithTimeout(tgc.tqCtx, ioTimeout)
 	defer cancel()
@@ -89,7 +89,7 @@ func (tgc *taskGC) checkPrecond(ackLevel int64, batchSize int, ignoreTimeCond bo
 	if backlog >= int64(batchSize) {
 		return true
 	}
-	return backlog > 0 && (ignoreTimeCond || time.Now().UTC().Sub(tgc.lastDeleteTime) > maxTimeBetweenTaskDeletes)
+	return backlog > 0 && (ignoreTimeCond || tgc.db.systemClock.Since(tgc.lastDeleteTime) > maxTimeBetweenTaskDeletes)
 }
 
 func (tgc *taskGC) tryLock() bool {

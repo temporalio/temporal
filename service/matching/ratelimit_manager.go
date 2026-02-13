@@ -19,7 +19,7 @@ type (
 		userDataManager userDataManager       // User data manager to fetch user data for task queue configurations.
 		config          *taskQueueConfig      // Dynamic configuration for task queues set by system.
 		taskQueueType   enumspb.TaskQueueType // Task queue type
-		timeSource      clock.TimeSource
+		systemClock     clock.TimeSource
 
 		// Sources of the effective RPS.
 		workerRPS                   *float64 // RPS set by worker at the time of polling, if available.
@@ -72,7 +72,7 @@ func newRateLimitManager(userDataManager userDataManager,
 		config:          config,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
-		timeSource:      clock.NewRealTimeSource(),
+		systemClock:     clock.NewRealTimeSource(),
 	}
 	r.dynamicRateBurst = quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
@@ -269,7 +269,7 @@ func (r *rateLimitManager) updateSimpleRateLimitWithBurstLocked(burstDuration ti
 
 	// Clip to handle the case where we have increased from a zero or very low limit and had
 	// ready times in the far future.
-	now := r.timeSource.Now().UnixNano()
+	now := r.systemClock.Now().UnixNano()
 	r.wholeQueueReady = r.wholeQueueReady.clip(r.wholeQueueLimit, now, maxTokens)
 }
 
@@ -291,7 +291,7 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitWithBurstLocked(burstDurat
 	// Clip to handle the case where we have increased from a zero or very low limit and had
 	// ready times in the far future.
 	var updates map[string]simpleLimiter
-	now := r.timeSource.Now().UnixNano()
+	now := r.systemClock.Now().UnixNano()
 	it := r.perKeyReady.Iterator()
 	for it.HasNext() {
 		e := it.Next()

@@ -164,15 +164,17 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	case !pm.config.AutoEnableV2() || pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED:
 		var fairness bool
 		changeKey := pm.partition.GradualChangeKey()
+		// systemClock: config rollout pacing must use real time, not affected by fake time in tests.
 		fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
-			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.timeSource)
+			pm.config.EnableFairnessSub, changeKey, unload, pm.engine.systemClock)
 		// Fairness is disabled for sticky queues for now so that we can still use TTLs.
 		pm.config.EnableFairness = fairness && pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY
 		if fairness {
 			pm.config.NewMatcher = true
 		} else {
+			// systemClock: config rollout pacing must use real time, not affected by fake time in tests.
 			pm.config.NewMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-				pm.config.NewMatcherSub, changeKey, unload, pm.engine.timeSource)
+				pm.config.NewMatcherSub, changeKey, unload, pm.engine.systemClock)
 		}
 	case pm.fairnessState == enumsspb.FAIRNESS_STATE_V0:
 		pm.config.NewMatcher = false
@@ -210,7 +212,7 @@ func (pm *taskQueuePartitionManagerImpl) defaultQueue() physicalTaskQueueManager
 }
 
 func (pm *taskQueuePartitionManagerImpl) Start() {
-	pm.loadTime = time.Now()
+	pm.loadTime = pm.engine.systemClock.Now()
 	pm.engine.updateTaskQueuePartitionGauge(pm.Namespace(), pm.partition, 1)
 	pm.userDataManager.Start()
 	//nolint:errcheck
@@ -344,7 +346,7 @@ reredirectTask:
 		// 1. Partition has been loaded for more than noPollerThreshold (2 minutes)
 		// 2. No pollers have polled in the last noPollerThreshold (2 minutes)
 		// This prevents false positives for newly loaded partitions that haven't had time to receive pollers yet.
-		if time.Since(pm.loadTime) > noPollerThreshold && !pm.HasAnyPollerAfter(time.Now().Add(-noPollerThreshold)) {
+		if pm.engine.systemClock.Since(pm.loadTime) > noPollerThreshold && !pm.HasAnyPollerAfter(pm.engine.systemClock.Now().Add(-noPollerThreshold)) {
 			pm.metricsHandler.Counter(metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()).Record(1)
 		}
 	}
@@ -1062,6 +1064,7 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 		return nil
 	}
 
+	systemClock := pm.engine.systemClock
 	var prevBacklogPriority map[PhysicalTaskQueueVersion]int64
 
 	for {
@@ -1071,11 +1074,13 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 			continue
 		}
 
+		timerC, timer := systemClock.NewTimer(backoff.Jitter(interval, 0.05))
 		select {
 		case <-ctx.Done():
+			timer.Stop()
 			return ctx.Err()
 
-		case <-time.After(backoff.Jitter(interval, 0.05)):
+		case <-timerC:
 			prevBacklogPriority = pm.updateEphemeralDataIteration(prevBacklogPriority)
 		}
 	}
