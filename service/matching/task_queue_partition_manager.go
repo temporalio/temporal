@@ -1197,8 +1197,11 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 //   - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
 //     unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
 //
-// Only zeroes priority keys that actually exist in the queue's subqueues to avoid creating
-// noisy zero-value series.
+// Only zeroes priority keys that actually exist in the queue's own subqueues to avoid creating
+// noisy zero-value series. Note: for current/ramping versions, fetchAndEmitLogicalBacklogMetrics
+// may emit additional priority keys attributed from the default queue via mergeStatsByPriority.
+// Those attributed-only keys are not zeroed here, which could leave stale gauge values for
+// priority keys that existed only through attribution.
 func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version PhysicalTaskQueueVersion, pq physicalTaskQueueManager) {
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
 		return

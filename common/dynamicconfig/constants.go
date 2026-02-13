@@ -1277,7 +1277,7 @@ Set to zero to disable ephemeral data updates.`,
 	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
 		"matching.backlogMetricsEmitInterval",
 		time.Minute,
-		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions.`,
+		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions. Set to zero to disable version-attributed backlog metrics.`,
 	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",
