@@ -817,7 +817,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 			s.Equal(enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT, timeoutEvent.GetEventType())
 			timeoutAttributes := timeoutEvent.GetActivityTaskTimedOutEventAttributes()
 			s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutAttributes.Failure.GetTimeoutFailureInfo().GetTimeoutType())
-			s.Contains(timeoutAttributes.Failure.Message, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String())
+			s.Contains(timeoutAttributes.Failure.Message, "Not enough time to schedule next retry before activity ScheduleToClose timeout")
 			s.Equal(enumspb.RETRY_STATE_TIMEOUT, timeoutAttributes.RetryState)
 			return tests.UpdateWorkflowExecutionResponse, nil
 		})

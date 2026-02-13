@@ -363,7 +363,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
-	s.Equal("not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
+	s.Equal("Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
 	s.True(timeoutErr.HasLastHeartbeatDetails())
 	v = 0
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
@@ -374,7 +374,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 	timeoutErr, ok = activityErr.Unwrap().(*temporal.TimeoutError)
 	s.True(ok)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutErr.TimeoutType())
-	s.Equal("not enough time to schedule next retry before activity schedule-to-close timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
+	s.Equal("Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying (type: ScheduleToClose)", timeoutErr.Error())
 }
 
 func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
