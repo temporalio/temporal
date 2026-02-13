@@ -144,7 +144,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	buildIds[bld2] = true
 
 	// validating TQ Stats
-	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false, false)
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false)
 	s.NoError(err)
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
@@ -183,7 +183,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.validatePollTask(bld2, true)
 
 	// fresher call of the describe API
-	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true, false)
+	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true)
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
@@ -1320,7 +1320,7 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus, false)
+		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
 		if err != nil {
 			return false
 		}

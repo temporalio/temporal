@@ -543,7 +543,7 @@ func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
 		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
 	}
 
-	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false, false)
+	partitionInfo, err := pm.Describe(ctx, map[string]bool{buildID: true}, false, true, false, false)
 	if err != nil {
 		return nil
 	}
@@ -878,11 +878,22 @@ func (pm *taskQueuePartitionManagerImpl) LegacyDescribeTaskQueue(includeTaskQueu
 }
 
 // In order to accommodate the changes brought in by versioning-3.1, `buildIDs` will now also accept versionID's that represent worker-deployment versions.
-// Describe returns information about physical queues for the requested versions, including
-// pollers, stats (with versioning attribution), and internal status. By default, each described
-// queue is marked alive to reset its idle timeout. Pass skipMarkAlive=true to suppress this
-// side effect — used by periodic metrics emission to avoid preventing idle queue unloading.
 func (pm *taskQueuePartitionManagerImpl) Describe(
+	ctx context.Context,
+	buildIds map[string]bool,
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return pm.describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, false)
+}
+
+// Describe returns information about physical queues for the requested versions, including
+// pollers, stats (with "versioning attribution", which means the default queue backlog is
+// proportionally attributed to the Current and Ramping versioned backlog counts based on
+// routing config), and internal status. When Describe is called by external clients, each
+// described queue is marked alive to reset its idle timeout and prevent it from being unloaded.
+// When we describe the task queue from inside the partition manager to expose periodic metrics,
+// we pass skipMarkAlive=true to suppress this side effect and avoid preventing idle queue unloading.
+func (pm *taskQueuePartitionManagerImpl) describe(
 	ctx context.Context,
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool,
@@ -1178,7 +1189,7 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
-	resp, err := pm.Describe(ctx, buildIds, true, true, false, false, true)
+	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
 	if err != nil {
 		return
 	}

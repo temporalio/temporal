@@ -1628,7 +1628,7 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus(), false)
+	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {

@@ -58,7 +58,7 @@ type (
 		HasAnyPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns information about all pollers of this partition and the status of its unversioned physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) (*matchingservice.DescribeTaskQueueResponse, error)
-		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
+		Describe(ctx context.Context, buildIds map[string]bool, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		Partition() tqid.Partition
 		PartitionCount() int
 		LongPollExpirationInterval() time.Duration
