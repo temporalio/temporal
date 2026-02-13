@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 )
 
@@ -50,6 +51,8 @@ type (
 		TestHooks                       testhooks.TestHooks
 		ChasmEngine                     chasm.Engine
 		VersionMembershipCache          worker_versioning.VersionMembershipCache
+		ReactivationSignalCache         worker_versioning.ReactivationSignalCache
+		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
 	}
 
@@ -69,6 +72,8 @@ func (f *historyEngineFactory) CreateEngine(
 		f.EventNotifier,
 		f.Config,
 		f.VersionMembershipCache,
+		f.ReactivationSignalCache,
+		f.WorkerDeploymentClient,
 		f.RoutingInfoCache,
 		f.RawMatchingClient,
 		f.WorkflowCache,

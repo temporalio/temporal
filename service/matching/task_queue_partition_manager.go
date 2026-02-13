@@ -198,6 +198,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	pm.defaultQueueFuture.Set(defaultQ, nil)
 	defaultQ.Start()
 	pm.goroGroup.Go(pm.updateEphemeralData)
+	pm.goroGroup.Go(pm.emitLogicalBacklogMetrics)
 	return nil
 }
 
@@ -224,6 +225,7 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	queue, err := pm.defaultQueueFuture.Get(context.Background())
 	if err == nil {
 		queue.Stop(unloadCause)
+		pm.emitZeroLogicalBacklogForQueue(queue.QueueKey().Version(), queue)
 	}
 
 	if pm.cancelFairnessSub != nil {
@@ -234,9 +236,9 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	}
 
 	pm.versionedQueuesLock.Lock()
-	// First, stop all queues to wrap up ongoing operations.
-	for _, vq := range pm.versionedQueues {
+	for version, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
+		pm.emitZeroLogicalBacklogForQueue(version, vq)
 	}
 	pm.versionedQueuesLock.Unlock()
 
@@ -496,10 +498,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 	}
 
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+	identity, hasIdentity := ctx.Value(identityKey).(string)
+	if hasIdentity && identity != "" {
 		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	// The desired global rate limit for the task queue can come from multiple sources:
@@ -516,6 +517,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+	}
+
+	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).
+	// Skip on cancellation to avoid re-adding entry after RemovePoller was called.
+	if hasIdentity && identity != "" && ctx.Err() != context.Canceled {
+		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	return task, versionSetUsed, err
@@ -780,6 +787,18 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	return ret
 }
 
+// RemovePoller eagerly removes a poller from history for graceful shutdown.
+func (pm *taskQueuePartitionManagerImpl) RemovePoller(identity pollerIdentity) {
+	if dbq := pm.defaultQueue(); dbq != nil {
+		dbq.RemovePoller(identity)
+	}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, vq := range pm.versionedQueues {
+		vq.RemovePoller(identity)
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
 	dbq := pm.defaultQueue()
 	if dbq != nil && dbq.HasPollerAfter(accessTime) {
@@ -863,6 +882,23 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return pm.describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, false)
+}
+
+// Describe returns information about physical queues for the requested versions, including
+// pollers, stats (with "versioning attribution", which means the default queue backlog is
+// proportionally attributed to the Current and Ramping versioned backlog counts based on
+// routing config), and internal status. When Describe is called by external clients, each
+// described queue is marked alive to reset its idle timeout and prevent it from being unloaded.
+// When we describe the task queue from inside the partition manager to expose periodic metrics,
+// we pass skipMarkAlive=true to suppress this side effect and avoid preventing idle queue unloading.
+//
+//nolint:revive // cognitive complexity 67 (> max enabled 25) but this is just a renaming of an existing function.
+func (pm *taskQueuePartitionManagerImpl) describe(
+	ctx context.Context,
+	buildIds map[string]bool,
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 
@@ -1046,7 +1082,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		versionsInfo[bid] = vInfo
 
-		physicalQueue.MarkAlive() // Count Describe for liveness
+		if !skipMarkAlive {
+			// Skipped by periodic metrics emission to avoid resetting the idle timeout,
+			// which would prevent queues from ever being unloaded.
+			physicalQueue.MarkAlive()
+		}
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
@@ -1118,6 +1158,99 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 	pm.userDataManager.LocalBacklogPriorityChanged(backlogPriority)
 	return backlogPriority
+}
+
+func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
+	for {
+		interval := pm.config.BacklogMetricsEmitInterval()
+		if interval == 0 { // disabled
+			_ = util.InterruptibleSleep(ctx, time.Minute)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			continue
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(interval):
+			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+		}
+	}
+}
+
+// fetchAndEmitLogicalBacklogMetrics calls Describe to get attributed backlog stats and emits
+// approximate_backlog_count and approximate_backlog_age_seconds per version. These metrics
+// reflect versioning attribution: for current/ramping versions, a proportional share of the
+// unversioned queue's backlog is added to their count, and the unversioned queue's count is
+// reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
+func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) {
+	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
+		return
+	}
+
+	buildIds := map[string]bool{"": true} // include unversioned
+	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
+	if err != nil {
+		return
+	}
+
+	for versionKey, vInfo := range resp.GetVersionsInfoInternal() {
+		// When BreakdownMetricsByBuildID is disabled, all versioned queues share the same
+		// "__versioned__" tag value. Since gauges overwrite on each Record() call, emitting
+		// multiple versions under the same tag would produce non-deterministic results.
+		// Skip versioned entries in this case; unversioned attributed metrics are still emitted.
+		if versionKey != "" && !pm.config.BreakdownMetricsByBuildID() {
+			continue
+		}
+
+		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
+
+		versionHandler := pm.metricsHandler.WithTags(
+			metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
+		)
+
+		// Per-priority backlog count
+		for pri, stats := range pqInfo.GetTaskQueueStatsByPriorityKey() {
+			metrics.ApproximateBacklogCount.With(versionHandler).Record(
+				float64(stats.GetApproximateBacklogCount()),
+				metrics.MatchingTaskPriorityTag(pri),
+			)
+		}
+
+		// Backlog age (oldest across all priorities)
+		age := pqInfo.GetTaskQueueStats().GetApproximateBacklogAge()
+		if age != nil && age.AsDuration() > 0 {
+			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(age.AsDuration().Seconds())
+		} else {
+			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(0)
+		}
+	}
+}
+
+// emitZeroLogicalBacklogForQueue zeroes out logical backlog gauges for a single physical queue
+// to prevent stale values after unloading. Called from:
+//   - Stop(): after each physical queue is stopped during full partition unload.
+//   - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
+//     unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
+//
+// Only zeroes priority keys that actually exist in the queue's own subqueues to avoid creating
+// noisy zero-value series. Note: for current/ramping versions, fetchAndEmitLogicalBacklogMetrics
+// may emit additional priority keys attributed from the default queue via mergeStatsByPriority.
+// Those attributed-only keys are not zeroed here, which could leave stale gauge values for
+// priority keys that existed only through attribution.
+func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version PhysicalTaskQueueVersion, pq physicalTaskQueueManager) {
+	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
+		return
+	}
+	handler := pm.metricsHandler.WithTags(
+		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
+	)
+	for pri := range pq.GetStatsByPriority(false) {
+		metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
+	}
+	metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
 }
 
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
@@ -1398,6 +1531,8 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	pm.versionedQueuesLock.Lock()
 	foundDbq, ok := pm.versionedQueues[version]
 	if ok && foundDbq == unloadedDbq {
+		// Zero logical backlog metrics before removing from map to prevent stale gauges.
+		pm.emitZeroLogicalBacklogForQueue(version, foundDbq)
 		delete(pm.versionedQueues, version)
 	}
 	pm.versionedQueuesLock.Unlock()

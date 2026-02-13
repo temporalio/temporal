@@ -108,9 +108,14 @@ type (
 		// When terminated is true, regardless of the Lifecycle state of the component,
 		// the component will be considered as closed.
 		//
-		// This right now only applies to the root node and used to update MutableState
-		// executionState and executionStatus and trigger retention timers.
-		// We could consider extending the force terminate concept to sub-components as well.
+		// NOTE: this is an in-memory only field and will be lost upon mutable state reload or replication.
+		// The purpose of this field is only for the transaction that force terminates the execution to
+		// update executionState & State in mutable state and generate retention timers, so it only needs to be
+		// in-memory and on the active side.
+		// If your logic needs to check if an execution is ever force terminated, check both this field (for the current
+		// transaction) and also the executionState from backend (for previous transactions).
+		//
+		// We can consider extending the force terminate concept to sub-components as well, and make the field durable.
 		terminated bool
 	}
 
@@ -342,13 +347,14 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 
 func (n *Node) SetRootComponent(
 	rootComponent Component,
-) {
+) error {
 	root := n.root()
 	root.setValue(rootComponent)
 	root.setValueState(valueStateNeedSyncStructure)
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
+	return root.syncSubComponents()
 }
 
 // setValue sets the value field of the node.
@@ -480,6 +486,13 @@ func (n *Node) validateAccessHelper(ctx Context) error {
 
 	if n.terminated {
 		// Terminated nodes can never be written to.
+		// This handles the case where root is terminated in the current transaction.
+		return errAccessCheckFailed
+	}
+
+	// terminated field check above is in memory only, so handle the case where root is terminated (closed)
+	// in a previous transaction and we have a mutable state reload which clears the field.
+	if n.parent == nil && n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return errAccessCheckFailed
 	}
 
@@ -583,7 +596,18 @@ func (n *Node) isMap() bool {
 }
 
 func (n *Node) isDetached() bool {
-	return n.serializedNode.GetMetadata().GetComponentAttributes().GetDetached()
+	componentAttr := n.serializedNode.GetMetadata().GetComponentAttributes()
+	if componentAttr == nil {
+		return false
+	}
+	componentTypeID := componentAttr.GetTypeId()
+	if componentTypeID == CallbackComponentID ||
+		componentTypeID == visibilityComponentTypeID {
+		// For backward compatibility purpose, we need to special handle callback and visibility components,
+		// which are implemented before detached component is properly supported by the framework.
+		return true
+	}
+	return componentAttr.GetDetached()
 }
 
 func (n *Node) fieldType() fieldType {
@@ -1486,10 +1510,16 @@ func (n *Node) closeTransactionHandleRootLifecycleChange() (bool, error) {
 		return false, nil
 	}
 
+	if n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// Already in completed state, no need to update lifecycle state.
+		return false, nil
+	}
+
 	if n.terminated {
 		return n.backend.UpdateWorkflowStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		)
 	}
 
 	chasmContext := NewContext(context.Background(), n)
@@ -1759,7 +1789,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 func (n *Node) deserializeComponentTask(
 	componentTask *persistencespb.ChasmComponentAttributes_Task,
 ) (any, error) {
-	registableTask, ok := n.registry.taskByID(componentTask.TypeId)
+	registableTask, ok := n.registry.TaskByID(componentTask.TypeId)
 	if !ok {
 		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
@@ -2946,7 +2976,7 @@ func (n *Node) ValidateSideEffectTask(
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := n.registry.taskByID(taskTypeID)
+	registrableTask, ok := n.registry.TaskByID(taskTypeID)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
 			n.logger,
@@ -3031,7 +3061,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := registry.taskByID(taskTypeID)
+	registrableTask, ok := registry.TaskByID(taskTypeID)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
