@@ -477,10 +477,11 @@ Deleted Redirect Rules will be kept in the DB (with DeleteTimestamp). After this
 	)
 	ShutdownWorkerCacheTTL = NewGlobalDurationSetting(
 		"matching.ShutdownWorkerCacheTTL",
-		60*time.Second,
+		70*time.Second,
 		`ShutdownWorkerCacheTTL is the time to live for entries in the shutdown worker cache. When a worker calls
 		ShutdownWorker, its WorkerInstanceKey is cached for this duration. Any poll arriving with a cached
-		WorkerInstanceKey returns empty immediately, preventing task dispatch to a shutting-down worker.`,
+		WorkerInstanceKey returns empty immediately, preventing task dispatch to a shutting-down worker.
+		This should be longer than MatchingLongPollExpirationInterval (default 1 min) to catch any in-flight polls.`,
 	)
 	ReachabilityBuildIdVisibilityGracePeriod = NewNamespaceDurationSetting(
 		"matching.wv.ReachabilityBuildIdVisibilityGracePeriod",
