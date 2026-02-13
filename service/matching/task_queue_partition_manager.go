@@ -15,6 +15,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -36,8 +39,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
+	"go.temporal.io/server/service/matching/hooks"
 )
 
 var errDefaultQueueNotInit = serviceerror.NewInternal("defaultQueue is not initializaed")
@@ -73,6 +75,8 @@ type (
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// TODO(stephanos): move cache out of partition manager
 		cache cache.Cache // non-nil for root-partition
+
+		taskAddHooks []hooks.TaskAddHook
 
 		goroGroup goro.Group
 
@@ -113,6 +117,7 @@ func newTaskQueuePartitionManager(
 	throttledLogger log.Logger,
 	metricsHandler metrics.Handler,
 	userDataManager userDataManager,
+	taskAddHooks []hooks.TaskAddHook,
 ) (*taskQueuePartitionManagerImpl, error) {
 	rateLimitManager := newRateLimitManager(
 		userDataManager,
@@ -132,6 +137,7 @@ func newTaskQueuePartitionManager(
 		rateLimitManager:      rateLimitManager,
 		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
 		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
+		taskAddHooks:          taskAddHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -359,6 +365,7 @@ reredirectTask:
 	if isActive {
 		syncMatched, err = syncMatchQueue.TrySyncMatch(ctx, syncMatchTask)
 		if syncMatched && !pm.shouldBacklogSyncMatchTaskOnError(err) {
+			pm.processTaskAddHooks(ctx, targetVersion, syncMatched, dbq)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -384,7 +391,25 @@ reredirectTask:
 		assignedBuildId = spoolQueue.QueueKey().Version().BuildId()
 	}
 
+	pm.processTaskAddHooks(ctx, targetVersion, false, dbq)
 	return assignedBuildId, false, spoolQueue.SpoolTask(params.taskInfo)
+}
+
+func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context, targetVersion *deploymentspb.WorkerDeploymentVersion, syncMatched bool, dbq physicalTaskQueueManager) {
+	// ignoring the err as there is little we can do about it now
+	userData, _, _ := pm.getPerTypeUserData()
+
+	for _, l := range pm.taskAddHooks {
+		l.ProcessTaskAdd(ctx, &hooks.TaskAddHookDetails{
+			Namespace:               pm.ns,
+			TaskQueueName:           pm.partition.TaskQueue().Name(),
+			TaskQueueType:           pm.partition.TaskType(),
+			DeploymentVersion:       worker_versioning.ExternalWorkerDeploymentVersionFromVersion(targetVersion),
+			IsSyncMatch:             syncMatched,
+			TaskQueueUserData:       userData,
+			TaskQueueStatsRetriever: func() *taskqueuepb.TaskQueueStats { return pm.GetPhysicalQueueAdjustedStats(ctx, dbq) },
+		})
+	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) shouldBacklogSyncMatchTaskOnError(err error) bool {
@@ -996,7 +1021,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			unversionedCurrentShareByPriority, unversionedRampingShareByPriority =
 				splitStatsByPriorityByRampPercentage(unversionedStatsByPriority, rampPercentage)
 		} else if currentExists {
-			// If there exist no ramping version, weattribute the entire unversioned backlog to the current version.
+			// If there exist no ramping version, we attribute the entire unversioned backlog to the current version.
 			unversionedCurrentShareByPriority = cloneStatsByPriority(unversionedStatsByPriority)
 		}
 	}
