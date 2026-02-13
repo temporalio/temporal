@@ -299,7 +299,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	var persistenceToken []byte
 	var history *historypb.History
 	var err error
-
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
 			ctx,
@@ -313,7 +312,6 @@ func setHistoryForRecordWfTaskStartedResp(
 			nil,
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
-			true,
 		)
 	} else {
 		history, persistenceToken, err = api.GetHistory(
@@ -329,7 +327,6 @@ func setHistoryForRecordWfTaskStartedResp(
 			response.GetTransientWorkflowTask(),
 			response.GetBranchToken(),
 			persistenceVisibilityMgr,
-			true,
 		)
 	}
 	if err != nil {
@@ -339,11 +336,12 @@ func setHistoryForRecordWfTaskStartedResp(
 	var continuation []byte
 	if len(persistenceToken) != 0 {
 		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:            workflowKey.GetRunID(),
-			FirstEventId:     firstEventID,
-			NextEventId:      nextEventID,
-			PersistenceToken: persistenceToken,
-			BranchToken:      response.GetBranchToken(),
+			RunId:                 workflowKey.GetRunID(),
+			FirstEventId:          firstEventID,
+			NextEventId:           nextEventID,
+			PersistenceToken:      persistenceToken,
+			TransientWorkflowTask: response.GetTransientWorkflowTask(),
+			BranchToken:           response.GetBranchToken(),
 		})
 		if err != nil {
 			return err
