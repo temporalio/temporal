@@ -329,7 +329,7 @@ func TestAreValidTransientOrSpecTasks(t *testing.T) {
 				HistorySuffix: tt.historySuffix,
 			}
 
-			result := areValidTransientOrSpecEvents(tranOrSpecEvents)
+			result := AreValidTransientOrSpecEvents(tranOrSpecEvents)
 			r.Equal(tt.expected, result)
 		})
 	}

@@ -400,10 +400,10 @@ func shouldIncludeTransientOrSpeculativeTasks(
 	return len(tranOrSpecEvents.GetHistorySuffix()) > 0 &&
 		clientSupportsTranOrSpecEvents(ctx) &&
 		isWorkflowRunning &&
-		areValidTransientOrSpecEvents(tranOrSpecEvents)
+		AreValidTransientOrSpecEvents(tranOrSpecEvents)
 }
 
-// areValidTransientOrSpecEvents validates that transient/speculative workflow task events
+// AreValidTransientOrSpecEvents validates that transient/speculative workflow task events
 // are properly formed before including them in GetWorkflowExecutionHistory responses.
 //
 // Transient events represent workflow tasks that exist in mutable state but may not be
@@ -419,7 +419,7 @@ func shouldIncludeTransientOrSpeculativeTasks(
 // with a warning logged.
 //
 // Returns true if events are valid and should be included in history, false otherwise.
-func areValidTransientOrSpecEvents(tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo) bool {
+func AreValidTransientOrSpecEvents(tranOrSpecEvents *historyspb.TransientWorkflowTaskInfo) bool {
 	events := tranOrSpecEvents.GetHistorySuffix()
 	if len(events) == 0 || len(events) > 2 {
 		return false

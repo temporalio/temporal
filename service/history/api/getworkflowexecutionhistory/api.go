@@ -71,22 +71,28 @@ func appendTransientTasks(
 			tag.NewInt64("next-event-id", nextEventID),
 			tag.NewInt64("cached-events-count", int64(len(cachedTransientTasks.GetHistorySuffix()))))
 
-		// Validate cached tasks are still valid (not stale)
-		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, cachedTransientTasks); err == nil {
-			// Cache is valid, use it (FAST PATH - no second mutable state call)
-			transientWorkflowTask = cachedTransientTasks
-			logger.Warn("Using valid cached transient tasks",
+		// First validate structure (event types and ordering)
+		if !api.AreValidTransientOrSpecEvents(cachedTransientTasks) {
+			logger.Warn("Cached transient tasks failed structure validation, will refetch",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()))
-		} else {
-			// Cache is stale, log and fall through to refetch
-			logger.Warn("Cached transient tasks failed validation, will refetch",
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewInt64("cached-events-count", int64(len(cachedTransientTasks.GetHistorySuffix()))))
+		} else if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, cachedTransientTasks); err != nil {
+			// Cache has valid structure but stale event IDs, log and fall through to refetch
+			logger.Warn("Cached transient tasks failed ID validation, will refetch",
 				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(execution.GetWorkflowId()),
 				tag.WorkflowRunID(execution.GetRunId()),
 				tag.NewInt64("next-event-id", nextEventID),
 				tag.Error(err))
+		} else {
+			// Both structure and event IDs are valid, use cache (FAST PATH - no second mutable state call)
+			transientWorkflowTask = cachedTransientTasks
+			logger.Warn("Using valid cached transient tasks",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()))
 		}
 	} else {
 		logger.Warn("No cached transient tasks, will fetch from mutable state",
@@ -117,6 +123,16 @@ func appendTransientTasks(
 			return
 		}
 
+		// Check if workflow is still running
+		if msResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			logger.Warn("Workflow no longer running, skipping transient events",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewStringTag("workflow-status", msResp.GetWorkflowStatus().String()))
+			return
+		}
+
 		transientTasks := msResp.GetTransientOrSpeculativeTasks()
 		if transientTasks == nil {
 			logger.Warn("CRITICAL: No transient events in mutable state",
@@ -134,6 +150,26 @@ func appendTransientTasks(
 			tag.WorkflowID(execution.GetWorkflowId()),
 			tag.WorkflowRunID(execution.GetRunId()),
 			tag.NewInt64("events-count", int64(len(transientTasks.GetHistorySuffix()))))
+
+		// Validate structure before using
+		if !api.AreValidTransientOrSpecEvents(transientTasks) {
+			logger.Warn("Transient events from mutable state have invalid structure, skipping",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewInt64("events-count", int64(len(transientTasks.GetHistorySuffix()))))
+			return
+		}
+
+		// Validate event IDs
+		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientTasks); err != nil {
+			logger.Warn("Transient events from mutable state have invalid event IDs, skipping",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
+			return
+		}
 
 		transientWorkflowTask = transientTasks
 	}
