@@ -275,14 +275,14 @@ func (db *taskQueueDB) OldUpdateState(
 	if err != nil {
 		db.subqueues[subqueueZero].AckLevel = prevAckLevel
 	}
-	db.emitPhysicalBacklogGaugesLocked()
+	db.emitBacklogGaugesLocked()
 	return err
 }
 
 func (db *taskQueueDB) SyncState(ctx context.Context) error {
 	db.Lock()
 	defer db.Unlock()
-	defer db.emitPhysicalBacklogGaugesLocked()
+	defer db.emitBacklogGaugesLocked()
 
 	// We only need to write if something changed, or if we're past half of the sticky queue TTL.
 	// Note that we use the same threshold for non-sticky queues even though they don't have a
@@ -733,17 +733,13 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitPhysicalBacklogGaugesLocked emits the physical_approximate_backlog_count,
-// physical_approximate_backlog_age_seconds, and the legacy task_lag_per_tl gauges
-// tagged by priority key.
-// Physical backlog metrics are only emitted for the default (unversioned) queue.
-// Version-attributed backlog metrics for all worker versions (including appropriate
-// attribution of the default queue's tasks to current and ramping versions) are emitted
-// separately by the partition manager via fetchAndEmitLogicalBacklogMetrics.
-func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
+// emitBacklogGaugesLocked emits the approximate_backlog_count, approximate_backlog_age_seconds, and the legacy
+// task_lag_per_tl gauges. For these gauges to be emitted, BreakdownMetricsByTaskQueue and BreakdownMetricsByPartition
+// should be enabled. Additionally, for versioned queues, BreakdownMetricsByBuildID should also be enabled.
+func (db *taskQueueDB) emitBacklogGaugesLocked() {
 	if !db.config.BreakdownMetricsByTaskQueue() ||
 		!db.config.BreakdownMetricsByPartition() ||
-		db.queue.IsVersioned() {
+		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
 		return
 	}
 
@@ -765,12 +761,12 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 	}
 
 	for priority, count := range counts {
-		metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
 	}
 	if oldestTime.IsZero() {
-		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	} else {
-		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -827,11 +823,10 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 	return infos
 }
 
-func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
-	// Physical backlog metrics are only emitted for the default (unversioned) queue.
+func (db *taskQueueDB) emitZeroBacklogGauges() {
 	if !db.config.BreakdownMetricsByTaskQueue() ||
 		!db.config.BreakdownMetricsByPartition() ||
-		db.queue.IsVersioned() {
+		(db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID()) {
 		return
 	}
 
@@ -843,8 +838,8 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 	db.Unlock()
 
 	for k := range priorities {
-		metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+		metrics.ApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
 	}
-	metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+	metrics.ApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

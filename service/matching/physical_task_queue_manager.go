@@ -323,7 +323,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	// The call is placed here instead of backlogMgr.Stop() since there could be a race condition where a task is
 	// added to the backlog after we have emitted the zero values inside of the backlogMgr.Stop() call. This happens
 	// since task reader's and writer's contexts are cancelled after the backlogMgr.Stop() call.
-	c.backlogMgr.getDB().emitZeroPhysicalBacklogGauges()
+	c.backlogMgr.getDB().emitZeroBacklogGauges()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
