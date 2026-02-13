@@ -211,16 +211,12 @@ func (f *FIFOScheduler[T]) executeTask(
 			return
 		}
 
-		if f.metricsHandler != nil {
-			metrics.FIFOSchedulerTasksFailed.With(f.metricsHandler).Record(1)
-		}
+		metrics.FIFOSchedulerTasksFailed.With(f.metricsHandler).Record(1)
 		task.Nack(err)
 		return
 	}
 
-	if f.metricsHandler != nil {
-		metrics.FIFOSchedulerTasksCompleted.With(f.metricsHandler).Record(1)
-	}
+	metrics.FIFOSchedulerTasksCompleted.With(f.metricsHandler).Record(1)
 	task.Ack()
 }
 

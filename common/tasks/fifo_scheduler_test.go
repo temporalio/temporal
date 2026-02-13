@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
 )
 
@@ -199,6 +200,6 @@ func (s *fifoSchedulerSuite) newTestProcessor() *FIFOScheduler[*MockTask] {
 			},
 		},
 		log.NewNoopLogger(),
-		nil, // No metrics in tests
+		metrics.NoopMetricsHandler,
 	)
 }
