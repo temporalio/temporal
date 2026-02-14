@@ -5690,3 +5690,7 @@ func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.Deployment
 		s.T().Skipf("test supports workflow version %v and newer", version)
 	}
 }
+
+func (s *Versioning3Suite) Context() context.Context {
+	return s.T().Context()
+}
