@@ -140,7 +140,7 @@ func (s *ExecutionQueueScheduler[T]) HasQueue(key any) bool {
 func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 	if s.isStopped() {
 		task.Abort()
-		metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+
 		return
 	}
 
@@ -153,7 +153,7 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 		if s.isStopped() {
 			s.mu.Unlock()
 			task.Abort()
-			metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+	
 			return
 		}
 		var exists bool
@@ -173,7 +173,7 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 func (s *ExecutionQueueScheduler[T]) TrySubmit(task T) bool {
 	if s.isStopped() {
 		task.Abort()
-		metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+
 		return true
 	}
 
@@ -184,7 +184,7 @@ func (s *ExecutionQueueScheduler[T]) TrySubmit(task T) bool {
 	if s.isStopped() {
 		s.mu.Unlock()
 		task.Abort()
-		metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
+
 		return true
 	}
 
@@ -243,9 +243,6 @@ func (s *ExecutionQueueScheduler[T]) runWorker(q *executionQueue[T]) {
 			s.mu.Unlock()
 			for _, entry := range tasks {
 				entry.task.Abort()
-			}
-			if len(tasks) > 0 {
-				metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(int64(len(tasks)))
 			}
 			return
 		}
@@ -317,21 +314,7 @@ func (s *ExecutionQueueScheduler[T]) sweepIdleQueues() bool {
 }
 
 func (s *ExecutionQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
-	var panicErr error
-	defer log.CapturePanic(s.logger, &panicErr)
-
-	shouldRetry := true
-
-	operation := func() (retErr error) {
-		var executePanic error
-		defer func() {
-			if executePanic != nil {
-				retErr = executePanic
-				shouldRetry = false
-			}
-		}()
-		defer log.CapturePanic(s.logger, &executePanic)
-
+	operation := func() error {
 		if err := task.Execute(); err != nil {
 			return task.HandleErr(err)
 		}
@@ -339,23 +322,22 @@ func (s *ExecutionQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
 	}
 
 	isRetryable := func(err error) bool {
-		return !s.isStopped() && shouldRetry && task.IsRetryableError(err)
+		return !s.isStopped() && task.IsRetryableError(err)
 	}
 
 	if err := backoff.ThrottleRetry(operation, task.RetryPolicy(), isRetryable); err != nil {
 		if s.isStopped() {
 			task.Abort()
-			metrics.ExecutionQueueSchedulerTasksAborted.With(s.metricsHandler).Record(1)
 			return
 		}
 
-		task.Nack(err)
 		metrics.ExecutionQueueSchedulerTasksFailed.With(s.metricsHandler).Record(1)
+		task.Nack(err)
 		return
 	}
 
-	task.Ack()
 	metrics.ExecutionQueueSchedulerTasksCompleted.With(s.metricsHandler).Record(1)
+	task.Ack()
 
 	taskLatency := s.timeSource.Now().Sub(submitTime)
 	metrics.ExecutionQueueSchedulerTaskLatency.With(s.metricsHandler).Record(taskLatency)

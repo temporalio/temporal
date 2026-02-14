@@ -98,22 +98,6 @@ func (s *executionQueueSchedulerSuite) TestSubmit_Failure() {
 	testWG.Wait()
 }
 
-func (s *executionQueueSchedulerSuite) TestSubmit_Panic() {
-	testWG := sync.WaitGroup{}
-	testWG.Add(1)
-
-	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTask.EXPECT().Execute().DoAndReturn(func() error {
-		panic("test panic")
-	}).Times(1)
-	mockTask.EXPECT().Nack(gomock.Any()).Do(func(_ error) { testWG.Done() }).Times(1)
-
-	s.scheduler.Submit(mockTask)
-
-	testWG.Wait()
-}
-
 func (s *executionQueueSchedulerSuite) TestSubmit_RetryThenSuccess() {
 	testWG := sync.WaitGroup{}
 	testWG.Add(1)

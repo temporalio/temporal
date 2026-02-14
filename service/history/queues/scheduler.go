@@ -219,9 +219,6 @@ func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 // underlying ExecutionAwareScheduler. This is called when a task encounters
 // a busy workflow error and needs to be routed to the sequential scheduler.
 func (s *schedulerImpl) HandleBusyWorkflow(executable Executable) bool {
-	if s.executionAwareScheduler == nil {
-		return false
-	}
 	return s.executionAwareScheduler.HandleBusyWorkflow(executable)
 }
 

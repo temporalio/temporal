@@ -1089,7 +1089,6 @@ var (
 	ExecutionQueueSchedulerTasksSubmitted    = NewCounterDef("execution_queue_scheduler_tasks_submitted")
 	ExecutionQueueSchedulerTasksCompleted    = NewCounterDef("execution_queue_scheduler_tasks_completed")
 	ExecutionQueueSchedulerTasksFailed       = NewCounterDef("execution_queue_scheduler_tasks_failed")
-	ExecutionQueueSchedulerTasksAborted      = NewCounterDef("execution_queue_scheduler_tasks_aborted")
 	ExecutionQueueSchedulerSubmitRejected    = NewCounterDef("execution_queue_scheduler_submit_rejected")
 	ExecutionQueueSchedulerTaskLatency       = NewTimerDef("execution_queue_scheduler_task_latency")
 	ExecutionQueueSchedulerQueueWaitTime     = NewTimerDef("execution_queue_scheduler_queue_wait_time")
