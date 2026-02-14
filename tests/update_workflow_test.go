@@ -567,10 +567,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 2:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled // Speculative WT2 which was created while completing WT1.
-  6 WorkflowTaskStarted`, task.History)
-				// Message handler rejects update.
+  4 WorkflowTaskCompleted`, task.History)
+				// Message handled rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -691,10 +689,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 2:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
-  5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled // Speculative WFT2 with event (5) which was created while completing WFT1.
-  7 WorkflowTaskStarted`, task.History)
-				// Message handler rejects update.
+  5 ActivityTaskScheduled`, task.History)
+				// Message handled rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -2200,7 +2196,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.ErrorAs(updateResult.err, &wfNotReady)
 		s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due to unexpected workflow task failure.")
 
-		// New transient WFT is created, but it is not shown in the history.
+		// New transient WFT is created and is now included in the history.
 		events := s.GetHistory(s.Namespace().String(), s.Tv().WorkflowExecution())
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -2209,7 +2205,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
-  7 WorkflowTaskFailed`, events)
+  7 WorkflowTaskFailed
+  8 WorkflowTaskScheduled`, events)
 
 		// Send Update again. It will be delivered on existing transient WFT.
 		updateResultCh = sendUpdate(timeoutCtx, s, s.Tv())
@@ -2243,7 +2240,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.True(common.IsContextDeadlineExceededErr(updateResult.err), "UpdateWorkflowExecution must timeout after 2 seconds")
 		s.Nil(updateResult.response)
 
-		// This WFT failure wasn't recorded because WFT was transient.
+		// This WFT failure wasn't recorded because WFT was transient, but the scheduled event is included.
 		events = s.GetHistory(s.Namespace().String(), s.Tv().WorkflowExecution())
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -2252,7 +2249,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
-  7 WorkflowTaskFailed`, events)
+  7 WorkflowTaskFailed
+  8 WorkflowTaskScheduled`, events)
 
 		// Try to accept 2nd update in workflow 2nd time: get error. Poller will fail WT. Update is not aborted.
 		_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
@@ -2277,7 +2275,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
-  7 WorkflowTaskFailed`, events)
+  7 WorkflowTaskFailed
+  8 WorkflowTaskScheduled`, events)
 
 		// Complete Update and workflow.
 		_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
@@ -4432,9 +4431,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
-  5 WorkflowTaskScheduled
-  6 WorkflowTaskStarted`, task.History)
+  4 WorkflowTaskCompleted`, task.History)
 				commands := append(s.UpdateAcceptCompleteCommands(tv2),
 					&commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
