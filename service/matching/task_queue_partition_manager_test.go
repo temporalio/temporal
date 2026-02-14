@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/matching/hooks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -92,7 +93,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
 	s.userDataMgr = &mockUserDataManager{}
 
-	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr)
+	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, s.userDataMgr, nil)
 	s.NoError(err)
 	s.partitionMgr = pm
 	engine.Start()
@@ -169,7 +170,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 			ApproximateBacklogCount: 1,
 		},
 		TaskQueueStatsByPriorityKey: map[int32]*taskqueuepb.TaskQueueStats{
-			3: &taskqueuepb.TaskQueueStats{
+			3: {
 				ApproximateBacklogAge:   durationpb.New(0),
 				ApproximateBacklogCount: 1,
 			},
@@ -1334,6 +1335,61 @@ type testPartitionManagerConfig struct {
 	withRecentPoller bool          // Whether to register a poller to simulate recent poller activity
 }
 
+// capturingTaskMatchHook records ProcessTaskMatch calls for test assertions.
+type capturingTaskMatchHook struct {
+	mu    sync.Mutex
+	calls []capturedTaskMatchDetails
+}
+
+type capturedTaskMatchDetails struct {
+	TaskQueueName     string
+	TaskQueueType     enumspb.TaskQueueType
+	IsSyncMatch       bool
+	DeploymentVersion *deploymentpb.WorkerDeploymentVersion
+}
+
+func (h *capturingTaskMatchHook) ProcessTaskMatch(ctx context.Context, event *hooks.TaskMatchHookDetails) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	details := capturedTaskMatchDetails{
+		TaskQueueName: event.TaskQueueName,
+		TaskQueueType: event.TaskQueueType,
+		IsSyncMatch:   event.IsSyncMatch,
+	}
+	if event.DeploymentVersion != nil {
+		details.DeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: event.DeploymentVersion.DeploymentName,
+			BuildId:        event.DeploymentVersion.BuildId,
+		}
+	}
+	h.calls = append(h.calls, details)
+}
+
+func (h *capturingTaskMatchHook) getCalls() []capturedTaskMatchDetails {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]capturedTaskMatchDetails(nil), h.calls...)
+}
+
+// setupPartitionManagerWithTaskMatchHooks creates a partition manager with the given task match hooks.
+func (s *PartitionManagerTestSuite) setupPartitionManagerWithTaskMatchHooks(taskMatchHooks []hooks.TaskMatchHook) (*taskQueuePartitionManagerImpl, func()) {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, s.userDataMgr, taskMatchHooks)
+	s.Require().NoError(err)
+	pm.Start()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	err = pm.WaitUntilInitialized(ctx)
+	cancel()
+	s.Require().NoError(err)
+
+	return pm, func() { pm.Stop(unloadCauseUnspecified) }
+}
+
 // setupPartitionManagerWithCapture creates a partition manager with a capturing metrics handler
 // and returns the manager, capture, and a cleanup function
 func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
@@ -1349,7 +1405,7 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
 
-	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr, nil)
 	s.Require().NoError(err)
 	pm.Start()
 
@@ -1478,6 +1534,117 @@ func (s *PartitionManagerTestSuite) TestNoRecentPollerMetric_OldPartitionWithRec
 	recordings, exists := snapshot[metrics.NoRecentPollerTasksPerTaskQueueCounter.Name()]
 	s.False(exists, "No recordings should exist when there are no recent pollers")
 	s.Empty(recordings, "Metric should not be emitted when there are recent pollers")
+}
+
+func (s *PartitionManagerTestSuite) TestTaskMatchHooks_MatchHookSyncMatch() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskMatchHooks([]hooks.TaskMatchHook{hook})
+	defer cleanup()
+
+	type pollResult struct {
+		task *internalTask
+		err  error
+	}
+	pollDone := make(chan pollResult, 1)
+	pollStarted := make(chan struct{})
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		close(pollStarted)
+		task, _, err := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+				BuildId:       "",
+				UseVersioning: false,
+			},
+		})
+		pollDone <- pollResult{task: task, err: err}
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+	s.Require().Eventually(func() bool {
+		select {
+		case <-pollStarted:
+			return true
+		default:
+			return false
+		}
+	}, 2*time.Second, 1*time.Millisecond)
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().True(syncMatched)
+
+	var pr pollResult
+	s.Require().Eventually(func() bool {
+		select {
+		case pr = <-pollDone:
+			return true
+		default:
+			return false
+		}
+	}, 2*time.Second, 10*time.Millisecond)
+	s.Require().NoError(pr.err)
+	s.Require().NotNil(pr.task)
+	s.Require().NotNil(pr.task.responseC)
+
+	s.Require().Eventually(func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 10*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
+	s.True(calls[0].IsSyncMatch)
+	s.Nil(calls[0].DeploymentVersion)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskMatchHooks_MatchHookNoSyncMatch() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskMatchHooks([]hooks.TaskMatchHook{hook})
+	defer cleanup()
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId:      namespaceID,
+			RunId:            "run",
+			WorkflowId:       "wf",
+			VersionDirective: worker_versioning.MakeBuildIdDirective("buildXYZ"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Equal(enumspb.TASK_QUEUE_TYPE_WORKFLOW, calls[0].TaskQueueType)
+	s.False(calls[0].IsSyncMatch)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskMatchHooks_MultipleHooksInvoked() {
+	hook1 := &capturingTaskMatchHook{}
+	hook2 := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskMatchHooks([]hooks.TaskMatchHook{hook1, hook2})
+	defer cleanup()
+
+	_, _, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+
+	s.Len(hook1.getCalls(), 1)
+	s.Len(hook2.getCalls(), 1)
+	s.False(hook1.getCalls()[0].IsSyncMatch)
+	s.False(hook2.getCalls()[0].IsSyncMatch)
 }
 
 type mockUserDataManager struct {

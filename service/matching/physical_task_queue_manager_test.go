@@ -82,7 +82,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	onFatalErr := func(unloadCause) { s.T().Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
-	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr, nil)
 	s.NoError(err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
@@ -533,7 +533,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
 	udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
 
-	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr, nil)
 	require.NoError(t, err)
 	engine.partitions[prtn.Key()] = prtnMgr
 
@@ -578,7 +578,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	prevPriStats, prevFairStats := priQueueData.persistenceStats(), fairQueueData.persistenceStats()
 
 	// create a new manager (reload)
-	prtnMgr2, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+	prtnMgr2, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr, nil)
 	require.NoError(t, err)
 	engine.partitions[prtn.Key()] = prtnMgr2
 
