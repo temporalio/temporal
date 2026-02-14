@@ -8,6 +8,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -27,6 +28,7 @@ type mockUpdateStore struct {
 	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
+	GetNamespaceEntryFunc          func() *namespace.Namespace
 }
 
 func (m mockUpdateStore) VisitUpdates(
@@ -56,6 +58,17 @@ func (m mockUpdateStore) IsWorkflowExecutionRunning() bool {
 		return true
 	}
 	return m.IsWorkflowExecutionRunningFunc()
+}
+
+func (m mockUpdateStore) GetNamespaceEntry() *namespace.Namespace {
+	if m.GetNamespaceEntryFunc == nil {
+		return namespace.NewLocalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Name: "test-namespace"},
+			&persistencespb.NamespaceConfig{},
+			"",
+		)
+	}
+	return m.GetNamespaceEntryFunc()
 }
 
 type mockEventStore struct {

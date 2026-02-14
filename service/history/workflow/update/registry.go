@@ -416,7 +416,8 @@ func (r *registry) payloadSizeLimiter() updateOpt {
 			registrySize := r.GetSize()
 			payloadBytes := req.Size()
 			if registrySize+payloadBytes >= maxInFlightUpdateSize {
-				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
+				namespace := r.store.GetNamespaceEntry().Name().String()
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes, namespace)
 				return &serviceerror.ResourceExhausted{
 					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
