@@ -31,4 +31,7 @@ service SchedulerService {
     rpc ListScheduleMatchingTimes(ListScheduleMatchingTimesRequest) returns (ListScheduleMatchingTimesResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
     }
+    rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "state.scheduler_state.schedule_id";
+    }
 }

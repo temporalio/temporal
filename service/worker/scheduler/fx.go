@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -58,10 +59,11 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		HistoryClient  resource.HistoryClient
-		FrontendClient workflowservice.WorkflowServiceClient
+		MetricsHandler  metrics.Handler
+		Logger          log.Logger
+		HistoryClient   resource.HistoryClient
+		FrontendClient  workflowservice.WorkflowServiceClient
+		SchedulerClient schedulerpb.SchedulerServiceClient
 	}
 
 	fxResult struct {

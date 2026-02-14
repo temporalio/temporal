@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -371,4 +372,26 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Failure{Failure: failure}
 	}
 	return res
+}
+
+func (a *activities) MigrateSchedule(ctx context.Context, req *schedulerpb.MigrateScheduleRequest) error {
+	_, err := a.SchedulerClient.MigrateSchedule(ctx, req)
+	if err != nil {
+		// Treat "already exists" as success (idempotency)
+		var alreadyExists *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyExists) {
+			a.Logger.Warn("MigrateSchedule: CHASM schedule already exists, treating as success",
+				tag.WorkflowNamespace(req.GetState().GetSchedulerState().GetNamespace()),
+				tag.ScheduleID(req.GetState().GetSchedulerState().GetScheduleId()),
+			)
+			return nil
+		}
+		return translateError(err, "MigrateSchedule")
+	}
+
+	a.Logger.Info("MigrateSchedule: successfully created CHASM schedule",
+		tag.WorkflowNamespace(req.GetState().GetSchedulerState().GetNamespace()),
+		tag.ScheduleID(req.GetState().GetSchedulerState().GetScheduleId()),
+	)
+	return nil
 }
