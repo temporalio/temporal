@@ -153,7 +153,7 @@ func (s *ExecutionQueueScheduler[T]) Submit(task T) {
 		if s.isStopped() {
 			s.mu.Unlock()
 			task.Abort()
-	
+
 			return
 		}
 		var exists bool
@@ -306,11 +306,8 @@ func (s *ExecutionQueueScheduler[T]) sweepIdleQueues() bool {
 		s.queueAvailable.Signal()
 	}
 
-	if len(s.queues) == 0 {
-		s.sweeperRunning = false
-		return true
-	}
-	return false
+	s.sweeperRunning = len(s.queues) != 0
+	return !s.sweeperRunning
 }
 
 func (s *ExecutionQueueScheduler[T]) executeTask(task T, submitTime time.Time) {
