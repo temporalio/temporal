@@ -50,6 +50,7 @@ func TestFactoryImpl_NewHistoryTaskQueueManager(t *testing.T) {
 				nil,
 				func() bool { return false },
 				func() bool { return false },
+				func() bool { return false },
 			)
 			historyTaskQueueManager, err := factory.NewHistoryTaskQueueManager()
 			if tc.err != nil {
