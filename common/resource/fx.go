@@ -344,13 +344,17 @@ func ArchivalMetadataProvider(dc *dynamicconfig.Collection, cfg *config.Config) 
 
 func ArchiverProviderProvider(
 	cfg *config.Config,
+	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
+	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
 	persistenceExecutionManager persistence.ExecutionManager,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
 ) provider.ArchiverProvider {
-	return provider.NewArchiverProvider(
+	return provider.NewArchiverProviderWithFactories(
 		cfg.Archival.History.Provider,
 		cfg.Archival.Visibility.Provider,
+		customHistoryArchiverFactory,
+		customVisibilityArchiverFactory,
 		persistenceExecutionManager,
 		logger,
 		metricsHandler,
