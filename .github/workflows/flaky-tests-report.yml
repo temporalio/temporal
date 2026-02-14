@@ -71,7 +71,7 @@ jobs:
           mkdir -p tools/flakes/out
 
           tringa --json --since-days "$DAYS_PARAM" repo sql \
-            'select classname, name, artifact from test where passed = false and skipped = false order by classname, name, artifact desc' \
+            'select classname, name, artifact, passed from test where skipped = false order by classname, name, artifact desc' \
             --branch main \
             --workflow-id 80591745 \
             https://github.com/temporalio/temporal > tools/flakes/out/out.json
