@@ -316,8 +316,10 @@ type DescribeMutableStateRequest struct {
 	Execution       *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
 	SkipForceReload bool                   `protobuf:"varint,3,opt,name=skip_force_reload,json=skipForceReload,proto3" json:"skip_force_reload,omitempty"`
 	Archetype       string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId   uint32 `protobuf:"varint,5,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DescribeMutableStateRequest) Reset() {
@@ -376,6 +378,13 @@ func (x *DescribeMutableStateRequest) GetArchetype() string {
 		return x.Archetype
 	}
 	return ""
+}
+
+func (x *DescribeMutableStateRequest) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 type DescribeMutableStateResponse struct {
@@ -3148,10 +3157,12 @@ func (x *MergeDLQMessagesResponse) GetNextPageToken() []byte {
 }
 
 type RefreshWorkflowTasksRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	Archetype     string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Execution   *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	Archetype   string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId   uint32 `protobuf:"varint,5,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3205,6 +3216,13 @@ func (x *RefreshWorkflowTasksRequest) GetArchetype() string {
 		return x.Archetype
 	}
 	return ""
+}
+
+func (x *RefreshWorkflowTasksRequest) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 type RefreshWorkflowTasksResponse struct {
@@ -3540,10 +3558,12 @@ func (x *GetTaskQueueTasksResponse) GetNextPageToken() []byte {
 }
 
 type DeleteWorkflowExecutionRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Execution     *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	Archetype     string                 `protobuf:"bytes,3,opt,name=archetype,proto3" json:"archetype,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Execution *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	Archetype string                 `protobuf:"bytes,3,opt,name=archetype,proto3" json:"archetype,omitempty"`
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId   uint32 `protobuf:"varint,4,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3597,6 +3617,13 @@ func (x *DeleteWorkflowExecutionRequest) GetArchetype() string {
 		return x.Archetype
 	}
 	return ""
+}
+
+func (x *DeleteWorkflowExecutionRequest) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 type DeleteWorkflowExecutionResponse struct {
@@ -4994,8 +5021,10 @@ type GenerateLastHistoryReplicationTasksRequest struct {
 	Execution      *v1.WorkflowExecution  `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
 	TargetClusters []string               `protobuf:"bytes,3,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
 	Archetype      string                 `protobuf:"bytes,4,opt,name=archetype,proto3" json:"archetype,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId   uint32 `protobuf:"varint,5,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GenerateLastHistoryReplicationTasksRequest) Reset() {
@@ -5054,6 +5083,13 @@ func (x *GenerateLastHistoryReplicationTasksRequest) GetArchetype() string {
 		return x.Archetype
 	}
 	return ""
+}
+
+func (x *GenerateLastHistoryReplicationTasksRequest) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 type GenerateLastHistoryReplicationTasksResponse struct {
@@ -5756,12 +5792,13 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x0fversion_history\x18\x04 \x01(\v2..temporal.server.api.history.v1.VersionHistoryR\x0eversionHistory\x12\x14\n" +
 	"\x05token\x18\x05 \x01(\fR\x05token\"7\n" +
 	"\x1fImportWorkflowExecutionResponse\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\fR\x05token\"\xce\x01\n" +
+	"\x05token\x18\x01 \x01(\fR\x05token\"\xf1\x01\n" +
 	"\x1bDescribeMutableStateRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12*\n" +
 	"\x11skip_force_reload\x18\x03 \x01(\bR\x0fskipForceReload\x12\x1c\n" +
-	"\tarchetype\x18\x04 \x01(\tR\tarchetype\"\xb6\x02\n" +
+	"\tarchetype\x18\x04 \x01(\tR\tarchetype\x12!\n" +
+	"\farchetype_id\x18\x05 \x01(\rR\varchetypeId\"\xb6\x02\n" +
 	"\x1cDescribeMutableStateResponse\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\tR\ashardId\x12!\n" +
 	"\fhistory_addr\x18\x02 \x01(\tR\vhistoryAddr\x12h\n" +
@@ -5977,11 +6014,12 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x11maximum_page_size\x18\x05 \x01(\x05R\x0fmaximumPageSize\x12&\n" +
 	"\x0fnext_page_token\x18\x06 \x01(\fR\rnextPageToken\"B\n" +
 	"\x18MergeDLQMessagesResponse\x12&\n" +
-	"\x0fnext_page_token\x18\x01 \x01(\fR\rnextPageToken\"\xad\x01\n" +
+	"\x0fnext_page_token\x18\x01 \x01(\fR\rnextPageToken\"\xd0\x01\n" +
 	"\x1bRefreshWorkflowTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12\x1c\n" +
-	"\tarchetype\x18\x04 \x01(\tR\tarchetypeJ\x04\b\x01\x10\x02\"\x1e\n" +
+	"\tarchetype\x18\x04 \x01(\tR\tarchetype\x12!\n" +
+	"\farchetype_id\x18\x05 \x01(\rR\varchetypeIdJ\x04\b\x01\x10\x02\"\x1e\n" +
 	"\x1cRefreshWorkflowTasksResponse\"\xaf\x02\n" +
 	"\x1dResendReplicationTasksRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
@@ -6010,11 +6048,12 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\bsubqueue\x18\b \x01(\x05R\bsubqueue\"\x90\x01\n" +
 	"\x19GetTaskQueueTasksResponse\x12K\n" +
 	"\x05tasks\x18\x01 \x03(\v25.temporal.server.api.persistence.v1.AllocatedTaskInfoR\x05tasks\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xa5\x01\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\xc8\x01\n" +
 	"\x1eDeleteWorkflowExecutionRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12\x1c\n" +
-	"\tarchetype\x18\x03 \x01(\tR\tarchetype\"=\n" +
+	"\tarchetype\x18\x03 \x01(\tR\tarchetype\x12!\n" +
+	"\farchetype_id\x18\x04 \x01(\rR\varchetypeId\"=\n" +
 	"\x1fDeleteWorkflowExecutionResponse\x12\x1a\n" +
 	"\bwarnings\x18\x01 \x03(\tR\bwarnings\"\xaa\x01\n" +
 	"(StreamWorkflowReplicationMessagesRequest\x12p\n" +
@@ -6110,12 +6149,13 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x11target_cluster_id\x18\x05 \x01(\x05R\x0ftargetClusterId\x12!\n" +
 	"\farchetype_id\x18\x06 \x01(\rR\varchetypeId\"\xb9\x01\n" +
 	"\x19SyncWorkflowStateResponse\x12\x83\x01\n" +
-	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xda\x01\n" +
+	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xfd\x01\n" +
 	"*GenerateLastHistoryReplicationTasksRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12'\n" +
 	"\x0ftarget_clusters\x18\x03 \x03(\tR\x0etargetClusters\x12\x1c\n" +
-	"\tarchetype\x18\x04 \x01(\tR\tarchetype\"\x8a\x01\n" +
+	"\tarchetype\x18\x04 \x01(\tR\tarchetype\x12!\n" +
+	"\farchetype_id\x18\x05 \x01(\rR\varchetypeId\"\x8a\x01\n" +
 	"+GenerateLastHistoryReplicationTasksResponse\x124\n" +
 	"\x16state_transition_count\x18\x01 \x01(\x03R\x14stateTransitionCount\x12%\n" +
 	"\x0ehistory_length\x18\x02 \x01(\x03R\rhistoryLength\"\xfc\x01\n" +

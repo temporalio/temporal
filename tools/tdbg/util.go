@@ -309,13 +309,14 @@ func getNamespaceID(c *cli.Context, clientFactory ClientFactory, nsName namespac
 	return namespace.ID(nsResponse.NamespaceInfo.GetId()), nil
 }
 
-func getArchetypeWithDefault(
-	c *cli.Context,
-	defaultAchetype chasm.Archetype,
-) chasm.Archetype {
+func getArchetype(c *cli.Context) chasm.Archetype {
+	if c.IsSet(FlagArchetypeID) {
+		return ""
+	}
+
 	archetype := c.String(FlagArchetype)
 	if archetype != "" {
 		return archetype
 	}
-	return defaultAchetype
+	return chasm.WorkflowArchetype
 }
