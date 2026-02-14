@@ -64,6 +64,7 @@ func NewMemoryScheduledQueueFactory(
 			WorkerCount: params.Config.MemoryTimerProcessorSchedulerWorkerCount,
 		},
 		logger,
+		metrics.NoopMetricsHandler,
 	)
 
 	return &memoryScheduledQueueFactory{

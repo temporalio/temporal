@@ -678,6 +678,17 @@ func (e *executableImpl) Nack(err error) {
 		return
 	}
 
+	// Check if this is a busy workflow error and if the scheduler supports
+	// routing to a sequential scheduler for contended workflows
+	if errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+		if handler, ok := e.scheduler.(BusyWorkflowHandler); ok {
+			e.SetScheduledTime(e.timeSource.Now())
+			if handler.HandleBusyWorkflow(e) {
+				return
+			}
+		}
+	}
+
 	submitted := false
 	if e.shouldResubmitOnNack(err) {
 		// we do not need to know if there any error during submission
