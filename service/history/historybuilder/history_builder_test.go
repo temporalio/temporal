@@ -628,6 +628,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskScheduled() {
 		durationpb.New(startToCloseTimeout),
 		attempt,
 		s.now,
+		nil,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{

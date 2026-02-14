@@ -1294,7 +1294,7 @@ func (s *sutTestingAdapter) AddWorkflowTaskTimedOutEvent(_ ...eventConfig) *hist
 }
 
 func (s *sutTestingAdapter) AddWorkflowTaskScheduledEvent(_ ...eventConfig) *historypb.HistoryEvent {
-	return s.HistoryBuilder.AddWorkflowTaskScheduledEvent(nil, nil, 1, s.today)
+	return s.HistoryBuilder.AddWorkflowTaskScheduledEvent(nil, nil, 1, s.today, nil)
 }
 
 func (s *sutTestingAdapter) AddActivityTaskStartedEvent(optionalConfig ...eventConfig) *historypb.HistoryEvent {
