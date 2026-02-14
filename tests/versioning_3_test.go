@@ -3466,7 +3466,7 @@ func (s *Versioning3Suite) rollbackTaskQueueToVersion(
 	tv *testvars.TestVars,
 ) {
 
-	cleanup := s.InjectHook(testhooks.MatchingIgnoreRoutingConfigRevisionCheck, true)
+	cleanup := s.InjectHook(testhooks.NewHook(testhooks.MatchingIgnoreRoutingConfigRevisionCheck, true))
 	defer cleanup()
 
 	rc := &deploymentpb.RoutingConfig{

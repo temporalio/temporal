@@ -76,7 +76,7 @@ func NewLoadBalancer(
 func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
 ) *tqid.NormalPartition {
-	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceWritePartition); ok {
+	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceWritePartition, namespace.ID(taskQueue.NamespaceId())); ok {
 		return taskQueue.NormalPartition(n)
 	}
 
@@ -105,7 +105,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
 	}
 
-	if n, ok := testhooks.Get[int](lb.testHooks, testhooks.MatchingLBForceReadPartition); ok {
+	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceReadPartition, namespace.ID(taskQueue.NamespaceId())); ok {
 		return tqlb.forceReadPartition(partitionCount, n)
 	}
 

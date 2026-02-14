@@ -2155,7 +2155,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				rc := req.GetUpdateRoutingConfig()
 				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
 
-				ignoreRevCheck, _ := testhooks.Get[bool](e.testHooks, testhooks.MatchingIgnoreRoutingConfigRevisionCheck)
+				ignoreRevCheck, _ := testhooks.Get(e.testHooks, testhooks.MatchingIgnoreRoutingConfigRevisionCheck, namespace.ID(req.NamespaceId))
 				if ignoreRevCheck || rc.GetRevisionNumber() > tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
 					changed = true
 					// Update routing config when newer or equal revision is provided

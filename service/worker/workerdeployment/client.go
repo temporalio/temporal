@@ -1666,7 +1666,7 @@ func (d *ClientImpl) SignalVersionReactivation(
 
 func (d *ClientImpl) getSyncBatchSize() int32 {
 	syncBatchSize := int32(25)
-	if n, ok := testhooks.Get[int](d.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize); ok && n > 0 {
+	if n, ok := testhooks.Get(d.testHooks, testhooks.TaskQueuesInDeploymentSyncBatchSize, testhooks.GlobalScope); ok && n > 0 {
 		// In production, the testhook would be set to 0 and never reach here!
 		syncBatchSize = int32(n)
 	}

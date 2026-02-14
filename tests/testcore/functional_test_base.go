@@ -576,11 +576,18 @@ func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.Generic
 	return s.testCluster.host.overrideDynamicConfig(s.T(), setting.Key(), value)
 }
 
-func (s *FunctionalTestBase) InjectHook(key testhooks.Key, value any) (cleanup func()) {
-	if s.isShared {
-		s.T().Fatalf("InjectHook cannot be called on a shared cluster; use testcore.WithDedicatedCluster()")
+// InjectHook sets a test hook inside the cluster.
+func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
+	var scope any
+	switch hook.Scope() {
+	case testhooks.ScopeNamespace:
+		scope = s.NamespaceID()
+	case testhooks.ScopeGlobal:
+		scope = testhooks.GlobalScope
+	default:
+		s.T().Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
-	return s.testCluster.host.injectHook(s.T(), key, value)
+	return s.testCluster.host.injectHook(s.T(), hook, scope)
 }
 
 // CloseShard closes the shard that contains the given workflow.
@@ -634,19 +641,19 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 						}
 						if forceTaskForward {
-							s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
+							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 11))
 						} else {
-							s.InjectHook(testhooks.MatchingLBForceWritePartition, 0)
+							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 0))
 						}
 						if forcePollForward {
-							s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
+							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 5))
 						} else {
-							s.InjectHook(testhooks.MatchingLBForceReadPartition, 0)
+							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
 						}
 						if forceAsync {
-							s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
+							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
 						} else {
-							s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
+							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
 						}
 
 						subtest()
