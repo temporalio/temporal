@@ -199,8 +199,8 @@ func (h *handler) PollActivityExecution(
 		req *activitypb.PollActivityExecutionRequest,
 	) (*activitypb.PollActivityExecutionResponse, bool, error) {
 		if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
-			response, err := a.buildPollActivityExecutionResponse(ctx)
-			return response, true, err
+			response := a.buildPollActivityExecutionResponse(ctx)
+			return response, true, nil
 		}
 		return nil, false, nil
 	}, req)
