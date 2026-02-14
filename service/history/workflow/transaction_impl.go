@@ -614,6 +614,7 @@ func NotifyOnExecutionMutation(
 			RunID:       workflowMutation.ExecutionState.RunId,
 		}, nil)
 	}
+	engine.NotifyTimeSkipping()
 }
 
 func NotifyNewHistorySnapshotEvent(

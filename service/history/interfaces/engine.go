@@ -104,6 +104,8 @@ type (
 		NotifyChasmExecution(executionKey chasm.ExecutionKey, componentRef []byte)
 		// TODO(bergundy): This Environment should be host level once shard level workflow cache is deprecated.
 		StateMachineEnvironment(operationTag metrics.Tag) hsm.Environment
+		// todo, tentative, feiyang
+		NotifyTimeSkipping()
 
 		ReplicationStream
 		Start()
