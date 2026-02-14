@@ -777,4 +777,127 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
 
+func (s *ChasmTestSuite) TestUpdateWithStartExecution_UpdateExisting() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	// Create initial PayloadStore.
+	createResp, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyAllowDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+	originalRunID := createResp.RunID
+
+	// Add a payload to the original store.
+	_, err = tests.AddPayloadHandler(
+		ctx,
+		tests.AddPayloadRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			PayloadKey:  "original-key",
+			Payload:     payload.EncodeString("original-value"),
+		},
+	)
+	s.NoError(err)
+
+	// Call UpdateWithStartExecution - should update existing running execution.
+	newFnCalled := false
+	updateFnCalled := false
+	result, err := chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: s.NamespaceID().String(),
+			BusinessID:  storeID,
+		},
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			newFnCalled = true
+			s.Fail("newFn should not be called when execution exists and is running")
+			return nil, nil
+		},
+		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
+			updateFnCalled = true
+			// Update the store by closing it (marks for close but doesn't actually close yet).
+			store.State.Closed = true
+			return nil, nil
+		},
+		nil,
+	)
+	s.NoError(err)
+	s.False(newFnCalled, "newFn should not be called")
+	s.True(updateFnCalled, "updateFn should be called")
+	s.Equal(originalRunID, result.ExecutionKey.RunID, "RunID should be the same as original")
+	s.NotNil(result.ExecutionRef)
+
+	// Verify the store was updated (closed flag set).
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.True(descResp.State.Closed, "Store should be marked as closed")
+	s.Equal(int64(1), descResp.State.TotalCount) // Original payload still there.
+}
+
+func (s *ChasmTestSuite) TestUpdateWithStartExecution_CreateNew() {
+	tv := testvars.New(s.T())
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+
+	// Call UpdateWithStartExecution without creating execution first - should create new.
+	newFnCalled := false
+	updateFnCalled := false
+	result, err := chasm.UpdateWithStartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: s.NamespaceID().String(),
+			BusinessID:  storeID,
+		},
+		func(mutableContext chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			newFnCalled = true
+			store, err := tests.NewPayloadStore(mutableContext)
+			return store, err
+		},
+		func(store *tests.PayloadStore, mutableContext chasm.MutableContext, _ any) (any, error) {
+			updateFnCalled = true
+			// Apply update to the newly created store (like adding a signal during SignalWithStart).
+			store.State.TotalCount = 42
+			return nil, nil
+		},
+		nil,
+	)
+	s.NoError(err)
+	s.True(newFnCalled, "newFn should be called")
+	s.True(updateFnCalled, "updateFn should be called after newFn")
+	s.NotEmpty(result.ExecutionKey.RunID)
+	s.NotNil(result.ExecutionRef)
+
+	// Verify the store was created with the update applied.
+	descResp, err := tests.DescribePayloadStoreHandler(
+		ctx,
+		tests.DescribePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+		},
+	)
+	s.NoError(err)
+	s.False(descResp.State.Closed, "Store should not be closed")
+	s.Equal(int64(42), descResp.State.TotalCount) // Update was applied during creation.
+}
+
 // TODO: More tests here...

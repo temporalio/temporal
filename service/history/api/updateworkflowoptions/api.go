@@ -28,6 +28,8 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
 	req := request.GetUpdateRequest()
 	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
@@ -35,6 +37,9 @@ func Invoke(
 		return nil, err
 	}
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
+
+	// Store versioning override to send reactivation signal after successful persistence
+	var versioningOverrideForReactivation *workflowpb.VersioningOverride
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -94,6 +99,9 @@ func Invoke(
 				}, nil
 			}
 
+			// Store versioning override to send reactivation signal after successful persistence
+			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
+
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -107,6 +115,11 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're pinning to a potentially drained version.
+	// This is done after successful persistence to avoid signaling if the update fails.
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
+
 	return ret, nil
 }
 

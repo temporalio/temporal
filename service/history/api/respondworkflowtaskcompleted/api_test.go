@@ -127,6 +127,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 		nil,
 		nil,
 		api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
+		nil,
 		nil)
 }
 

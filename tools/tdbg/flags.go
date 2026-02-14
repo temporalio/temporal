@@ -75,4 +75,5 @@ var (
 	FlagMinPass                    = "min-pass"
 	FlagVisibilityQuery            = "query"
 	FlagJobID                      = "job-id"
+	FlagDecode                     = "decode"
 )

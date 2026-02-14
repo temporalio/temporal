@@ -60,6 +60,8 @@ type Starter struct {
 	namespace                  *namespace.Namespace
 	createOrUpdateLeaseFn      api.CreateOrUpdateLeaseFunc
 	versionMembershipCache     worker_versioning.VersionMembershipCache
+	reactivationSignalCache    worker_versioning.ReactivationSignalCache
+	reactivationSignaler       api.VersionReactivationSignalerFn
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -89,6 +91,8 @@ func NewStarter(
 	request *historyservice.StartWorkflowExecutionRequest,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
@@ -107,6 +111,8 @@ func NewStarter(
 		namespace:                  namespaceEntry,
 		createOrUpdateLeaseFn:      createLeaseFn,
 		versionMembershipCache:     versionMembershipCache,
+		reactivationSignalCache:    reactivationSignalCache,
+		reactivationSignaler:       reactivationSignaler,
 	}, nil
 }
 
@@ -208,11 +214,20 @@ func (s *Starter) Invoke(
 		var currentWorkflowConditionFailedError *persistence.CurrentWorkflowConditionFailedError
 		if errors.As(err, &currentWorkflowConditionFailedError) && len(currentWorkflowConditionFailedError.RunID) > 0 {
 			// The history and mutable state generated above will be deleted by a background process.
-			return s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+			resp, outcome, conflictErr := s.handleConflict(ctx, creationParams, currentWorkflowConditionFailedError)
+			if conflictErr == nil && outcome == StartNew {
+				// Notify version workflow if we are starting a workflow execution on a potentially drained version.
+				// Only signal when a new workflow was actually created (StartNew), not for deduped retries
+				// (StartDeduped) or reused existing workflows (StartReused) where the pinned override is not applied.
+				api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
+			}
+			return resp, outcome, conflictErr
 		}
-
 		return nil, StartErr, err
 	}
+
+	// Notify version workflow if we're pinning to a potentially drained version
+	api.ReactivateVersionWorkflowIfPinned(ctx, s.namespace, s.request.StartRequest.GetVersioningOverride(), s.reactivationSignalCache, s.reactivationSignaler, s.shardContext.GetConfig().EnableVersionReactivationSignals())
 
 	resp, err = s.generateResponse(
 		creationParams.runID,
