@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -42,6 +43,12 @@ const (
 	headerUserAgent        = "user-agent"
 	clientNameVersionDelim = "/v"
 )
+
+var errNexusEndpointRateLimitBusy = &serviceerror.ResourceExhausted{
+	Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+	Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	Message: "nexus endpoint rate limit exceeded",
+}
 
 // Generic Nexus context that is not bound to a specific operation.
 // Includes fields extracted from an incoming Nexus request before being handled by the Nexus HTTP handler.
@@ -60,6 +67,7 @@ type nexusContext struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
+	endpointRateLimiter                  quotas.RequestRateLimiter
 	responseHeaders                      map[string]string
 	responseHeadersMutex                 sync.Mutex
 	originalRequestHeaders               http.Header // Original HTTP request headers to be used for forwarded requests.
@@ -227,6 +235,18 @@ func (c *operationContext) interceptRequest(
 	if err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_concurrency_limited"))
 		return commonnexus.ConvertGRPCError(err, false)
+	}
+
+	if c.endpointName != "" && c.endpointRateLimiter != nil {
+		if !c.endpointRateLimiter.Allow(time.Now().UTC(), quotas.Request{
+			API:         c.apiName,
+			Token:       1,
+			Caller:      c.namespaceName,
+			Destination: c.endpointName,
+		}) {
+			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("endpoint_rate_limited"))
+			return commonnexus.ConvertGRPCError(errNexusEndpointRateLimitBusy, true)
+		}
 	}
 
 	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {

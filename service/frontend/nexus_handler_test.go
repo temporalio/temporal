@@ -75,6 +75,7 @@ type contextOptions struct {
 	quota                   int
 	namespaceRateLimitAllow bool
 	rateLimitAllow          bool
+	endpointRateLimitAllow  bool
 	redirectAllow           bool
 	headersBlacklist        []string
 }
@@ -148,6 +149,8 @@ func newOperationContext(options contextOptions) *operationContext {
 		mockRateLimiter{options.rateLimitAllow},
 		make(map[string]int),
 	)
+	oc.endpointName = "test-endpoint"
+	oc.endpointRateLimiter = mockRateLimiter{options.endpointRateLimitAllow}
 
 	oc.clusterMetadata = clustertest.NewMetadataForTest(
 		cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive),
@@ -184,6 +187,7 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 		quota:                   1,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 	})
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var handlerError *nexus.HandlerError
@@ -208,6 +212,7 @@ func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExha
 		quota:                   0,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 	})
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var handlerError *nexus.HandlerError
@@ -232,6 +237,7 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 		quota:                   1,
 		namespaceRateLimitAllow: false,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 	})
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var handlerError *nexus.HandlerError
@@ -247,6 +253,31 @@ func TestNexusInterceptRequest_NamespaceRateLimited_ResultsInResourceExhausted(t
 	require.Equal(t, map[string]string{"outcome": "namespace_rate_limited"}, snap["test"][0].Tags)
 }
 
+func TestNexusInterceptRequest_EndpointRateLimited_ResultsInResourceExhausted(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	var err error
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+		endpointRateLimitAllow:  false,
+	})
+	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
+	var handlerError *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerError)
+	require.Equal(t, nexus.HandlerErrorTypeResourceExhausted, handlerError.Type)
+	require.Equal(t, "nexus endpoint rate limit exceeded", handlerError.Cause.Error())
+	mh := oc.metricsHandler.(*metricstest.CaptureHandler) //nolint:revive
+	capture := mh.StartCapture()
+	oc.metricsHandler.Counter("test").Record(1)
+	mh.StopCapture(capture)
+	snap := capture.Snapshot()
+	require.Len(t, snap["test"], 1)
+	require.Equal(t, map[string]string{"outcome": "endpoint_rate_limited"}, snap["test"][0].Tags)
+}
+
 func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
@@ -256,6 +287,7 @@ func TestNexusInterceptRequest_GlobalRateLimited_ResultsInResourceExhausted(t *t
 		quota:                   1,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          false,
+		endpointRateLimitAllow:  true,
 	})
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
 	var handlerError *nexus.HandlerError
@@ -281,6 +313,7 @@ func TestNexusInterceptRequest_ForwardingDisabled_ResultsInUnavailable(t *testin
 		quota:                   1,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 		redirectAllow:           false,
 	})
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
@@ -306,6 +339,7 @@ func TestNexusInterceptRequest_ForwardingEnabled_ResultsInNotActiveError(t *test
 		quota:                   1,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 		redirectAllow:           true,
 	})
 	err = oc.interceptRequest(ctx, &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{})
@@ -330,6 +364,7 @@ func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.
 		quota:                   1,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 		redirectAllow:           true,
 	})
 	header := nexus.Header{headerUserAgent: "Nexus-go-sdk/v99.0.0"}
@@ -357,6 +392,7 @@ func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {
 		quota:                   1,
 		namespaceRateLimitAllow: true,
 		rateLimitAllow:          true,
+		endpointRateLimitAllow:  true,
 		headersBlacklist:        []string{"delete-*", "remove-*"},
 	})
 	initialHeader := nexus.Header{

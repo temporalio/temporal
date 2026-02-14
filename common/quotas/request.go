@@ -8,6 +8,7 @@ type (
 		CallerType    string
 		CallerSegment int32
 		Initiation    string
+		Destination   string
 	}
 )
 
