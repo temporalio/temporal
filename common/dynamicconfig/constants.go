@@ -186,7 +186,7 @@ config as the other services.`,
 	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
-		false,
+		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
