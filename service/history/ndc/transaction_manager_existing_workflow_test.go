@@ -46,7 +46,9 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 	s.NoError(err)
 	s.mockShard.EXPECT().StateMachineRegistry().Return(reg).AnyTimes()
 
-	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr, false)
+	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
+	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil).AnyTimes()
+	s.updateMgr = newNDCTransactionMgrForExistingWorkflow(s.mockShard, s.mockTransactionMgr, false, mockTaskRefresher)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TearDownTest() {
