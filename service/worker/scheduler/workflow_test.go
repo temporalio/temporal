@@ -2269,3 +2269,51 @@ func (s *workflowSuite) TestCANBySignal() {
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
+
+func (s *workflowSuite) TestContinuedFailureCleared() {
+	// First run fails to set ContinuedFailure
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Nil(req.Request.ContinuedFailure)
+		return nil, nil
+	})
+	failure := &failurepb.Failure{
+		Message: "test failure",
+	}
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		return &schedulespb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			ResultFailure: &schedulespb.WatchWorkflowResponse_Failure{
+				Failure: failure,
+			},
+		}, nil
+	})
+	// Second run succeeds with null payload - ContinuedFailure should be cleared
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.NotNil(req.Request.ContinuedFailure)
+		s.Equal("test failure", req.Request.ContinuedFailure.Message)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		return &schedulespb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}, nil
+	})
+	// Third run verifies ContinuedFailure was cleared after successful completion
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Nil(req.Request.ContinuedFailure, "ContinuedFailure should be nil after successful run")
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		return &schedulespb.WatchWorkflowResponse{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		}, nil
+	})
+	s.run(&schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(1 * time.Minute),
+			}},
+		},
+		Action: s.defaultAction("myid"),
+	}, 10)
+}
