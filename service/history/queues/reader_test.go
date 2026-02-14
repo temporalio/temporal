@@ -80,9 +80,11 @@ func (s *readerSuite) SetupTest() {
 			telemetry.NoopTracer,
 		)
 	})
-	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
+	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), s.logger, s.metricsHandler, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		ReaderStuckLagDuration:      dynamicconfig.GetDurationPropertyFn(0),
+		ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	})
 }

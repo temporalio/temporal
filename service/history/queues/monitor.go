@@ -6,6 +6,9 @@ import (
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -45,6 +48,8 @@ type (
 	MonitorOptions struct {
 		PendingTasksCriticalCount   dynamicconfig.IntPropertyFn
 		ReaderStuckCriticalAttempts dynamicconfig.IntPropertyFn
+		ReaderStuckLagDuration      dynamicconfig.DurationPropertyFn
+		ReaderStuckShadowMode       dynamicconfig.BoolPropertyFn
 		SliceCountCriticalThreshold dynamicconfig.IntPropertyFn
 	}
 
@@ -60,6 +65,8 @@ type (
 		categoryType tasks.CategoryType
 		timeSource   clock.TimeSource
 		options      *MonitorOptions
+		logger       log.Logger
+		metrics      metrics.Handler
 
 		pendingAlerts  map[AlertType]struct{}
 		silencedAlerts map[AlertType]time.Time // silenced alertType => expiration
@@ -85,6 +92,8 @@ type (
 func newMonitor(
 	categoryType tasks.CategoryType,
 	timeSource clock.TimeSource,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 	options *MonitorOptions,
 ) *monitorImpl {
 	return &monitorImpl{
@@ -93,6 +102,8 @@ func newMonitor(
 		categoryType:   categoryType,
 		timeSource:     timeSource,
 		options:        options,
+		logger:         logger,
+		metrics:        metricsHandler,
 		pendingAlerts:  make(map[AlertType]struct{}),
 		silencedAlerts: make(map[AlertType]time.Time),
 		alertCh:        make(chan *Alert, alertChSize),
@@ -176,16 +187,36 @@ func (m *monitorImpl) SetReaderWatermark(readerID int64, watermark tasks.Key) {
 	stats.progress.attempts++
 	m.readerStats[readerID] = stats
 
-	criticalAttempts := m.options.ReaderStuckCriticalAttempts()
-	if criticalAttempts > 0 && stats.progress.attempts >= criticalAttempts {
-		m.sendAlertLocked(&Alert{
-			AlertType: AlertTypeReaderStuck,
-			AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
-				ReaderID:         readerID,
-				CurrentWatermark: stats.progress.watermark,
-			},
-		})
+	now := m.timeSource.Now()
+	if now.Before(m.silencedAlerts[AlertTypeReaderStuck]) {
+		return
 	}
+
+	criticalAttempts := m.options.ReaderStuckCriticalAttempts()
+	if criticalAttempts <= 0 || stats.progress.attempts < criticalAttempts {
+		return
+	}
+
+	lagDuration := m.options.ReaderStuckLagDuration()
+	if lagDuration > 0 && now.Before(stats.progress.watermark.FireTime.Add(lagDuration)) {
+		return
+	}
+
+	alert := &Alert{
+		AlertType: AlertTypeReaderStuck,
+		AlertAttributesReaderStuck: &AlertAttributesReaderStuck{
+			ReaderID:         readerID,
+			CurrentWatermark: stats.progress.watermark,
+		},
+	}
+	if m.options.ReaderStuckShadowMode() {
+		m.logger.Info("Queue reader stuck alert suppressed by shadow mode", tag.QueueAlert(alert), tag.Attempt(int32(stats.progress.attempts)))
+		metrics.QueueAlertShadowCounter.With(m.metrics.WithTags(metrics.QueueActionTag(readerStuckActionName))).Record(1)
+		m.silenceAlertLocked(alert.AlertType)
+		return
+	}
+
+	m.sendAlertLocked(alert)
 }
 
 func (m *monitorImpl) GetTotalSliceCount() int {
@@ -269,6 +300,10 @@ func (m *monitorImpl) SilenceAlert(alertType AlertType) {
 	m.Lock()
 	defer m.Unlock()
 
+	m.silenceAlertLocked(alertType)
+}
+
+func (m *monitorImpl) silenceAlertLocked(alertType AlertType) {
 	delete(m.pendingAlerts, alertType)
 	m.silencedAlerts[alertType] = m.timeSource.Now().Add(defaultAlertSilenceDuration)
 }
