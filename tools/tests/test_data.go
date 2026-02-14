@@ -1,9 +1,6 @@
 package tests
 
 const (
-	testUser     = "temporal"
-	testPassword = "temporal"
-
 	testMySQLExecutionSchemaFile        = "../../schema/mysql/v8/temporal/schema.sql"
 	testMySQLVisibilitySchemaFile       = "../../schema/mysql/v8/visibility/schema.sql"
 	testMySQLExecutionSchemaVersionDir  = "../../schema/mysql/v8/temporal/versioned"
