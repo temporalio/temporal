@@ -290,7 +290,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
@@ -531,7 +531,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(
@@ -547,7 +547,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 			s.Len(options.Links, 1)
 			var links []*commonpb.Link
 			for _, nexusLink := range options.Links {
-				link, err := nexusoperations.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
+				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 				s.NoError(err)
 				links = append(links, &commonpb.Link{
 					Variant: &commonpb.Link_WorkflowEvent_{
@@ -3103,4 +3103,88 @@ func (s *NexusWorkflowTestSuite) sendNexusCompletionRequest(
 	})
 	err := c.CompleteOperation(ctx, url, completion)
 	return capture.Snapshot(), err
+}
+
+// NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
+// __temporal_system endpoint.
+func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint() {
+	ctx := testcore.NewContext()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, "workflow")
+	s.NoError(err)
+
+	pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  commonnexus.SystemEndpoint,
+						Service:   "TestService",
+						Operation: "TestOperation",
+						Input:     s.mustToPayload("Temporal"),
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+
+	// Poll for the completion
+	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		Identity: "test",
+	})
+	s.NoError(err)
+
+	// Find the NexusOperationCompleted event
+	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
+		return e.GetNexusOperationCompletedEventAttributes() != nil
+	})
+	s.Positive(completedEventIdx, "Should have a NexusOperationCompleted event")
+
+	// Verify the result contains the echoed request ID
+	completedEvent := pollResp.History.Events[completedEventIdx]
+	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
+	s.NotNil(result)
+
+	// Complete the workflow
+	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity:  "test",
+		TaskToken: pollResp.TaskToken,
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+						Result: &commonpb.Payloads{
+							Payloads: []*commonpb.Payload{result},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	var response string
+	s.NoError(run.Get(ctx, &response))
+	s.Equal("Hello, Temporal", response)
 }

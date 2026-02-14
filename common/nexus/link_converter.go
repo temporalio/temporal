@@ -24,7 +24,7 @@
 // Any changes here or there must be replicated. This is temporary until the
 // temporal repo updates to the most recent SDK version.
 
-package nexusoperations
+package nexus
 
 import (
 	"errors"

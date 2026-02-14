@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/components/nexusoperations"
@@ -25,6 +27,7 @@ import (
 type commandHandler struct {
 	config           *nexusoperations.Config
 	endpointRegistry commonnexus.EndpointRegistry
+	nexusProcessor   *chasm.NexusEndpointProcessor
 }
 
 func (ch *commandHandler) HandleScheduleCommand(
@@ -52,23 +55,52 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
+	requestID := uuid.NewString()
 	var endpointID string
-	endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
-	if err != nil {
-		if errors.As(err, new(*serviceerror.NotFound)) {
+	// Skip endpoint registry lookup for __temporal_system endpoint
+	if attrs.Endpoint == commonnexus.SystemEndpoint {
+		if len(attrs.NexusHeader) > 0 {
 			return workflow.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader must be empty when using %s endpoint", commonnexus.SystemEndpoint),
 			}
-		} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
-			return workflow.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
+		}
+		// Run ProcessInput for validation.
+		_, err := ch.nexusProcessor.ProcessInput(chasm.NexusOperationProcessorContext{
+			Namespace: ns,
+			RequestID: requestID,
+			// Links are not needed for validation.
+		}, attrs.Service, attrs.Operation, attrs.Input)
+		if err != nil {
+			var handlerErr *nexus.HandlerError
+			if errors.As(err, &handlerErr) {
+				// nolint:exhaustive
+				switch handlerErr.Type {
+				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
+					return workflow.FailWorkflowTaskError{
+						Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+						Message: handlerErr.Message,
+					}
+				}
 			}
-		} else {
 			return err
 		}
 	} else {
+		endpoint, err := ch.endpointRegistry.GetByName(ctx, ns.ID(), attrs.Endpoint)
+		if err != nil {
+			if errors.As(err, new(*serviceerror.NotFound)) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
+				}
+			} else if errors.As(err, new(*serviceerror.PermissionDenied)) {
+				return workflow.FailWorkflowTaskError{
+					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+					Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
+				}
+			}
+			return err
+		}
 		endpointID = endpoint.Id
 	}
 
@@ -194,7 +226,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 				ScheduleToStartTimeout:       attrs.ScheduleToStartTimeout,
 				StartToCloseTimeout:          attrs.StartToCloseTimeout,
 				NexusHeader:                  lowerCaseHeader,
-				RequestId:                    uuid.NewString(),
+				RequestId:                    requestID,
 				WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			},
 		}
@@ -293,8 +325,17 @@ func (ch *commandHandler) HandleCancelCommand(
 	return err
 }
 
-func RegisterCommandHandlers(reg *workflow.CommandHandlerRegistry, endpointRegistry commonnexus.EndpointRegistry, config *nexusoperations.Config) error {
-	h := commandHandler{config: config, endpointRegistry: endpointRegistry}
+func RegisterCommandHandlers(
+	reg *workflow.CommandHandlerRegistry,
+	chasmRegistry *chasm.Registry,
+	endpointRegistry commonnexus.EndpointRegistry,
+	config *nexusoperations.Config,
+) error {
+	h := commandHandler{
+		config:           config,
+		endpointRegistry: endpointRegistry,
+		nexusProcessor:   chasmRegistry.NexusEndpointProcessor,
+	}
 	if err := reg.Register(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, h.HandleScheduleCommand); err != nil {
 		return err
 	}

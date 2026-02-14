@@ -3,6 +3,7 @@
 package chasm
 
 import (
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -12,6 +13,11 @@ type (
 		Components() []*RegistrableComponent
 		Tasks() []*RegistrableTask
 		RegisterServices(server *grpc.Server)
+		// NexusServices returns a list of nexus.Service instances to register with the __temporal_system Nexus endpoint.
+		NexusServices() []*nexus.Service
+		// NexusServiceProcessors returns a list of NexusServiceProcessor instances to register with the __temporal_system
+		// Nexus endpoint.
+		NexusServiceProcessors() []*NexusServiceProcessor
 
 		mustEmbedUnimplementedLibrary()
 	}
@@ -35,6 +41,16 @@ func (UnimplementedLibrary) Tasks() []*RegistrableTask {
 func (UnimplementedLibrary) RegisterServices(_ *grpc.Server) {
 }
 
+func (UnimplementedLibrary) NexusServices() []*nexus.Service {
+	return nil
+}
+
+func (UnimplementedLibrary) NexusServiceProcessors() []*NexusServiceProcessor {
+	return nil
+}
+
+func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}
+
 // FullyQualifiedName creates a fully qualified name (FQN) by combining a library name
 // and a component or task name. The FQN is used to uniquely identify components and
 // tasks within the CHASM framework.
@@ -42,5 +58,3 @@ func (UnimplementedLibrary) RegisterServices(_ *grpc.Server) {
 func FullyQualifiedName(libName, name string) string {
 	return libName + "." + name
 }
-
-func (UnimplementedLibrary) mustEmbedUnimplementedLibrary() {}

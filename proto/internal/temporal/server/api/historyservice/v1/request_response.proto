@@ -1401,3 +1401,27 @@ message UnpauseWorkflowExecutionRequest {
 }
 
 message UnpauseWorkflowExecutionResponse { }
+
+message StartNexusOperationRequest {
+    option (routing).shard_id = "shard_id";
+
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    temporal.api.nexus.v1.StartOperationRequest request = 3;
+}
+
+message StartNexusOperationResponse {
+    temporal.api.nexus.v1.StartOperationResponse response = 1;
+}
+
+message CancelNexusOperationRequest {
+    option (routing).shard_id = "shard_id";
+
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    temporal.api.nexus.v1.CancelOperationRequest request = 3;
+}
+
+message CancelNexusOperationResponse {
+    temporal.api.nexus.v1.CancelOperationResponse response = 1;
+}

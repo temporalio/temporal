@@ -88,6 +88,10 @@ var (
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
+		// Nexus metrics are an exception since they use the information from the request.
+		"metricsClient.history.StartNexusOperation":  true,
+		"metricsClient.history.CancelNexusOperation": true,
+
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,

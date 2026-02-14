@@ -75,7 +75,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 	}
-	callerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(callerLink)
+	callerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(callerLink)
 
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  "handler-ns",
@@ -88,7 +88,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 			},
 		},
 	}
-	handlerNexusLink := nexusoperations.ConvertLinkWorkflowEventToNexusLink(handlerLink)
+	handlerNexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)
 	asyncSuccessEndpoint := testcore.RandomizeStr("test-endpoint")
 
 	operationErrorOutcome := "operation_error"

@@ -1,9 +1,12 @@
 package history
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -13,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -37,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -98,6 +103,7 @@ type (
 		dlqMetricsEmitter            *persistence.DLQMetricsEmitter
 		chasmEngine                  chasm.Engine
 		chasmRegistry                *chasm.Registry
+		nexusHandler                 nexus.Handler
 
 		replicationTaskFetcherFactory    replication.TaskFetcherFactory
 		replicationTaskConverterProvider replication.SourceTaskConverterProvider
@@ -2470,4 +2476,157 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 	}
 
 	return unpauseResp, nil
+}
+
+func (h *Handler) StartNexusOperation(
+	ctx context.Context,
+	req *historyservice.StartNexusOperationRequest,
+) (*historyservice.StartNexusOperationResponse, error) {
+	requestID := req.GetRequest().GetRequestId()
+	// Build nexus.StartOperationOptions from the request
+	options := nexus.StartOperationOptions{
+		// Header not supported for system endpoint operations.
+		Header:         make(nexus.Header),
+		RequestID:      requestID,
+		CallbackURL:    req.GetRequest().GetCallback(),
+		CallbackHeader: nexus.Header(req.GetRequest().GetCallbackHeader()),
+		Links:          commonnexus.ConvertLinksFromProto(req.GetRequest().GetLinks()),
+	}
+
+	// Wrap the payload in a LazyValue
+	input := createLazyValueFromPayload(req.GetRequest().GetPayload())
+
+	// Set up handler context before invoking the handler
+	ctx = nexus.WithHandlerContext(ctx, nexus.HandlerInfo{
+		Service:   req.GetRequest().GetService(),
+		Operation: req.GetRequest().GetOperation(),
+		Header:    options.Header,
+	})
+
+	// Invoke the operation via the handler
+	if h.nexusHandler == nil {
+		return nil, serviceerror.NewUnimplemented("no nexus services registered")
+	}
+	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
+	if err != nil {
+		var opErr *nexus.OperationError
+		if errors.As(err, &opErr) {
+			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+			if convErr != nil {
+				return nil, convErr
+			}
+			temporalFailure, convErr := commonnexus.NexusFailureToTemporalFailure(nexusFailure)
+			if convErr != nil {
+				return nil, convErr
+			}
+			return &historyservice.StartNexusOperationResponse{
+				Response: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_Failure{
+						Failure: temporalFailure,
+					},
+				},
+			}, nil
+		}
+		// TODO: redact certain errors
+		return nil, err
+	}
+	links := nexus.HandlerLinks(ctx)
+
+	// Convert the result to the response
+	response := &nexuspb.StartOperationResponse{}
+	switch r := result.(type) {
+	case interface{ ValueAsAny() any }:
+		ps, err := payloads.Encode(r.ValueAsAny())
+		if err != nil {
+			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
+			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
+		}
+		var payload *commonpb.Payload
+		if len(ps.GetPayloads()) == 1 {
+			payload = ps.GetPayloads()[0]
+		}
+		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
+			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+				Payload: payload,
+				Links:   commonnexus.ConvertLinksToProto(links),
+			},
+		}
+	case *nexus.HandlerStartOperationResultAsync:
+		response.Variant = &nexuspb.StartOperationResponse_AsyncSuccess{
+			AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+				OperationToken: r.OperationToken,
+				Links:          commonnexus.ConvertLinksToProto(links),
+			},
+		}
+	default:
+		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.RequestID(req.Request.RequestId))
+		return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
+	}
+
+	return &historyservice.StartNexusOperationResponse{
+		Response: response,
+	}, nil
+}
+
+func (h *Handler) CancelNexusOperation(
+	ctx context.Context,
+	req *historyservice.CancelNexusOperationRequest,
+) (*historyservice.CancelNexusOperationResponse, error) {
+	// Build nexus.CancelOperationOptions from the request
+	options := nexus.CancelOperationOptions{
+		// Header not supported for system endpoint operations.
+		Header: make(nexus.Header),
+	}
+
+	// Set up handler context before invoking the handler
+	ctx = nexus.WithHandlerContext(ctx, nexus.HandlerInfo{
+		Service:   req.GetRequest().GetService(),
+		Operation: req.GetRequest().GetOperation(),
+		// Header not supported for system endpoint operations.
+		Header: make(nexus.Header),
+	})
+
+	// Invoke the cancel operation via the handler
+	if h.nexusHandler == nil {
+		return nil, serviceerror.NewUnimplemented("no nexus services registered")
+	}
+	err := h.nexusHandler.CancelOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), req.GetRequest().GetOperationToken(), options)
+	if err != nil {
+		// TODO: redact certain errors
+		return nil, err
+	}
+
+	return &historyservice.CancelNexusOperationResponse{
+		Response: &nexuspb.CancelOperationResponse{},
+	}, nil
+}
+
+func createLazyValueFromPayload(payload *commonpb.Payload) *nexus.LazyValue {
+	// Create a serializer that wraps the payload.
+	// When Deserialize is called, it will directly unmarshal the payload.
+	// This avoids unnecessary serialization/deserialization since the payload is already in the correct format.
+	serializer := &payloadSerializer{payload: payload}
+	return nexus.NewLazyValue(
+		serializer,
+		&nexus.Reader{
+			ReadCloser: io.NopCloser(bytes.NewReader(nil)),
+		},
+	)
+}
+
+// payloadSerializer is a nexus.Serializer that wraps a commonpb.Payload.
+// It only implements Deserialize since CHASM operations work directly with payloads.
+type payloadSerializer struct {
+	payload *commonpb.Payload
+}
+
+// Deserialize unmarshals the wrapped payload into the provided value using the SDK's default data converter.
+func (p *payloadSerializer) Deserialize(_ *nexus.Content, v any) error {
+	return payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{p.payload}}, v)
+}
+
+// Serialize should never be called since we only use this serializer for deserialization.
+func (p *payloadSerializer) Serialize(v any) (*nexus.Content, error) {
+	// nolint:forbidigo // Panic is expected as this method should never be called.
+	panic("Serialize not supported on payloadSerializer")
 }
