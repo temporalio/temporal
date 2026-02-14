@@ -89,7 +89,7 @@ jobs:
 
   feature-tests-go:
     needs: build-docker-image
-    uses: temporalio/features/.github/workflows/go.yaml@main
+    uses: temporalio/features/.github/workflows/go.yaml@spk/update
     with:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
