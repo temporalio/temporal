@@ -2269,3 +2269,52 @@ func (s *workflowSuite) TestCANBySignal() {
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
+
+func (s *workflowSuite) TestTriggerImmediatelyVisibility() {
+	// This forces ProcessBuffer to treat starts as "overlapping",
+	// which normally hides them from RunningWorkflows.
+	s.runAcrossContinue(
+		[]workflowRun{
+			{
+				id:     "manual-trigger-run",
+				start:  time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC),
+				end:    time.Date(2022, 6, 1, 0, 10, 0, 0, time.UTC),
+				result: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			},
+		},
+		[]delayedCallback{
+			{
+				at: time.Date(2022, 6, 1, 0, 1, 0, 0, time.UTC),
+				f: func() {
+					s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
+						TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+					})
+				},
+			},
+			{
+				at: time.Date(2022, 6, 1, 0, 2, 0, 0, time.UTC),
+				f: func() {
+					// THIS FAILS without the fix because nonOverlapping is false
+					running := s.runningWorkflows()
+					s.Len(running, 1, "Manual trigger should be visible in RunningWorkflows")
+					s.Equal("manual-trigger-run", running[0])
+				},
+			},
+			{
+				at:         time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC),
+				finishTest: true,
+			},
+		},
+		&schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Policies: &schedulepb.SchedulePolicies{
+				// Force overlapping logic
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+		},
+	)
+}
