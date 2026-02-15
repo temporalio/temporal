@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
@@ -31,6 +32,7 @@ type outboundQueueFactoryParams struct {
 
 	QueueFactoryBaseParams
 	CircuitBreakerPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool
+	MatchingRawClient  resource.MatchingRawClient
 }
 
 type groupLimiter struct {
@@ -227,6 +229,8 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ChasmEngine,
+		f.MatchingRawClient,
+		shardContext.GetConfig(),
 	)
 
 	standbyExecutor := newOutboundQueueStandbyTaskExecutor(

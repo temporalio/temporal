@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -24,7 +26,8 @@ const (
 
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
-	chasmEngine chasm.Engine
+	chasmEngine                  chasm.Engine
+	notifyActivityTaskDispatcher *notifyActivityTaskDispatcher
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -35,6 +38,8 @@ func newOutboundQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	chasmEngine chasm.Engine,
+	matchingRawClient resource.MatchingRawClient,
+	config *configs.Config,
 ) *outboundQueueActiveTaskExecutor {
 	return &outboundQueueActiveTaskExecutor{
 		stateMachineEnvironment: stateMachineEnvironment{
@@ -45,7 +50,8 @@ func newOutboundQueueActiveTaskExecutor(
 				metrics.OperationTag(metrics.OperationOutboundQueueProcessorScope),
 			),
 		},
-		chasmEngine: chasmEngine,
+		chasmEngine:                  chasmEngine,
+		notifyActivityTaskDispatcher: newNotifyActivityTaskDispatcher(matchingRawClient, config, logger),
 	}
 }
 
@@ -92,6 +98,8 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
+	case *tasks.NotifyActivityTask:
+		return respond(e.executeNotifyActivityTask(ctx, task))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
@@ -144,4 +152,32 @@ func (e *outboundQueueActiveTaskExecutor) executeStateMachineTask(
 
 	smRegistry := e.shardContext.StateMachineRegistry()
 	return smRegistry.ExecuteImmediateTask(ctx, e, ref, smt)
+}
+
+func (e *outboundQueueActiveTaskExecutor) executeNotifyActivityTask(
+	ctx context.Context,
+	task *tasks.NotifyActivityTask,
+) (retError error) {
+	if len(task.ScheduledEventIDs) == 0 {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, outboundTaskTimeout)
+	defer cancel()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, e.shardContext, e.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTransferTask(ctx, e.shardContext, weContext, task, e.metricsHandler, e.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		return nil
+	}
+
+	return e.notifyActivityTaskDispatcher.execute(ctx, mutableState, task)
 }
