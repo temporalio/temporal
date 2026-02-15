@@ -350,6 +350,7 @@ message TransferTaskInfo {
         // by some other task, so this task doesn't need to worry about it.
         bool can_skip_visibility_archival = 1;
     }
+
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
 
@@ -482,7 +483,18 @@ message OutboundTaskInfo {
 
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 9;
+
+        // If the task is a notify activity task.
+        NotifyActivityTaskInfo notify_activity_info = 10;
     }
+}
+
+// NotifyActivityTaskInfo contains details for activity notification operations.
+message NotifyActivityTaskInfo {
+    // Type of notification to send.
+    temporal.server.api.enums.v1.ActivityNotificationType notification_type = 1;
+    // Scheduled event IDs of activities to notify.
+    repeated int64 scheduled_event_ids = 2;
 }
 
 message NexusInvocationTaskInfo {

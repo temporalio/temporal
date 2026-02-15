@@ -196,6 +196,8 @@ func GetOutboundTaskTypeTagValue(
 		return prefix + "." + task.StateMachineTaskType()
 	case *tasks.ChasmTask:
 		return prefix + "." + getCHASMTaskTypeTagValue(task, chasmRegistry)
+	case *tasks.NotifyActivityTask:
+		return prefix + ".NotifyActivity"
 	default:
 		return prefix + "Unknown"
 	}

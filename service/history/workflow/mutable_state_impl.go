@@ -4370,6 +4370,10 @@ func (ms *MutableStateImpl) AddActivityTaskCancelRequestedEvent(
 	return actCancelReqEvent, ai, nil
 }
 
+func (ms *MutableStateImpl) AddNotifyActivityTasks(scheduledEventIDs []int64, controlQueue string, notificationType enumsspb.ActivityNotificationType) error {
+	return ms.taskGenerator.GenerateNotifyActivityTasks(scheduledEventIDs, controlQueue, notificationType)
+}
+
 func (ms *MutableStateImpl) ApplyActivityTaskCancelRequestedEvent(
 	event *historypb.HistoryEvent,
 ) error {

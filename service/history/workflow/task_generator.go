@@ -63,6 +63,7 @@ type (
 			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
+		GenerateNotifyActivityTasks(scheduledEventIDs []int64, controlQueue string, notificationType enumsspb.ActivityNotificationType) error
 		GenerateChildWorkflowTasks(
 			childInitiatedEventId int64,
 		) error
@@ -579,6 +580,24 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 		EventID:             activityInfo.GetScheduledEventId(),
 		Attempt:             activityInfo.GetAttempt(),
 		Stamp:               activityInfo.Stamp,
+	})
+	return nil
+}
+
+func (r *TaskGeneratorImpl) GenerateNotifyActivityTasks(scheduledEventIDs []int64, controlQueue string, notificationType enumsspb.ActivityNotificationType) error {
+	if !r.config.EnableActivityCancellationNexusTask() {
+		return nil
+	}
+
+	if len(scheduledEventIDs) == 0 || controlQueue == "" {
+		return nil
+	}
+
+	r.mutableState.AddTasks(&tasks.NotifyActivityTask{
+		WorkflowKey:       r.mutableState.GetWorkflowKey(),
+		NotificationType:  notificationType,
+		ScheduledEventIDs: scheduledEventIDs,
+		Destination:       controlQueue,
 	})
 	return nil
 }
