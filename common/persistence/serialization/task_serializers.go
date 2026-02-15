@@ -38,8 +38,6 @@ func serializeTransferTask(
 		transferTask = transferDeleteExecutionTaskToProto(task)
 	case *tasks.ChasmTask:
 		transferTask = transferChasmTaskToProto(task)
-	case *tasks.CancelActivityNexusTask:
-		transferTask = transferCancelActivityNexusTaskToProto(task)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", task)
 	}
@@ -88,8 +86,6 @@ func deserializeTransferTask(
 		task = transferDeleteExecutionTaskFromProto(transferTask)
 	case enumsspb.TASK_TYPE_CHASM:
 		task = transferChasmTaskFromProto(transferTask)
-	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_ACTIVITY_NEXUS:
-		task = transferCancelActivityNexusTaskFromProto(transferTask)
 	default:
 		return nil, serviceerror.NewInternalf("Unknown transfer task type: %v", transferTask.TaskType)
 	}
@@ -107,40 +103,6 @@ func transferChasmTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Tas
 		TaskID:              task.TaskId,
 		Category:            tasks.CategoryTransfer,
 		Info:                task.GetChasmTaskInfo(),
-	}
-}
-
-func transferCancelActivityNexusTaskToProto(task *tasks.CancelActivityNexusTask) *persistencespb.TransferTaskInfo {
-	return &persistencespb.TransferTaskInfo{
-		NamespaceId:    task.NamespaceID,
-		WorkflowId:     task.WorkflowID,
-		RunId:          task.RunID,
-		TaskId:         task.TaskID,
-		TaskType:       task.GetType(),
-		Version:        task.Version,
-		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-		TaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails_{
-			CancelActivityNexusTaskDetails: &persistencespb.TransferTaskInfo_CancelActivityNexusTaskDetails{
-				ScheduledEventIds:      task.ScheduledEventIDs,
-				WorkerControlTaskQueue: task.WorkerControlTaskQueue,
-			},
-		},
-	}
-}
-
-func transferCancelActivityNexusTaskFromProto(task *persistencespb.TransferTaskInfo) tasks.Task {
-	details := task.GetCancelActivityNexusTaskDetails()
-	return &tasks.CancelActivityNexusTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			task.NamespaceId,
-			task.WorkflowId,
-			task.RunId,
-		),
-		VisibilityTimestamp:    task.VisibilityTime.AsTime(),
-		TaskID:                 task.TaskId,
-		Version:                task.Version,
-		ScheduledEventIDs:      details.GetScheduledEventIds(),
-		WorkerControlTaskQueue: details.GetWorkerControlTaskQueue(),
 	}
 }
 
@@ -1484,6 +1446,22 @@ func serializeOutboundTask(
 				ChasmTaskInfo: task.Info,
 			},
 		}
+	case *tasks.NotifyActivityTask:
+		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
+			NamespaceId:    task.NamespaceID,
+			WorkflowId:     task.WorkflowID,
+			RunId:          task.RunID,
+			TaskId:         task.TaskID,
+			TaskType:       task.GetType(),
+			Destination:    task.Destination,
+			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
+			TaskDetails: &persistencespb.OutboundTaskInfo_NotifyActivityInfo{
+				NotifyActivityInfo: &persistencespb.NotifyActivityTaskInfo{
+					NotificationType:  task.NotificationType,
+					ScheduledEventIds: task.ScheduledEventIDs,
+				},
+			},
+		}
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while serializing: %v", task)
 	}
@@ -1524,6 +1502,20 @@ func deserializeOutboundTask(
 			TaskID:              info.TaskId,
 			Category:            tasks.CategoryOutbound,
 			Info:                info.GetChasmTaskInfo(),
+			Destination:         info.Destination,
+		}, nil
+	case enumsspb.TASK_TYPE_NOTIFY_ACTIVITY:
+		notifyActivityInfo := info.GetNotifyActivityInfo()
+		return &tasks.NotifyActivityTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				info.NamespaceId,
+				info.WorkflowId,
+				info.RunId,
+			),
+			VisibilityTimestamp: info.VisibilityTime.AsTime(),
+			TaskID:              info.TaskId,
+			NotificationType:    notifyActivityInfo.GetNotificationType(),
+			ScheduledEventIDs:   notifyActivityInfo.GetScheduledEventIds(),
 			Destination:         info.Destination,
 		}, nil
 	default:

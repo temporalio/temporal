@@ -108,10 +108,6 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
-	case *tasks.CancelActivityNexusTask:
-		// Nexus operation is synchronous. So if the failover happens waiting for the Nexus response,
-		// the task will be retried in standby.
-		err = nil
 	default:
 		err = errUnknownTransferTask
 	}

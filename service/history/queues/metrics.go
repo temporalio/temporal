@@ -48,8 +48,6 @@ func GetActiveTransferTaskTypeTagValue(
 		return metrics.TaskTypeTransferActiveTaskResetWorkflow
 	case *tasks.DeleteExecutionTask:
 		return metrics.TaskTypeTransferActiveTaskDeleteExecution
-	case *tasks.CancelActivityNexusTask:
-		return metrics.TaskTypeTransferActiveTaskCancelActivityNexus
 	case *tasks.ChasmTask:
 		return prefix + "." + getCHASMTaskTypeTagValue(t, chasmRegistry)
 	default:
@@ -198,6 +196,8 @@ func GetOutboundTaskTypeTagValue(
 		return prefix + "." + task.StateMachineTaskType()
 	case *tasks.ChasmTask:
 		return prefix + "." + getCHASMTaskTypeTagValue(task, chasmRegistry)
+	case *tasks.NotifyActivityTask:
+		return prefix + ".NotifyActivity"
 	default:
 		return prefix + "Unknown"
 	}

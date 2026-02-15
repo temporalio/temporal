@@ -63,7 +63,7 @@ type (
 			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
-		GenerateCancelActivityNexusTasks(scheduledEventID int64) error
+		GenerateNotifyActivityTasks(scheduledEventIDs []int64, controlQueue string, notificationType enumsspb.ActivityNotificationType) error
 		GenerateChildWorkflowTasks(
 			childInitiatedEventId int64,
 		) error
@@ -584,22 +584,20 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateCancelActivityNexusTasks(scheduledEventID int64) error {
+func (r *TaskGeneratorImpl) GenerateNotifyActivityTasks(scheduledEventIDs []int64, controlQueue string, notificationType enumsspb.ActivityNotificationType) error {
 	if !r.config.EnableActivityCancellationNexusTask() {
 		return nil
 	}
 
-	ai, ok := r.mutableState.GetActivityInfo(scheduledEventID)
-	// If control queue is not set, it means the worker that this activity belongs to does not support Nexus tasks.
-	if !ok || ai.WorkerControlTaskQueue == "" {
+	if len(scheduledEventIDs) == 0 || controlQueue == "" {
 		return nil
 	}
 
-	r.mutableState.AddTasks(&tasks.CancelActivityNexusTask{
-		WorkflowKey:            r.mutableState.GetWorkflowKey(),
-		ScheduledEventIDs:      []int64{scheduledEventID},
-		WorkerControlTaskQueue: ai.WorkerControlTaskQueue,
-		Version:                ai.Version,
+	r.mutableState.AddTasks(&tasks.NotifyActivityTask{
+		WorkflowKey:       r.mutableState.GetWorkflowKey(),
+		NotificationType:  notificationType,
+		ScheduledEventIDs: scheduledEventIDs,
+		Destination:       controlQueue,
 	})
 	return nil
 }

@@ -351,21 +351,11 @@ message TransferTaskInfo {
         bool can_skip_visibility_archival = 1;
     }
 
-    // Details for a Nexus task that cancels activities.
-    message CancelActivityNexusTaskDetails {
-        // Scheduled event IDs of activities to cancel.
-        repeated int64 scheduled_event_ids = 1;
-        // The Nexus queue to dispatch the cancel request to.
-        string worker_control_task_queue = 2;
-    }
-
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
 
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 18;
-
-        CancelActivityNexusTaskDetails cancel_activity_nexus_task_details = 19;
     }
     // Stamp represents the "version" of the entity's internal state for which the transfer task was created.
     // It increases monotonically when the entity's options are modified.
@@ -493,7 +483,18 @@ message OutboundTaskInfo {
 
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 9;
+
+        // If the task is a notify activity task.
+        NotifyActivityTaskInfo notify_activity_info = 10;
     }
+}
+
+// NotifyActivityTaskInfo contains details for activity notification operations.
+message NotifyActivityTaskInfo {
+    // Type of notification to send.
+    temporal.server.api.enums.v1.ActivityNotificationType notification_type = 1;
+    // Scheduled event IDs of activities to notify.
+    repeated int64 scheduled_event_ids = 2;
 }
 
 message NexusInvocationTaskInfo {

@@ -57,7 +57,7 @@ var (
 		"ReplicationSyncVersionedTransition": 31,
 		"ChasmPure":                          32,
 		"Chasm":                              33,
-		"TransferCancelActivityNexus":        34,
+		"NotifyActivity":                     34,
 	}
 )
 
@@ -70,6 +70,24 @@ func TaskTypeFromString(s string) (TaskType, error) {
 		return TaskType(v), nil
 	}
 	return TaskType(0), fmt.Errorf("%s is not a valid TaskType", s)
+}
+
+var (
+	ActivityNotificationType_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Cancel":      1,
+	}
+)
+
+// ActivityNotificationTypeFromString parses a ActivityNotificationType value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ActivityNotificationType
+func ActivityNotificationTypeFromString(s string) (ActivityNotificationType, error) {
+	if v, ok := ActivityNotificationType_value[s]; ok {
+		return ActivityNotificationType(v), nil
+	} else if v, ok := ActivityNotificationType_shorthandValue[s]; ok {
+		return ActivityNotificationType(v), nil
+	}
+	return ActivityNotificationType(0), fmt.Errorf("%s is not a valid ActivityNotificationType", s)
 }
 
 var (

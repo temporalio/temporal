@@ -169,17 +169,17 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 	s.assertEqualTasks(resetTask)
 }
 
-func (s *taskSerializerSuite) TestTransferCancelActivityNexusTask() {
-	cancelActivityNexusTask := &tasks.CancelActivityNexusTask{
-		WorkflowKey:            s.workflowKey,
-		VisibilityTimestamp:    time.Unix(0, rand.Int63()).UTC(),
-		TaskID:                 rand.Int63(),
-		Version:                rand.Int63(),
-		ScheduledEventIDs:      []int64{rand.Int63(), rand.Int63(), rand.Int63()},
-		WorkerControlTaskQueue: "test-control-queue",
+func (s *taskSerializerSuite) TestOutboundNotifyActivityTask() {
+	notifyActivityTask := &tasks.NotifyActivityTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		NotificationType:    enumsspb.ACTIVITY_NOTIFICATION_TYPE_CANCEL,
+		ScheduledEventIDs:   []int64{rand.Int63(), rand.Int63(), rand.Int63()},
+		Destination:         "test-control-queue",
 	}
 
-	s.assertEqualTasks(cancelActivityNexusTask)
+	s.assertEqualTasks(notifyActivityTask)
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
