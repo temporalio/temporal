@@ -259,11 +259,7 @@ All PR titles should start with Upper case and have no dot at the end.
 
 ## Go version update
 
-1. In this repository, update `go` in `go.mod`.
-2. ~~In [docker-builds](https://github.com/temporalio/docker-builds/), update the base images:
-[base-ci-builder](https://github.com/temporalio/docker-builds/blob/main/docker/base-images/base-ci-builder.Dockerfile)
-and [base-builder](https://github.com/temporalio/docker-builds/blob/main/docker/base-images/base-builder.Dockerfile)~~ 
-**Note:** The docker-builds repository is now deprecated and will be archived.
+To update the Go version, update the `go` directive in `go.mod`. CI workflows automatically pick up the version from `go.mod`.
 
 ## License
 
