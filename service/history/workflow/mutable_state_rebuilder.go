@@ -664,6 +664,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := b.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event); err != nil {
 				return nil, err
 			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_POINT_ADVANCED:
+			if err := b.mutableState.ApplyWorkflowExecutionTimePointAdvancedEvent(event); err != nil {
+				return nil, err
+			}
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED:
 			if err := b.mutableState.ApplyWorkflowExecutionPausedEvent(event); err != nil {
 				return nil, err

@@ -63,6 +63,26 @@ func (mr *MockHistoryServiceClientMockRecorder) AddTasks(ctx, in any, opts ...an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).AddTasks), varargs...)
 }
 
+// AdvanceWorkflowExecutionTimePoint mocks base method.
+func (m *MockHistoryServiceClient) AdvanceWorkflowExecutionTimePoint(ctx context.Context, in *historyservice.AdvanceWorkflowExecutionTimePointRequest, opts ...grpc.CallOption) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AdvanceWorkflowExecutionTimePoint", varargs...)
+	ret0, _ := ret[0].(*historyservice.AdvanceWorkflowExecutionTimePointResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdvanceWorkflowExecutionTimePoint indicates an expected call of AdvanceWorkflowExecutionTimePoint.
+func (mr *MockHistoryServiceClientMockRecorder) AdvanceWorkflowExecutionTimePoint(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvanceWorkflowExecutionTimePoint", reflect.TypeOf((*MockHistoryServiceClient)(nil).AdvanceWorkflowExecutionTimePoint), varargs...)
+}
+
 // CloseShard mocks base method.
 func (m *MockHistoryServiceClient) CloseShard(ctx context.Context, in *historyservice.CloseShardRequest, opts ...grpc.CallOption) (*historyservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -1700,6 +1720,21 @@ func (mr *MockHistoryServiceServerMockRecorder) AddTasks(arg0, arg1 any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).AddTasks), arg0, arg1)
 }
 
+// AdvanceWorkflowExecutionTimePoint mocks base method.
+func (m *MockHistoryServiceServer) AdvanceWorkflowExecutionTimePoint(arg0 context.Context, arg1 *historyservice.AdvanceWorkflowExecutionTimePointRequest) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdvanceWorkflowExecutionTimePoint", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.AdvanceWorkflowExecutionTimePointResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdvanceWorkflowExecutionTimePoint indicates an expected call of AdvanceWorkflowExecutionTimePoint.
+func (mr *MockHistoryServiceServerMockRecorder) AdvanceWorkflowExecutionTimePoint(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvanceWorkflowExecutionTimePoint", reflect.TypeOf((*MockHistoryServiceServer)(nil).AdvanceWorkflowExecutionTimePoint), arg0, arg1)
+}
+
 // CloseShard mocks base method.
 func (m *MockHistoryServiceServer) CloseShard(arg0 context.Context, arg1 *historyservice.CloseShardRequest) (*historyservice.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -2001,10 +2036,10 @@ func (mr *MockHistoryServiceServerMockRecorder) GetShard(arg0, arg1 any) *gomock
 }
 
 // GetWorkflowExecutionHistory mocks base method.
-func (m *MockHistoryServiceServer) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponse, error) {
+func (m *MockHistoryServiceServer) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *historyservice.GetWorkflowExecutionHistoryRequest) (*historyservice.GetWorkflowExecutionHistoryResponseWithRaw, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionHistory", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponse)
+	ret0, _ := ret[0].(*historyservice.GetWorkflowExecutionHistoryResponseWithRaw)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -2331,10 +2366,10 @@ func (mr *MockHistoryServiceServerMockRecorder) RecordChildExecutionCompleted(ar
 }
 
 // RecordWorkflowTaskStarted mocks base method.
-func (m *MockHistoryServiceServer) RecordWorkflowTaskStarted(arg0 context.Context, arg1 *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+func (m *MockHistoryServiceServer) RecordWorkflowTaskStarted(arg0 context.Context, arg1 *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RecordWorkflowTaskStarted", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.RecordWorkflowTaskStartedResponse)
+	ret0, _ := ret[0].(*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

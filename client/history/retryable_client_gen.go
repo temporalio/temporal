@@ -26,6 +26,21 @@ func (c *retryableClient) AddTasks(
 	return resp, err
 }
 
+func (c *retryableClient) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	request *historyservice.AdvanceWorkflowExecutionTimePointRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	var resp *historyservice.AdvanceWorkflowExecutionTimePointResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AdvanceWorkflowExecutionTimePoint(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,

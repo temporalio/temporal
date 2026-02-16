@@ -399,6 +399,10 @@ func (wh *WorkflowHandler) StartWorkflowExecution(
 
 	namespaceName := namespace.Name(request.GetNamespace())
 
+	if request.GetTimeSkippingConfig() != nil && !wh.config.TimeSkippingEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("time skipping is not enabled for namespace: %s", request.GetNamespace())
+	}
+
 	wh.logger.Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
@@ -2146,6 +2150,10 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errWorkflowTypeTooLong
 	}
 
+	if request.GetTimeSkippingConfig() != nil && !wh.config.TimeSkippingEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("time skipping is not enabled for namespace: %s", request.GetNamespace())
+	}
+
 	namespaceName := namespace.Name(request.GetNamespace())
 	if err := tqid.NormalizeAndValidateUserDefined(request.TaskQueue, "", "", wh.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -3084,6 +3092,8 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		Callbacks:              response.GetCallbacks(),
 		PendingNexusOperations: response.GetPendingNexusOperations(),
 		WorkflowExtendedInfo:   response.GetWorkflowExtendedInfo(),
+		UpcomingTimePoints:     response.GetUpcomingTimePoints(),
+		TimeSkippingInfo:       response.GetTimeSkippingInfo(),
 	}, nil
 }
 
@@ -6444,6 +6454,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
 		return nil, err
 	}
+	if opts.GetTimeSkippingConfig() != nil && !wh.config.TimeSkippingEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("time skipping is not enabled for namespace: %s", request.GetNamespace())
+	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
@@ -6934,4 +6947,35 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 	}
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
+}
+
+func (wh *WorkflowHandler) AdvanceWorkflowExecutionTimePoint(ctx context.Context, request *workflowservice.AdvanceWorkflowExecutionTimePointRequest) (_ *workflowservice.AdvanceWorkflowExecutionTimePointResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if !wh.config.TimeSkippingEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplementedf("time skipping is not enabled for namespace: %s", request.GetNamespace())
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := wh.historyClient.AdvanceWorkflowExecutionTimePoint(ctx, &historyservice.AdvanceWorkflowExecutionTimePointRequest{
+		NamespaceId:    namespaceID.String(),
+		AdvanceRequest: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.AdvanceWorkflowExecutionTimePointResponse{
+		TimeSkippingInfo:   response.TimeSkippingInfo,
+		AdvancedTimePoints: response.AdvancedTimePoints,
+		UpcomingTimePoints: response.UpcomingTimePoints,
+	}, nil
 }

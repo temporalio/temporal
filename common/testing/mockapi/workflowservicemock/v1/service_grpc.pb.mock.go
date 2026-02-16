@@ -42,6 +42,26 @@ func (m *MockWorkflowServiceClient) EXPECT() *MockWorkflowServiceClientMockRecor
 	return m.recorder
 }
 
+// AdvanceWorkflowExecutionTimePoint mocks base method.
+func (m *MockWorkflowServiceClient) AdvanceWorkflowExecutionTimePoint(ctx context.Context, in *workflowservice.AdvanceWorkflowExecutionTimePointRequest, opts ...grpc.CallOption) (*workflowservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AdvanceWorkflowExecutionTimePoint", varargs...)
+	ret0, _ := ret[0].(*workflowservice.AdvanceWorkflowExecutionTimePointResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdvanceWorkflowExecutionTimePoint indicates an expected call of AdvanceWorkflowExecutionTimePoint.
+func (mr *MockWorkflowServiceClientMockRecorder) AdvanceWorkflowExecutionTimePoint(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvanceWorkflowExecutionTimePoint", reflect.TypeOf((*MockWorkflowServiceClient)(nil).AdvanceWorkflowExecutionTimePoint), varargs...)
+}
+
 // CountActivityExecutions mocks base method.
 func (m *MockWorkflowServiceClient) CountActivityExecutions(ctx context.Context, in *workflowservice.CountActivityExecutionsRequest, opts ...grpc.CallOption) (*workflowservice.CountActivityExecutionsResponse, error) {
 	m.ctrl.T.Helper()

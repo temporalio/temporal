@@ -9,6 +9,20 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *metricClient) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	request *workflowservice.AdvanceWorkflowExecutionTimePointRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.AdvanceWorkflowExecutionTimePointResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientAdvanceWorkflowExecutionTimePoint")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AdvanceWorkflowExecutionTimePoint(ctx, request, opts...)
+}
+
 func (c *metricClient) CountActivityExecutions(
 	ctx context.Context,
 	request *workflowservice.CountActivityExecutionsRequest,

@@ -295,6 +295,18 @@ message WorkflowExecutionInfo {
         temporal.api.enums.v1.WorkflowTaskFailedCause last_workflow_task_failure_cause = 107;
         temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
     }
+
+    // Time-skipping configuration for this workflow execution.
+    temporal.api.workflow.v1.TimeSkippingConfig time_skipping_config = 113;
+    // Accumulated virtual time offset from time-skipping advances.
+    // The workflow's current virtual time is approximately now() + virtual_time_offset.
+    google.protobuf.Duration virtual_time_offset = 114;
+
+    // Resolved absolute deadline (virtual time) for current auto-skip window.
+    google.protobuf.Timestamp auto_skip_deadline = 115;
+
+    // Number of auto-skip firings consumed in the current window.
+    int32 auto_skip_firings_used = 116;
 }
 
 message ExecutionStats {

@@ -23,8 +23,9 @@ import (
 )
 
 type EventFactory struct {
-	timeSource clock.TimeSource
-	version    int64
+	timeSource        clock.TimeSource
+	version           int64
+	virtualTimeOffset time.Duration
 }
 
 func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
@@ -413,6 +414,30 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 		},
 	}
 	event.Links = links
+	event.WorkerMayIgnore = true
+	return event
+}
+
+func (b *EventFactory) CreateWorkflowExecutionTimePointAdvancedEvent(
+	fireTime time.Time,
+	identity string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_POINT_ADVANCED, b.timeSource.Now())
+	// Compute duration_advanced as the gap between the fire time and the
+	// event's own time (which is now + virtualTimeOffset). This avoids an
+	// explicit Now() call — the EventFactory already encapsulates the clock.
+	durationAdvanced := fireTime.Sub(event.EventTime.AsTime())
+	if durationAdvanced < 0 {
+		durationAdvanced = 0
+	}
+	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionTimePointAdvancedEventAttributes{
+		WorkflowExecutionTimePointAdvancedEventAttributes: &historypb.WorkflowExecutionTimePointAdvancedEventAttributes{
+			DurationAdvanced: durationpb.New(durationAdvanced),
+			Identity:         identity,
+			RequestId:        requestID,
+		},
+	}
 	event.WorkerMayIgnore = true
 	return event
 }
@@ -1062,7 +1087,7 @@ func (b *EventFactory) createHistoryEvent(
 	time time.Time,
 ) *historypb.HistoryEvent {
 	historyEvent := &historypb.HistoryEvent{}
-	historyEvent.EventTime = timestamppb.New(time.UTC())
+	historyEvent.EventTime = timestamppb.New(time.Add(b.virtualTimeOffset).UTC())
 	historyEvent.EventType = eventType
 	historyEvent.Version = b.version
 	historyEvent.TaskId = common.EmptyEventTaskID

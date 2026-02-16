@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/advancetimepoint"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -530,7 +531,26 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
+	// Try auto-skip when no new WFT was going to be created and workflow is still running.
+	autoSkipFired := false
+	if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED && ms.IsWorkflowExecutionRunning() {
+		fired, autoSkipErr := advancetimepoint.TryAutoSkip(ms)
+		if autoSkipErr != nil {
+			return nil, autoSkipErr
+		}
+		if fired {
+			autoSkipFired = true
+			newWorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+		}
+	}
+
 	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
+	if autoSkipFired {
+		// When auto-skip fires, the new WFT must go through the task queue
+		// (not returned inline to the current poller). Otherwise the worker
+		// won't see the auto-skip-fired events until some future poll.
+		bypassTaskGeneration = false
+	}
 	// TODO (alex-update): All current SDKs always set ReturnNewWorkflowTask to true
 	//  which means that server always bypass task generation if WFT didn't fail.
 	//  ReturnNewWorkflowTask flag needs to be removed.

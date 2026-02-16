@@ -767,6 +767,21 @@ func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionTerminatedEvent(firs
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionTerminatedEvent), firstEventID, reason, details, identity, deleteAfterTerminate, links)
 }
 
+// AddWorkflowExecutionTimePointAdvancedEvent mocks base method.
+func (m *MockMutableState) AddWorkflowExecutionTimePointAdvancedEvent(fireTime time.Time, identity, requestID string) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddWorkflowExecutionTimePointAdvancedEvent", fireTime, identity, requestID)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddWorkflowExecutionTimePointAdvancedEvent indicates an expected call of AddWorkflowExecutionTimePointAdvancedEvent.
+func (mr *MockMutableStateMockRecorder) AddWorkflowExecutionTimePointAdvancedEvent(fireTime, identity, requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddWorkflowExecutionTimePointAdvancedEvent", reflect.TypeOf((*MockMutableState)(nil).AddWorkflowExecutionTimePointAdvancedEvent), fireTime, identity, requestID)
+}
+
 // AddWorkflowExecutionUnpausedEvent mocks base method.
 func (m *MockMutableState) AddWorkflowExecutionUnpausedEvent(identity, reason, requestID string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -1496,6 +1511,20 @@ func (m *MockMutableState) ApplyWorkflowExecutionTerminatedEvent(arg0 int64, arg
 func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTerminatedEvent(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTerminatedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTerminatedEvent), arg0, arg1)
+}
+
+// ApplyWorkflowExecutionTimePointAdvancedEvent mocks base method.
+func (m *MockMutableState) ApplyWorkflowExecutionTimePointAdvancedEvent(event *history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionTimePointAdvancedEvent", event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplyWorkflowExecutionTimePointAdvancedEvent indicates an expected call of ApplyWorkflowExecutionTimePointAdvancedEvent.
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimePointAdvancedEvent(event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimePointAdvancedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimePointAdvancedEvent), event)
 }
 
 // ApplyWorkflowExecutionTimedoutEvent mocks base method.

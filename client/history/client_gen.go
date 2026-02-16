@@ -30,6 +30,26 @@ func (c *clientImpl) AddTasks(
 	return response, nil
 }
 
+func (c *clientImpl) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	request *historyservice.AdvanceWorkflowExecutionTimePointRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetAdvanceRequest().GetWorkflowExecution().GetWorkflowId())
+	var response *historyservice.AdvanceWorkflowExecutionTimePointResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.AdvanceWorkflowExecutionTimePoint(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,

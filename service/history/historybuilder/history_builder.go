@@ -147,6 +147,10 @@ func (b *HistoryBuilder) IsDirty() bool {
 	return b.EventStore.IsDirty()
 }
 
+func (b *HistoryBuilder) AddVirtualTimeOffset(d time.Duration) {
+	b.EventFactory.virtualTimeOffset += d
+}
+
 // AddWorkflowExecutionStartedEvent
 // firstInChainRunID is the runID of the first run in a workflow chain (continueAsNew, cron & workflow retry)
 // originalRunID is the base workflow's runID upon workflow reset. If the current run is the base (i.e. no reset),
@@ -467,6 +471,20 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		links,
 		identity,
 		priority,
+	)
+	event, _ = b.EventStore.add(event)
+	return event
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionTimePointAdvancedEvent(
+	fireTime time.Time,
+	identity string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.EventFactory.CreateWorkflowExecutionTimePointAdvancedEvent(
+		fireTime,
+		identity,
+		requestID,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

@@ -2471,3 +2471,27 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 
 	return unpauseResp, nil
 }
+
+func (h *Handler) AdvanceWorkflowExecutionTimePoint(ctx context.Context, request *historyservice.AdvanceWorkflowExecutionTimePointRequest) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowID := request.GetAdvanceRequest().GetWorkflowExecution().GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	resp, err := engine.AdvanceWorkflowExecutionTimePoint(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return resp, nil
+}

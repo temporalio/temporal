@@ -72,6 +72,17 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
+	// Apply time-skipping config from start request if provided.
+	tsc := startRequest.StartRequest.GetTimeSkippingConfig()
+	if tsc == nil && signalWithStartRequest != nil {
+		tsc = signalWithStartRequest.GetTimeSkippingConfig()
+	}
+	if tsc != nil && tsc.GetEnabled() {
+		newMutableState.GetExecutionInfo().TimeSkippingConfig = tsc
+		// VirtualTimeOffset starts at 0 (the default) — no initialization needed.
+		ResetAutoSkipState(newMutableState.GetExecutionInfo(), time.Now())
+	}
+
 	if signalWithStartRequest != nil {
 		if signalWithStartRequest.GetRequestId() != "" {
 			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())

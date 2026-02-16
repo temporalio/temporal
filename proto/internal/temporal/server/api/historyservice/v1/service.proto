@@ -429,4 +429,9 @@ service HistoryService {
     // UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
     rpc UnpauseWorkflowExecution (UnpauseWorkflowExecutionRequest) returns (UnpauseWorkflowExecutionResponse) {
     }
+
+    // AdvanceWorkflowExecutionTimePoint advances the virtual time of a time-skipping-enabled
+    // workflow execution to the next time point and fires it.
+    rpc AdvanceWorkflowExecutionTimePoint (AdvanceWorkflowExecutionTimePointRequest) returns (AdvanceWorkflowExecutionTimePointResponse) {
+    }
 }

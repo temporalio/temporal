@@ -23,6 +23,20 @@ func (c *metricClient) AddTasks(
 	return c.client.AddTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	request *historyservice.AdvanceWorkflowExecutionTimePointRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.AdvanceWorkflowExecutionTimePointResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientAdvanceWorkflowExecutionTimePoint")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.AdvanceWorkflowExecutionTimePoint(ctx, request, opts...)
+}
+
 func (c *metricClient) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,

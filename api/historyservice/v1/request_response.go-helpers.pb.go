@@ -5776,3 +5776,77 @@ func (this *UnpauseWorkflowExecutionResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type AdvanceWorkflowExecutionTimePointRequest to the protobuf v3 wire format
+func (val *AdvanceWorkflowExecutionTimePointRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdvanceWorkflowExecutionTimePointRequest from the protobuf v3 wire format
+func (val *AdvanceWorkflowExecutionTimePointRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdvanceWorkflowExecutionTimePointRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdvanceWorkflowExecutionTimePointRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdvanceWorkflowExecutionTimePointRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdvanceWorkflowExecutionTimePointRequest
+	switch t := that.(type) {
+	case *AdvanceWorkflowExecutionTimePointRequest:
+		that1 = t
+	case AdvanceWorkflowExecutionTimePointRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AdvanceWorkflowExecutionTimePointResponse to the protobuf v3 wire format
+func (val *AdvanceWorkflowExecutionTimePointResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AdvanceWorkflowExecutionTimePointResponse from the protobuf v3 wire format
+func (val *AdvanceWorkflowExecutionTimePointResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AdvanceWorkflowExecutionTimePointResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AdvanceWorkflowExecutionTimePointResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AdvanceWorkflowExecutionTimePointResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AdvanceWorkflowExecutionTimePointResponse
+	switch t := that.(type) {
+	case *AdvanceWorkflowExecutionTimePointResponse:
+		that1 = t
+	case AdvanceWorkflowExecutionTimePointResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

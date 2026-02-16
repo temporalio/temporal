@@ -517,6 +517,7 @@ func NewMutableStateFromDB(
 		dbRecord.BufferedEvents,
 		mutableState.metricsHandler,
 	)
+	mutableState.syncVirtualTimeOffset()
 
 	mutableState.currentVersion = common.EmptyVersion
 	mutableState.bufferEventsInDB = dbRecord.BufferedEvents
@@ -1089,6 +1090,7 @@ func (ms *MutableStateImpl) UpdateCurrentVersion(
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
 	)
+	ms.syncVirtualTimeOffset()
 
 	return nil
 }
@@ -2633,6 +2635,34 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	if err != nil {
 		return nil, err
 	}
+
+	// Inherit time-skipping config if propagation is enabled. This must be set
+	// directly on executionInfo (not via the start request) because the CAN path
+	// doesn't go through NewWorkflowWithSignal. VirtualTimeOffset starts at 0
+	// (fresh history). Auto-skip state (firings, deadline) defaults to zero
+	// values, which TryAutoSkip handles correctly for configs without a
+	// duration-based bound. Duration-based bounds use a resolved absolute
+	// deadline that carries over from the previous run's config.
+	if previousExecutionInfo.GetTimeSkippingConfig().GetPropagateOnContinueAsNew() {
+		tsc := previousExecutionInfo.GetTimeSkippingConfig()
+		ms.executionInfo.TimeSkippingConfig = tsc
+		// Resolve auto-skip deadline for the new run.
+		if autoSkip := tsc.GetAutoSkip(); autoSkip != nil {
+			ms.executionInfo.AutoSkipFiringsUsed = 0
+			switch bound := autoSkip.GetBound().(type) {
+			case *workflowpb.TimeSkippingConfig_AutoSkipConfig_UntilTime:
+				ms.executionInfo.AutoSkipDeadline = bound.UntilTime
+			case *workflowpb.TimeSkippingConfig_AutoSkipConfig_UntilDuration:
+				// New run starts with offset 0, so virtual now = real now.
+				ms.executionInfo.AutoSkipDeadline = timestamppb.New(
+					ms.timeSource.Now().Add(bound.UntilDuration.AsDuration()),
+				)
+			default:
+				ms.executionInfo.AutoSkipDeadline = nil
+			}
+		}
+	}
+
 	var parentClock *clockspb.VectorClock
 	if parentExecutionInfo != nil {
 		parentClock = parentExecutionInfo.Clock
@@ -2657,6 +2687,10 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 	if ms.executionInfo.ExecutionTime != nil {
 		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
 	}
+	// When time-skipping is enabled, event times include the virtual time offset
+	// (they appear ahead of real wall clock). Subtract the offset so lifetime
+	// reflects actual elapsed wall-clock time.
+	lifetime += ms.executionInfo.GetVirtualTimeOffset().AsDuration()
 
 	interval := lifetime
 	if backoffDuration != nil {
@@ -5448,6 +5482,42 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 	return nil
 }
 
+func (ms *MutableStateImpl) AddWorkflowExecutionTimePointAdvancedEvent(
+	fireTime time.Time,
+	identity string,
+	requestID string,
+) (*historypb.HistoryEvent, error) {
+	if err := ms.checkMutability(tag.WorkflowActionTimePointAdvanced); err != nil {
+		return nil, err
+	}
+	event := ms.hBuilder.AddWorkflowExecutionTimePointAdvancedEvent(
+		fireTime,
+		identity,
+		requestID,
+	)
+	if err := ms.ApplyWorkflowExecutionTimePointAdvancedEvent(event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionTimePointAdvancedEvent(event *historypb.HistoryEvent) error {
+	attrs := event.GetWorkflowExecutionTimePointAdvancedEventAttributes()
+	delta := attrs.GetDurationAdvanced().AsDuration()
+	existingOffset := ms.executionInfo.GetVirtualTimeOffset().AsDuration()
+	ms.executionInfo.VirtualTimeOffset = durationpb.New(existingOffset + delta)
+	ms.hBuilder.AddVirtualTimeOffset(delta)
+	return nil
+}
+
+// syncVirtualTimeOffset propagates the persisted virtual time offset to a
+// freshly-created HistoryBuilder (which always starts at offset 0).
+func (ms *MutableStateImpl) syncVirtualTimeOffset() {
+	if offset := ms.executionInfo.GetVirtualTimeOffset().AsDuration(); offset > 0 {
+		ms.hBuilder.AddVirtualTimeOffset(offset)
+	}
+}
+
 func (ms *MutableStateImpl) updateVersioningOverride(
 	override *workflowpb.VersioningOverride,
 ) (bool, error) {
@@ -7721,6 +7791,7 @@ func (ms *MutableStateImpl) cleanupTransaction() error {
 		ms.bufferEventsInDB,
 		ms.metricsHandler,
 	)
+	ms.syncVirtualTimeOffset()
 
 	ms.InsertTasks = make(map[tasks.Category][]tasks.Task)
 	ms.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)

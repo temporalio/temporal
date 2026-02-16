@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/addtasks"
+	"go.temporal.io/server/service/history/api/advancetimepoint"
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
@@ -1137,4 +1138,11 @@ func (e *historyEngineImpl) UnpauseWorkflowExecution(
 	req *historyservice.UnpauseWorkflowExecutionRequest,
 ) (resp *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
 	return unpauseworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	req *historyservice.AdvanceWorkflowExecutionTimePointRequest,
+) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	return advancetimepoint.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }

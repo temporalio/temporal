@@ -70,6 +70,21 @@ func (mr *MockEngineMockRecorder) AddTasks(ctx, request any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockEngine)(nil).AddTasks), ctx, request)
 }
 
+// AdvanceWorkflowExecutionTimePoint mocks base method.
+func (m *MockEngine) AdvanceWorkflowExecutionTimePoint(ctx context.Context, request *historyservice.AdvanceWorkflowExecutionTimePointRequest) (*historyservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdvanceWorkflowExecutionTimePoint", ctx, request)
+	ret0, _ := ret[0].(*historyservice.AdvanceWorkflowExecutionTimePointResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdvanceWorkflowExecutionTimePoint indicates an expected call of AdvanceWorkflowExecutionTimePoint.
+func (mr *MockEngineMockRecorder) AdvanceWorkflowExecutionTimePoint(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdvanceWorkflowExecutionTimePoint", reflect.TypeOf((*MockEngine)(nil).AdvanceWorkflowExecutionTimePoint), ctx, request)
+}
+
 // BackfillHistoryEvents mocks base method.
 func (m *MockEngine) BackfillHistoryEvents(ctx context.Context, request *BackfillHistoryEventsRequest) error {
 	m.ctrl.T.Helper()

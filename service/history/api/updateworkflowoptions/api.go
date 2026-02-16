@@ -2,6 +2,8 @@ package updateworkflowoptions
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -14,6 +16,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/advancetimepoint"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -84,7 +87,8 @@ func Invoke(
 				return nil, err
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
+			now := time.Now()
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity(), now)
 			if err != nil {
 				return nil, err
 			}
@@ -102,10 +106,22 @@ func Invoke(
 			// Store versioning override to send reactivation signal after successful persistence
 			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
 
+			// If auto-skip was enabled/updated, try to fire immediately on idle workflows.
+			createWorkflowTask := false
+			if mergedOpts.GetTimeSkippingConfig().GetAutoSkip() != nil {
+				autoSkipFired, autoSkipErr := advancetimepoint.TryAutoSkip(mutableState)
+				if autoSkipErr != nil {
+					return nil, autoSkipErr
+				}
+				if autoSkipFired {
+					createWorkflowTask = true
+				}
+			}
+
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
-				CreateWorkflowTask: false,
+				CreateWorkflowTask: createWorkflowTask,
 			}, nil
 		},
 		nil,
@@ -130,6 +146,7 @@ func MergeAndApply(
 	opts *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
 	identity string,
+	now time.Time,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
 	mergedOpts, err := mergeWorkflowExecutionOptions(
@@ -145,6 +162,14 @@ func MergeAndApply(
 	hasChanges := !proto.Equal(mergedOpts, getOptionsFromMutableState(ms))
 	if !hasChanges {
 		return mergedOpts, false, nil
+	}
+
+	// Validate and apply time-skipping config changes before recording the event.
+	executionInfo := ms.GetExecutionInfo()
+	if !proto.Equal(mergedOpts.GetTimeSkippingConfig(), executionInfo.GetTimeSkippingConfig()) {
+		if err := api.ValidateAndApplyTimeSkippingConfig(ms, mergedOpts.GetTimeSkippingConfig(), now); err != nil {
+			return nil, false, err
+		}
 	}
 
 	unsetOverride := false
@@ -170,6 +195,11 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
 		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
 			opts.Priority = cloned
+		}
+	}
+	if tsc := ms.GetExecutionInfo().GetTimeSkippingConfig(); tsc != nil {
+		if cloned, ok := proto.Clone(tsc).(*workflowpb.TimeSkippingConfig); ok {
+			opts.TimeSkippingConfig = cloned
 		}
 	}
 	return opts
@@ -228,6 +258,35 @@ func mergeWorkflowExecutionOptions(
 			mergeInto.Priority = &commonpb.Priority{}
 		}
 		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+	}
+
+	// ==== Time Skipping Config
+
+	// auto_skip must be set/cleared as a whole; sub-field paths are not supported.
+	for field := range updateFields {
+		if strings.HasPrefix(field, "timeSkippingConfig.autoSkip.") {
+			return nil, serviceerror.NewInvalidArgument(
+				"time_skipping_config.auto_skip must be set or cleared as a whole; sub-field paths are not supported",
+			)
+		}
+	}
+
+	if _, ok := updateFields["timeSkippingConfig"]; ok {
+		mergeInto.TimeSkippingConfig = mergeFrom.GetTimeSkippingConfig()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.enabled"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.Enabled = mergeFrom.GetTimeSkippingConfig().GetEnabled()
+	}
+
+	if _, ok := updateFields["timeSkippingConfig.autoSkip"]; ok {
+		if mergeInto.TimeSkippingConfig == nil {
+			mergeInto.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{}
+		}
+		mergeInto.TimeSkippingConfig.AutoSkip = mergeFrom.GetTimeSkippingConfig().GetAutoSkip()
 	}
 
 	return mergeInto, nil

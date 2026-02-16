@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/sony/gobreaker"
 	commonpb "go.temporal.io/api/common/v1"
@@ -320,7 +321,195 @@ func Invoke(
 		result.PendingNexusOperations = append(result.PendingNexusOperations, operationInfo)
 	}
 
+	// Populate time-skipping info if enabled. Done after Nexus ops are
+	// collected so we can derive hasNonAutoSkipWork without a second HSM walk.
+	if executionInfo.GetTimeSkippingConfig() != nil {
+		now := time.Now()
+		virtualNow := now.Add(executionInfo.GetVirtualTimeOffset().AsDuration())
+		result.UpcomingTimePoints = BuildUpcomingTimePoints(mutableState, executionInfo, virtualNow)
+		hasNonAutoSkipWork := len(mutableState.GetPendingActivityInfos()) > 0 ||
+			len(mutableState.GetPendingChildExecutionInfos()) > 0 ||
+			len(result.PendingNexusOperations) > 0
+		result.TimeSkippingInfo = BuildTimeSkippingInfo(executionInfo, result.UpcomingTimePoints, hasNonAutoSkipWork, mutableState.IsWorkflowExecutionRunning(), virtualNow)
+	}
+
 	return result, nil
+}
+
+// BuildTimeSkippingInfo constructs a TimeSkippingInfo proto from execution info.
+// hasNonAutoSkipWork indicates whether there are pending activities, child
+// workflows, or Nexus operations that should pause auto-skip.
+// virtualNow is the current virtual time (wall clock + offset), used to
+// compute VirtualTime and DeadlineRemaining.
+func BuildTimeSkippingInfo(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	upcomingTimePoints []*workflowpb.UpcomingTimePointInfo,
+	hasNonAutoSkipWork bool,
+	isRunning bool,
+	virtualNow time.Time,
+) *workflowpb.TimeSkippingInfo {
+	info := &workflowpb.TimeSkippingInfo{
+		Config:            executionInfo.GetTimeSkippingConfig(),
+		VirtualTimeOffset: executionInfo.GetVirtualTimeOffset(),
+		VirtualTime:       timestamppb.New(virtualNow),
+	}
+
+	autoSkip := executionInfo.GetTimeSkippingConfig().GetAutoSkip()
+	if autoSkip != nil {
+		maxFirings := api.EffectiveAutoSkipMaxFirings(autoSkip)
+		firingsUsed := executionInfo.GetAutoSkipFiringsUsed()
+		firingsRemaining := maxFirings - firingsUsed
+		if firingsRemaining < 0 {
+			firingsRemaining = 0
+		}
+
+		// Active when: within limits, no in-flight work, workflow is running,
+		// and the next fire time is within the deadline (if set).
+		active := firingsUsed < maxFirings &&
+			!hasNonAutoSkipWork &&
+			isRunning
+
+		if active && len(upcomingTimePoints) > 0 {
+			if dl := executionInfo.GetAutoSkipDeadline(); dl != nil && dl.IsValid() {
+				if upcomingTimePoints[0].GetFireTime().AsTime().After(dl.AsTime()) {
+					active = false
+				}
+			}
+		}
+
+		autoSkipInfo := &workflowpb.TimeSkippingInfo_AutoSkipInfo{
+			Active:           active,
+			Deadline:         executionInfo.GetAutoSkipDeadline(),
+			FiringsUsed:      firingsUsed,
+			FiringsRemaining: firingsRemaining,
+		}
+
+		if dl := executionInfo.GetAutoSkipDeadline(); dl != nil && dl.IsValid() {
+			remaining := dl.AsTime().Sub(virtualNow)
+			if remaining < 0 {
+				remaining = 0
+			}
+			autoSkipInfo.DeadlineRemaining = durationpb.New(remaining)
+		}
+
+		info.AutoSkip = autoSkipInfo
+	}
+
+	return info
+}
+
+// BuildUpcomingTimePoints scans mutable state for all upcoming time points:
+// user timers, activity timeouts (excluding heartbeat), and workflow timeouts.
+// virtualNow is the current virtual time, used to compute FireTimeRemaining
+// on each returned time point.
+func BuildUpcomingTimePoints(
+	mutableState historyi.MutableState,
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	virtualNow time.Time,
+) []*workflowpb.UpcomingTimePointInfo {
+	var result []*workflowpb.UpcomingTimePointInfo
+
+	// User timers.
+	for _, timerInfo := range mutableState.GetPendingTimerInfos() {
+		if timerInfo.ExpiryTime == nil {
+			continue
+		}
+		result = append(result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: timerInfo.ExpiryTime,
+			Source: &workflowpb.UpcomingTimePointInfo_Timer{
+				Timer: &workflowpb.UpcomingTimePointInfo_TimerTimePoint{
+					TimerId:        timerInfo.TimerId,
+					StartedEventId: timerInfo.StartedEventId,
+				},
+			},
+		})
+	}
+
+	// Activity timeouts (excluding heartbeat).
+	for _, ai := range mutableState.GetPendingActivityInfos() {
+		if ai.Paused || ai.ScheduledEventId == common.EmptyEventID {
+			continue
+		}
+		addActivityTimeoutPoints(&result, ai)
+	}
+
+	// Workflow run timeout.
+	if executionInfo.WorkflowRunExpirationTime != nil && executionInfo.WorkflowRunExpirationTime.IsValid() && !executionInfo.WorkflowRunExpirationTime.AsTime().IsZero() {
+		result = append(result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: executionInfo.WorkflowRunExpirationTime,
+			Source: &workflowpb.UpcomingTimePointInfo_WorkflowTimeout{
+				WorkflowTimeout: &workflowpb.UpcomingTimePointInfo_WorkflowTimeoutTimePoint{
+					TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+				},
+			},
+		})
+	}
+
+	// Workflow execution timeout.
+	if executionInfo.WorkflowExecutionExpirationTime != nil && executionInfo.WorkflowExecutionExpirationTime.IsValid() && !executionInfo.WorkflowExecutionExpirationTime.AsTime().IsZero() {
+		result = append(result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: executionInfo.WorkflowExecutionExpirationTime,
+			Source: &workflowpb.UpcomingTimePointInfo_WorkflowTimeout{
+				WorkflowTimeout: &workflowpb.UpcomingTimePointInfo_WorkflowTimeoutTimePoint{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				},
+			},
+		})
+	}
+
+	// Set FireTimeRemaining on each time point.
+	for _, tp := range result {
+		remaining := tp.GetFireTime().AsTime().Sub(virtualNow)
+		if remaining < 0 {
+			remaining = 0
+		}
+		tp.FireTimeRemaining = durationpb.New(remaining)
+	}
+
+	return result
+}
+
+func addActivityTimeoutPoints(result *[]*workflowpb.UpcomingTimePointInfo, ai *persistencespb.ActivityInfo) {
+	add := func(t *timestamppb.Timestamp, timeoutType enumspb.TimeoutType) {
+		if t == nil {
+			return
+		}
+		*result = append(*result, &workflowpb.UpcomingTimePointInfo{
+			FireTime: t,
+			Source: &workflowpb.UpcomingTimePointInfo_ActivityTimeout{
+				ActivityTimeout: &workflowpb.UpcomingTimePointInfo_ActivityTimeoutTimePoint{
+					ActivityId:  ai.ActivityId,
+					TimeoutType: timeoutType,
+				},
+			},
+		})
+	}
+
+	// Schedule-to-start: only if not yet started.
+	if ai.StartedEventId == common.EmptyEventID {
+		if d := ai.ScheduleToStartTimeout.AsDuration(); d > 0 {
+			t := timestamppb.New(ai.ScheduledTime.AsTime().Add(d))
+			add(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+		}
+	}
+
+	// Schedule-to-close.
+	if d := ai.ScheduleToCloseTimeout.AsDuration(); d > 0 {
+		base := ai.FirstScheduledTime
+		if base == nil {
+			base = ai.ScheduledTime
+		}
+		t := timestamppb.New(base.AsTime().Add(d))
+		add(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+	}
+
+	// Start-to-close: only if started.
+	if ai.StartedEventId != common.EmptyEventID {
+		if d := ai.StartToCloseTimeout.AsDuration(); d > 0 {
+			t := timestamppb.New(ai.StartedTime.AsTime().Add(d))
+			add(t, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		}
+	}
 }
 
 func buildCallbackInfoFromHSM(

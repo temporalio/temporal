@@ -1028,6 +1028,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
+	// Propagate time-skipping config to child if the parent has opted in.
+	var inheritedTimeSkippingConfig *workflowpb.TimeSkippingConfig
+	if tsc := executionInfo.GetTimeSkippingConfig(); tsc.GetPropagateToNewChildren() {
+		inheritedTimeSkippingConfig = tsc
+	}
+
 	childRunID, childClock, err := t.startWorkflow(
 		ctx,
 		task,
@@ -1045,6 +1051,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		inheritedPinnedVersion,
 		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
 		inheritedAutoUpgradeInfo,
+		inheritedTimeSkippingConfig,
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
@@ -1619,6 +1626,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
 	priority *commonpb.Priority,
 	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) (string, *clockspb.VectorClock, error) {
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                targetNamespace.String(),
@@ -1641,6 +1649,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		UserMetadata:          userMetadata,
 		VersioningOverride:    inheritedPinnedOverride,
 		Priority:              priority,
+		TimeSkippingConfig:    timeSkippingConfig,
 	}
 
 	request := common.CreateHistoryStartWorkflowRequest(

@@ -121,6 +121,11 @@ type (
 			identity string,
 			priority *commonpb.Priority,
 		) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTimePointAdvancedEvent(
+			fireTime time.Time,
+			identity string,
+			requestID string,
+		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID string, acceptedRequestMessageId string, acceptedRequestSequencingEventId int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(protocolInstanceID string, updRejection *updatepb.Rejection) error
@@ -268,6 +273,7 @@ type (
 		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error
+		ApplyWorkflowExecutionTimePointAdvancedEvent(event *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
