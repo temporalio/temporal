@@ -1164,7 +1164,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	if currentPausedPayload == nil ||
 		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
 		currentPaused != s.Schedule.State.Paused {
-		err := workflow.UpsertSearchAttributes(s.ctx, map[string]any{
+		err := workflow.UpsertSearchAttributes(s.ctx, map[string]any{ //nolint:staticcheck // SA1019: untyped search attributes required here
 			sadefs.TemporalSchedulePaused: s.Schedule.State.Paused,
 		})
 		if err != nil {

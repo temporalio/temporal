@@ -573,7 +573,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	}
 	state.ChasmNodes = chasmNodeBlobs
 
-	eList := result["buffered_events_list"].([]map[string]any)
+	eList := result["buffered_events_list"].([]map[string]any) //nolint:revive // unchecked-type-assertion: consistent with surrounding Cassandra result parsing
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
 	for _, v := range eList {
 		blob := createHistoryEventBatchBlob(v)

@@ -107,9 +107,9 @@ func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*common
 func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
 	var val any
 
-	if isJsonArray(valStr) {
+	if isJSONArray(valStr) {
 		var err error
-		val, err = parseJsonArray(valStr, t)
+		val, err = parseJSONArray(valStr, t)
 		if err != nil {
 			return nil, err
 		}
@@ -164,8 +164,8 @@ func parseValueUnspecified(valStr string) any {
 	} else if val, err = strconv.ParseBool(valStr); err == nil {
 	} else if val, err = strconv.ParseFloat(valStr, 64); err == nil {
 	} else if val, err = time.Parse(time.RFC3339Nano, valStr); err == nil {
-	} else if isJsonArray(valStr) {
-		arr, err := parseJsonArray(valStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	} else if isJSONArray(valStr) {
+		arr, err := parseJSONArray(valStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 		if err != nil {
 			val = valStr
 		} else {
@@ -178,12 +178,12 @@ func parseValueUnspecified(valStr string) any {
 	return val
 }
 
-func isJsonArray(str string) bool {
+func isJSONArray(str string) bool {
 	str = strings.TrimSpace(str)
 	return strings.HasPrefix(str, "[") && strings.HasSuffix(str, "]")
 }
 
-func parseJsonArray(str string, t enumspb.IndexedValueType) (any, error) {
+func parseJSONArray(str string, t enumspb.IndexedValueType) (any, error) {
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_TEXT,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,

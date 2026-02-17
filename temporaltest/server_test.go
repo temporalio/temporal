@@ -365,7 +365,7 @@ func BenchmarkRunWorkflow(b *testing.B) {
 }
 
 func SearchAttrWorkflow(ctx workflow.Context, searchAttr string) error {
-	return workflow.UpsertSearchAttributes(ctx, map[string]any{
+	return workflow.UpsertSearchAttributes(ctx, map[string]any{ //nolint:staticcheck // SA1019: untyped search attributes used in test
 		searchAttr: "foo",
 	})
 }

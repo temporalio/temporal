@@ -312,18 +312,18 @@ func (s *StringifySuite) Test_parseValueUnspecified() {
 	s.Equal("test string", res)
 }
 
-func (s *StringifySuite) Test_isJsonArray() {
-	s.True(isJsonArray("[1,2,3]"))
-	s.True(isJsonArray("  [1,2,3] "))
-	s.True(isJsonArray(`  ["1","2","3"] `))
-	s.True(isJsonArray("[]"))
-	s.False(isJsonArray("["))
-	s.False(isJsonArray("]"))
-	s.False(isJsonArray("qwe"))
-	s.False(isJsonArray("123"))
+func (s *StringifySuite) Test_isJSONArray() {
+	s.True(isJSONArray("[1,2,3]"))
+	s.True(isJSONArray("  [1,2,3] "))
+	s.True(isJSONArray(`  ["1","2","3"] `))
+	s.True(isJSONArray("[]"))
+	s.False(isJSONArray("["))
+	s.False(isJSONArray("]"))
+	s.False(isJSONArray("qwe"))
+	s.False(isJSONArray("123"))
 }
 
-func (s *StringifySuite) Test_parseJsonArray() {
+func (s *StringifySuite) Test_parseJSONArray() {
 	t1, _ := time.Parse(time.RFC3339Nano, "2019-06-07T16:16:34-08:00")
 	t2, _ := time.Parse(time.RFC3339Nano, "2019-06-07T17:16:34-08:00")
 	testCases := []struct {
@@ -371,7 +371,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 	}
 	for _, testCase := range testCases {
 		s.Run(testCase.name, func() {
-			res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
+			res, err := parseJSONArray(testCase.input, testCase.indexedValueType)
 			s.NoError(err)
 			s.Equal(testCase.expected, res)
 		})
@@ -400,7 +400,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 		},
 	}
 	for _, testCase := range testCases2 {
-		res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
+		res, err := parseJSONArray(testCase.input, testCase.indexedValueType)
 		s.NotNil(err)
 		s.Nil(res)
 	}

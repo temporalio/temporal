@@ -152,8 +152,8 @@ func TestEmptySelectWhere(t *testing.T) {
 	assert.Nil(t, queryParams.Query)
 	assert.Len(t, queryParams.Sorter, 1)
 	actualSorterMap, _ := queryParams.Sorter[0].Source()
-	actualSorterJson, _ := json.Marshal([]any{actualSorterMap})
-	assert.JSONEq(t, `[{"Id":{"missing":"_last","order":"desc"}}]`, string(actualSorterJson))
+	actualSorterJSON, _ := json.Marshal([]any{actualSorterMap})
+	assert.JSONEq(t, `[{"Id":{"missing":"_last","order":"desc"}}]`, string(actualSorterJSON))
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {
