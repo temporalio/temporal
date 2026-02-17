@@ -274,58 +274,151 @@ func (s *standaloneActivityTestSuite) TestPollActivityTaskQueue() {
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 
-	activityID := testcore.RandomizeStr(t.Name())
-	taskQueue := testcore.RandomizeStr(t.Name())
-	namespace := s.Namespace().String()
+	t.Run("FirstAttempt", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		namespace := s.Namespace().String()
 
-	startToCloseTimeout := durationpb.New(1 * time.Minute)
-	scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
-	heartbeatTimeout := durationpb.New(20 * time.Second)
-	priority := &commonpb.Priority{
-		FairnessKey: "test-key",
-	}
+		startToCloseTimeout := durationpb.New(1 * time.Minute)
+		scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
+		heartbeatTimeout := durationpb.New(20 * time.Second)
+		priority := &commonpb.Priority{
+			FairnessKey: "test-key",
+		}
 
-	startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
-		Namespace:    namespace,
-		ActivityId:   activityID,
-		ActivityType: s.tv.ActivityType(),
-		Identity:     s.tv.WorkerIdentity(),
-		Input:        defaultInput,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-		},
-		StartToCloseTimeout:    startToCloseTimeout,
-		ScheduleToCloseTimeout: scheduleToCloseTimeout,
-		HeartbeatTimeout:       heartbeatTimeout,
-		RequestId:              s.tv.RequestID(),
-		Priority:               priority,
-		Header:                 defaultHeader,
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    namespace,
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout:    startToCloseTimeout,
+			ScheduleToCloseTimeout: scheduleToCloseTimeout,
+			HeartbeatTimeout:       heartbeatTimeout,
+			RequestId:              s.tv.RequestID(),
+			Priority:               priority,
+			Header:                 defaultHeader,
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: namespace,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollTaskResp.GetActivityId())
+		require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
+		protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
+		require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
+		protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
+		require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
+		require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
+		require.EqualValues(t, 1, pollTaskResp.Attempt)
+		protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
+		protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
+		protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
+		protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
+		protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
+		require.NotNil(t, pollTaskResp.TaskToken)
+		protorequire.ProtoEqual(t, pollTaskResp.GetScheduledTime(), pollTaskResp.GetCurrentAttemptScheduledTime()) // Equal on first attempt
 	})
-	require.NoError(t, err)
 
-	pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: namespace,
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: s.tv.WorkerIdentity(),
+	t.Run("RetriedAttempt", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		namespace := s.Namespace().String()
+
+		startToCloseTimeout := durationpb.New(1 * time.Minute)
+		scheduleToCloseTimeout := durationpb.New(2 * time.Minute)
+		heartbeatTimeout := durationpb.New(20 * time.Second)
+		priority := &commonpb.Priority{
+			FairnessKey: "test-key",
+		}
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:    namespace,
+			ActivityId:   activityID,
+			ActivityType: s.tv.ActivityType(),
+			Identity:     s.tv.WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout:    startToCloseTimeout,
+			ScheduleToCloseTimeout: scheduleToCloseTimeout,
+			HeartbeatTimeout:       heartbeatTimeout,
+			RequestId:              s.tv.RequestID(),
+			Priority:               priority,
+			Header:                 defaultHeader,
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: namespace,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		nextRetryDelay := durationpb.New(1 * time.Second)
+		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+					NonRetryable:   false,
+					NextRetryDelay: nextRetryDelay,
+				}},
+			},
+		})
+		require.NoError(t, err)
+
+		describeResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.GetRunId(),
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err = s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: namespace,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: s.tv.WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollTaskResp.GetActivityId())
+		require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
+		protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
+		require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
+		protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
+		require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
+		require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
+		require.EqualValues(t, 2, pollTaskResp.Attempt)
+		protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
+		protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
+		protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
+		protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
+		protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
+		require.NotNil(t, pollTaskResp.TaskToken)
+
+		expectedAttemptScheduledTime := timestamppb.New(
+			describeResp.GetInfo().GetLastAttemptCompleteTime().AsTime().Add(nextRetryDelay.AsDuration()))
+		protorequire.ProtoEqual(t, expectedAttemptScheduledTime, pollTaskResp.GetCurrentAttemptScheduledTime())
 	})
-	require.NoError(t, err)
-	require.Equal(t, activityID, pollTaskResp.GetActivityId())
-	require.Equal(t, namespace, pollTaskResp.GetWorkflowNamespace())
-	protorequire.ProtoEqual(t, s.tv.ActivityType(), pollTaskResp.GetActivityType())
-	require.Equal(t, startResp.GetRunId(), pollTaskResp.GetActivityRunId())
-	protorequire.ProtoEqual(t, defaultInput, pollTaskResp.GetInput())
-	require.False(t, pollTaskResp.GetStartedTime().AsTime().IsZero())
-	require.False(t, pollTaskResp.GetScheduledTime().AsTime().IsZero())
-	require.EqualValues(t, 1, pollTaskResp.Attempt)
-	protorequire.ProtoEqual(t, startToCloseTimeout, pollTaskResp.GetStartToCloseTimeout())
-	protorequire.ProtoEqual(t, scheduleToCloseTimeout, pollTaskResp.GetScheduleToCloseTimeout())
-	protorequire.ProtoEqual(t, heartbeatTimeout, pollTaskResp.GetHeartbeatTimeout())
-	protorequire.ProtoEqual(t, priority, pollTaskResp.GetPriority())
-	protorequire.ProtoEqual(t, defaultHeader, pollTaskResp.GetHeader())
-	require.NotNil(t, pollTaskResp.TaskToken)
 }
 
 func (s *standaloneActivityTestSuite) TestStart() {

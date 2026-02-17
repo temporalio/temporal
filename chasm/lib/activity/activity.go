@@ -220,14 +220,25 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
+
+	// The current attempt scheduled time is either 1. the activity's original schedule time for the first attempt, or
+	// 2. last_attempt_complete_time + current_retry_interval on retries
+	var currentAttemptScheduledTime *timestamppb.Timestamp
+	if attempt.GetCount() == 1 {
+		currentAttemptScheduledTime = a.GetScheduleTime()
+	} else if retryInterval := attempt.GetCurrentRetryInterval(); retryInterval != nil {
+		currentAttemptScheduledTime = timestamppb.New(attempt.GetCompleteTime().AsTime().Add(retryInterval.AsDuration()))
+	}
+
 	return &historyservice.RecordActivityTaskStartedResponse{
-		StartedTime:       attempt.GetStartedTime(),
-		Attempt:           attempt.GetCount(),
-		Priority:          a.GetPriority(),
-		RetryPolicy:       a.GetRetryPolicy(),
-		ActivityRunId:     key.RunID,
-		WorkflowNamespace: namespace,
-		HeartbeatDetails:  lastHeartbeat.GetDetails(),
+		StartedTime:                 attempt.GetStartedTime(),
+		Attempt:                     attempt.GetCount(),
+		Priority:                    a.GetPriority(),
+		RetryPolicy:                 a.GetRetryPolicy(),
+		ActivityRunId:               key.RunID,
+		WorkflowNamespace:           namespace,
+		HeartbeatDetails:            lastHeartbeat.GetDetails(),
+		CurrentAttemptScheduledTime: currentAttemptScheduledTime,
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
