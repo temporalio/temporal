@@ -11,9 +11,7 @@ import (
 )
 
 type (
-	TestProvider struct {
-		es bool
-	}
+	TestProvider struct{}
 
 	TestMapper struct {
 		Namespace            string
@@ -25,27 +23,8 @@ var _ Provider = (*TestProvider)(nil)
 var _ Mapper = (*TestMapper)(nil)
 
 var (
-	// esCustomSearchAttributes includes both preallocated field names (for allocation)
-	// and custom field names (for testing existing mappings). The preallocated fields
-	// like Keyword01 are mapped to aliases like CustomKeywordField via TestAliases.
-	esCustomSearchAttributes = map[string]enumspb.IndexedValueType{
-		// Preallocated fields (these are what ES indexes actually use)
-		"Int01":      enumspb.INDEXED_VALUE_TYPE_INT,
-		"Int02":      enumspb.INDEXED_VALUE_TYPE_INT,
-		"Text01":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"Text02":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"Keyword01":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Keyword02":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"Datetime01": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"Datetime02": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"Double01":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"Double02":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"Bool01":     enumspb.INDEXED_VALUE_TYPE_BOOL,
-		"Bool02":     enumspb.INDEXED_VALUE_TYPE_BOOL,
-	}
-
-	// default custom search attributes definition for SQL databases
-	sqlCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	// testCustomSearchAttributes is the unified custom search attributes map for tests (DB index only).
+	testCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 
 	// ScheduleId is mapped to Keyword10 for tests
 	TestScheduleIDFieldName = "Keyword10"
@@ -59,38 +38,35 @@ var (
 		"Bool01":        "CustomBoolField",
 		"KeywordList01": "CustomKeywordListField",
 	}
+
+	// testAliasToField maps alias name to storage field name (reverse of TestAliases).
+	testAliasToField = func() map[string]string {
+		out := make(map[string]string, len(TestAliases))
+		for field, alias := range TestAliases {
+			out[alias] = field
+		}
+		return out
+	}()
 )
 
 func TestNameTypeMap() NameTypeMap {
-	csa := maps.Clone(sqlCustomSearchAttributes)
+	csa := maps.Clone(testCustomSearchAttributes)
 	return NewNameTypeMap(csa)
 }
 
-func TestEsNameTypeMap() NameTypeMap {
-	csa := maps.Clone(esCustomSearchAttributes)
+// TestNameTypeMapWithScheduleID returns a type map that includes ScheduleID as a custom attribute.
+// Use only for tests that explicitly need "ScheduleID defined as custom search attribute" (e.g. schedule visibility with custom ScheduleId column).
+func TestNameTypeMapWithScheduleID() NameTypeMap {
+	csa := maps.Clone(testCustomSearchAttributes)
+	csa[sadefs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 	return NewNameTypeMap(csa)
-}
-
-func TestEsNameTypeMapWithScheduleID() NameTypeMap {
-	res := TestEsNameTypeMap()
-	res.customSearchAttributes[sadefs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
-	return res
 }
 
 func NewTestProvider() *TestProvider {
 	return &TestProvider{}
 }
 
-func NewTestEsProvider() *TestProvider {
-	return &TestProvider{
-		es: true,
-	}
-}
-
 func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	if s.es {
-		return TestEsNameTypeMap(), nil
-	}
 	return TestNameTypeMap(), nil
 }
 
@@ -134,12 +110,18 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		if t.WithCustomScheduleID && alias == sadefs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
+		var resolved string
 		if strings.HasPrefix(alias, "AliasFor") {
-			return strings.TrimPrefix(alias, "AliasFor"), nil
+			resolved = strings.TrimPrefix(alias, "AliasFor")
 		} else if strings.HasPrefix(alias, "AliasWithHyphenFor-") {
-			return strings.TrimPrefix(alias, "AliasWithHyphenFor-"), nil
+			resolved = strings.TrimPrefix(alias, "AliasWithHyphenFor-")
+		} else {
+			resolved = alias
 		}
-		return "", serviceerror.NewInvalidArgument("mapper error")
+		if fieldName, ok := testAliasToField[resolved]; ok {
+			return fieldName, nil
+		}
+		return resolved, nil
 	}
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }

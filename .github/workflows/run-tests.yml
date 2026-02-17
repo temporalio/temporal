@@ -509,6 +509,21 @@ jobs:
           services: "${{ join(matrix.containers, '\n') }}"
           down-flags: -v
 
+      - name: Wait for Elasticsearch/OpenSearch
+        if: ${{ toJson(matrix.containers) != '[]' && (contains(matrix.containers, 'elasticsearch') || contains(matrix.containers, 'elasticsearch8') || contains(matrix.containers, 'opensearch2') || contains(matrix.containers, 'opensearch3')) }}
+        run: |
+          echo "Waiting for visibility store on 127.0.0.1:9200..."
+          for i in $(seq 1 60); do
+            if curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:9200 | grep -q 200; then
+              echo "Ready after ${i}s"
+              exit 0
+            fi
+            echo "Attempt $i/60: not ready"
+            sleep 2
+          done
+          echo "Timeout waiting for Elasticsearch/OpenSearch"
+          exit 1
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
