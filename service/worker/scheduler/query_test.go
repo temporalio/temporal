@@ -21,8 +21,8 @@ func TestFieldNameAggInterceptor(t *testing.T) {
 	s := require.New(t)
 	fnInterceptor := newFieldNameAggInterceptor(
 		testNamespace,
-		searchattribute.TestEsNameTypeMap(),
-		searchattribute.NewTestMapperProvider(nil),
+		searchattribute.TestNameTypeMap(),
+		searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 	)
 
 	_, err := fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
@@ -166,8 +166,8 @@ func TestGetQueryFieldsLegacy(t *testing.T) {
 				s := require.New(t)
 				fields, err := getQueryFieldsLegacy(
 					testNamespace,
-					searchattribute.TestEsNameTypeMap(),
-					searchattribute.NewTestMapperProvider(nil),
+					searchattribute.TestNameTypeMap(),
+					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 					tc.input,
 				)
 				if tc.expectedErrMsg == "" {

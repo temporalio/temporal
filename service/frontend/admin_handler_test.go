@@ -228,7 +228,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	// Elasticsearch is not configured
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(false).AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	testCases3 := []test{
 		{
 			Name: "reserved key (empty index)",
@@ -259,7 +259,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	testCases2 := []test{
 		{
 			Name: "reserved key (ES configured)",
@@ -347,7 +347,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_EmptyIndexName() {
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
 	s.NoError(err)
@@ -367,21 +367,21 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	resp, err := handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
 	s.NoError(err)
 	s.NotNil(resp)
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{IndexName: "another-index-name"})
 	s.NoError(err)
 	s.NotNil(resp)
 
 	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
 		nil, errors.New("random error"))
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
 	s.Error(err)
 	s.Nil(resp)
@@ -483,7 +483,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
 	// Configure Elasticsearch: add advanced visibility store config with index name.
 	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
+	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
 	for _, testCase := range testCases {
 		s.T().Run(testCase.Name, func(t *testing.T) {
 			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
@@ -2042,7 +2042,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
 			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
-			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestEsNameTypeMap(), nil).Times(eventsWithSasCount)
+			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestNameTypeMap(), nil).Times(eventsWithSasCount)
 
 			// Mock mapper returns error because field name is not an alias.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {

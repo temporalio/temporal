@@ -67,23 +67,20 @@ func (s *VisibilityTestSuite) TearDownSuite() {
 
 func (s *VisibilityTestSuite) TestSearchAttributes() {
 	ns := s.createGlobalNamespace()
-	if testcore.UseSQLVisibility() {
-		// When Elasticsearch is enabled, the search attribute aliases are not used.
-		updateNamespaceConfig(s.Assertions, ns,
-			func() *namespacepb.NamespaceConfig {
-				return &namespacepb.NamespaceConfig{
-					CustomSearchAttributeAliases: map[string]string{
-						"Bool01":     "CustomBoolField",
-						"Datetime01": "CustomDatetimeField",
-						"Double01":   "CustomDoubleField",
-						"Int01":      "CustomIntField",
-						"Keyword01":  "CustomKeywordField",
-						"Text01":     "CustomTextField",
-					},
-				}
-			},
-			s.clusters, 0)
-	}
+	updateNamespaceConfig(s.Assertions, ns,
+		func() *namespacepb.NamespaceConfig {
+			return &namespacepb.NamespaceConfig{
+				CustomSearchAttributeAliases: map[string]string{
+					"Bool01":     "CustomBoolField",
+					"Datetime01": "CustomDatetimeField",
+					"Double01":   "CustomDoubleField",
+					"Int01":      "CustomIntField",
+					"Keyword01":  "CustomKeywordField",
+					"Text01":     "CustomTextField",
+				},
+			}
+		},
+		s.clusters, 0)
 
 	client0 := s.clusters[0].FrontendClient() // active
 	client1 := s.clusters[1].FrontendClient() // standby

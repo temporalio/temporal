@@ -161,7 +161,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.visibilityStore = &VisibilityStore{
 		esClient:                       s.mockESClient,
 		index:                          testIndex,
-		searchAttributesProvider:       searchattribute.NewTestEsProvider(),
+		searchAttributesProvider:       searchattribute.NewTestProvider(),
 		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
 		chasmRegistry:                  s.chasmRegistry,
 		processor:                      s.mockProcessor,
@@ -424,13 +424,13 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	_, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "invalid query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
+	s.Equal("invalid query: unable to convert 'order by' column name: invalid search attribute: CustomTextField", err.(*serviceerror.InvalidArgument).Error())
 
-	query = `order by CustomIntField asc`
+	query = `order by Int01 asc`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.JSONEq(`[{"CustomIntField":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"Int01":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `ExecutionTime < "unable to parse"`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -456,19 +456,19 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
 	query = "`AliasForCustomKeywordField` = 'pid'"
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"Keyword01":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = "`AliasWithHyphenFor-CustomKeywordField` = 'pid'"
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
-	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"Keyword01":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `CustomKeywordField = 'pid'`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
-	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"CustomKeywordField":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"term":{"Keyword01":"pid"}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
 	query = `AliasForUnknownField = 'pid'`
@@ -488,7 +488,7 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy_Mapper() {
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
 	s.Equal(`{"bool":{"filter":{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
-	s.JSONEq(`[{"CustomKeywordField":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
+	s.JSONEq(`[{"Keyword01":{"missing":"_last","order":"asc"}}]`, s.sorterToJSON(queryParams.Sorter))
 
 	query = `order by CustomKeywordField asc`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
@@ -602,15 +602,15 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 								Should(
 									newBoolQuery().Filter(
 										elastic.NewTermQuery(sadefs.WorkflowID, "wid"),
-										elastic.NewTermQuery("CustomKeywordField", "foo"),
+										elastic.NewTermQuery("Keyword01", "foo"),
 									),
-									elastic.NewTermQuery("CustomIntField", int64(123)),
+									elastic.NewTermQuery("Int01", int64(123)),
 								).
 								MinimumNumberShouldMatch(1),
 						).
 						MustNot(namespaceDivisionExists),
 				),
-				Sorter:  []elastic.Sorter{elastic.NewFieldSort("CustomKeywordField").Missing("_last")},
+				Sorter:  []elastic.Sorter{elastic.NewFieldSort("Keyword01").Missing("_last")},
 				GroupBy: []string{},
 			},
 		},
@@ -751,7 +751,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
-	saTypeMap := searchattribute.TestEsNameTypeMap()
+	saTypeMap := searchattribute.TestNameTypeMap()
 	docSource := []byte(`{"ExecutionStatus": "Running",
           "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
           "HistoryLength": 29,
@@ -814,15 +814,16 @@ func (s *ESVisibilitySuite) TestParseESDoc() {
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	s.visibilityStore.searchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 
-	saTypeMap := searchattribute.TestEsNameTypeMap()
+	saTypeMap := searchattribute.TestNameTypeMap()
+	// Document uses DB column names (field names), not aliases; visibility store returns DB column names.
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
-          "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "CustomTextField": "text text",
-          "CustomDatetimeField": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
-          "CustomDoubleField": [1234.1234,5678.5678],
-          "CustomIntField": [111,222],
-          "CustomBoolField": true,
+          "Keyword01": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+          "Text01": "text text",
+          "Datetime01": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
+          "Double01": [1234.1234,5678.5678],
+          "Int01": [111,222],
+          "Bool01": true,
           "UnknownField": "random"}`)
 	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
 	s.NoError(err)
@@ -833,22 +834,17 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 	s.Len(customSearchAttributes, 7)
 
 	s.Equal([]string{"ver1", "ver2"}, customSearchAttributes["TemporalChangeVersion"])
-
-	s.Equal("bfd5c907-f899-4baf-a7b2-2ab85e623ebd", customSearchAttributes["CustomKeywordField"])
-
-	s.Equal("text text", customSearchAttributes["CustomTextField"])
+	s.Equal("bfd5c907-f899-4baf-a7b2-2ab85e623ebd", customSearchAttributes["Keyword01"])
+	s.Equal("text text", customSearchAttributes["Text01"])
 
 	date1, err := time.Parse(time.RFC3339Nano, "2014-08-28T03:15:00.000-07:00")
 	s.NoError(err)
 	date2, err := time.Parse(time.RFC3339Nano, "2016-04-21T05:00:00.000-07:00")
 	s.NoError(err)
-	s.Equal([]time.Time{date1, date2}, customSearchAttributes["CustomDatetimeField"])
-
-	s.Equal([]float64{1234.1234, 5678.5678}, customSearchAttributes["CustomDoubleField"])
-
-	s.Equal(true, customSearchAttributes["CustomBoolField"])
-
-	s.Equal([]int64{int64(111), int64(222)}, customSearchAttributes["CustomIntField"])
+	s.Equal([]time.Time{date1, date2}, customSearchAttributes["Datetime01"])
+	s.Equal([]float64{1234.1234, 5678.5678}, customSearchAttributes["Double01"])
+	s.Equal(true, customSearchAttributes["Bool01"])
+	s.Equal([]int64{int64(111), int64(222)}, customSearchAttributes["Int01"])
 
 	_, ok := customSearchAttributes["UnknownField"]
 	s.False(ok)
@@ -857,15 +853,16 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
-	saTypeMap := searchattribute.TestEsNameTypeMap()
+	saTypeMap := searchattribute.TestNameTypeMap()
+	// Document uses DB column names (field names); visibility store returns DB column names (not aliased).
 	docSource := []byte(`{"ExecutionStatus": "Completed",
           "TemporalChangeVersion": ["ver1", "ver2"],
-          "CustomKeywordField": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "CustomTextField": "text text",
-          "CustomDatetimeField": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
-          "CustomDoubleField": [1234.1234,5678.5678],
-          "CustomIntField": [111,222],
-          "CustomBoolField": true,
+          "Keyword01": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+          "Text01": "text text",
+          "Datetime01": ["2014-08-28T03:15:00.000-07:00", "2016-04-21T05:00:00.000-07:00"],
+          "Double01": [1234.1234,5678.5678],
+          "Int01": [111,222],
+          "Bool01": true,
           "UnknownField": "random"}`)
 
 	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, testNamespace, nil)
@@ -875,12 +872,12 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 	// Visibility store returns DB column names (not aliased). Aliasing is done at visibility manager layer.
 	s.Len(info.SearchAttributes.GetIndexedFields(), 7)
 	s.Contains(info.SearchAttributes.GetIndexedFields(), "TemporalChangeVersion")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomKeywordField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomTextField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomDatetimeField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomDoubleField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomBoolField")
-	s.Contains(info.SearchAttributes.GetIndexedFields(), "CustomIntField")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "Keyword01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "Text01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "Datetime01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "Double01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "Bool01")
+	s.Contains(info.SearchAttributes.GetIndexedFields(), "Int01")
 	s.NotContains(info.SearchAttributes.GetIndexedFields(), "UnknownField")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 }
@@ -1617,7 +1614,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 	startTime := time.Now().UTC()
 	closeTime := startTime.Add(1 * time.Minute)
 	datetimeNull := json.Number(fmt.Sprintf("%d", math.MaxInt64))
-	saTypeMap := searchattribute.TestEsNameTypeMap()
+	saTypeMap := searchattribute.TestNameTypeMap()
 
 	testCases := []struct {
 		name         string
@@ -2184,7 +2181,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes() {
 		},
 	)
 
-	saTypeMap := searchattribute.TestEsNameTypeMap()
+	saTypeMap := searchattribute.TestNameTypeMap()
 	docSource := []byte(`{
 		"ExecutionStatus": "Completed",
 		"NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -2219,7 +2216,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes() {
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_ChasmSearchAttributes_NoMapper() {
-	saTypeMap := searchattribute.TestEsNameTypeMap()
+	saTypeMap := searchattribute.TestNameTypeMap()
 	docSource := []byte(`{
 		"ExecutionStatus": "Completed",
 		"NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
@@ -2256,7 +2253,7 @@ func (s *ESVisibilitySuite) TestNameInterceptor_ChasmMapper() {
 
 	ni := NewNameInterceptor(
 		testNamespace,
-		searchattribute.TestEsNameTypeMap(),
+		searchattribute.TestNameTypeMap(),
 		s.mockSearchAttributesMapperProvider,
 		chasmMapper,
 		chasm.UnspecifiedArchetypeID,
@@ -2300,7 +2297,7 @@ func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
 
 	vi := NewValuesInterceptor(
 		testNamespace,
-		searchattribute.TestEsNameTypeMap(),
+		searchattribute.TestNameTypeMap(),
 		chasmMapper,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),

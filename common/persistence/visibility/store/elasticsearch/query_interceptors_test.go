@@ -39,7 +39,7 @@ func (s *QueryInterceptorSuite) TearDownTest() {
 func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestEsNameTypeMap(),
+		searchattribute.TestNameTypeMap(),
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
@@ -79,7 +79,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestEsNameTypeMap(),
+		searchattribute.TestNameTypeMap(),
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
@@ -125,7 +125,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestEsNameTypeMap(),
+		searchattribute.TestNameTypeMap(),
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
@@ -184,7 +184,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_ScheduleIDToWorkflowID() {
 func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestEsNameTypeMap(),
+		searchattribute.TestNameTypeMap(),
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
@@ -209,7 +209,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_ScheduleIDToWorkflowID() {
 func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 	vi := NewValuesInterceptor(
 		"test-namespace",
-		searchattribute.TestEsNameTypeMapWithScheduleID(),
+		searchattribute.TestNameTypeMapWithScheduleID(),
 		nil,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
@@ -233,7 +233,7 @@ func (s *QueryInterceptorSuite) TestValuesInterceptor_NoTransformation() {
 func (s *QueryInterceptorSuite) createMockNameInterceptor(mapper searchattribute.Mapper) *nameInterceptor {
 	return &nameInterceptor{
 		namespace:                      "test-namespace",
-		searchAttributesTypeMap:        searchattribute.TestEsNameTypeMap(),
+		searchAttributesTypeMap:        searchattribute.TestNameTypeMap(),
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(mapper),
 	}
 }
@@ -244,7 +244,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_TemporalSystemExecutionStatu
 	// With SchedulerArchetypeID, TemporalSystemExecutionStatus should map to ExecutionStatus
 	ni := &nameInterceptor{
 		namespace:                      "test-namespace",
-		searchAttributesTypeMap:        searchattribute.TestEsNameTypeMap(),
+		searchAttributesTypeMap:        searchattribute.TestNameTypeMap(),
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
 		archetypeID:                    chasm.SchedulerArchetypeID,
 	}
@@ -256,7 +256,7 @@ func (s *QueryInterceptorSuite) TestNameInterceptor_TemporalSystemExecutionStatu
 	// Without SchedulerArchetypeID, TemporalSystemExecutionStatus should fail
 	ni2 := &nameInterceptor{
 		namespace:                      "test-namespace",
-		searchAttributesTypeMap:        searchattribute.TestEsNameTypeMap(),
+		searchAttributesTypeMap:        searchattribute.TestNameTypeMap(),
 		searchAttributesMapperProvider: searchattribute.NewTestMapperProvider(nil),
 		archetypeID:                    chasm.UnspecifiedArchetypeID,
 	}
