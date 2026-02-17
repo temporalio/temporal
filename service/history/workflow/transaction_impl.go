@@ -614,7 +614,11 @@ func NotifyOnExecutionMutation(
 			RunID:       workflowMutation.ExecutionState.RunId,
 		}, nil)
 	}
-	engine.NotifyTimeSkipping()
+	engine.NotifyTimeSkipping(chasm.ExecutionKey{
+		NamespaceID: workflowMutation.ExecutionInfo.NamespaceId,
+		BusinessID:  workflowMutation.ExecutionInfo.WorkflowId,
+		RunID:       workflowMutation.ExecutionState.RunId,
+	})
 }
 
 func NotifyNewHistorySnapshotEvent(
