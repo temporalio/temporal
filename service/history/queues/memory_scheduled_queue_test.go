@@ -124,7 +124,7 @@ func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
 	t := make([]*speculativeWorkflowTaskTimeoutExecutable, 1000)
 	calls := atomic.Int32{}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		t[i] = s.newSpeculativeWorkflowTaskTimeoutTestExecutable(now.Add(time.Duration(rand.Intn(100)) * time.Microsecond))
 
 		// Randomly cancel some tasks.
@@ -135,13 +135,13 @@ func (s *memoryScheduledQueueSuite) Test_1KRandomTasks() {
 		}
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		if t[i].State() != ctasks.TaskStateCancelled {
 			s.mockScheduler.EXPECT().TrySubmit(t[i]).Return(true).Do(func(_ ctasks.Task) { calls.Add(-1) })
 		}
 	}
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		s.scheduledQueue.Add(t[i])
 	}
 

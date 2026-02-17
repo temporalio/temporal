@@ -199,7 +199,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			now = now.Add(scheduleLatency)
 			s.timeSource.Update(now)
 
-			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo any) {
 				metrics.ContextCounterAdd(
 					ctx,
 					metrics.HistoryWorkflowExecutionCacheLatency.Name(),
@@ -275,7 +275,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_MultipleAttempts() {
 		now = now.Add(scheduleLatencies[i])
 		s.timeSource.Update(now)
 
-		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo interface{}) {
+		s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(func(ctx context.Context, taskInfo any) {
 			metrics.ContextCounterAdd(
 				ctx,
 				metrics.HistoryWorkflowExecutionCacheLatency.Name(),

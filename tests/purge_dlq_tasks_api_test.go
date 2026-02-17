@@ -201,7 +201,7 @@ func (s *PurgeDLQTasksSuite) enqueueTasks(ctx context.Context, queueKey persiste
 	})
 	s.NoError(err)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err := s.dlq.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
 			QueueType:     queueKey.QueueType,
 			SourceCluster: queueKey.SourceCluster,

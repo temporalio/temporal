@@ -105,7 +105,7 @@ func Parse(searchAttributesStr map[string]string, typeMap *NameTypeMap) (*common
 }
 
 func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
-	var val interface{}
+	var val any
 
 	if isJsonArray(valStr) {
 		var err error
@@ -130,8 +130,8 @@ func parseValueOrArray(valStr string, t enumspb.IndexedValueType) (*commonpb.Pay
 	return valPayload, nil
 }
 
-func parseValueTyped(valStr string, t enumspb.IndexedValueType) (interface{}, error) {
-	var val interface{}
+func parseValueTyped(valStr string, t enumspb.IndexedValueType) (any, error) {
+	var val any
 	var err error
 
 	switch t {
@@ -156,8 +156,8 @@ func parseValueTyped(valStr string, t enumspb.IndexedValueType) (interface{}, er
 	return val, err
 }
 
-func parseValueUnspecified(valStr string) interface{} {
-	var val interface{}
+func parseValueUnspecified(valStr string) any {
+	var val any
 	var err error
 
 	if val, err = strconv.ParseInt(valStr, 10, 64); err == nil {
@@ -183,7 +183,7 @@ func isJsonArray(str string) bool {
 	return strings.HasPrefix(str, "[") && strings.HasSuffix(str, "]")
 }
 
-func parseJsonArray(str string, t enumspb.IndexedValueType) (interface{}, error) {
+func parseJsonArray(str string, t enumspb.IndexedValueType) (any, error) {
 	switch t {
 	case enumspb.INDEXED_VALUE_TYPE_TEXT,
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -208,7 +208,7 @@ func parseJsonArray(str string, t enumspb.IndexedValueType) (interface{}, error)
 		err := json.Unmarshal([]byte(str), &result)
 		return result, err
 	case enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED:
-		var result []interface{}
+		var result []any
 		err := json.Unmarshal([]byte(str), &result)
 		return result, err
 	default:

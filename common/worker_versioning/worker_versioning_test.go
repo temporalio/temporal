@@ -650,7 +650,7 @@ func TestFindDeploymentVersionForWorkflowID_PartialRamp(t *testing.T) {
 			}
 			histogram := make(map[string]int)
 			runs := 1000000
-			for i := 0; i < runs; i++ {
+			for i := range runs {
 				v, _ := FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(current.GetVersion(), 0, ramping.GetVersion(), ramping.GetRampPercentage(), 0, "wf-"+strconv.Itoa(i))
 				histogram[v.GetBuildId()]++
 			}

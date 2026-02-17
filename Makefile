@@ -402,11 +402,20 @@ lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
-fmt: fmt-imports fmt-yaml
+fmt: fmt-gofix fmt-imports fmt-yaml
+
+# Some fixes enable others (e.g. rangeint may expose minmax opportunities),
+# so - as recommended by the Go team - we run go fix in a loop until it reaches
+# a fixed point (exit code 0)
+fmt-gofix:
+	@printf $(COLOR) "Run go fix..."
+	@while ! go fix -any -rangeint ./...; do \
+		printf $(COLOR) "Re-running go fix..."; \
+	done
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-		@printf $(COLOR) "Formatting imports..."
-		@$(GCI) write --skip-generated -s standard -s default ./*
+	@printf $(COLOR) "Formatting imports..."
+	@$(GCI) write --skip-generated -s standard -s default ./*
 
 fmt-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Formatting YAML files..."

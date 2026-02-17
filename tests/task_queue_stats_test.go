@@ -1301,7 +1301,7 @@ func (s *TaskQueueStatsSuite) enqueueActivitiesForEachWorkflow(sets int, tqName 
 	deploymentOpts := s.deploymentOptions(tqName)
 
 	var total int
-	for version := 0; version < 2; version++ { // 0=unversioned, 1=versioned
+	for version := range 2 { // 0=unversioned, 1=versioned
 		for priority := 0; priority <= s.maxPriority; priority++ {
 			for i := 0; i < sets; { // not counting up here to allow for retries
 				pollReq := &workflowservice.PollWorkflowTaskQueueRequest{

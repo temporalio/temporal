@@ -365,7 +365,7 @@ func BenchmarkRunWorkflow(b *testing.B) {
 }
 
 func SearchAttrWorkflow(ctx workflow.Context, searchAttr string) error {
-	return workflow.UpsertSearchAttributes(ctx, map[string]interface{}{
+	return workflow.UpsertSearchAttributes(ctx, map[string]any{
 		searchAttr: "foo",
 	})
 }
@@ -432,7 +432,7 @@ func (i *WorkflowInterceptor) Init(outbound interceptor.WorkflowOutboundIntercep
 	return i.Next.Init(outbound)
 }
 
-func (i *WorkflowInterceptor) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (interface{}, error) {
+func (i *WorkflowInterceptor) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (any, error) {
 	version := workflow.GetVersion(ctx, "version", workflow.DefaultVersion, 1)
 	var err error
 

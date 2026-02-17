@@ -37,7 +37,7 @@ func (s *StringifySuite) Test_Stringify() {
 		},
 	}
 
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -82,7 +82,7 @@ func (s *StringifySuite) Test_Stringify_Array() {
 		},
 	}
 
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": []string{"val1", "val2"},
 		"key2": []int64{2, 3, 4},
 		"key3": []bool{true, false, true},
@@ -230,7 +230,7 @@ func (s *StringifySuite) Test_parseValueOrArray() {
 }
 
 func (s *StringifySuite) Test_parseValueTyped() {
-	var res interface{}
+	var res any
 	var err error
 
 	// int
@@ -283,7 +283,7 @@ func (s *StringifySuite) Test_parseValueTyped() {
 }
 
 func (s *StringifySuite) Test_parseValueUnspecified() {
-	var res interface{}
+	var res any
 
 	// int
 	res = parseValueUnspecified("1")
@@ -305,7 +305,7 @@ func (s *StringifySuite) Test_parseValueUnspecified() {
 
 	// array
 	res = parseValueUnspecified(`["a", "b", "c"]`)
-	s.Equal([]interface{}{"a", "b", "c"}, res)
+	s.Equal([]any{"a", "b", "c"}, res)
 
 	// string
 	res = parseValueUnspecified("test string")
@@ -330,7 +330,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 		name             string
 		indexedValueType enumspb.IndexedValueType
 		input            string
-		expected         interface{}
+		expected         any
 	}{
 		{
 			name:             "string",
@@ -366,7 +366,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 			name:             "unspecified",
 			indexedValueType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
 			input:            `["a", "b", "c"]`,
-			expected:         []interface{}{"a", "b", "c"},
+			expected:         []any{"a", "b", "c"},
 		},
 	}
 	for _, testCase := range testCases {

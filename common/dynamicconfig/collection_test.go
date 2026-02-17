@@ -272,7 +272,7 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 }
 
 func (s *collectionSuite) TestGetMapProperty() {
-	def := map[string]interface{}{"testKey": 123}
+	def := map[string]any{"testKey": 123}
 	setting := dynamicconfig.NewGlobalMapSetting(
 		testGetMapPropertyKey,
 		def,

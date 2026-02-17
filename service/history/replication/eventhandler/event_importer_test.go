@@ -53,7 +53,7 @@ type ImportWorkflowExecutionRequestMatcher struct {
 	ExpectedRequest *historyservice.ImportWorkflowExecutionRequest
 }
 
-func (m *ImportWorkflowExecutionRequestMatcher) Matches(x interface{}) bool {
+func (m *ImportWorkflowExecutionRequestMatcher) Matches(x any) bool {
 	return m.ExpectedRequest.Equal(x)
 }
 

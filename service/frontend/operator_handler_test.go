@@ -1106,7 +1106,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Nil(resp)
 
 	// Success case.
-	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr interface{}) error {
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr any) error {
 		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
 		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
 		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"
@@ -1122,7 +1122,7 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Equal("test-namespace-deleted-ka2te", resp.DeletedNamespace)
 
 	// Success case with id.
-	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr interface{}) error {
+	mockRun.EXPECT().Get(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, valuePtr any) error {
 		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
 		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
 		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"

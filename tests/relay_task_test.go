@@ -95,7 +95,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	//nolint:forbidigo
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		events := s.GetHistory(s.Namespace().String(), workflowExecution)
 		if len(events) == 8 {
 			s.EqualHistoryEvents(`

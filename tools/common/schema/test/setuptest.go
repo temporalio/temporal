@@ -78,7 +78,7 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 
 		ver := convert.Int32ToString(tb.rand.Int31())
 		versioningEnabled := (i%2 == 0)

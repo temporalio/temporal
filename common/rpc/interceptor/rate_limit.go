@@ -45,10 +45,10 @@ func NewRateLimitInterceptor(
 
 func (i *RateLimitInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	methodName := info.FullMethod
 
 	// for DescribeTaskQueueRequest, we want to use visibility rate limit only if reachability is queried

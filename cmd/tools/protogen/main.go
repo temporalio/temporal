@@ -17,7 +17,7 @@ import (
 
 var cyan = color.New(color.FgHiCyan, color.Bold)
 
-func info(format string, args ...interface{}) {
+func info(format string, args ...any) {
 	log.Println(cyan.Sprintf(format, args...))
 }
 

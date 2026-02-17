@@ -79,7 +79,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	s.NoError(err)
 
 	// Queue up a couple workflows
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := s.SdkClient().ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
@@ -99,7 +99,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 
 		// Start enough activities / nexus tasks to ensure we will see scale up decisions
 		commands := make([]*commandpb.Command, 0, 5)
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			commands = append(commands, &commandpb.Command{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
@@ -189,7 +189,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 	}()
 
 	allScaleDecisions := make([]*taskqueuepb.PollerScalingDecision, 0, 15)
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		resp, _ := s.FrontendClient().PollWorkflowTaskQueue(longctx, &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -267,7 +267,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	deploymentName := testcore.RandomizeStr(deploymentNamePrefix)
 
 	// Queueing up unversioned workflows
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, err := s.SdkClient().ExecuteWorkflow(
 			ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
@@ -352,7 +352,7 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 
 	// Start enough activities to ensure we will see scale up decisions. These are scheduled by an unversioned poller.
 	commands := make([]*commandpb.Command, 0, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		commands = append(commands, &commandpb.Command{
 			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{

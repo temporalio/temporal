@@ -44,7 +44,7 @@ type (
 	}
 	statement struct {
 		query string
-		args  []interface{}
+		args  []any
 	}
 	// failingIter is a [gocql.Iter] which fails when iterated.
 	failingIter struct{}
@@ -78,11 +78,11 @@ type (
 	}
 )
 
-func (f failingIter) Scan(...interface{}) bool {
+func (f failingIter) Scan(...any) bool {
 	return false
 }
 
-func (f failingIter) MapScan(map[string]interface{}) bool {
+func (f failingIter) MapScan(map[string]any) bool {
 	return false
 }
 
@@ -98,7 +98,7 @@ func (q failingQuery) Iter() gocql.Iter {
 	return failingIter{}
 }
 
-func (q failingQuery) Scan(...interface{}) error {
+func (q failingQuery) Scan(...any) error {
 	return assert.AnError
 }
 
@@ -110,7 +110,7 @@ func (l *testLogger) Warn(msg string, _ ...tag.Tag) {
 	l.warningMsgs = append(l.warningMsgs, msg)
 }
 
-func (s *recordingSession) Query(query string, args ...interface{}) gocql.Query {
+func (s *recordingSession) Query(query string, args ...any) gocql.Query {
 	s.statements = append(s.statements, statement{
 		query: query,
 		args:  args,
@@ -528,7 +528,7 @@ func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandra.Tes
 
 // Query checks if the query matches queryToBlockOn, and, if so, it notifies the test and then blocks until the test
 // unblocks it.
-func (f *blockingSession) Query(query string, args ...interface{}) gocql.Query {
+func (f *blockingSession) Query(query string, args ...any) gocql.Query {
 	if query == f.queryToBlockOn {
 		f.queryStarted <- struct{}{}
 		<-f.queryCanContinue
@@ -564,7 +564,7 @@ func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster 
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	for i := 0; i < numConcurrentWrites; i++ {
+	for range numConcurrentWrites {
 		go func() {
 			res, err := persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 			if err != nil {
@@ -583,7 +583,7 @@ func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster 
 		}()
 	}
 
-	for i := 0; i < numConcurrentWrites; i++ {
+	for range numConcurrentWrites {
 		select {
 		case <-ctx.Done():
 			printResults(t, results)
@@ -596,7 +596,7 @@ func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster 
 	numConflicts := 0
 	writtenMessageIDs := make([]int, 0, 1)
 
-	for i := 0; i < numConcurrentWrites; i++ {
+	for range numConcurrentWrites {
 		var res enqueueMessageResult
 		select {
 		case <-ctx.Done():
@@ -673,7 +673,7 @@ func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluste
 	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
 }
 
-func (q failingQuery) MapScanCAS(map[string]interface{}) (bool, error) {
+func (q failingQuery) MapScanCAS(map[string]any) (bool, error) {
 	return false, assert.AnError
 }
 
@@ -681,7 +681,7 @@ func (q failingQuery) WithContext(context.Context) gocql.Query {
 	return q
 }
 
-func (f failingSession) Query(query string, args ...interface{}) gocql.Query {
+func (f failingSession) Query(query string, args ...any) gocql.Query {
 	for _, q := range f.failingQueries {
 		if q == query {
 			return failingQuery{}
@@ -879,7 +879,7 @@ func testCassandraQueueV2MinMessageIDOptimization(t *testing.T, cluster *cassand
 		QueueName: queueName,
 	})
 	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 		require.NoError(t, err)
 	}
@@ -969,7 +969,7 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 			require.NoError(t, err)
 
 			// Enqueue 3 messages
-			for i := 0; i < 3; i++ {
+			for range 3 {
 				_, err := persistencetest.EnqueueMessage(ctx, qs[0].QueueV2, queueType, queueName)
 				require.NoError(t, err)
 			}
@@ -984,7 +984,7 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 			}
 
 			// Wait for both queries to start
-			for i := 0; i < 2; i++ {
+			for i := range 2 {
 				<-qs[i].session.queryStarted
 			}
 
@@ -1144,7 +1144,7 @@ func testCassandraQueueV2RepeatedRangeDelete(t *testing.T, cluster *cassandra.Te
 	})
 	require.NoError(t, err)
 	numMessages := 3
-	for i := 0; i < numMessages; i++ {
+	for range numMessages {
 		_, err := persistencetest.EnqueueMessage(ctx, q, queueType, queueName)
 		require.NoError(t, err)
 	}
@@ -1181,7 +1181,7 @@ func getNumMessages(
 		numMessages,                     // limit
 	).Iter()
 	numRemainingMessages := 0
-	for iter.MapScan(map[string]interface{}{}) {
+	for iter.MapScan(map[string]any{}) {
 		numRemainingMessages++
 	}
 	require.NoError(t, iter.Close())
@@ -1277,7 +1277,7 @@ func testCassandraNexusEndpointStoreConcurrentCreate(t *testing.T, store persist
 
 	requestTableVersion := tableVersion.Load()
 
-	for i := 0; i < numConcurrentRequests; i++ {
+	for range numConcurrentRequests {
 		go func() {
 			<-starter
 			err := store.CreateOrUpdateNexusEndpoint(ctx, &persistence.InternalCreateOrUpdateNexusEndpointRequest{
@@ -1335,7 +1335,7 @@ func testCassandraNexusEndpointStoreConcurrentUpdate(t *testing.T, store persist
 	updateErrors := make(chan error, numConcurrentRequests)
 	defer close(updateErrors)
 
-	for i := 0; i < numConcurrentRequests; i++ {
+	for range numConcurrentRequests {
 		go func() {
 			<-starter
 			err := store.CreateOrUpdateNexusEndpoint(ctx, &persistence.InternalCreateOrUpdateNexusEndpointRequest{
@@ -1498,7 +1498,7 @@ func testCassandraNexusEndpointStoreDeleteWhilePaging(t *testing.T, store persis
 
 	// Create some endpoints
 	numEndpoints := 3
-	for i := 0; i < numEndpoints; i++ {
+	for range numEndpoints {
 		err := store.CreateOrUpdateNexusEndpoint(ctx, &persistence.InternalCreateOrUpdateNexusEndpointRequest{
 			LastKnownTableVersion: tableVersion.Load(),
 			Endpoint: persistence.InternalNexusEndpoint{

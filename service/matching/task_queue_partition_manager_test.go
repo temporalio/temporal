@@ -290,7 +290,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_CurrentAndRam
 	s.Require().NoError(err)
 	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
@@ -471,7 +471,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyCurrentNo
 	s.Require().NoError(err)
 	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
@@ -543,7 +543,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_OnlyRampingNo
 	s.Require().NoError(err)
 	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 10 tasks in the unversioned/default queue.
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
@@ -596,7 +596,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnversionedDo
 	s.Require().NoError(err)
 	dQueue := s.partitionMgr.defaultQueue()
 	// Backlog 5 tasks in the unversioned/default queue.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err = dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
@@ -670,7 +670,7 @@ func (s *PartitionManagerTestSuite) addRoutingConfigUserData(deploymentName, cur
 // spoolDefaultTasks spools n tasks to the partition manager's default queue.
 func (s *PartitionManagerTestSuite) spoolDefaultTasks(pm *taskQueuePartitionManagerImpl, n int) {
 	dQueue := pm.defaultQueue()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		err := dQueue.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",
@@ -724,7 +724,7 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentOnly() {
 		BuildId:    currentBuildID,
 	}, true)
 	s.Require().NoError(err)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		err = currentQ.SpoolTask(&persistencespb.TaskInfo{
 			NamespaceId: namespaceID,
 			RunId:       "run",

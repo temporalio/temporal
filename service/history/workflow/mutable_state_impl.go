@@ -8737,12 +8737,12 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 		}
 	}
 
-	doNotSync := func(v any) []interface{} {
+	doNotSync := func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		ignoreFields := []interface{}{
+		ignoreFields := []any{
 			&info.WorkflowTaskVersion,
 			&info.WorkflowTaskScheduledEventId,
 			&info.WorkflowTaskStartedEventId,

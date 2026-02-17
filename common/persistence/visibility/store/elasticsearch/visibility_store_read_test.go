@@ -85,7 +85,7 @@ var (
 	)
 )
 
-func mustEncodeValue(val interface{}, valueType enumspb.IndexedValueType) *commonpb.Payload {
+func mustEncodeValue(val any, valueType enumspb.IndexedValueType) *commonpb.Payload {
 	p, err := searchattribute.EncodeValue(val, valueType)
 	if err != nil {
 		panic(fmt.Sprintf("failed to encode value %v: %v", val, err))
@@ -330,7 +330,7 @@ func (s *ESVisibilitySuite) queryToJSON(q elastic.Query) string {
 }
 
 func (s *ESVisibilitySuite) sorterToJSON(sorters []elastic.Sorter) string {
-	var ms []interface{}
+	var ms []any
 	for _, sorter := range sorters {
 		m, err := sorter.Source()
 		s.NoError(err)
@@ -669,13 +669,13 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	source := json.RawMessage(data)
 	searchHit := &elastic.SearchHit{
 		Source: source,
-		Sort:   []interface{}{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"},
+		Sort:   []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"},
 	}
 	searchResult.Hits.Hits = []*elastic.SearchHit{searchHit}
 	searchResult.Hits.TotalHits.Value = 1
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 1, nil)
 	s.NoError(err)
-	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []interface{}{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
+	serializedToken, _ := s.visibilityStore.serializePageToken(&visibilityPageToken{SearchAfter: []any{1547596872371234567, "e481009e-14b3-45ae-91af-dce6e2a88365"}})
 	s.Equal(serializedToken, resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
@@ -720,7 +720,7 @@ func (s *ESVisibilitySuite) TestDeserializePageToken() {
 	s.NoError(err)
 	s.Nil(result)
 
-	token := &visibilityPageToken{SearchAfter: []interface{}{int64(1629936710090695939), "unique"}}
+	token := &visibilityPageToken{SearchAfter: []any{int64(1629936710090695939), "unique"}}
 	data, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	result, err = s.visibilityStore.deserializePageToken(data)
@@ -740,7 +740,7 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 	sortTime := int64(123)
 	tieBreaker := "unique"
-	newToken := &visibilityPageToken{SearchAfter: []interface{}{sortTime, tieBreaker}}
+	newToken := &visibilityPageToken{SearchAfter: []any{sortTime, tieBreaker}}
 	data, err = s.visibilityStore.serializePageToken(newToken)
 	s.NoError(err)
 	s.True(len(data) > 0)
@@ -1405,7 +1405,7 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 		func(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
 			s.Equal(testIndex, index)
 			s.Equal(testWorkflowID+delimiter+testRunID, docID)
-			data := map[string]interface{}{
+			data := map[string]any{
 				"ExecutionStatus":      "Running",
 				"NamespaceId":          testNamespaceID.String(),
 				"StateTransitionCount": 22,

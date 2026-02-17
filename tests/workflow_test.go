@@ -932,7 +932,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
@@ -961,7 +961,7 @@ GetHistoryLoop:
 
 	newExecutionStarted := false
 StartNewExecutionLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.NewString(),
 			Namespace:           s.Namespace().String(),
@@ -1131,7 +1131,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
@@ -1297,7 +1297,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	const testTag = "[TestWorkflowTaskAndActivityTaskTimeoutsWorkflow] "
 	testStart := time.Now()
 	var lastDropTime time.Time
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		// Check if test context has been cancelled/timed out
 		select {
 		case <-ctx.Done():
@@ -1468,7 +1468,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	}
 
 	// Check run id links
-	for i := 0; i < maximumAttempts; i++ {
+	for i := range maximumAttempts {
 		events := s.GetHistory(s.Namespace().String(), executions[i])
 		if i == 0 {
 			s.EqualHistoryEvents(fmt.Sprintf(`
