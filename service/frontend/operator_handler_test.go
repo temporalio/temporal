@@ -191,7 +191,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 
 			saTypeMap := searchattribute.TestNameTypeMap()
 			if len(tc.storeNames) > 0 && tc.storeNames[0] == esconfig.PersistenceName {
-				saTypeMap = searchattribute.TestEsNameTypeMap()
+				saTypeMap = searchattribute.TestNameTypeMap()
 			}
 
 			if tc.getSearchAttributesCalled {
@@ -442,7 +442,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributesInternal() {
 		s.Run(tc.name, func() {
 			saTypeMap := searchattribute.TestNameTypeMap()
 			if tc.storeName == esconfig.PersistenceName {
-				saTypeMap = searchattribute.TestEsNameTypeMap()
+				saTypeMap = searchattribute.TestNameTypeMap()
 			}
 
 			s.mockResource.SearchAttributesManager.EXPECT().

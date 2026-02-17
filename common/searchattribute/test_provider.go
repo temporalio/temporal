@@ -40,8 +40,8 @@ var (
 		"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}
 
-	// default custom search attributes definition for SQL databases
-	sqlCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	// testCustomSearchAttributes is the unified custom search attributes map for tests (DB index only).
+	testCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 
 	// ScheduleId is mapped to Keyword10 for tests
 	TestScheduleIDFieldName = "Keyword10"
@@ -55,10 +55,27 @@ var (
 		"Bool01":        "CustomBoolField",
 		"KeywordList01": "CustomKeywordListField",
 	}
+
+	// testAliasToField maps alias name to storage field name (reverse of TestAliases).
+	testAliasToField = func() map[string]string {
+		out := make(map[string]string, len(TestAliases))
+		for field, alias := range TestAliases {
+			out[alias] = field
+		}
+		return out
+	}()
 )
 
 func TestNameTypeMap() NameTypeMap {
-	csa := maps.Clone(sqlCustomSearchAttributes)
+	csa := maps.Clone(testCustomSearchAttributes)
+	return NewNameTypeMap(csa)
+}
+
+// TestNameTypeMapWithScheduleID returns a type map that includes ScheduleID as a custom attribute.
+// Use only for tests that explicitly need "ScheduleID defined as custom search attribute" (e.g. schedule visibility with custom ScheduleId column).
+func TestNameTypeMapWithScheduleID() NameTypeMap {
+	csa := maps.Clone(testCustomSearchAttributes)
+	csa[sadefs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 	return NewNameTypeMap(csa)
 }
 
@@ -135,12 +152,16 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		if t.WithCustomScheduleID && alias == sadefs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
+		resolved := alias
 		if after, ok := strings.CutPrefix(alias, "AliasFor"); ok {
-			return after, nil
+			resolved = after
 		} else if after, ok := strings.CutPrefix(alias, "AliasWithHyphenFor-"); ok {
-			return after, nil
+			resolved = after
 		}
-		return "", serviceerror.NewInvalidArgument("mapper error")
+		if fieldName, ok := testAliasToField[resolved]; ok {
+			return fieldName, nil
+		}
+		return resolved, nil
 	}
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }
