@@ -1,3 +1,8 @@
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 3s
+  timeout: 3s
+  retries: 30
+
 services:
   cassandra:
     image: cassandra:3.11
@@ -10,10 +15,8 @@ services:
       # Increase native transport threads for handling more concurrent connections
       JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
     healthcheck:
+      !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -25,10 +28,8 @@ services:
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
 
   postgresql:
     image: postgres:13.5
@@ -41,10 +42,8 @@ services:
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
     healthcheck:
+      !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "pg_isready -U temporal"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
 
   elasticsearch:
     image: elasticsearch:7.10.1
@@ -58,10 +57,8 @@ services:
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
+      !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
 
   elasticsearch8:
     image: elasticsearch:8.5.0
@@ -76,10 +73,8 @@ services:
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
+      !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
 
   opensearch2:
     image: opensearchproject/opensearch:2
@@ -94,10 +89,8 @@ services:
       - DISABLE_SECURITY_PLUGIN=true
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
+      !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
 
   opensearch3:
     image: opensearchproject/opensearch:3
@@ -112,7 +105,5 @@ services:
       - DISABLE_SECURITY_PLUGIN=true
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
     healthcheck:
+      !!merge <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
-      interval: 3s
-      timeout: 3s
-      retries: 30
