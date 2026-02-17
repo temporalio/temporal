@@ -401,6 +401,12 @@ jobs:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
 
+      - name: Wait for containerized dependencies to be healthy
+        run: |
+          # Word splitting is intentional here.
+          # shellcheck disable=SC2046
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+
       - name: Run integration test
         timeout-minutes: 15
         run: ./develop/github/monitor_test.sh make integration-test-coverage
@@ -515,6 +521,13 @@ jobs:
 
       - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
+
+      - name: Wait for containerized dependencies to be healthy
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        run: |
+          # Word splitting is intentional here.
+          # shellcheck disable=SC2046
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
 
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
