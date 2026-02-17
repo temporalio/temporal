@@ -24,19 +24,15 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/util"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"go.uber.org/fx"
 	expmaps "golang.org/x/exp/maps"
 )
 
 const (
-	perNamespaceWorkerManagerListenerKey = "perNamespaceWorkerManager"
-
 	// Always refresh workers after this time even if there were no membership or namespace
 	// state changes. This is to pick up dynamic config changes in component enabled status,
 	// and heal anything that may have gotten into a bad state.
@@ -44,18 +40,7 @@ const (
 )
 
 type (
-	perNamespaceWorkerManagerInitParams struct {
-		fx.In
-		Logger            log.Logger
-		SdkClientFactory  sdk.ClientFactory
-		NamespaceRegistry namespace.Registry
-		HostName          resource.HostName
-		Config            *Config
-		ClusterMetadata   cluster.Metadata
-		Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
-	}
-
-	perNamespaceWorkerManager struct {
+	PerNamespaceWorkerManager struct {
 		status int32
 
 		// from init params or Start
@@ -65,6 +50,7 @@ type (
 		self              membership.HostInfo
 		hostName          resource.HostName
 		config            *Config
+		taskQueueName     string
 		serviceResolver   membership.ServiceResolver
 		components        []workercommon.PerNSWorkerComponent
 		initialRetry      time.Duration
@@ -78,7 +64,7 @@ type (
 	}
 
 	perNamespaceWorker struct {
-		wm     *perNamespaceWorkerManager
+		wm     *PerNamespaceWorkerManager
 		logger log.Logger
 		cancel func()
 
@@ -114,27 +100,37 @@ var (
 	errInvalidConfiguration = errors.New("invalid dynamic configuration")
 )
 
-func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *perNamespaceWorkerManager {
-	return &perNamespaceWorkerManager{
-		logger:              log.With(params.Logger, tag.ComponentPerNSWorkerManager),
-		sdkClientFactory:    params.SdkClientFactory,
-		namespaceRegistry:   params.NamespaceRegistry,
-		hostName:            params.HostName,
-		config:              params.Config,
-		components:          params.Components,
+func NewPerNamespaceWorkerManager(
+	logger log.Logger,
+	sdkClientFactory sdk.ClientFactory,
+	namespaceRegistry namespace.Registry,
+	hostName resource.HostName,
+	config *Config,
+	clusterMetadata cluster.Metadata,
+	components []workercommon.PerNSWorkerComponent,
+	taskQueueName string,
+) *PerNamespaceWorkerManager {
+	return &PerNamespaceWorkerManager{
+		logger:              log.With(logger, tag.ComponentPerNSWorkerManager),
+		sdkClientFactory:    sdkClientFactory,
+		namespaceRegistry:   namespaceRegistry,
+		hostName:            hostName,
+		taskQueueName:       taskQueueName,
+		config:              config,
+		components:          components,
 		initialRetry:        1 * time.Second,
-		thisClusterName:     params.ClusterMetadata.GetCurrentClusterName(),
-		startLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(params.Config.PerNamespaceWorkerStartRate)),
+		thisClusterName:     clusterMetadata.GetCurrentClusterName(),
+		startLimiter:        quotas.NewDefaultOutgoingRateLimiter(quotas.RateFn(config.PerNamespaceWorkerStartRate)),
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workers:             make(map[namespace.ID]*perNamespaceWorker),
 	}
 }
 
-func (wm *perNamespaceWorkerManager) Running() bool {
+func (wm *PerNamespaceWorkerManager) Running() bool {
 	return atomic.LoadInt32(&wm.status) == common.DaemonStatusStarted
 }
 
-func (wm *perNamespaceWorkerManager) Start(
+func (wm *PerNamespaceWorkerManager) Start(
 	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 ) {
@@ -154,7 +150,7 @@ func (wm *perNamespaceWorkerManager) Start(
 	// this will call namespaceCallback with current namespaces
 	wm.namespaceRegistry.RegisterStateChangeCallback(wm, wm.namespaceCallback)
 
-	err := wm.serviceResolver.AddListener(perNamespaceWorkerManagerListenerKey, wm.membershipChangedCh)
+	err := wm.serviceResolver.AddListener(fmt.Sprintf("%p", wm), wm.membershipChangedCh)
 	if err != nil {
 		wm.logger.Fatal("Unable to register membership listener", tag.Error(err))
 	}
@@ -164,7 +160,7 @@ func (wm *perNamespaceWorkerManager) Start(
 	wm.logger.Info("", tag.LifeCycleStarted)
 }
 
-func (wm *perNamespaceWorkerManager) Stop() {
+func (wm *PerNamespaceWorkerManager) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&wm.status,
 		common.DaemonStatusStarted,
@@ -176,7 +172,7 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	wm.logger.Info("", tag.LifeCycleStopping)
 
 	wm.namespaceRegistry.UnregisterStateChangeCallback(wm)
-	err := wm.serviceResolver.RemoveListener(perNamespaceWorkerManagerListenerKey)
+	err := wm.serviceResolver.RemoveListener(fmt.Sprintf("%p", wm))
 	if err != nil {
 		wm.logger.Error("Unable to unregister membership listener", tag.Error(err))
 	}
@@ -195,11 +191,11 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	wm.logger.Info("", tag.LifeCycleStopped)
 }
 
-func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, nsDeleted bool) {
+func (wm *PerNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, nsDeleted bool) {
 	go wm.getWorkerByNamespace(ns).update(ns, nsDeleted, nil, nil)
 }
 
-func (wm *perNamespaceWorkerManager) refreshAll() {
+func (wm *PerNamespaceWorkerManager) refreshAll() {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 	for _, worker := range wm.workers {
@@ -207,13 +203,13 @@ func (wm *perNamespaceWorkerManager) refreshAll() {
 	}
 }
 
-func (wm *perNamespaceWorkerManager) membershipChangedListener() {
+func (wm *PerNamespaceWorkerManager) membershipChangedListener() {
 	for range wm.membershipChangedCh {
 		wm.refreshAll()
 	}
 }
 
-func (wm *perNamespaceWorkerManager) periodicRefresh() {
+func (wm *PerNamespaceWorkerManager) periodicRefresh() {
 	for range time.NewTicker(refreshInterval).C {
 		if atomic.LoadInt32(&wm.status) != common.DaemonStatusStarted {
 			return
@@ -222,7 +218,7 @@ func (wm *perNamespaceWorkerManager) periodicRefresh() {
 	}
 }
 
-func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespace) *perNamespaceWorker {
+func (wm *PerNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespace) *perNamespaceWorker {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 
@@ -246,7 +242,7 @@ func (wm *perNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 	return worker
 }
 
-func (wm *perNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
+func (wm *PerNamespaceWorkerManager) removeWorker(ns *namespace.Namespace) {
 	wm.lock.Lock()
 	defer wm.lock.Unlock()
 	prev := wm.workers[ns.ID()]
@@ -490,7 +486,7 @@ func (w *perNamespaceWorker) startWorker(
 	sdkoptions.OnFatalError = w.onFatalError
 
 	// this should not block because the client already has server capabilities
-	worker := w.wm.sdkClientFactory.NewWorker(client, primitives.PerNSWorkerTaskQueue, sdkoptions)
+	worker := w.wm.sdkClientFactory.NewWorker(client, w.wm.taskQueueName, sdkoptions)
 	details := workercommon.RegistrationDetails{
 		TotalWorkers: allocation.total,
 		Multiplicity: allocation.local,

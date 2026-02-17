@@ -458,6 +458,7 @@ var (
 	serviceNameToServiceTypeEnumMap = map[primitives.ServiceName]persistence.ServiceType{}
 )
 
+// RegisterServiceNameToServiceTypeEnum must be called from a static init().
 func RegisterServiceNameToServiceTypeEnum(serviceName primitives.ServiceName, serviceType persistence.ServiceType) {
 	serviceNameToServiceTypeEnumMap[serviceName] = serviceType
 }
