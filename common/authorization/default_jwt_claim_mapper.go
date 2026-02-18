@@ -99,7 +99,7 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim", "")
 	}
 	claims.Subject = subject
-	permissions, ok := jwtClaims[a.permissionsClaimName].([]interface{})
+	permissions, ok := jwtClaims[a.permissionsClaimName].([]any)
 	if ok {
 		err := a.extractPermissions(permissions, &claims)
 		if err != nil {
@@ -109,7 +109,7 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 	return &claims, nil
 }
 
-func (a *defaultJWTClaimMapper) extractPermissions(permissions []interface{}, claims *Claims) error {
+func (a *defaultJWTClaimMapper) extractPermissions(permissions []any, claims *Claims) error {
 	for _, permission := range permissions {
 		p, ok := permission.(string)
 		if !ok {
@@ -156,13 +156,13 @@ func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audi
 
 	var keyFunc jwt.Keyfunc
 	if provider, _ := keyProvider.(RawTokenKeyProvider); provider != nil {
-		keyFunc = func(token *jwt.Token) (interface{}, error) {
+		keyFunc = func(token *jwt.Token) (any, error) {
 			// reserve context
 			// impl may introduce network request to get public key
 			return provider.GetKey(context.Background(), token)
 		}
 	} else {
-		keyFunc = func(token *jwt.Token) (interface{}, error) {
+		keyFunc = func(token *jwt.Token) (any, error) {
 			kid, ok := token.Header["kid"].(string)
 			if !ok {
 				return nil, fmt.Errorf("malformed token - no \"kid\" header")

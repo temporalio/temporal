@@ -73,7 +73,7 @@ func (s *RpoSuite) TestMonitor() {
 		s.Fail("Timed out waiting for failure to be detected by ringpop")
 	}
 
-	for k := 0; k < 10; k++ {
+	for k := range 10 {
 		host, err = r.Lookup(fmt.Sprintf("key%d", k))
 		s.Nil(err, "Ringpop monitor failed to find host for key")
 		s.NotEqual(testService.hostAddrs[1], host.GetAddress(), "Ringpop monitor assigned key to dead host")

@@ -30,7 +30,7 @@ type (
 type (
 	// JWTAudienceMapper returns JWT audience for a given request
 	JWTAudienceMapper interface {
-		Audience(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo) string
+		Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string
 	}
 
 	NamespaceChecker interface {
@@ -121,10 +121,10 @@ func NewInterceptor(
 
 func (a *Interceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	tlsConnection := TLSInfoFromContext(ctx)
 
 	authInfo := a.GetAuthInfo(tlsConnection, headers.NewGRPCHeaderGetter(ctx), func() string {
@@ -275,7 +275,7 @@ func (a *Interceptor) authorizeTargetNamespaces(
 	ctx context.Context,
 	claims *Claims,
 	sourceNamespace string,
-	req interface{},
+	req any,
 ) error {
 	// Skip if cross-namespace commands are not enabled
 	if !a.enableCrossNamespaceCommands() {

@@ -109,14 +109,14 @@ func (s *WorkerDeploymentSuite) Test_SetCurrentVersion_RejectStaleConcurrentUpda
 					},
 					OnAccept: func() {
 					},
-					OnComplete: func(a interface{}, err error) {
+					OnComplete: func(a any, err error) {
 						// Update #2 clears the validator and waits for the first update to complete. Once it starts
 						// being processed, it should be rejected since completion of the first update changed the state.
 						s.Require().ErrorContains(err, errNoChangeType)
 					},
 				}, updateArgs)
 			},
-			OnComplete: func(a interface{}, err error) {
+			OnComplete: func(a any, err error) {
 			},
 		}, updateArgs)
 
@@ -180,7 +180,7 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 					},
 					OnAccept: func() {
 					},
-					OnComplete: func(a interface{}, err error) {
+					OnComplete: func(a any, err error) {
 						// Update #2 clears the validator and waits for the first update to complete. Once it starts
 						// being processed, it should be rejected since completion of the first update changed the state.
 						s.Require().ErrorContains(err, errNoChangeType)
@@ -188,7 +188,7 @@ func (s *WorkerDeploymentSuite) Test_SetRampingVersion_RejectStaleConcurrentUpda
 				}, updateArgs)
 
 			},
-			OnComplete: func(a interface{}, err error) {
+			OnComplete: func(a any, err error) {
 			},
 		}, updateArgs)
 
@@ -227,7 +227,7 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 
 	var a *Activities
 	taskQueueInfos := make([]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo, totalWorkers)
-	for i := 0; i < totalWorkers; i++ {
+	for i := range totalWorkers {
 		taskQueueInfos[i] = &deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
 			Name: tv.TaskQueue().Name + fmt.Sprintf("%03d", i),
 			Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
@@ -258,7 +258,7 @@ func (s *WorkerDeploymentSuite) syncUnversionedRampInBatches(totalWorkers int) {
 			},
 			OnAccept: func() {
 			},
-			OnComplete: func(a interface{}, err error) {
+			OnComplete: func(a any, err error) {
 			},
 		}, &deploymentspb.SetRampingVersionArgs{
 			Version: worker_versioning.UnversionedVersionId,
@@ -312,7 +312,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionIncrementsWithAsyncSetCurrentAndRam
 				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 
 				// Query after SetRampingVersion - revision should be 1
@@ -349,7 +349,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionIncrementsWithAsyncSetCurrentAndRam
 			s.Fail("SetRampingVersion update should not have failed", err)
 		},
 		OnAccept: func() {},
-		OnComplete: func(result interface{}, err error) {
+		OnComplete: func(result any, err error) {
 			s.Require().NoError(err)
 			// After SetRamping completes, verify revision number is 2
 			s.verifyRevisionNumber(2)
@@ -389,7 +389,7 @@ func (s *WorkerDeploymentSuite) Test_NoRevisionIncrementsWithoutAsyncSetCurrentA
 				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 
 				// Query after SetRampingVersion - revision should be 0
@@ -426,7 +426,7 @@ func (s *WorkerDeploymentSuite) Test_NoRevisionIncrementsWithoutAsyncSetCurrentA
 			s.Fail("SetRampingVersion update should not have failed", err)
 		},
 		OnAccept: func() {},
-		OnComplete: func(result interface{}, err error) {
+		OnComplete: func(result any, err error) {
 			s.Require().NoError(err)
 			// After SetRamping completes, verify revision number is 0
 			s.verifyRevisionNumber(0)
@@ -487,7 +487,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberPassedToContinueAsNew() {
 				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 				// Verify revision number is 46 after update
 				s.verifyRevisionNumber(46)
@@ -551,7 +551,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberDoesNotIncrementOnFailedSetCu
 				s.Fail("SetCurrentVersion update should have been accepted by validator")
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				// The update should fail due to activity failure
 				s.Require().Error(err)
 				s.Require().ErrorContains(err, "sync failed")
@@ -612,7 +612,7 @@ func (s *WorkerDeploymentSuite) Test_RevisionNumberDoesNotIncrementOnFailedSetRa
 				s.Fail("SetRampingVersion update should have been accepted by validator")
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				// The update should fail due to activity failure
 				s.Require().Error(err)
 				s.Require().ErrorContains(err, "sync failed")
@@ -761,7 +761,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_Success() {
 				s.Fail("delete deployment should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete deployment should complete without error")
 			},
 		}, nil) // DeleteDeployment takes no arguments
@@ -796,7 +796,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_FailsWithVersions() {
 			OnAccept: func() {
 				s.Fail("delete deployment should have been rejected by validator")
 			},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Fail("delete deployment should not have reached completion")
 			},
 		}, nil)
@@ -832,7 +832,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteDeployment_QueryAfterDeletion() {
 				s.Fail("delete deployment should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete deployment should complete without error")
 			},
 		}, nil)
@@ -905,7 +905,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_Success() {
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error")
 			},
 		}, &deploymentspb.DeleteVersionArgs{
@@ -961,7 +961,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenCurrentOrRamping() {
 			OnAccept: func() {
 				s.Fail("delete version should have been rejected by validator")
 			},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Fail("delete version should not have reached completion")
 			},
 		}, &deploymentspb.DeleteVersionArgs{
@@ -1008,7 +1008,7 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_FailsWhenVersionNotFound() {
 			OnAccept: func() {
 				s.Fail("delete version should have been rejected by validator")
 			},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Fail("delete version should not have reached completion")
 			},
 		}, &deploymentspb.DeleteVersionArgs{
@@ -1063,14 +1063,14 @@ func (s *WorkerDeploymentSuite) Test_DeleteVersion_ConcurrentDeletes() {
 						s.Fail("second delete should have been accepted by validator")
 					},
 					OnAccept: func() {},
-					OnComplete: func(result interface{}, err error) {
+					OnComplete: func(result any, err error) {
 						// Second delete should fail because version is already deleted
 						s.Require().Error(err, "second delete should fail")
 						s.Require().ErrorContains(err, errVersionNotFound)
 					},
 				}, deleteArgs)
 			},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "first delete should complete without error")
 			},
 		}, deleteArgs)
@@ -1128,7 +1128,7 @@ func (s *WorkerDeploymentSuite) Test_SetCurrent_AddsPropagatingRevision() {
 				s.Fail("SetCurrentVersion update should not have failed", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 
 				// Query the state to verify propagating revision was added

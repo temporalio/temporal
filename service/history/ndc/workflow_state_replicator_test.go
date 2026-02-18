@@ -580,7 +580,7 @@ type VersionedTransitionMatcher struct {
 }
 
 // Matches implements gomock.Matcher
-func (m *VersionedTransitionMatcher) Matches(x interface{}) bool {
+func (m *VersionedTransitionMatcher) Matches(x any) bool {
 	// Type assertion to ensure the argument is of the correct type
 	got, ok := x.(*persistencespb.VersionedTransition)
 	if !ok {
@@ -1044,7 +1044,7 @@ type historyEventMatcher struct {
 	expected *historypb.HistoryEvent
 }
 
-func (m *historyEventMatcher) Matches(x interface{}) bool {
+func (m *historyEventMatcher) Matches(x any) bool {
 	evt, ok := x.(*historypb.HistoryEvent)
 	return ok && proto.Equal(evt, m.expected)
 }

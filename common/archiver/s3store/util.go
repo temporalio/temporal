@@ -42,7 +42,7 @@ func decodeVisibilityRecord(data []byte) (*archiverspb.VisibilityRecord, error) 
 	return record, nil
 }
 
-func SerializeToken(token interface{}) ([]byte, error) {
+func SerializeToken(token any) ([]byte, error) {
 	if token == nil {
 		return nil, nil
 	}

@@ -4724,7 +4724,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		nUpdates := 10
 
 		mustStartWorkflow(s, s.Tv())
-		for i := 0; i < nUpdates; i++ {
+		for i := range nUpdates {
 			// Sequentially send updates one by one.
 			sendUpdateNoError(s, s.Tv().WithUpdateIDNumber(i))
 		}
@@ -4770,7 +4770,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
 `
-		for i := 0; i < nUpdates; i++ {
+		for i := range nUpdates {
 			tvi := s.Tv().WithUpdateIDNumber(i)
 			expectedHistory += fmt.Sprintf(`
   %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
@@ -5658,7 +5658,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				})
 
 				// complete workflow (twice including retry)
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 							return &workflowservice.RespondWorkflowTaskCompletedRequest{

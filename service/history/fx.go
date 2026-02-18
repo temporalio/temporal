@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -107,7 +108,13 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
-func HandlerProvider(args NewHandlerArgs) *Handler {
+func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
+	// Build and store the Nexus handler
+	nexusHandler, err := buildNexusHandler(args.ChasmRegistry)
+	if err != nil {
+		return nil, err
+	}
+
 	handler := &Handler{
 		status:                       common.DaemonStatusInitialized,
 		config:                       args.Config,
@@ -142,9 +149,24 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
+		nexusHandler:                     nexusHandler,
 	}
 
-	return handler
+	return handler, nil
+}
+
+func buildNexusHandler(chasmRegistry *chasm.Registry) (nexus.Handler, error) {
+	nexusServices := chasmRegistry.NexusServices()
+	if len(nexusServices) == 0 {
+		return nil, nil
+	}
+	serviceRegistry := nexus.NewServiceRegistry()
+	for _, svc := range nexusServices {
+		// No chance of collision here since the registry would have errored out earlier.
+		serviceRegistry.MustRegister(svc)
+	}
+
+	return serviceRegistry.NewHandler()
 }
 
 func HistoryEngineFactoryProvider(

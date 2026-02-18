@@ -144,7 +144,7 @@ func checkImports(files map[string]protoreflect.FileDescriptor) {
 	for _, fd := range files {
 		imports := fd.Imports()
 		num := imports.Len()
-		for i := 0; i < num; i++ {
+		for i := range num {
 			imp := imports.Get(i).Path()
 			if strings.HasPrefix(imp, "temporal/api/") || strings.HasPrefix(imp, "google/") {
 				if _, ok := files[imp]; !ok {

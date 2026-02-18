@@ -190,7 +190,7 @@ func TestDefaultReplicationResolver_MultipleCalls(t *testing.T) {
 	resolver := factory(detail)
 
 	// Call multiple times and verify consistency
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		assert.Equal(t, "primary", resolver.ActiveClusterName(namespace.EmptyBusinessID))
 		assert.Equal(t, []string{"primary", "secondary", "tertiary"}, resolver.ClusterNames(namespace.EmptyBusinessID))
 		assert.Equal(t, enumspb.REPLICATION_STATE_NORMAL, resolver.ReplicationState())

@@ -317,7 +317,7 @@ func newReachabilityCache(
 // Get retrieves the Workflow Count existence value based on the query-string key.
 func (c *reachabilityCache) Get(ctx context.Context, countRequest manager.CountWorkflowExecutionsRequest, open bool) (exists, hit bool, err error) {
 	// try cache
-	var result interface{}
+	var result any
 	if open {
 		result = c.openWFCache.Get(countRequest)
 	} else {

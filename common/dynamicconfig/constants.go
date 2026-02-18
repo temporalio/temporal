@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
@@ -1279,6 +1278,11 @@ This can help reduce effects of task queue movement.`,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
 	)
+	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
+		"matching.backlogMetricsEmitInterval",
+		time.Minute,
+		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions. Set to zero to disable version-attributed backlog metrics.`,
+	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",
 		true,
@@ -2325,11 +2329,6 @@ When the this config is zero or lower we will only update shard info at most onc
 		"history.emitShardLagLog",
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
-	)
-	DefaultEventEncoding = NewNamespaceStringSetting(
-		"history.defaultEventEncoding",
-		enumspb.ENCODING_TYPE_PROTO3.String(),
-		`DefaultEventEncoding is the encoding type for history events`,
 	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",

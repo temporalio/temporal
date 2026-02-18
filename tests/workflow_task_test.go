@@ -77,7 +77,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: taskToken,
@@ -620,7 +620,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
@@ -740,7 +740,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
@@ -853,7 +853,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,

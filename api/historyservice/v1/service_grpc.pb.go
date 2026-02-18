@@ -94,6 +94,8 @@ const (
 	HistoryService_ResetActivity_FullMethodName                          = "/temporal.server.api.historyservice.v1.HistoryService/ResetActivity"
 	HistoryService_PauseWorkflowExecution_FullMethodName                 = "/temporal.server.api.historyservice.v1.HistoryService/PauseWorkflowExecution"
 	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
+	HistoryService_StartNexusOperation_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/StartNexusOperation"
+	HistoryService_CancelNexusOperation_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/CancelNexusOperation"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -381,6 +383,10 @@ type HistoryServiceClient interface {
 	PauseWorkflowExecution(ctx context.Context, in *PauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
 	UnpauseWorkflowExecution(ctx context.Context, in *UnpauseWorkflowExecutionRequest, opts ...grpc.CallOption) (*UnpauseWorkflowExecutionResponse, error)
+	// StartNexusOperation starts a Nexus operation on the __temporal_system endpoint.
+	StartNexusOperation(ctx context.Context, in *StartNexusOperationRequest, opts ...grpc.CallOption) (*StartNexusOperationResponse, error)
+	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
+	CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error)
 }
 
 type historyServiceClient struct {
@@ -1079,6 +1085,24 @@ func (c *historyServiceClient) UnpauseWorkflowExecution(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *historyServiceClient) StartNexusOperation(ctx context.Context, in *StartNexusOperationRequest, opts ...grpc.CallOption) (*StartNexusOperationResponse, error) {
+	out := new(StartNexusOperationResponse)
+	err := c.cc.Invoke(ctx, HistoryService_StartNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error) {
+	out := new(CancelNexusOperationResponse)
+	err := c.cc.Invoke(ctx, HistoryService_CancelNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HistoryServiceServer is the server API for HistoryService service.
 // All implementations must embed UnimplementedHistoryServiceServer
 // for forward compatibility
@@ -1364,6 +1388,10 @@ type HistoryServiceServer interface {
 	PauseWorkflowExecution(context.Context, *PauseWorkflowExecutionRequest) (*PauseWorkflowExecutionResponse, error)
 	// UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
 	UnpauseWorkflowExecution(context.Context, *UnpauseWorkflowExecutionRequest) (*UnpauseWorkflowExecutionResponse, error)
+	// StartNexusOperation starts a Nexus operation on the __temporal_system endpoint.
+	StartNexusOperation(context.Context, *StartNexusOperationRequest) (*StartNexusOperationResponse, error)
+	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
+	CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1592,6 +1620,12 @@ func (UnimplementedHistoryServiceServer) PauseWorkflowExecution(context.Context,
 }
 func (UnimplementedHistoryServiceServer) UnpauseWorkflowExecution(context.Context, *UnpauseWorkflowExecutionRequest) (*UnpauseWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UnpauseWorkflowExecution not implemented")
+}
+func (UnimplementedHistoryServiceServer) StartNexusOperation(context.Context, *StartNexusOperationRequest) (*StartNexusOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelNexusOperation not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2946,6 +2980,42 @@ func _HistoryService_UnpauseWorkflowExecution_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_StartNexusOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartNexusOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).StartNexusOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_StartNexusOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).StartNexusOperation(ctx, req.(*StartNexusOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _HistoryService_CancelNexusOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelNexusOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).CancelNexusOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_CancelNexusOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).CancelNexusOperation(ctx, req.(*CancelNexusOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3244,6 +3314,14 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "UnpauseWorkflowExecution",
 			Handler:    _HistoryService_UnpauseWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "StartNexusOperation",
+			Handler:    _HistoryService_StartNexusOperation_Handler,
+		},
+		{
+			MethodName: "CancelNexusOperation",
+			Handler:    _HistoryService_CancelNexusOperation_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

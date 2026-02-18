@@ -96,7 +96,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
 	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil)
 
-	for workerNum := 0; workerNum < totalWorkers; workerNum++ {
+	for workerNum := range totalWorkers {
 		s.env.RegisterDelayedCallback(func() {
 
 			registerWorkerArgs := &deploymentspb.RegisterWorkerInVersionArgs{
@@ -111,7 +111,7 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 				},
 				OnAccept: func() {
 				},
-				OnComplete: func(i interface{}, err error) {
+				OnComplete: func(i any, err error) {
 				},
 			}, registerWorkerArgs)
 		}, 1*time.Millisecond)
@@ -163,13 +163,13 @@ func (s *VersionWorkflowSuite) syncStateInBatches(totalWorkers int) {
 			},
 			OnAccept: func() {
 			},
-			OnComplete: func(i interface{}, err error) {
+			OnComplete: func(i any, err error) {
 
 			},
 		}, syncStateArgs)
 	}, 30*time.Millisecond)
 
-	for i := 0; i < totalWorkers; i++ {
+	for i := range totalWorkers {
 		syncReq.Sync = append(syncReq.Sync, &deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			Name:  tv.TaskQueue().Name + fmt.Sprintf("%03d", i),
 			Types: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
@@ -277,7 +277,7 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 				s.Fail("sync state update should not have failed", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncStateArgs)
@@ -357,7 +357,7 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 				s.Fail("sync state update should not have failed")
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncStateArgs)
@@ -424,7 +424,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_Success() {
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error")
 			},
 		}, deleteArgs)
@@ -491,7 +491,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_QueryAfterDeletion() {
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error")
 			},
 		}, deleteArgs)
@@ -551,7 +551,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWhenDraining() {
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().Error(err, "delete version should fail when version is draining")
 				var applicationError *temporal.ApplicationError
 				s.Require().ErrorAs(err, &applicationError)
@@ -625,7 +625,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_SucceedsWhenDrainingWithSkipFl
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should succeed when SkipDrainage is true")
 			},
 		}, deleteArgs)
@@ -684,7 +684,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_FailsWithActivePollers() {
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().Error(err, "delete version should fail when version has active pollers")
 				var applicationError *temporal.ApplicationError
 				s.Require().ErrorAs(err, &applicationError)
@@ -808,7 +808,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error even with async propagation")
 			},
 		}, deleteArgs)
@@ -914,7 +914,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 				s.Fail("delete version should not have been rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "delete version should complete without error")
 				deleteCompleted = true
 			},
@@ -936,7 +936,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 				s.Fail("register worker should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				// Worker registration should complete only after propagation finishes
 				s.True(deleteCompleted, "worker registration should complete after delete propagation")
 				s.Require().NoError(err, "register worker should complete without error")
@@ -965,7 +965,7 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation_BlocksWorkerR
 				s.Fail("second delete should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err, "second delete should complete without error")
 			},
 		}, deleteArgs2)
@@ -1049,7 +1049,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 				s.Fail("delete should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, deleteArgs)
@@ -1076,7 +1076,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 				s.Fail("register should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, registerArgs)
@@ -1158,7 +1158,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_IncrementsRevisionNumber_InAsyncMo
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1241,7 +1241,7 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 				s.Fail("first sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1267,7 +1267,7 @@ func (s *VersionWorkflowSuite) Test_MultipleSyncStates_BlocksCaNUntilAllComplete
 				s.Fail("second sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1359,7 +1359,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1386,7 +1386,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_And_RegisterWorker_ConcurrentPropa
 				s.Fail("register should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, registerArgs)
@@ -1451,7 +1451,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 		"",
 		PropagationCompleteSignal,
 		mock.Anything,
-	).Return(func(namespace string, workflowID string, runID string, signalName string, arg interface{}) error {
+	).Return(func(namespace string, workflowID string, runID string, signalName string, arg any) error {
 		capturedSignalArg = arg.(*deploymentspb.PropagationCompletionInfo)
 		return nil
 	}).Maybe()
@@ -1474,7 +1474,7 @@ func (s *VersionWorkflowSuite) Test_SyncState_SignalsPropagationComplete_WithCor
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1553,7 +1553,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 				s.Fail("register should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, registerArgs)
@@ -1588,7 +1588,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_SingleBatch() {
 
 	// Create 5 task queues, batch size is 25, so should be single batch
 	taskQueues := make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		tqName := fmt.Sprintf("%s_%d", tv.TaskQueue().Name, i)
 		taskQueues[tqName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{
 			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
@@ -1627,7 +1627,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_SingleBatch() {
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1663,7 +1663,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_MultipleBatches() {
 
 	// Create 50 task queues, batch size is 25, so should be 2 batches
 	taskQueues := make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		tqName := fmt.Sprintf("%s_%03d", tv.TaskQueue().Name, i)
 		taskQueues[tqName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{
 			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
@@ -1714,7 +1714,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_MultipleBatches() {
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1750,7 +1750,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 
 	// Create 27 task queues, batch size is 10, so should be 3 batches: 10, 10, 7
 	taskQueues := make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
-	for i := 0; i < 27; i++ {
+	for i := range 27 {
 		tqName := fmt.Sprintf("%s_%02d", tv.TaskQueue().Name, i)
 		taskQueues[tqName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{
 			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
@@ -1796,7 +1796,7 @@ func (s *VersionWorkflowSuite) Test_BatchTaskQueuesForSync_PartialLastBatch() {
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 			},
 		}, syncArgs)
@@ -1875,7 +1875,7 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Curren
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
 				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.Summary.Status,
@@ -1961,7 +1961,7 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Rampin
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
 				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, resp.Summary.Status,
@@ -2045,7 +2045,7 @@ func (s *VersionWorkflowSuite) Test_FindNewVersionStatusFromRoutingConfig_Inacti
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
 				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, resp.Summary.Status,
@@ -2126,7 +2126,7 @@ func (s *VersionWorkflowSuite) Test_UpdateStateFromRoutingConfig_UpdatesTimestam
 				s.Fail("sync should not be rejected", err)
 			},
 			OnAccept: func() {},
-			OnComplete: func(result interface{}, err error) {
+			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
 				resp := result.(*deploymentspb.SyncVersionStateResponse)
 				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_RAMPING, resp.Summary.Status)
