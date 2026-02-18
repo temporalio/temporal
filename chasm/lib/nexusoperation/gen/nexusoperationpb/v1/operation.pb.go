@@ -221,24 +221,27 @@ type OperationState struct {
 	Operation string `protobuf:"bytes,5,opt,name=operation,proto3" json:"operation,omitempty"`
 	// The time when the operation was scheduled.
 	ScheduledTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
+	// Schedule-to-start timeout for this operation.
+	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,7,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
+	// Start-to-close timeout for this operation.
+	StartToCloseTimeout *durationpb.Duration `protobuf:"bytes,8,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
 	// Schedule-to-close timeout for this operation.
-	// This is the only timeout settable by a workflow.
-	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,7,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
+	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,9,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
 	// Unique request ID allocated for all retry attempts of the StartOperation request.
-	RequestId string `protobuf:"bytes,8,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	RequestId string `protobuf:"bytes,10,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Token for fetching the scheduled event from history.
-	ScheduledEventToken []byte `protobuf:"bytes,9,opt,name=scheduled_event_token,json=scheduledEventToken,proto3" json:"scheduled_event_token,omitempty"`
+	ScheduledEventToken []byte `protobuf:"bytes,11,opt,name=scheduled_event_token,json=scheduledEventToken,proto3" json:"scheduled_event_token,omitempty"`
 	// The number of attempts made to deliver the start operation request.
 	// This number represents a minimum bound since the attempt is incremented after the request completes.
-	Attempt int32 `protobuf:"varint,10,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	Attempt int32 `protobuf:"varint,12,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	// The time when the last attempt completed.
-	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
+	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 	// The last attempt's failure, if any.
-	LastAttemptFailure *v1.Failure `protobuf:"bytes,12,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
+	LastAttemptFailure *v1.Failure `protobuf:"bytes,14,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled (only set when in BACKING_OFF state).
-	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
+	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Operation token - only set for asynchronous operations after a successful StartOperation call.
-	OperationToken string `protobuf:"bytes,14,opt,name=operation_token,json=operationToken,proto3" json:"operation_token,omitempty"`
+	OperationToken string `protobuf:"bytes,16,opt,name=operation_token,json=operationToken,proto3" json:"operation_token,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -311,6 +314,20 @@ func (x *OperationState) GetOperation() string {
 func (x *OperationState) GetScheduledTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.ScheduledTime
+	}
+	return nil
+}
+
+func (x *OperationState) GetScheduleToStartTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.ScheduleToStartTimeout
+	}
+	return nil
+}
+
+func (x *OperationState) GetStartToCloseTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.StartToCloseTimeout
 	}
 	return nil
 }
@@ -475,7 +492,7 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto proto
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc = "" +
 	"\n" +
-	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\"\x96\x06\n" +
+	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\"\xbc\a\n" +
 	"\x0eOperationState\x12Z\n" +
 	"\x06status\x18\x01 \x01(\x0e2B.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatusR\x06status\x12\x1f\n" +
 	"\vendpoint_id\x18\x02 \x01(\tR\n" +
@@ -484,16 +501,18 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\aservice\x18\x04 \x01(\tR\aservice\x12\x1c\n" +
 	"\toperation\x18\x05 \x01(\tR\toperation\x12A\n" +
 	"\x0escheduled_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12T\n" +
-	"\x19schedule_to_close_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToCloseTimeout\x12\x1d\n" +
+	"\x19schedule_to_start_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToStartTimeout\x12N\n" +
+	"\x16start_to_close_timeout\x18\b \x01(\v2\x19.google.protobuf.DurationR\x13startToCloseTimeout\x12T\n" +
+	"\x19schedule_to_close_timeout\x18\t \x01(\v2\x19.google.protobuf.DurationR\x16scheduleToCloseTimeout\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\b \x01(\tR\trequestId\x122\n" +
-	"\x15scheduled_event_token\x18\t \x01(\fR\x13scheduledEventToken\x12\x18\n" +
-	"\aattempt\x18\n" +
-	" \x01(\x05R\aattempt\x12W\n" +
-	"\x1alast_attempt_complete_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12R\n" +
-	"\x14last_attempt_failure\x18\f \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
-	"\x1anext_attempt_schedule_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12'\n" +
-	"\x0foperation_token\x18\x0e \x01(\tR\x0eoperationToken\"\x83\x04\n" +
+	"request_id\x18\n" +
+	" \x01(\tR\trequestId\x122\n" +
+	"\x15scheduled_event_token\x18\v \x01(\fR\x13scheduledEventToken\x12\x18\n" +
+	"\aattempt\x18\f \x01(\x05R\aattempt\x12W\n" +
+	"\x1alast_attempt_complete_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12R\n" +
+	"\x14last_attempt_failure\x18\x0e \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
+	"\x1anext_attempt_schedule_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12'\n" +
+	"\x0foperation_token\x18\x10 \x01(\tR\x0eoperationToken\"\x83\x04\n" +
 	"\x11CancellationState\x12]\n" +
 	"\x06status\x18\x01 \x01(\x0e2E.temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatusR\x06status\x12A\n" +
 	"\x0erequested_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rrequestedTime\x12\x18\n" +
@@ -546,20 +565,22 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTyp
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatus
 	4,  // 1: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.scheduled_time:type_name -> google.protobuf.Timestamp
-	5,  // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	4,  // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	6,  // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	4,  // 5: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	1,  // 6: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatus
-	4,  // 7: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.requested_time:type_name -> google.protobuf.Timestamp
-	4,  // 8: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	6,  // 9: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	4,  // 10: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	5,  // 2: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	5,  // 3: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.start_to_close_timeout:type_name -> google.protobuf.Duration
+	5,  // 4: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	4,  // 5: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	6,  // 6: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	4,  // 7: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	1,  // 8: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatus
+	4,  // 9: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.requested_time:type_name -> google.protobuf.Timestamp
+	4,  // 10: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	6,  // 11: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	4,  // 12: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_init() }

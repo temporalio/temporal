@@ -8,6 +8,14 @@ message InvocationTask {
   int32 attempt = 1;
 }
 
+message ScheduleToStartTimeoutTask {
+  int32 attempt = 1;
+}
+
+message StartToCloseTimeoutTask {
+  int32 attempt = 1;
+}
+
 message ScheduleToCloseTimeoutTask {
   int32 attempt = 1;
 }

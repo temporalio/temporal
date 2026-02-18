@@ -21,6 +21,16 @@ var transitionScheduled = chasm.NewTransition(
 			Attempt: o.Attempt,
 		})
 
+		// Emit a schedule-to-start timeout task if configured
+		if o.ScheduleToStartTimeout != nil && o.ScheduleToStartTimeout.AsDuration() != 0 {
+			deadline := o.ScheduledTime.AsTime().Add(o.ScheduleToStartTimeout.AsDuration())
+			ctx.AddTask(o, chasm.TaskAttributes{
+				ScheduledTime: deadline,
+			}, &nexusoperationpb.ScheduleToStartTimeoutTask{
+				Attempt: o.Attempt,
+			})
+		}
+
 		// Emit a schedule-to-close timeout task if configured
 		if o.ScheduleToCloseTimeout != nil && o.ScheduleToCloseTimeout.AsDuration() != 0 {
 			deadline := o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration())
@@ -125,6 +135,15 @@ var transitionStarted = chasm.NewTransition(
 		o.OperationToken = event.OperationToken
 
 		// TODO: emit a cancellation task if a start-to-close timeout is configured
+		// Emit a start-to-close timeout task if configured
+		if o.StartToCloseTimeout != nil && o.StartToCloseTimeout.AsDuration() != 0 {
+			deadline := o.ScheduledTime.AsTime().Add(o.StartToCloseTimeout.AsDuration())
+			ctx.AddTask(o, chasm.TaskAttributes{
+				ScheduledTime: deadline,
+			}, &nexusoperationpb.StartToCloseTimeoutTask{
+				Attempt: o.Attempt,
+			})
+		}
 
 		return nil
 	},
