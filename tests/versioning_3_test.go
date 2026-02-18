@@ -1132,56 +1132,49 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 
 	if retryOfCaN {
 		// wait for first run to continue-as-new
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
-			s.NoError(err)
-			if err != nil {
-				return false
+			if !assert.NoError(t, err) {
+				return
 			}
-			return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
-		}, 5*time.Second, 1*time.Millisecond)
+			assert.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, desc.Status)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 
 	// wait for workflow to progress on v1 (activity completed and waiting for signal)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
-		if err != nil {
-			return false
+		if !assert.NoError(t, err) {
+			return
 		}
 		// Check if workflow is running on v1
-		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
-	}, 5*time.Second, 1*time.Millisecond)
+		assert.Equal(t, tv1.BuildID(), desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// get run ID of first run of the workflow before it fails
 	if retryOfChild {
 		wfIDOfRetryingWF = childWorkflowID
 		// Wait for child workflow to be created
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-			s.NoError(err)
-			if err != nil {
-				return false
+			if !assert.NoError(t, err) {
+				return
 			}
 			runIDBeforeRetry = desc.WorkflowExecution.RunID
-			return true
-		}, 5*time.Second, 1*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	} else if retryOfCaN {
 		// get the next run in the continue-as-new chain
-		s.Eventually(func() bool {
+		s.EventuallyWithT(func(t *assert.CollectT) {
 			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-			s.NoError(err)
-			if err != nil {
-				return false
+			if !assert.NoError(t, err) {
+				return
 			}
 			caNRunID := continuedAsNewRunResp.WorkflowExecution.RunID
 			// confirm that it's a new run
-			if caNRunID != run0.GetRunID() {
+			if assert.NotEqual(t, run0.GetRunID(), caNRunID) {
 				runIDBeforeRetry = caNRunID
-				return true
 			}
-			return false
-		}, 5*time.Second, 1*time.Millisecond)
+		}, 5*time.Second, 100*time.Millisecond)
 	}
 
 	// Set v2 to current and propagate to all task queue partitions
@@ -1192,55 +1185,51 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry, "currentVersionChanged", nil))
 
 	// wait for run that will retry to fail
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
-		s.NoError(err)
-		if err != nil {
-			return false
+		if !assert.NoError(t, err) {
+			return
 		}
-		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}, 5*time.Second, 1*time.Millisecond)
+		assert.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, desc.Status)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// get the execution info of the next run in the retry chain, wait for next run to start
 	var secondRunID string
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
-		if err != nil {
-			return false
+		if !assert.NoError(t, err) {
+			return
 		}
 		secondRunID = secondRunResp.WorkflowExecution.RunID
 		// confirm that it's a new run
-		if secondRunID != runIDBeforeRetry {
-			return true
-		}
-		return false
-	}, 5*time.Second, 1*time.Millisecond)
+		assert.NotEqual(t, runIDBeforeRetry, secondRunID)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunID)
-		s.NoError(err)
+		if !assert.NoError(t, err) {
+			return
+		}
 		switch behavior {
 		case workflow.VersioningBehaviorPinned:
-			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
-				return false
+			if !assert.Equal(t, enumspb.VERSIONING_BEHAVIOR_PINNED, secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior()) {
+				return
 			}
 		case workflow.VersioningBehaviorAutoUpgrade:
-			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE {
-				return false
+			if !assert.Equal(t, enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE, secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior()) {
+				return
 			}
 		default:
 		}
 		switch expectInherit {
 		case true:
-			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+			assert.Equal(t, tv1.BuildID(), secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 		case false:
-			return secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv2.BuildID()
+			assert.Equal(t, tv2.BuildID(), secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId())
 		default:
 		}
-		return true
-	}, 5*time.Second, 1*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
 func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
@@ -1326,12 +1315,12 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	numTests := 50
 	counter := make(map[string]int)
 	runs := make([]sdkclient.WorkflowRun, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
 		s.NoError(err)
 		runs[i] = run
 	}
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		var out string
 		s.NoError(runs[i].Get(ctx, &out))
 		counter[out]++
@@ -2396,9 +2385,9 @@ func (s *Versioning3Suite) makePinnedOverride(tv *testvars.TestVars) *workflowpb
 // 4. Trigger WFT (mode-dependent: signal (normal task), update (speculative task), or fail+retry(transient task))
 // 5. On WFT: confirm ContinueAsNewSuggested=true, issue ContinueAsNew with AUTO_UPGRADE
 // 6. The new run should start on v2 (current) and be pinned after WFT completion.
-func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSuggestCaNOnNewTargetVersion bool) {
-	if enableSuggestCaNOnNewTargetVersion {
-		s.OverrideDynamicConfig(dynamicconfig.EnableSuggestCaNOnNewTargetVersion, true)
+func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask, transientTask, pinnedOverride, enableSendTargetVersionChanged bool) {
+	if !enableSendTargetVersionChanged {
+		s.OverrideDynamicConfig(dynamicconfig.EnableSendTargetVersionChanged, false)
 	}
 	s.RunTestWithMatchingBehavior(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -2467,17 +2456,19 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				if enableSuggestCaNOnNewTargetVersion {
+				if enableSendTargetVersionChanged {
 					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
 					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						if i == len(wfTaskStartedEvents)-1 { // last event
-							s.True(attr.GetSuggestContinueAsNew())
-							s.Equal(enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TARGET_WORKER_DEPLOYMENT_VERSION_CHANGED, attr.GetSuggestContinueAsNewReasons()[0])
+							s.False(attr.GetSuggestContinueAsNew())
+							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.True(attr.GetTargetWorkerDeploymentVersionChanged())
 						} else { // earlier events
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+							s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 						}
 					}
 				} else {
@@ -2485,6 +2476,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						attr := event.GetWorkflowTaskStartedEventAttributes()
 						s.False(attr.GetSuggestContinueAsNew())
 						s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
+						s.False(attr.GetTargetWorkerDeploymentVersionChanged())
 					}
 				}
 
@@ -4127,7 +4119,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		tp   enumspb.TaskQueueType
 	}
 	remaining := make(map[partAndType]struct{})
-	for i := 0; i < partitionCount; i++ {
+	for i := range partitionCount {
 		for _, tqt := range tqTypes {
 			remaining[partAndType{i, tqt}] = struct{}{}
 		}
@@ -5538,6 +5530,159 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 
 	// Verify backlog is now empty
 	s.validateBacklogCount(tv1, tqTypeWf, 0)
+}
+
+func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithoutSignal() {
+	s.testTransitionDuringTransientTask(false)
+}
+
+func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithSignal() {
+	s.testTransitionDuringTransientTask(true)
+}
+
+// TestTransitionDuringTransientTask verifies that a deployment version transition to v1
+// is properly set when a workflow task fails and is retried, and that the transition completes
+// successfully after a signal is sent during the retry backoff period.
+func (s *Versioning3Suite) testTransitionDuringTransientTask(withSignal bool) {
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create test vars for v1
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	s.idlePollWorkflow(ctx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
+	s.idlePollActivity(tv1, true, ver3MinPollTime, "should not get any tasks yet")
+
+	// Start the workflow
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tv1.WorkflowID(),
+	}
+	runID := s.startWorkflow(tv1, nil)
+	execution.RunId = runID
+
+	// Poll first workflow task and schedule two activities
+	s.unversionedPollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Schedule two activities
+			return respondWftWithActivities(tv1, tv1, false, vbUnspecified, "activity-1", "activity-2"), nil
+		})
+
+	// Complete the first activity to generate a new wft
+	s.unversionedPollActivityAndHandle(tv1, nil,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+
+	// Poll and fail the next workflow task - this will cause a transient WFT to be scheduled with retry backoff
+	s.unversionedPollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Return error to fail the task
+			return nil, errors.New("intentional workflow task failure")
+		})
+
+	// Set v1 as current deployment
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	if withSignal {
+		// While during retry backoff, send a signal to the workflow
+		// Signal would convert the transient task to normal because of the new history event being inserted after the first task failure
+		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: execution,
+			SignalName:        "test-signal",
+			Input:             tv1.Any().Payloads(),
+			Identity:          tv1.WorkerIdentity(),
+		})
+		s.NoError(err)
+	}
+
+	// Poll the second activity to cause transition to v1.
+	s.idlePollActivity(tv1, true, ver3MinPollTime, "should not get the activity because it started a transition")
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
+
+	// Print workflow describe and history
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: execution,
+	})
+	if err == nil && descResp != nil {
+		fmt.Println("=== Workflow Describe ===")
+		fmt.Printf("pending activities: %v\n", descResp.PendingActivities)
+		fmt.Println("=========================")
+	}
+
+	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: execution,
+	})
+	if err == nil && histResp != nil {
+		fmt.Println("=== Workflow Event History ===")
+		for i, event := range histResp.History.Events {
+			fmt.Printf("Event %d: %s (EventId: %d)\n", i, event.EventType, event.EventId)
+		}
+		fmt.Println("==============================")
+	}
+
+	// After the retry backoff, poll and complete the workflow task
+	// This should complete the transition and the workflow should be on v1
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Verify that a deployment version transition to v1 is set in the workflow
+			s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
+
+			if withSignal {
+				s.EqualHistory(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted
+			5 ActivityTaskScheduled // activity-1
+			6 ActivityTaskScheduled // activity-2
+			7 ActivityTaskStarted // activity-1
+			8 ActivityTaskCompleted // activity-1
+			9 WorkflowTaskScheduled
+			10 WorkflowTaskStarted
+			11 WorkflowTaskFailed
+			12 WorkflowExecutionSignaled
+			13 WorkflowTaskScheduled // normal task
+			14 WorkflowTaskStarted
+		  `, task.History)
+			} else {
+				// Verify this is the transient (retry) attempt
+				s.verifyTransientTask(task)
+				s.EqualHistory(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted
+			5 ActivityTaskScheduled // activity-1
+			6 ActivityTaskScheduled // activity-2
+			7 ActivityTaskStarted // activity-1
+			8 ActivityTaskCompleted // activity-1
+			9 WorkflowTaskScheduled
+			10 WorkflowTaskStarted
+			11 WorkflowTaskFailed
+			12 WorkflowTaskScheduled // Transient task
+			13 WorkflowTaskStarted
+		  `, task.History)
+			}
+
+			// Complete the workflow
+			return respondCompleteWorkflow(tv1, vbUnpinned), nil
+		})
+
+	// Verify the transition is completed and the workflow is on v1
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 }
 
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {

@@ -43,11 +43,20 @@ uv run main.py \
 ## Output Files
 
 The tool generates several report files:
-- `flaky.txt`: Markdown table of flaky tests
+- `flaky.txt`: Markdown table of flaky tests (includes all retry attempts grouped by test name)
+- `flaky_count.txt`: Total count of flaky tests (for summary table)
 - `flaky_slack.txt`: Plain text version for Slack
 - `crash.txt`: Tests that crashed
 - `timeout.txt`: Tests that timed out
-- `retry.txt`: Tests that failed on retry
+
+## Features
+
+### Retry Grouping
+Tests with retry suffixes (e.g., "TestName (retry 1)", "TestName (retry 2)") are automatically grouped together under the base test name. This ensures that:
+- All retry attempts are combined into a single entry in the flaky tests report
+- Failure counts include all attempts (base + all retries)
+- All failure links are preserved and displayed
+- No separate "Retry Failures" section is needed since retries are grouped with their base tests
 
 ## GitHub Actions Integration
 

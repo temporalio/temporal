@@ -34,7 +34,7 @@ type (
 	// for the schema-tool to work
 	DB interface {
 		// Exec executes a cql statement
-		Exec(stmt string, args ...interface{}) error
+		Exec(stmt string, args ...any) error
 		// DropAllTables drops all tables
 		DropAllTables() error
 		// CreateSchemaVersionTables sets up the schema version tables

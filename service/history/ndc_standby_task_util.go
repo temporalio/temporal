@@ -24,8 +24,8 @@ import (
 )
 
 type (
-	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (interface{}, error)
-	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
+	standbyActionFn     func(context.Context, historyi.WorkflowContext, historyi.MutableState, historyi.ReleaseWorkflowContextFunc) (any, error)
+	standbyPostActionFn func(context.Context, tasks.Task, any, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
 )
@@ -33,7 +33,7 @@ type (
 func standbyTaskPostActionNoOp(
 	_ context.Context,
 	_ tasks.Task,
-	postActionInfo interface{},
+	postActionInfo any,
 	_ log.Logger,
 ) error {
 
@@ -52,7 +52,7 @@ func standbyTaskPostActionNoOp(
 func standbyTransferTaskPostActionTaskDiscarded(
 	_ context.Context,
 	taskInfo tasks.Task,
-	postActionInfo interface{},
+	postActionInfo any,
 	logger log.Logger,
 ) error {
 
@@ -67,7 +67,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 func standbyTimerTaskPostActionTaskDiscarded(
 	_ context.Context,
 	taskInfo tasks.Task,
-	postActionInfo interface{},
+	postActionInfo any,
 	logger log.Logger,
 ) error {
 

@@ -49,12 +49,11 @@ type priTaskMatcher struct {
 
 type waitingPoller struct {
 	waitableMatchResult
-	startTime       time.Time
-	forwardCtx      context.Context // non-nil iff poll can be forwarded
-	pollMetadata    *pollMetadata   // non-nil iff poll can be forwarded
-	queryOnly       bool            // if true, poller can be given only query task, otherwise any task
-	isTaskForwarder bool
-	isTaskValidator bool
+	startTime         time.Time
+	forwardCtx        context.Context   // non-nil iff poll can be forwarded
+	pollMetadata      *pollMetadata     // non-nil iff poll can be forwarded
+	queryOnly         bool              // if true, poller can be given only query task, otherwise any task
+	taskForwarderType taskForwarderType // type of task forwarder (if any)
 }
 
 type matchResult struct {
@@ -73,8 +72,6 @@ type remotePriorityBacklog struct {
 }
 
 type remotePriorityBacklogSet = map[remotePriorityBacklog]struct{}
-
-type pollForwarderType int32
 
 var (
 	// TODO(pri): old matcher cleanup, move to here
@@ -146,7 +143,7 @@ func (tm *priTaskMatcher) Start() {
 		degree := tm.config.ForwarderMaxChildrenPerNode()
 		if parent, err := normal.ParentPartition(degree); err == nil {
 			for range tm.config.ForwarderMaxOutstandingPolls() {
-				go tm.forwardPolls(tm.tqCtx, 0, pollForwarderPriority, normalPollForwarder, parent)
+				go tm.forwardPolls(tm.tqCtx, 0, pollForwarderPriority, parentPollForwarder, parent)
 			}
 		}
 	}
@@ -168,7 +165,7 @@ func (tm *priTaskMatcher) Stop() {
 // TODO(pri): access to retrier is not synchronized
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
-	poller := waitingPoller{isTaskForwarder: true}
+	poller := waitingPoller{taskForwarderType: parentTaskForwarder}
 	skipLimiter := false
 	var err error
 	for {
@@ -252,7 +249,7 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 
 func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
-	poller := &waitingPoller{isTaskForwarder: true, isTaskValidator: true}
+	poller := &waitingPoller{taskForwarderType: validatorTaskForwarder}
 	for {
 		res := tm.data.EnqueuePollerAndWait(ctxs, poller)
 		if res.ctxErr != nil {
@@ -494,7 +491,7 @@ func (tm *priTaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*
 // Local match is always attempted before forwarding. If local match occurs response and error are both nil, if
 // forwarding occurs then response or error is returned.
 func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	res, err := tm.syncOfferTask(ctx, task, true)
+	res, err := tm.syncOfferTask(ctx, task, false)
 	if res != nil { // note res may be non-nil "any" containing nil pointer
 		return res.(*matchingservice.DispatchNexusTaskResponse), err // nolint:revive
 	}

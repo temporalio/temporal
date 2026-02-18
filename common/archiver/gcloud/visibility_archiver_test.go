@@ -412,7 +412,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	executions := make(map[string]*workflowpb.WorkflowExecutionInfo, limit)
 
 	numPages := 2
-	for i := 0; i < numPages; i++ {
+	for i := range numPages {
 		req := &archiver.QueryVisibilityRequest{
 			NamespaceID:   testNamespaceID,
 			PageSize:      1,

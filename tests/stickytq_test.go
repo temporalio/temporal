@@ -133,7 +133,7 @@ func (s *StickyTqTestSuite) TestStickyTimeout_NonTransientWorkflowTask() {
 	// Wait for workflow task timeout
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		events := s.GetHistory(s.Namespace().String(), workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
@@ -321,7 +321,7 @@ func (s *StickyTqTestSuite) TestStickyTaskqueueResetThenTimeout() {
 	// Wait for workflow task timeout
 	stickyTimeout := false
 WaitForStickyTimeoutLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		events := s.GetHistory(s.Namespace().String(), workflowExecution)
 		for _, event := range events {
 			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {

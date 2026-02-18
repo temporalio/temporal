@@ -255,12 +255,12 @@ func TestRoutingInfoCache_Concurrent(t *testing.T) {
 	numOperations := 100
 
 	// Concurrent writes
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		idx := i
 		wg.Add(1) //nolint:revive // use-waitgroup-go: standard sync.WaitGroup doesn't have Go() method
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				version := &deploymentspb.WorkerDeploymentVersion{
 					DeploymentName: "deployment",
 					BuildId:        "build",
@@ -280,11 +280,11 @@ func TestRoutingInfoCache_Concurrent(t *testing.T) {
 	}
 
 	// Concurrent reads
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		wg.Add(1) //nolint:revive // use-waitgroup-go: standard sync.WaitGroup doesn't have Go() method
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				routingCache.Get(namespace, taskQueue, taskQueueType)
 			}
 		}()

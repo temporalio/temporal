@@ -53,6 +53,26 @@ func (c *clientImpl) CancelOutstandingPoll(
 	return client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
+func (c *clientImpl) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+
+	p, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.CancelOutstandingWorkerPolls(ctx, request, opts...)
+}
+
 func (c *clientImpl) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,

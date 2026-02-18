@@ -1,11 +1,27 @@
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from typing import Any, Dict
 
 import requests
+
+
+# Minimum number of failures for a test to be considered flaky
+MIN_FLAKY_FAILURES = 3
+
+
+def normalize_test_name(name: str) -> str:
+    """
+    Strip retry suffix from test name.
+    Examples:
+      - "TestSomething (retry 1)" -> "TestSomething"
+      - "TestSomething (retry 2)" -> "TestSomething"
+      - "TestSomething" -> "TestSomething"
+    """
+    return re.sub(r'\s*\(retry \d+\)$', '', name)
 
 
 def process_tests(data, pattern, output_file: str, max_links: int = 3):
@@ -18,7 +34,7 @@ def process_tests(data, pattern, output_file: str, max_links: int = 3):
         if not item["name"].endswith(pattern):
             continue
 
-        test_name = item["name"]
+        test_name = normalize_test_name(item["name"])
         if test_name not in test_groups:
             test_groups[test_name] = []
 
@@ -70,7 +86,7 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
         if "crash" not in item["name"]:
             continue
 
-        test_name = item["name"]
+        test_name = normalize_test_name(item["name"])
         if test_name not in test_groups:
             test_groups[test_name] = []
 
@@ -88,9 +104,7 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
     transformed = []
     for test_name, artifacts in test_groups.items():
         failure_count = len(artifacts)
-        # Get up to max_links most recent artifacts (already sorted desc from SQL)
         recent_artifacts = artifacts[:max_links]
-
         transformed.append({
             "name": test_name,
             "count": failure_count,
@@ -103,7 +117,6 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
     # Write bullet point format
     lines = []
     for item in transformed:
-        # Format: * XXX failures: `TestName` [1](url1) [2](url2) [3](url3)
         links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
         lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
 
@@ -112,6 +125,17 @@ def process_crash(data, pattern, output_file: str, max_links: int = 3):
 
 
 def process_flaky(data, output_file: str, max_links: int = 3):
+    """
+    Process flaky tests and generate reports.
+
+    Args:
+        data: Test failure data
+        output_file: Path to output file
+        max_links: Maximum number of failure links to include per test
+
+    Returns:
+        Total count of tests with > MIN_FLAKY_FAILURES
+    """
     # Group data by test name and collect artifacts
     test_groups = {}
     for item in data:
@@ -119,7 +143,7 @@ def process_flaky(data, output_file: str, max_links: int = 3):
         if len(name_parts) < 2:
             continue
 
-        test_name = item["name"]
+        test_name = normalize_test_name(item["name"])
         if test_name not in test_groups:
             test_groups[test_name] = []
 
@@ -141,6 +165,11 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     transformed = []
     for test_name, artifacts in test_groups.items():
         failure_count = len(artifacts)
+
+        # Only include tests that meet the minimum threshold
+        if failure_count <= MIN_FLAKY_FAILURES:
+            continue
+
         # Get up to max_links most recent artifacts (already sorted desc from SQL)
         recent_artifacts = artifacts[:max_links]
 
@@ -153,12 +182,15 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     # Sort by failure count descending
     transformed.sort(key=lambda x: x["count"], reverse=True)
 
-    # Limit to top 10 flaky tests
-    transformed = transformed[:10]
+    # Remember total count before limiting for display
+    total_count = len(transformed)
+
+    # Limit to top 10 flaky tests for display
+    display_tests = transformed[:10]
 
     # Write bullet point format (for GitHub)
     lines = []
-    for item in transformed:
+    for item in display_tests:
         # Format: * XXX failures: `TestName` [1](url1) [2](url2) [3](url3)
         links = " ".join([f"[{i+1}]({url})" for i, url in enumerate(item["artifacts"])])
         lines.append(f"* {item['count']} failures: `{item['name']}` {links}\n")
@@ -169,18 +201,24 @@ def process_flaky(data, output_file: str, max_links: int = 3):
     # Also create a plain text version for Slack (without links for cleaner viewing)
     slack_file = output_file.replace(".txt", "_slack.txt")
     slack_lines = []
-    for item in transformed:
+    for item in display_tests:
         # Format for Slack: • XXX failures: `TestName`
         slack_lines.append(f"• {item['count']} failures: `{item['name']}`\n")
 
     with open(slack_file, "w") as outfile:
         outfile.writelines(slack_lines)
 
+    # Write count metadata for summary
+    count_file = output_file.replace(".txt", "_count.txt")
+    with open(count_file, "w") as f:
+        f.write(str(total_count))
+
+    return total_count
+
 
 def create_success_message(
     crash_count: int,
     flaky_count: int,
-    retry_count: int,
     timeout_count: int,
     flaky_content: str,
     run_id: str,
@@ -202,7 +240,6 @@ def create_success_message(
             "fields": [
                 {"type": "mrkdwn", "text": f"Crashes: {crash_count}"},
                 {"type": "mrkdwn", "text": f"Flaky Tests: {flaky_count}"},
-                {"type": "mrkdwn", "text": f"Retry Failures: {retry_count}"},
                 {"type": "mrkdwn", "text": f"Timeouts: {timeout_count}"},
             ],
         },
@@ -343,7 +380,6 @@ def count_failures_in_file(file_path: str) -> int:
 def create_github_actions_summary(
     crash_count: int,
     flaky_count: int,
-    retry_count: int,
     timeout_count: int,
     run_id: str,
 ) -> str:
@@ -357,12 +393,11 @@ def create_github_actions_summary(
     # Summary table
     summary_lines.append("### Failure Categories Summary")
     summary_lines.append("")
-    summary_lines.append("| Category | Count |")
-    summary_lines.append("|----------|-------|")
+    summary_lines.append("| Category | Unique Tests |")
+    summary_lines.append("|----------|--------------|")
     summary_lines.append(f"| Crashes | {crash_count} |")
     summary_lines.append(f"| Timeouts | {timeout_count} |")
     summary_lines.append(f"| Flaky Tests | {flaky_count} |")
-    summary_lines.append(f"| Retry Failures | {retry_count} |")
     summary_lines.append("")
     
     # Add detailed tables for each category
@@ -387,14 +422,7 @@ def create_github_actions_summary(
             summary_lines.append(f.read())
         summary_lines.append("")
 
-    if retry_count > 0 and os.path.exists("out/retry.txt"):
-        summary_lines.append("### Retry Failures")
-        summary_lines.append("")
-        with open("out/retry.txt", "r") as f:
-            summary_lines.append(f.read())
-        summary_lines.append("")
-    
-    if crash_count == 0 and flaky_count == 0 and retry_count == 0 and timeout_count == 0:
+    if crash_count == 0 and flaky_count == 0 and timeout_count == 0:
         summary_lines.append("**No test failures found in the last 7 days!**")
     
     return "\n".join(summary_lines)
@@ -424,7 +452,6 @@ def process_json_file(input_filename: str, max_links: int = 3):
 
     process_flaky(data, "out/flaky.txt", max_links)
     process_tests(data, "(timeout)", "out/timeout.txt", max_links)
-    process_tests(data, "(retry 2)", "out/retry.txt", max_links)
     process_crash(data, "(crash)", "out/crash.txt", max_links)
 
     # Return total number of failures in the original data
@@ -467,36 +494,43 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def get_failure_counts() -> tuple[int, int, int, int]:
+def get_failure_counts() -> tuple[int, int, int]:
     """Count failures from generated report files."""
     crash_count = count_failures_in_file("out/crash.txt")
-    flaky_count = count_failures_in_file("out/flaky.txt")
-    retry_count = count_failures_in_file("out/retry.txt")
+
+    # For flaky tests, read from metadata file which contains total count (not just top 10)
+    try:
+        with open("out/flaky_count.txt", "r") as f:
+            flaky_count = int(f.read().strip())
+    except (FileNotFoundError, ValueError):
+        # Fallback to counting lines if metadata doesn't exist
+        flaky_count = count_failures_in_file("out/flaky.txt")
+
     timeout_count = count_failures_in_file("out/timeout.txt")
-    
-    print(f"Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Retry: {retry_count}, Timeout: {timeout_count}")
-    
-    return crash_count, flaky_count, retry_count, timeout_count
+
+    print(f"Failure counts - Crashes: {crash_count}, Flaky: {flaky_count}, Timeout: {timeout_count}")
+
+    return crash_count, flaky_count, timeout_count
 
 
 def handle_success_case(args, total_failures: int) -> None:
     """Handle the successful processing case."""
     # Count failures from generated files
-    crash_count, flaky_count, retry_count, timeout_count = get_failure_counts()
+    crash_count, flaky_count, timeout_count = get_failure_counts()
 
     # Generate GitHub Actions summary if requested
     if args.github_summary:
         print("Generating GitHub Actions summary...")
         summary_content = create_github_actions_summary(
-            crash_count, flaky_count, retry_count, timeout_count, args.run_id or "unknown"
+            crash_count, flaky_count, timeout_count, args.run_id or "unknown"
         )
         write_github_actions_summary(summary_content)
 
     if args.slack_webhook:
-        send_success_slack_notification(args, crash_count, flaky_count, retry_count, timeout_count, total_failures)
+        send_success_slack_notification(args, crash_count, flaky_count, timeout_count, total_failures)
 
 
-def send_success_slack_notification(args, crash_count: int, flaky_count: int, retry_count: int, timeout_count: int, total_failures: int) -> None:
+def send_success_slack_notification(args, crash_count: int, flaky_count: int, timeout_count: int, total_failures: int) -> None:
     """Send success Slack notification."""
     print("Sending success Slack notification...")
     if not args.run_id:
@@ -512,7 +546,6 @@ def send_success_slack_notification(args, crash_count: int, flaky_count: int, re
     message = create_success_message(
         crash_count,
         flaky_count,
-        retry_count,
         timeout_count,
         flaky_content,
         args.run_id,

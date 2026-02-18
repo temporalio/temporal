@@ -445,8 +445,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			runID := primitives.NewUUID()
 			workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
 			visibility := s.newRandomVisibilityRow(
@@ -570,8 +570,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 	historyLength := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			runID := primitives.NewUUID()
 			workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
 			visibility := s.newRandomVisibilityRow(
@@ -694,8 +694,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
 			runID := primitives.NewUUID()
 			visibility := s.newRandomVisibilityRow(
@@ -819,8 +819,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 	historyLength := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
 			runID := primitives.NewUUID()
 			visibility := s.newRandomVisibilityRow(
@@ -942,8 +942,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 	status := int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	closeTime := (*time.Time)(nil)
 	historyLength := (*int64)(nil)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
 			runID := primitives.NewUUID()
 			workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
@@ -1074,8 +1074,8 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 	historyLength := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
 			runID := primitives.NewUUID()
 			workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)
@@ -1213,8 +1213,8 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 	historyLength := rand.Int63()
 	minStartTime := closeTime
 	maxStartTime := closeTime.Add(time.Duration(numStartTime) * time.Second)
-	for i := 0; i < numStartTime; i++ {
-		for j := 0; j < visibilityPerStartTime; j++ {
+	for range numStartTime {
+		for range visibilityPerStartTime {
 			workflowID := shuffle.String(testVisibilityWorkflowID)
 			runID := primitives.NewUUID()
 			workflowTypeName := shuffle.String(testVisibilityWorkflowTypeName)

@@ -139,7 +139,7 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
-	row := make(map[string]interface{})
+	row := make(map[string]any)
 	for iter.MapScan(row) {
 		taskQueue, err := getTypedFieldFromRow[string]("task_queue_name", row)
 		if err != nil {
@@ -160,7 +160,7 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 
 		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding), Version: version})
 
-		row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+		row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
@@ -177,7 +177,7 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
 
 	var taskQueues []string
-	row := make(map[string]interface{})
+	row := make(map[string]any)
 
 	for {
 		for iter.MapScan(row) {
@@ -193,7 +193,7 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 
 			taskQueues = append(taskQueues, taskQueue)
 
-			row = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+			row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 		}
 		if len(iter.PageState()) == 0 {
 			break

@@ -546,7 +546,7 @@ func (s *historyReplicationDLQSuite) runTDBGCommand(
 	s.T().Log("========================================")
 }
 
-func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() interface{} {
+func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() any {
 	if s.enableReplicationStream {
 		// The replication stream uses a different code path which converts tasks into executables using this interface,
 		// so that's a good injection point for us.

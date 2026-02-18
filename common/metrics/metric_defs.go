@@ -44,6 +44,7 @@ const (
 	MutableStateCacheTypeTagValue                     = "mutablestate"
 	EventsCacheTypeTagValue                           = "events"
 	VersionMembershipCacheTypeTagValue                = "version_membership"
+	VersionReactivationSignalCacheTypeTagValue        = "version_reactivation_signal"
 	RoutingInfoCacheTypeTagValue                      = "routing_info"
 	NexusEndpointRegistryReadThroughCacheTypeTagValue = "nexus_endpoint_registry_readthrough"
 
@@ -458,6 +459,8 @@ const (
 	VersionMembershipCacheGetScope = "VersionMembershipCacheGet"
 	// VersionMembershipCachePutScope is the scope used by version membership cache
 	VersionMembershipCachePutScope = "VersionMembershipCachePut"
+	// VersionReactivationSignalCacheShouldSendScope is the scope used by version reactivation signal cache
+	VersionReactivationSignalCacheShouldSendScope = "VersionReactivationSignalCacheShouldSend"
 	// RoutingInfoCacheGetScope is the scope used by routing info cache
 	RoutingInfoCacheGetScope = "RoutingInfoCacheGet"
 	// RoutingInfoCachePutScope is the scope used by routing info cache
@@ -879,35 +882,34 @@ var (
 		"activity_schedule_to_close_latency",
 		WithDescription("Duration of activity execution from scheduled time to terminal state. Includes retries and backoffs."),
 	)
-	ActivitySuccess                                      = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
-	ActivityFail                                         = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
-	ActivityTaskFail                                     = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
-	ActivityCancel                                       = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
-	ActivityTerminate                                    = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
-	ActivityTaskTimeout                                  = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
-	ActivityTimeout                                      = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
-	ActivityPayloadSize                                  = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
-	AckLevelUpdateCounter                                = NewCounterDef("ack_level_update")
-	AckLevelUpdateFailedCounter                          = NewCounterDef("ack_level_update_failed")
-	CommandCounter                                       = NewCounterDef("command")
-	MessageTypeRequestWorkflowExecutionUpdateCounter     = NewCounterDef("request_workflow_update_message")
-	MessageTypeAcceptWorkflowExecutionUpdateCounter      = NewCounterDef("accept_workflow_update_message")
-	MessageTypeRespondWorkflowExecutionUpdateCounter     = NewCounterDef("respond_workflow_update_message")
-	MessageTypeRejectWorkflowExecutionUpdateCounter      = NewCounterDef("reject_workflow_update_message")
-	InvalidStateTransitionWorkflowExecutionUpdateCounter = NewCounterDef("invalid_state_transition_workflow_update_message")
-	WorkflowExecutionUpdateRegistrySize                  = NewBytesHistogramDef("workflow_update_registry_size")
-	WorkflowExecutionUpdateRegistrySizeLimited           = NewCounterDef("workflow_update_registry_size_limited")
-	WorkflowExecutionUpdateRequestRateLimited            = NewCounterDef("workflow_update_request_rate_limited")
-	WorkflowExecutionUpdateTooMany                       = NewCounterDef("workflow_update_request_too_many")
-	WorkflowExecutionUpdateAborted                       = NewCounterDef("workflow_update_aborted")
-	WorkflowExecutionUpdateSentToWorker                  = NewCounterDef("workflow_update_sent_to_worker")
-	WorkflowExecutionUpdateSentToWorkerAgain             = NewCounterDef("workflow_update_sent_to_worker_again")
-	WorkflowExecutionUpdateWaitStageAccepted             = NewCounterDef("workflow_update_wait_stage_accepted")
-	WorkflowExecutionUpdateWaitStageCompleted            = NewCounterDef("workflow_update_wait_stage_completed")
-	WorkflowExecutionUpdateClientTimeout                 = NewCounterDef("workflow_update_client_timeout")
-	WorkflowExecutionUpdateServerTimeout                 = NewCounterDef("workflow_update_server_timeout")
-	SpeculativeWorkflowTaskCommits                       = NewCounterDef("speculative_workflow_task_commits")
-	SpeculativeWorkflowTaskRollbacks                     = NewCounterDef("speculative_workflow_task_rollbacks")
+	ActivitySuccess                                  = NewCounterDef("activity_success", WithDescription("Number of activities that succeeded (doesn't include retries)."))
+	ActivityFail                                     = NewCounterDef("activity_fail", WithDescription("Number of activities that failed and won't be retried anymore."))
+	ActivityTaskFail                                 = NewCounterDef("activity_task_fail", WithDescription("Number of activity task failures (includes retries)."))
+	ActivityCancel                                   = NewCounterDef("activity_cancel", WithDescription("Number of activities that are cancelled."))
+	ActivityTerminate                                = NewCounterDef("activity_terminate", WithDescription("Number of activities that are terminated."))
+	ActivityTaskTimeout                              = NewCounterDef("activity_task_timeout", WithDescription("Number of activity task timeouts (including retries)."))
+	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
+	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
+	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
+	CommandCounter                                   = NewCounterDef("command")
+	MessageTypeRequestWorkflowExecutionUpdateCounter = NewCounterDef("request_workflow_update_message")
+	MessageTypeAcceptWorkflowExecutionUpdateCounter  = NewCounterDef("accept_workflow_update_message")
+	MessageTypeRespondWorkflowExecutionUpdateCounter = NewCounterDef("respond_workflow_update_message")
+	MessageTypeRejectWorkflowExecutionUpdateCounter  = NewCounterDef("reject_workflow_update_message")
+	WorkflowExecutionUpdateRegistrySize              = NewBytesHistogramDef("workflow_update_registry_size")
+	WorkflowExecutionUpdateRegistrySizeLimited       = NewCounterDef("workflow_update_registry_size_limited")
+	WorkflowExecutionUpdateRequestRateLimited        = NewCounterDef("workflow_update_request_rate_limited")
+	WorkflowExecutionUpdateTooMany                   = NewCounterDef("workflow_update_request_too_many")
+	WorkflowExecutionUpdateAborted                   = NewCounterDef("workflow_update_aborted")
+	WorkflowExecutionUpdateSentToWorker              = NewCounterDef("workflow_update_sent_to_worker")
+	WorkflowExecutionUpdateSentToWorkerAgain         = NewCounterDef("workflow_update_sent_to_worker_again")
+	WorkflowExecutionUpdateWaitStageAccepted         = NewCounterDef("workflow_update_wait_stage_accepted")
+	WorkflowExecutionUpdateWaitStageCompleted        = NewCounterDef("workflow_update_wait_stage_completed")
+	WorkflowExecutionUpdateClientTimeout             = NewCounterDef("workflow_update_client_timeout")
+	WorkflowExecutionUpdateServerTimeout             = NewCounterDef("workflow_update_server_timeout")
+	SpeculativeWorkflowTaskCommits                   = NewCounterDef("speculative_workflow_task_commits")
+	SpeculativeWorkflowTaskRollbacks                 = NewCounterDef("speculative_workflow_task_rollbacks")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
@@ -1013,6 +1015,9 @@ var (
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
+	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
+	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -1142,6 +1147,8 @@ var (
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
+	PhysicalApproximateBacklogCount        = NewGaugeDef("physical_approximate_backlog_count")
+	PhysicalApproximateBacklogAgeSeconds   = NewGaugeDef("physical_approximate_backlog_age_seconds")
 	NonRetryableTasks                      = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
@@ -1334,6 +1341,7 @@ var (
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
+	WorkflowTargetVersionChangedCount                 = NewCounterDef("workflow_target_version_changed_count")
 
 	// Continue-as-new
 	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")

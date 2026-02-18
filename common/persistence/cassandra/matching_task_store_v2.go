@@ -97,7 +97,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateTasks", err)
@@ -151,7 +151,7 @@ func (d *matchingTaskStoreV2) GetTasks(
 	iter := query.WithContext(ctx).PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
-	task := make(map[string]interface{})
+	task := make(map[string]any)
 	for iter.MapScan(task) {
 		_, ok := task["task_id"]
 		if !ok { // no tasks, but static column record returned
@@ -179,7 +179,7 @@ func (d *matchingTaskStoreV2) GetTasks(
 		}
 		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
 
-		task = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+		task = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()

@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
@@ -907,6 +906,11 @@ and deployment interaction in matching and history.`,
 		false,
 		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
 	)
+	EnableSendTargetVersionChanged = NewNamespaceBoolSetting(
+		"system.enableSendTargetVersionChanged",
+		true,
+		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,
@@ -1273,6 +1277,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Second,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
+		"matching.backlogMetricsEmitInterval",
+		time.Minute,
+		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions. Set to zero to disable version-attributed backlog metrics.`,
 	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",
@@ -2297,11 +2306,6 @@ When the this config is zero or lower we will only update shard info at most onc
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
 	)
-	DefaultEventEncoding = NewNamespaceStringSetting(
-		"history.defaultEventEncoding",
-		enumspb.ENCODING_TYPE_PROTO3.String(),
-		`DefaultEventEncoding is the encoding type for history events`,
-	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
@@ -2789,6 +2793,27 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
+	VersionReactivationSignalCacheTTL = NewGlobalDurationSetting(
+		"history.versionReactivationSignalCacheTTL",
+		10*time.Second,
+		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
+		draining status to DRAINING from DRAINED/INACTIVE states.`,
+	)
+
+	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
+		"history.versionReactivationSignalCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version reactivation signal cache.`,
+	)
+
+	EnableVersionReactivationSignals = NewGlobalBoolSetting(
+		"history.enableVersionReactivationSignals",
+		true,
+		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
+		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
+		globally if load becomes problematic.`,
+	)
+
 	RoutingInfoCacheTTL = NewGlobalDurationSetting(
 		"history.routingInfoCacheTTL",
 		1*time.Second,
@@ -3084,6 +3109,14 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerHeartbeatsEnabled",
 		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
+	)
+
+	EnableCancelWorkerPollsOnShutdown = NewNamespaceBoolSetting(
+		"frontend.enableCancelWorkerPollsOnShutdown",
+		false,
+		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
+		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
+		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(
