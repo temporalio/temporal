@@ -364,6 +364,7 @@ func MutableStateToGetResponse(
 	executionInfo := mutableState.GetExecutionInfo()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
+	currentWorkflowTask := mutableState.GetPendingWorkflowTask()
 
 	var mostRecentWorkerVersionStamp *commonpb.WorkerVersionStamp
 	if mrwvs := mutableState.GetExecutionInfo().GetMostRecentWorkerVersionStamp(); mrwvs != nil {
@@ -406,5 +407,6 @@ func MutableStateToGetResponse(
 		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
 		VersioningInfo:               mutableState.GetExecutionInfo().VersioningInfo,
+		TransientOrSpeculativeEvents: common.CloneProto(mutableState.GetTransientWorkflowTaskInfo(currentWorkflowTask, "")),
 	}, nil
 }

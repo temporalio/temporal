@@ -534,12 +534,13 @@ type GetMutableStateResponse struct {
 	MostRecentWorkerVersionStamp *v14.WorkerVersionStamp `protobuf:"bytes,21,opt,name=most_recent_worker_version_stamp,json=mostRecentWorkerVersionStamp,proto3" json:"most_recent_worker_version_stamp,omitempty"`
 	// The currently assigned build ID for this execution. Presence of this value means worker versioning is used
 	// for this execution.
-	AssignedBuildId   string                               `protobuf:"bytes,22,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
-	InheritedBuildId  string                               `protobuf:"bytes,23,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
-	TransitionHistory []*v19.VersionedTransition           `protobuf:"bytes,24,rep,name=transition_history,json=transitionHistory,proto3" json:"transition_history,omitempty"`
-	VersioningInfo    *v15.WorkflowExecutionVersioningInfo `protobuf:"bytes,25,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	AssignedBuildId              string                               `protobuf:"bytes,22,opt,name=assigned_build_id,json=assignedBuildId,proto3" json:"assigned_build_id,omitempty"`
+	InheritedBuildId             string                               `protobuf:"bytes,23,opt,name=inherited_build_id,json=inheritedBuildId,proto3" json:"inherited_build_id,omitempty"`
+	TransitionHistory            []*v19.VersionedTransition           `protobuf:"bytes,24,rep,name=transition_history,json=transitionHistory,proto3" json:"transition_history,omitempty"`
+	VersioningInfo               *v15.WorkflowExecutionVersioningInfo `protobuf:"bytes,25,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
+	TransientOrSpeculativeEvents *v18.TransientWorkflowTaskInfo       `protobuf:"bytes,26,opt,name=transient_or_speculative_events,json=transientOrSpeculativeEvents,proto3" json:"transient_or_speculative_events,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *GetMutableStateResponse) Reset() {
@@ -708,6 +709,13 @@ func (x *GetMutableStateResponse) GetTransitionHistory() []*v19.VersionedTransit
 func (x *GetMutableStateResponse) GetVersioningInfo() *v15.WorkflowExecutionVersioningInfo {
 	if x != nil {
 		return x.VersioningInfo
+	}
+	return nil
+}
+
+func (x *GetMutableStateResponse) GetTransientOrSpeculativeEvents() *v18.TransientWorkflowTaskInfo {
+	if x != nil {
+		return x.TransientOrSpeculativeEvents
 	}
 	return nil
 }
@@ -1282,7 +1290,6 @@ type RecordWorkflowTaskStartedResponse struct {
 	NextEventId                int64                          `protobuf:"varint,5,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
 	Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	StickyExecutionEnabled     bool                           `protobuf:"varint,7,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3" json:"sticky_execution_enabled,omitempty"`
-	TransientWorkflowTask      *v18.TransientWorkflowTaskInfo `protobuf:"bytes,8,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
 	WorkflowExecutionTaskQueue *v110.TaskQueue                `protobuf:"bytes,9,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
 	BranchToken                []byte                         `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
 	ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
@@ -1391,13 +1398,6 @@ func (x *RecordWorkflowTaskStartedResponse) GetStickyExecutionEnabled() bool {
 		return x.StickyExecutionEnabled
 	}
 	return false
-}
-
-func (x *RecordWorkflowTaskStartedResponse) GetTransientWorkflowTask() *v18.TransientWorkflowTaskInfo {
-	if x != nil {
-		return x.TransientWorkflowTask
-	}
-	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponse) GetWorkflowExecutionTaskQueue() *v110.TaskQueue {
@@ -1512,7 +1512,6 @@ type RecordWorkflowTaskStartedResponseWithRawHistory struct {
 	NextEventId                int64                          `protobuf:"varint,5,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
 	Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	StickyExecutionEnabled     bool                           `protobuf:"varint,7,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3" json:"sticky_execution_enabled,omitempty"`
-	TransientWorkflowTask      *v18.TransientWorkflowTaskInfo `protobuf:"bytes,8,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
 	WorkflowExecutionTaskQueue *v110.TaskQueue                `protobuf:"bytes,9,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
 	BranchToken                []byte                         `protobuf:"bytes,11,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
 	ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,12,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
@@ -1610,13 +1609,6 @@ func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetStickyExecutionEnab
 		return x.StickyExecutionEnabled
 	}
 	return false
-}
-
-func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetTransientWorkflowTask() *v18.TransientWorkflowTaskInfo {
-	if x != nil {
-		return x.TransientWorkflowTask
-	}
-	return nil
 }
 
 func (x *RecordWorkflowTaskStartedResponseWithRawHistory) GetWorkflowExecutionTaskQueue() *v110.TaskQueue {
@@ -10419,7 +10411,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16expected_next_event_id\x18\x03 \x01(\x03R\x13expectedNextEventId\x120\n" +
 	"\x14current_branch_token\x18\x04 \x01(\fR\x12currentBranchToken\x12d\n" +
 	"\x14version_history_item\x18\x05 \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x12versionHistoryItem\x12j\n" +
-	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xf3\v\n" +
+	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xf6\f\n" +
 	"\x17GetMutableStateResponse\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12I\n" +
 	"\rworkflow_type\x18\x02 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x12\"\n" +
@@ -10441,7 +10433,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x11assigned_build_id\x18\x16 \x01(\tR\x0fassignedBuildId\x12,\n" +
 	"\x12inherited_build_id\x18\x17 \x01(\tR\x10inheritedBuildId\x12f\n" +
 	"\x12transition_history\x18\x18 \x03(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x11transitionHistory\x12b\n" +
-	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfoJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfo\x12\x80\x01\n" +
+	"\x1ftransient_or_speculative_events\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1ctransientOrSpeculativeEventsJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0f\"\xef\x02\n" +
 	"\x17PollMutableStateRequest\x12!\n" +
@@ -10513,8 +10506,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x10started_event_id\x18\x04 \x01(\x03R\x0estartedEventId\x12\"\n" +
 	"\rnext_event_id\x18\x05 \x01(\x03R\vnextEventId\x12\x18\n" +
 	"\aattempt\x18\x06 \x01(\x05R\aattempt\x128\n" +
-	"\x18sticky_execution_enabled\x18\a \x01(\bR\x16stickyExecutionEnabled\x12q\n" +
-	"\x17transient_workflow_task\x18\b \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x15transientWorkflowTask\x12g\n" +
+	"\x18sticky_execution_enabled\x18\a \x01(\bR\x16stickyExecutionEnabled\x12g\n" +
 	"\x1dworkflow_execution_task_queue\x18\t \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\x1aworkflowExecutionTaskQueue\x12!\n" +
 	"\fbranch_token\x18\v \x01(\fR\vbranchToken\x12A\n" +
 	"\x0escheduled_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12=\n" +
@@ -10540,8 +10532,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x10started_event_id\x18\x04 \x01(\x03R\x0estartedEventId\x12\"\n" +
 	"\rnext_event_id\x18\x05 \x01(\x03R\vnextEventId\x12\x18\n" +
 	"\aattempt\x18\x06 \x01(\x05R\aattempt\x128\n" +
-	"\x18sticky_execution_enabled\x18\a \x01(\bR\x16stickyExecutionEnabled\x12q\n" +
-	"\x17transient_workflow_task\x18\b \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x15transientWorkflowTask\x12g\n" +
+	"\x18sticky_execution_enabled\x18\a \x01(\bR\x16stickyExecutionEnabled\x12g\n" +
 	"\x1dworkflow_execution_task_queue\x18\t \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\x1aworkflowExecutionTaskQueue\x12!\n" +
 	"\fbranch_token\x18\v \x01(\fR\vbranchToken\x12A\n" +
 	"\x0escheduled_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12=\n" +

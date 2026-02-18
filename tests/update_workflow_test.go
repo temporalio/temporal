@@ -114,11 +114,11 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   5 WorkflowTaskScheduled // Speculative WT events are not written to the history yet.
   6 WorkflowTaskStarted
 `, task.History)
-						return s.UpdateAcceptCompleteCommands(s.Tv()), nil
-					default:
-						s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
-						return nil, nil
-					}
+					return s.UpdateAcceptCompleteCommands(s.Tv()), nil
+				default:
+					s.Failf("wtHandler called too many times", "wtHandler shouldn't be called %d times", wtHandlerCalls)
+					return nil, nil
+				}
 				}
 
 				msgHandlerCalls := 0

@@ -119,28 +119,27 @@ func (x *PollWorkflowTaskQueueRequest) GetConditions() *PollConditions {
 }
 
 type PollWorkflowTaskQueueResponse struct {
-	state                      protoimpl.MessageState         `protogen:"open.v1"`
-	TaskToken                  []byte                         `protobuf:"bytes,1,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
-	WorkflowExecution          *v11.WorkflowExecution         `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
-	WorkflowType               *v11.WorkflowType              `protobuf:"bytes,3,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
-	PreviousStartedEventId     int64                          `protobuf:"varint,4,opt,name=previous_started_event_id,json=previousStartedEventId,proto3" json:"previous_started_event_id,omitempty"`
-	StartedEventId             int64                          `protobuf:"varint,5,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
-	Attempt                    int32                          `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	NextEventId                int64                          `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	BacklogCountHint           int64                          `protobuf:"varint,8,opt,name=backlog_count_hint,json=backlogCountHint,proto3" json:"backlog_count_hint,omitempty"`
-	StickyExecutionEnabled     bool                           `protobuf:"varint,9,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3" json:"sticky_execution_enabled,omitempty"`
-	Query                      *v12.WorkflowQuery             `protobuf:"bytes,10,opt,name=query,proto3" json:"query,omitempty"`
-	TransientWorkflowTask      *v13.TransientWorkflowTaskInfo `protobuf:"bytes,11,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
-	WorkflowExecutionTaskQueue *v14.TaskQueue                 `protobuf:"bytes,12,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
-	BranchToken                []byte                         `protobuf:"bytes,14,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	ScheduledTime              *timestamppb.Timestamp         `protobuf:"bytes,15,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
-	StartedTime                *timestamppb.Timestamp         `protobuf:"bytes,16,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
-	Queries                    map[string]*v12.WorkflowQuery  `protobuf:"bytes,17,rep,name=queries,proto3" json:"queries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Messages                   []*v15.Message                 `protobuf:"bytes,18,rep,name=messages,proto3" json:"messages,omitempty"`
+	state                      protoimpl.MessageState        `protogen:"open.v1"`
+	TaskToken                  []byte                        `protobuf:"bytes,1,opt,name=task_token,json=taskToken,proto3" json:"task_token,omitempty"`
+	WorkflowExecution          *v11.WorkflowExecution        `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
+	WorkflowType               *v11.WorkflowType             `protobuf:"bytes,3,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
+	PreviousStartedEventId     int64                         `protobuf:"varint,4,opt,name=previous_started_event_id,json=previousStartedEventId,proto3" json:"previous_started_event_id,omitempty"`
+	StartedEventId             int64                         `protobuf:"varint,5,opt,name=started_event_id,json=startedEventId,proto3" json:"started_event_id,omitempty"`
+	Attempt                    int32                         `protobuf:"varint,6,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	NextEventId                int64                         `protobuf:"varint,7,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
+	BacklogCountHint           int64                         `protobuf:"varint,8,opt,name=backlog_count_hint,json=backlogCountHint,proto3" json:"backlog_count_hint,omitempty"`
+	StickyExecutionEnabled     bool                          `protobuf:"varint,9,opt,name=sticky_execution_enabled,json=stickyExecutionEnabled,proto3" json:"sticky_execution_enabled,omitempty"`
+	Query                      *v12.WorkflowQuery            `protobuf:"bytes,10,opt,name=query,proto3" json:"query,omitempty"`
+	WorkflowExecutionTaskQueue *v13.TaskQueue                `protobuf:"bytes,12,opt,name=workflow_execution_task_queue,json=workflowExecutionTaskQueue,proto3" json:"workflow_execution_task_queue,omitempty"`
+	BranchToken                []byte                        `protobuf:"bytes,14,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
+	ScheduledTime              *timestamppb.Timestamp        `protobuf:"bytes,15,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
+	StartedTime                *timestamppb.Timestamp        `protobuf:"bytes,16,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
+	Queries                    map[string]*v12.WorkflowQuery `protobuf:"bytes,17,rep,name=queries,proto3" json:"queries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Messages                   []*v14.Message                `protobuf:"bytes,18,rep,name=messages,proto3" json:"messages,omitempty"`
 	// The history for this workflow, which will either be complete or partial. Partial histories
 	// are sent to workers who have signaled that they are using a sticky queue when completing
 	// a workflow task. Sticky query tasks will not include any history.
-	History               *v16.History               `protobuf:"bytes,19,opt,name=history,proto3" json:"history,omitempty"`
+	History               *v15.History               `protobuf:"bytes,19,opt,name=history,proto3" json:"history,omitempty"`
 	NextPageToken         []byte                     `protobuf:"bytes,20,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	PollerScalingDecision *v14.PollerScalingDecision `protobuf:"bytes,21,opt,name=poller_scaling_decision,json=pollerScalingDecision,proto3" json:"poller_scaling_decision,omitempty"`
 	// Raw history bytes sent from matching service when history.sendRawHistoryBetweenInternalServices is enabled.
@@ -250,14 +249,7 @@ func (x *PollWorkflowTaskQueueResponse) GetQuery() *v12.WorkflowQuery {
 	return nil
 }
 
-func (x *PollWorkflowTaskQueueResponse) GetTransientWorkflowTask() *v13.TransientWorkflowTaskInfo {
-	if x != nil {
-		return x.TransientWorkflowTask
-	}
-	return nil
-}
-
-func (x *PollWorkflowTaskQueueResponse) GetWorkflowExecutionTaskQueue() *v14.TaskQueue {
+func (x *PollWorkflowTaskQueueResponse) GetWorkflowExecutionTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.WorkflowExecutionTaskQueue
 	}
@@ -292,14 +284,14 @@ func (x *PollWorkflowTaskQueueResponse) GetQueries() map[string]*v12.WorkflowQue
 	return nil
 }
 
-func (x *PollWorkflowTaskQueueResponse) GetMessages() []*v15.Message {
+func (x *PollWorkflowTaskQueueResponse) GetMessages() []*v14.Message {
 	if x != nil {
 		return x.Messages
 	}
 	return nil
 }
 
-func (x *PollWorkflowTaskQueueResponse) GetHistory() *v16.History {
+func (x *PollWorkflowTaskQueueResponse) GetHistory() *v15.History {
 	if x != nil {
 		return x.History
 	}
@@ -313,7 +305,7 @@ func (x *PollWorkflowTaskQueueResponse) GetNextPageToken() []byte {
 	return nil
 }
 
-func (x *PollWorkflowTaskQueueResponse) GetPollerScalingDecision() *v14.PollerScalingDecision {
+func (x *PollWorkflowTaskQueueResponse) GetPollerScalingDecision() *v13.PollerScalingDecision {
 	if x != nil {
 		return x.PollerScalingDecision
 	}
@@ -657,7 +649,7 @@ type PollActivityTaskQueueResponse struct {
 	WorkflowType                *v11.WorkflowType          `protobuf:"bytes,14,opt,name=workflow_type,json=workflowType,proto3" json:"workflow_type,omitempty"`
 	WorkflowNamespace           string                     `protobuf:"bytes,15,opt,name=workflow_namespace,json=workflowNamespace,proto3" json:"workflow_namespace,omitempty"`
 	Header                      *v11.Header                `protobuf:"bytes,16,opt,name=header,proto3" json:"header,omitempty"`
-	PollerScalingDecision       *v14.PollerScalingDecision `protobuf:"bytes,17,opt,name=poller_scaling_decision,json=pollerScalingDecision,proto3" json:"poller_scaling_decision,omitempty"`
+	PollerScalingDecision       *v13.PollerScalingDecision `protobuf:"bytes,17,opt,name=poller_scaling_decision,json=pollerScalingDecision,proto3" json:"poller_scaling_decision,omitempty"`
 	Priority                    *v11.Priority              `protobuf:"bytes,18,opt,name=priority,proto3" json:"priority,omitempty"`
 	RetryPolicy                 *v11.RetryPolicy           `protobuf:"bytes,19,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
 	// ID of the activity run (applicable for standalone activities only)
@@ -808,7 +800,7 @@ func (x *PollActivityTaskQueueResponse) GetHeader() *v11.Header {
 	return nil
 }
 
-func (x *PollActivityTaskQueueResponse) GetPollerScalingDecision() *v14.PollerScalingDecision {
+func (x *PollActivityTaskQueueResponse) GetPollerScalingDecision() *v13.PollerScalingDecision {
 	if x != nil {
 		return x.PollerScalingDecision
 	}
@@ -840,17 +832,17 @@ type AddWorkflowTaskRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	Execution        *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	TaskQueue        *v14.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue        *v13.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
 	//
 	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
-	Clock                  *v17.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
+	Clock                  *v16.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
 	// How this task should be directed by matching. (Missing means the default
 	// for TaskVersionDirective, which is unversioned.)
-	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
+	VersionDirective *v17.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
+	ForwardInfo      *v17.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,12,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
 	Stamp         int32 `protobuf:"varint,13,opt,name=stamp,proto3" json:"stamp,omitempty"`
@@ -902,7 +894,7 @@ func (x *AddWorkflowTaskRequest) GetExecution() *v11.WorkflowExecution {
 	return nil
 }
 
-func (x *AddWorkflowTaskRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *AddWorkflowTaskRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -923,21 +915,21 @@ func (x *AddWorkflowTaskRequest) GetScheduleToStartTimeout() *durationpb.Duratio
 	return nil
 }
 
-func (x *AddWorkflowTaskRequest) GetClock() *v17.VectorClock {
+func (x *AddWorkflowTaskRequest) GetClock() *v16.VectorClock {
 	if x != nil {
 		return x.Clock
 	}
 	return nil
 }
 
-func (x *AddWorkflowTaskRequest) GetVersionDirective() *v18.TaskVersionDirective {
+func (x *AddWorkflowTaskRequest) GetVersionDirective() *v17.TaskVersionDirective {
 	if x != nil {
 		return x.VersionDirective
 	}
 	return nil
 }
 
-func (x *AddWorkflowTaskRequest) GetForwardInfo() *v18.TaskForwardInfo {
+func (x *AddWorkflowTaskRequest) GetForwardInfo() *v17.TaskForwardInfo {
 	if x != nil {
 		return x.ForwardInfo
 	}
@@ -1008,17 +1000,17 @@ type AddActivityTaskRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId      string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	Execution        *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	TaskQueue        *v14.TaskQueue         `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue        *v13.TaskQueue         `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	ScheduledEventId int64                  `protobuf:"varint,5,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
 	//
 	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,6,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
-	Clock                  *v17.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
+	Clock                  *v16.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
 	// How this task should be directed by matching. (Missing means the default
 	// for TaskVersionDirective, which is unversioned.)
-	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
+	VersionDirective *v17.TaskVersionDirective `protobuf:"bytes,10,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
+	ForwardInfo      *v17.TaskForwardInfo      `protobuf:"bytes,11,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Stamp            int32                     `protobuf:"varint,12,opt,name=stamp,proto3" json:"stamp,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,13,opt,name=priority,proto3" json:"priority,omitempty"`
 	// Reference to the Chasm component for activity execution (if applicable). For standalone activities, all
@@ -1073,7 +1065,7 @@ func (x *AddActivityTaskRequest) GetExecution() *v11.WorkflowExecution {
 	return nil
 }
 
-func (x *AddActivityTaskRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *AddActivityTaskRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -1094,21 +1086,21 @@ func (x *AddActivityTaskRequest) GetScheduleToStartTimeout() *durationpb.Duratio
 	return nil
 }
 
-func (x *AddActivityTaskRequest) GetClock() *v17.VectorClock {
+func (x *AddActivityTaskRequest) GetClock() *v16.VectorClock {
 	if x != nil {
 		return x.Clock
 	}
 	return nil
 }
 
-func (x *AddActivityTaskRequest) GetVersionDirective() *v18.TaskVersionDirective {
+func (x *AddActivityTaskRequest) GetVersionDirective() *v17.TaskVersionDirective {
 	if x != nil {
 		return x.VersionDirective
 	}
 	return nil
 }
 
-func (x *AddActivityTaskRequest) GetForwardInfo() *v18.TaskForwardInfo {
+func (x *AddActivityTaskRequest) GetForwardInfo() *v17.TaskForwardInfo {
 	if x != nil {
 		return x.ForwardInfo
 	}
@@ -1185,12 +1177,12 @@ func (x *AddActivityTaskResponse) GetAssignedBuildId() string {
 type QueryWorkflowRequest struct {
 	state        protoimpl.MessageState   `protogen:"open.v1"`
 	NamespaceId  string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue    *v14.TaskQueue           `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue    *v13.TaskQueue           `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	QueryRequest *v1.QueryWorkflowRequest `protobuf:"bytes,3,opt,name=query_request,json=queryRequest,proto3" json:"query_request,omitempty"`
 	// How this task should be directed by matching. (Missing means the default
 	// for TaskVersionDirective, which is unversioned.)
-	VersionDirective *v18.TaskVersionDirective `protobuf:"bytes,5,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
-	ForwardInfo      *v18.TaskForwardInfo      `protobuf:"bytes,6,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
+	VersionDirective *v17.TaskVersionDirective `protobuf:"bytes,5,opt,name=version_directive,json=versionDirective,proto3" json:"version_directive,omitempty"`
+	ForwardInfo      *v17.TaskForwardInfo      `protobuf:"bytes,6,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	Priority         *v11.Priority             `protobuf:"bytes,7,opt,name=priority,proto3" json:"priority,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -1233,7 +1225,7 @@ func (x *QueryWorkflowRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *QueryWorkflowRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *QueryWorkflowRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -1247,14 +1239,14 @@ func (x *QueryWorkflowRequest) GetQueryRequest() *v1.QueryWorkflowRequest {
 	return nil
 }
 
-func (x *QueryWorkflowRequest) GetVersionDirective() *v18.TaskVersionDirective {
+func (x *QueryWorkflowRequest) GetVersionDirective() *v17.TaskVersionDirective {
 	if x != nil {
 		return x.VersionDirective
 	}
 	return nil
 }
 
-func (x *QueryWorkflowRequest) GetForwardInfo() *v18.TaskForwardInfo {
+func (x *QueryWorkflowRequest) GetForwardInfo() *v17.TaskForwardInfo {
 	if x != nil {
 		return x.ForwardInfo
 	}
@@ -1323,7 +1315,7 @@ func (x *QueryWorkflowResponse) GetQueryRejected() *v12.QueryRejected {
 type RespondQueryTaskCompletedRequest struct {
 	state            protoimpl.MessageState               `protogen:"open.v1"`
 	NamespaceId      string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue        *v14.TaskQueue                       `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue        *v13.TaskQueue                       `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskId           string                               `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	CompletedRequest *v1.RespondQueryTaskCompletedRequest `protobuf:"bytes,4,opt,name=completed_request,json=completedRequest,proto3" json:"completed_request,omitempty"`
 	unknownFields    protoimpl.UnknownFields
@@ -1367,7 +1359,7 @@ func (x *RespondQueryTaskCompletedRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *RespondQueryTaskCompletedRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *RespondQueryTaskCompletedRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -1427,8 +1419,8 @@ func (*RespondQueryTaskCompletedResponse) Descriptor() ([]byte, []int) {
 type CancelOutstandingPollRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueueType v19.TaskQueueType      `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	TaskQueue     *v14.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueueType v18.TaskQueueType      `protobuf:"varint,2,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	TaskQueue     *v13.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	PollerId      string                 `protobuf:"bytes,4,opt,name=poller_id,json=pollerId,proto3" json:"poller_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1471,14 +1463,14 @@ func (x *CancelOutstandingPollRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *CancelOutstandingPollRequest) GetTaskQueueType() v19.TaskQueueType {
+func (x *CancelOutstandingPollRequest) GetTaskQueueType() v18.TaskQueueType {
 	if x != nil {
 		return x.TaskQueueType
 	}
-	return v19.TaskQueueType(0)
+	return v18.TaskQueueType(0)
 }
 
-func (x *CancelOutstandingPollRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *CancelOutstandingPollRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -1883,8 +1875,8 @@ func (x *DescribeVersionedTaskQueuesResponse) GetVersionTaskQueues() []*Describe
 type DescribeTaskQueuePartitionRequest struct {
 	state              protoimpl.MessageState         `protogen:"open.v1"`
 	NamespaceId        string                         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueuePartition *v18.TaskQueuePartition        `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
-	Versions           *v14.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=versions,proto3" json:"versions,omitempty"`
+	TaskQueuePartition *v17.TaskQueuePartition        `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
+	Versions           *v13.TaskQueueVersionSelection `protobuf:"bytes,3,opt,name=versions,proto3" json:"versions,omitempty"`
 	// Report task queue stats for the requested task queue types and versions
 	ReportStats bool `protobuf:"varint,4,opt,name=report_stats,json=reportStats,proto3" json:"report_stats,omitempty"`
 	// Report list of pollers for requested task queue types and versions
@@ -1931,14 +1923,14 @@ func (x *DescribeTaskQueuePartitionRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *DescribeTaskQueuePartitionRequest) GetTaskQueuePartition() *v18.TaskQueuePartition {
+func (x *DescribeTaskQueuePartitionRequest) GetTaskQueuePartition() *v17.TaskQueuePartition {
 	if x != nil {
 		return x.TaskQueuePartition
 	}
 	return nil
 }
 
-func (x *DescribeTaskQueuePartitionRequest) GetVersions() *v14.TaskQueueVersionSelection {
+func (x *DescribeTaskQueuePartitionRequest) GetVersions() *v13.TaskQueueVersionSelection {
 	if x != nil {
 		return x.Versions
 	}
@@ -1968,7 +1960,7 @@ func (x *DescribeTaskQueuePartitionRequest) GetReportInternalTaskQueueStatus() b
 
 type DescribeTaskQueuePartitionResponse struct {
 	state                protoimpl.MessageState                       `protogen:"open.v1"`
-	VersionsInfoInternal map[string]*v18.TaskQueueVersionInfoInternal `protobuf:"bytes,1,rep,name=versions_info_internal,json=versionsInfoInternal,proto3" json:"versions_info_internal,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	VersionsInfoInternal map[string]*v17.TaskQueueVersionInfoInternal `protobuf:"bytes,1,rep,name=versions_info_internal,json=versionsInfoInternal,proto3" json:"versions_info_internal,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -2003,7 +1995,7 @@ func (*DescribeTaskQueuePartitionResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{22}
 }
 
-func (x *DescribeTaskQueuePartitionResponse) GetVersionsInfoInternal() map[string]*v18.TaskQueueVersionInfoInternal {
+func (x *DescribeTaskQueuePartitionResponse) GetVersionsInfoInternal() map[string]*v17.TaskQueueVersionInfoInternal {
 	if x != nil {
 		return x.VersionsInfoInternal
 	}
@@ -2014,7 +2006,7 @@ type ListTaskQueuePartitionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	NamespaceId   string                 `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue     *v14.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue     *v13.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2063,7 +2055,7 @@ func (x *ListTaskQueuePartitionsRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *ListTaskQueuePartitionsRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *ListTaskQueuePartitionsRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -2072,8 +2064,8 @@ func (x *ListTaskQueuePartitionsRequest) GetTaskQueue() *v14.TaskQueue {
 
 type ListTaskQueuePartitionsResponse struct {
 	state                       protoimpl.MessageState            `protogen:"open.v1"`
-	ActivityTaskQueuePartitions []*v14.TaskQueuePartitionMetadata `protobuf:"bytes,1,rep,name=activity_task_queue_partitions,json=activityTaskQueuePartitions,proto3" json:"activity_task_queue_partitions,omitempty"`
-	WorkflowTaskQueuePartitions []*v14.TaskQueuePartitionMetadata `protobuf:"bytes,2,rep,name=workflow_task_queue_partitions,json=workflowTaskQueuePartitions,proto3" json:"workflow_task_queue_partitions,omitempty"`
+	ActivityTaskQueuePartitions []*v13.TaskQueuePartitionMetadata `protobuf:"bytes,1,rep,name=activity_task_queue_partitions,json=activityTaskQueuePartitions,proto3" json:"activity_task_queue_partitions,omitempty"`
+	WorkflowTaskQueuePartitions []*v13.TaskQueuePartitionMetadata `protobuf:"bytes,2,rep,name=workflow_task_queue_partitions,json=workflowTaskQueuePartitions,proto3" json:"workflow_task_queue_partitions,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -2108,14 +2100,14 @@ func (*ListTaskQueuePartitionsResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_matchingservice_v1_request_response_proto_rawDescGZIP(), []int{24}
 }
 
-func (x *ListTaskQueuePartitionsResponse) GetActivityTaskQueuePartitions() []*v14.TaskQueuePartitionMetadata {
+func (x *ListTaskQueuePartitionsResponse) GetActivityTaskQueuePartitions() []*v13.TaskQueuePartitionMetadata {
 	if x != nil {
 		return x.ActivityTaskQueuePartitions
 	}
 	return nil
 }
 
-func (x *ListTaskQueuePartitionsResponse) GetWorkflowTaskQueuePartitions() []*v14.TaskQueuePartitionMetadata {
+func (x *ListTaskQueuePartitionsResponse) GetWorkflowTaskQueuePartitions() []*v13.TaskQueuePartitionMetadata {
 	if x != nil {
 		return x.WorkflowTaskQueuePartitions
 	}
@@ -2643,7 +2635,7 @@ type GetTaskQueueUserDataRequest struct {
 	// The task queue to fetch data from. The task queue is always considered as a normal
 	// queue, since sticky queues have no user data.
 	TaskQueue     string            `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueType v19.TaskQueueType `protobuf:"varint,5,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	TaskQueueType v18.TaskQueueType `protobuf:"varint,5,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	// The value of the last known user data version.
 	// If the requester has no data, it should set this to 0.
 	// This value must not be set to a negative number (note that our linter suggests avoiding uint64).
@@ -2703,11 +2695,11 @@ func (x *GetTaskQueueUserDataRequest) GetTaskQueue() string {
 	return ""
 }
 
-func (x *GetTaskQueueUserDataRequest) GetTaskQueueType() v19.TaskQueueType {
+func (x *GetTaskQueueUserDataRequest) GetTaskQueueType() v18.TaskQueueType {
 	if x != nil {
 		return x.TaskQueueType
 	}
-	return v19.TaskQueueType(0)
+	return v18.TaskQueueType(0)
 }
 
 func (x *GetTaskQueueUserDataRequest) GetLastKnownUserDataVersion() int64 {
@@ -2873,7 +2865,7 @@ func (x *SyncDeploymentUserDataRequest) GetDeploymentName() string {
 	return ""
 }
 
-func (x *SyncDeploymentUserDataRequest) GetTaskQueueTypes() []v19.TaskQueueType {
+func (x *SyncDeploymentUserDataRequest) GetTaskQueueTypes() []v18.TaskQueueType {
 	if x != nil {
 		return x.TaskQueueTypes
 	}
@@ -3203,7 +3195,7 @@ func (x *GetBuildIdTaskQueueMappingResponse) GetTaskQueues() []string {
 type ForceLoadTaskQueuePartitionRequest struct {
 	state              protoimpl.MessageState  `protogen:"open.v1"`
 	NamespaceId        string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueuePartition *v18.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
+	TaskQueuePartition *v17.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -3245,7 +3237,7 @@ func (x *ForceLoadTaskQueuePartitionRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *ForceLoadTaskQueuePartitionRequest) GetTaskQueuePartition() *v18.TaskQueuePartition {
+func (x *ForceLoadTaskQueuePartitionRequest) GetTaskQueuePartition() *v17.TaskQueuePartition {
 	if x != nil {
 		return x.TaskQueuePartition
 	}
@@ -3301,7 +3293,7 @@ type ForceUnloadTaskQueueRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueType v19.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	TaskQueueType v18.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3350,11 +3342,11 @@ func (x *ForceUnloadTaskQueueRequest) GetTaskQueue() string {
 	return ""
 }
 
-func (x *ForceUnloadTaskQueueRequest) GetTaskQueueType() v19.TaskQueueType {
+func (x *ForceUnloadTaskQueueRequest) GetTaskQueueType() v18.TaskQueueType {
 	if x != nil {
 		return x.TaskQueueType
 	}
-	return v19.TaskQueueType(0)
+	return v18.TaskQueueType(0)
 }
 
 // TODO Shivam - Please remove this in 123
@@ -3405,7 +3397,7 @@ func (x *ForceUnloadTaskQueueResponse) GetWasLoaded() bool {
 type ForceUnloadTaskQueuePartitionRequest struct {
 	state              protoimpl.MessageState  `protogen:"open.v1"`
 	NamespaceId        string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueuePartition *v18.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
+	TaskQueuePartition *v17.TaskQueuePartition `protobuf:"bytes,2,opt,name=task_queue_partition,json=taskQueuePartition,proto3" json:"task_queue_partition,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -3447,7 +3439,7 @@ func (x *ForceUnloadTaskQueuePartitionRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *ForceUnloadTaskQueuePartitionRequest) GetTaskQueuePartition() *v18.TaskQueuePartition {
+func (x *ForceUnloadTaskQueuePartitionRequest) GetTaskQueuePartition() *v17.TaskQueuePartition {
 	if x != nil {
 		return x.TaskQueuePartition
 	}
@@ -3816,10 +3808,10 @@ func (*CheckTaskQueueUserDataPropagationResponse) Descriptor() ([]byte, []int) {
 type DispatchNexusTaskRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue   *v14.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue   *v13.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// Nexus request extracted by the frontend and translated into Temporal API format.
-	Request       *v113.Request        `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
-	ForwardInfo   *v18.TaskForwardInfo `protobuf:"bytes,4,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
+	Request       *v112.Request        `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
+	ForwardInfo   *v17.TaskForwardInfo `protobuf:"bytes,4,opt,name=forward_info,json=forwardInfo,proto3" json:"forward_info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3861,21 +3853,21 @@ func (x *DispatchNexusTaskRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *DispatchNexusTaskRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *DispatchNexusTaskRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
 	return nil
 }
 
-func (x *DispatchNexusTaskRequest) GetRequest() *v113.Request {
+func (x *DispatchNexusTaskRequest) GetRequest() *v112.Request {
 	if x != nil {
 		return x.Request
 	}
 	return nil
 }
 
-func (x *DispatchNexusTaskRequest) GetForwardInfo() *v18.TaskForwardInfo {
+func (x *DispatchNexusTaskRequest) GetForwardInfo() *v17.TaskForwardInfo {
 	if x != nil {
 		return x.ForwardInfo
 	}
@@ -3942,7 +3934,7 @@ func (x *DispatchNexusTaskResponse) GetHandlerError() *v113.HandlerError {
 	return nil
 }
 
-func (x *DispatchNexusTaskResponse) GetResponse() *v113.Response {
+func (x *DispatchNexusTaskResponse) GetResponse() *v112.Response {
 	if x != nil {
 		if x, ok := x.Outcome.(*DispatchNexusTaskResponse_Response); ok {
 			return x.Response
@@ -3982,7 +3974,7 @@ type DispatchNexusTaskResponse_HandlerError struct {
 
 type DispatchNexusTaskResponse_Response struct {
 	// Set if the worker's handler responded successfully to the nexus task.
-	Response *v113.Response `protobuf:"bytes,2,opt,name=response,proto3,oneof"`
+	Response *v112.Response `protobuf:"bytes,2,opt,name=response,proto3,oneof"`
 }
 
 type DispatchNexusTaskResponse_RequestTimeout struct {
@@ -4130,7 +4122,7 @@ func (x *PollNexusTaskQueueResponse) GetResponse() *v1.PollNexusTaskQueueRespons
 type RespondNexusTaskCompletedRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue   *v14.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue   *v13.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// A unique ID for this task generated by the matching engine. Decoded from the incoming request's task token.
 	TaskId string `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	// Original completion as received by the frontend.
@@ -4176,7 +4168,7 @@ func (x *RespondNexusTaskCompletedRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *RespondNexusTaskCompletedRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *RespondNexusTaskCompletedRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -4236,7 +4228,7 @@ func (*RespondNexusTaskCompletedResponse) Descriptor() ([]byte, []int) {
 type RespondNexusTaskFailedRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue   *v14.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueue   *v13.TaskQueue         `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// A unique ID for this task generated by the matching engine. Decoded from the incoming request's task token.
 	TaskId string `protobuf:"bytes,3,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
 	// Original failure as received by the frontend.
@@ -4282,7 +4274,7 @@ func (x *RespondNexusTaskFailedRequest) GetNamespaceId() string {
 	return ""
 }
 
-func (x *RespondNexusTaskFailedRequest) GetTaskQueue() *v14.TaskQueue {
+func (x *RespondNexusTaskFailedRequest) GetTaskQueue() *v13.TaskQueue {
 	if x != nil {
 		return x.TaskQueue
 	}
@@ -5747,8 +5739,7 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x12backlog_count_hint\x18\b \x01(\x03R\x10backlogCountHint\x128\n" +
 	"\x18sticky_execution_enabled\x18\t \x01(\bR\x16stickyExecutionEnabled\x12:\n" +
 	"\x05query\x18\n" +
-	" \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05query\x12q\n" +
-	"\x17transient_workflow_task\x18\v \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x15transientWorkflowTask\x12g\n" +
+	" \x01(\v2$.temporal.api.query.v1.WorkflowQueryR\x05query\x12g\n" +
 	"\x1dworkflow_execution_task_queue\x18\f \x01(\v2$.temporal.api.taskqueue.v1.TaskQueueR\x1aworkflowExecutionTaskQueue\x12!\n" +
 	"\fbranch_token\x18\x0e \x01(\fR\vbranchToken\x12A\n" +
 	"\x0escheduled_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\rscheduledTime\x12=\n" +
