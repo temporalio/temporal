@@ -60,9 +60,11 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTask(task any) *go
 }
 
 // AddSpooledTaskToMatcher mocks base method.
-func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) {
+func (m *MockphysicalTaskQueueManager) AddSpooledTaskToMatcher(task *internalTask) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret := m.ctrl.Call(m, "AddSpooledTaskToMatcher", task)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
 // AddSpooledTaskToMatcher indicates an expected call of AddSpooledTaskToMatcher.
@@ -278,6 +280,18 @@ func (m *MockphysicalTaskQueueManager) QueueKey() *PhysicalTaskQueueKey {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
+}
+
+// ReprocessRedirectedTasksAfterStop mocks base method.
+func (m *MockphysicalTaskQueueManager) ReprocessRedirectedTasksAfterStop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ReprocessRedirectedTasksAfterStop")
+}
+
+// ReprocessRedirectedTasksAfterStop indicates an expected call of ReprocessRedirectedTasksAfterStop.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) ReprocessRedirectedTasksAfterStop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReprocessRedirectedTasksAfterStop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ReprocessRedirectedTasksAfterStop))
 }
 
 // SetupDraining mocks base method.

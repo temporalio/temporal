@@ -1013,6 +1013,9 @@ var (
 	ReplicationTasksFailed                = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill              = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency       = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
+	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
+	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
 	// ReplicationTasksLag is a heuristic for how far behind the remote DC is for a given cluster. It measures the
 	// difference between task IDs so its unit should be "tasks".
 	ReplicationTasksLag = NewDimensionlessHistogramDef("replication_tasks_lag")
@@ -1334,6 +1337,7 @@ var (
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
+	WorkflowTargetVersionChangedCount                 = NewCounterDef("workflow_target_version_changed_count")
 
 	// Continue-as-new
 	WorkflowContinueAsNewCount        = NewCounterDef("workflow_continue_as_new_count")

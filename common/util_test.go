@@ -463,6 +463,7 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 			&info.WorkflowTaskType,
 			&info.WorkflowTaskSuggestContinueAsNew,
 			&info.WorkflowTaskSuggestContinueAsNewReasons,
+			&info.WorkflowTaskTargetWorkerDeploymentVersionChanged,
 			&info.WorkflowTaskHistorySizeBytes,
 			&info.WorkflowTaskBuildId,
 			&info.WorkflowTaskBuildIdRedirectCounter,

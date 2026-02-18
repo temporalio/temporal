@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -282,6 +283,34 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollWorkflowTaskQueueRequest
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding workflow poll")
+}
+
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
@@ -300,7 +329,7 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(pollerID, request.GetPollerId())
@@ -310,6 +339,64 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal(t.partition.Kind(), request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollActivityTaskQueueResponse())
 	t.Nil(task.pollWorkflowTaskQueueResponse())
+}
+
+func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollActivityTaskQueueRequest
+	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...interface{}) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding activity poll")
+}
+
+func (t *ForwarderTestSuite) TestForwardPollForNexusPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_NEXUS)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollNexusTaskQueueResponse{
+		Response: &workflowservice.PollNexusTaskQueueResponse{
+			TaskToken: []byte("token1"),
+		},
+	}
+
+	var request *matchingservice.PollNexusTaskQueueRequest
+	t.client.EXPECT().PollNexusTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollNexusTaskQueueRequest, arg2 ...interface{}) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding Nexus poll")
 }
 
 // TODO(pri): old matcher cleanup

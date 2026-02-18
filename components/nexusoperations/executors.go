@@ -177,7 +177,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	// This happens when we accept the ScheduleNexusOperation command when the endpoint is not found in the registry as
 	// indicated by the EndpointNotFoundAlwaysNonRetryable dynamic config.
 	if args.endpointID == "" {
-		handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+		handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 		return e.saveResult(ctx, env, ref, nil, handlerError)
 	}
 
@@ -185,7 +185,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
 			// The endpoint is not registered, immediately fail the invocation.
-			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+			handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 			return e.saveResult(ctx, env, ref, nil, handlerError)
 		}
 		return err
@@ -238,12 +238,16 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		opTimeout = min(args.scheduleToCloseTimeout-time.Since(args.scheduledTime), opTimeout)
 	}
 	header := nexus.Header(args.header)
+	if header == nil {
+		header = make(nexus.Header, 1) // It's most likely that we'll only be setting the new wire format header.
+	}
 	// Set the operation timeout header if not already set.
 	if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeout != maxDuration && opTimeoutHeader == "" {
-		if header == nil {
-			header = make(nexus.Header, 1)
-		}
 		header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(opTimeout)
+	}
+	if e.Config.UseNewFailureWireFormat(ns.Name().String()) {
+		// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
+		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
 
 	callCtx, cancel := context.WithTimeout(ctx, callTimeout)
@@ -479,12 +483,12 @@ func (e taskExecutor) saveResult(ctx context.Context, env hsm.Environment, ref h
 
 func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.Node, operation Operation, callErr error) error {
 	var handlerErr *nexus.HandlerError
-	var opFailedErr *nexus.OperationError
+	var opErr *nexus.OperationError
 	var opTimeoutBelowMinErr *operationTimeoutBelowMinError
 
 	switch {
-	case errors.As(callErr, &opFailedErr):
-		return handleOperationError(node, operation, opFailedErr)
+	case errors.As(callErr, &opErr):
+		return handleOperationError(node, operation, opErr)
 	case errors.As(callErr, &handlerErr) && !handlerErr.Retryable():
 		// The StartOperation request got an unexpected response that is not retryable, fail the operation.
 		// Although Failure is nullable, Nexus SDK is expected to always populate this field
@@ -526,15 +530,15 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 	if err != nil {
 		return err
 	}
-	failure, err := callErrToFailure(callErr, true)
+	cause, err := callErrToFailure(callErr, false)
 	if err != nil {
 		return err
 	}
 	attrs := &historypb.NexusOperationFailedEventAttributes{
-		Failure: nexusOperationFailure(
+		Failure: createNexusOperationFailure(
 			operation,
 			eventID,
-			failure,
+			cause,
 		),
 		ScheduledEventId: eventID,
 		RequestId:        operation.RequestId,
@@ -579,7 +583,7 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb
 			// nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
-					Failure: nexusOperationFailure(
+					Failure: createNexusOperationFailure(
 						op,
 						eventID,
 						&failurepb.Failure{
@@ -629,7 +633,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	endpoint, err := e.lookupEndpoint(ctx, namespace.ID(ref.WorkflowKey.NamespaceID), args.endpointID, args.endpointName)
 	if err != nil {
 		if errors.As(err, new(*serviceerror.NotFound)) {
-			handlerError := nexus.HandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
+			handlerError := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "endpoint not registered")
 
 			// The endpoint is not registered, immediately fail the invocation.
 			return e.saveCancelationResult(ctx, env, ref, handlerError, args.scheduledEventID)
@@ -841,7 +845,7 @@ func (e taskExecutor) lookupEndpoint(ctx context.Context, namespaceID namespace.
 	return entry, nil
 }
 
-func nexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
+func createNexusOperationFailure(operation Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
 	return &failurepb.Failure{
 		Message: "nexus operation completed unsuccessfully",
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
@@ -924,44 +928,21 @@ func isDestinationDown(err error) bool {
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
 	var handlerErr *nexus.HandlerError
 	if errors.As(callErr, &handlerErr) {
-		var retryBehavior enumspb.NexusHandlerErrorRetryBehavior
-		// nolint:exhaustive // unspecified is the default
-		switch handlerErr.RetryBehavior {
-		case nexus.HandlerErrorRetryBehaviorRetryable:
-			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE
-		case nexus.HandlerErrorRetryBehaviorNonRetryable:
-			retryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE
-		}
-		failure := &failurepb.Failure{
-			Message: handlerErr.Error(),
-			FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
-				NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
-					Type:          string(handlerErr.Type),
-					RetryBehavior: retryBehavior,
-				},
-			},
-		}
-		var failureError *nexus.FailureError
-		if errors.As(handlerErr.Cause, &failureError) {
+		var nf nexus.Failure
+		if handlerErr.OriginalFailure != nil {
+			nf = *handlerErr.OriginalFailure
+		} else {
 			var err error
-			failure.Cause, err = commonnexus.NexusFailureToAPIFailure(failureError.Failure, retryable)
+			nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(handlerErr)
 			if err != nil {
 				return nil, err
 			}
-		} else {
-			cause := handlerErr.Cause
-			if cause == nil {
-				cause = errors.New("unknown cause")
-			}
-			failure.Cause = &failurepb.Failure{
-				Message: cause.Error(),
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
-				},
-			}
 		}
-
-		return failure, nil
+		f, err := commonnexus.NexusFailureToTemporalFailure(nf)
+		if err != nil {
+			return nil, err
+		}
+		return f, nil
 	}
 
 	return &failurepb.Failure{

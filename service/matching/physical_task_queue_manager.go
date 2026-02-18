@@ -436,6 +436,13 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 	c.logger.Info("Drain completed, unloaded draining backlog manager")
 }
 
+func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
+	if c.priMatcher == nil {
+		return
+	}
+	c.priMatcher.ReprocessRedirectedTasksAfterStop()
+}
+
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
 	c.liveness.markAlive()
 	return c.backlogMgr.SpoolTask(taskInfo)
@@ -550,12 +557,12 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) error {
 	if c.priMatcher == nil {
 		softassert.Fail(c.logger, "AddSpooledTaskToMatcher called on old matcher")
-		return
+		return errInternalMatchError
 	}
-	c.priMatcher.AddTask(task)
+	return c.priMatcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {

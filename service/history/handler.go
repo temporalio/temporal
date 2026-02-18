@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -2157,11 +2158,22 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	}
 	var opErr *nexus.OperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
-		opErr = &nexus.OperationError{
-			State: nexus.OperationState(request.GetState()),
-			Cause: &nexus.FailureError{
-				Failure: commonnexus.ProtoFailureToNexusFailure(request.GetFailure()),
-			},
+		failure := commonnexus.ProtoFailureToNexusFailure(request.GetFailure())
+		recvdErr, err := nexusrpc.DefaultFailureConverter().FailureToError(failure)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("unable to convert failure to error")
+		}
+		// Backward compatibility: if the received error is not of type OperationError, wrap the error in OperationError.
+		var ok bool
+		if opErr, ok = recvdErr.(*nexus.OperationError); !ok {
+			opErr = &nexus.OperationError{
+				State:   nexus.OperationState(request.GetState()),
+				Message: "nexus operation completed unsuccessfully",
+				Cause:   recvdErr,
+			}
+			if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+				return nil, serviceerror.NewInvalidArgument("unable to convert operation error to failure")
+			}
 		}
 	}
 	err = nexusoperations.CompletionHandler(

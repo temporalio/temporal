@@ -26,6 +26,12 @@ const (
 	headerOperationStartTime = "nexus-operation-start-time"
 	headerOperationCloseTime = "nexus-operation-close-time"
 	headerRetryable          = "nexus-request-retryable"
+
+	// HeaderTemporalNexusFailureSupport is a Temporal specific header that toggles behavior of how failures are
+	// serialized over the wire when set to the string "true".
+	// NOTE: If / when porting this package back into the Nexus SDK, make sure not to copy this header over.
+	// The header should be safe to remove by server version 1.32.0.
+	HeaderTemporalNexusFailureSupport = "temporal-nexus-failure-support"
 )
 
 const contentTypeJSON = "application/json"
@@ -33,8 +39,8 @@ const contentTypeJSON = "application/json"
 // Query param for passing a callback URL.
 const queryCallbackURL = "callback"
 
-// HTTP status code for failed operation responses.
-const statusOperationFailed = http.StatusFailedDependency
+// HTTP status code for unsuccessful (failed or canceled) operation responses.
+const statusOperationUnsuccessful = http.StatusFailedDependency
 
 func isMediaTypeJSON(contentType string) bool {
 	if contentType == "" {
@@ -272,4 +278,18 @@ func ParseDuration(value string) (time.Duration, error) {
 // FormatDuration converts a duration into a string representation in millisecond resolution.
 func FormatDuration(d time.Duration) string {
 	return strconv.FormatInt(d.Milliseconds(), 10) + "ms"
+}
+
+// MarkAsWrapperError adds the "unwrap-error" metadata to the original failure of the given OperationError, which
+// signals the Temporal codebase to unwrap the underlying failure as the failure cause.
+// This is used as a shim for Temporal->Temporal calls. Temporal already has a Failure type that represents an
+// OperationError and does not need to record this wrapper error.
+func MarkAsWrapperError(failureConverter FailureConverter, opErr *nexus.OperationError) error {
+	originalFailure, err := failureConverter.ErrorToFailure(opErr)
+	if err != nil {
+		return err
+	}
+	originalFailure.Metadata["unwrap-error"] = "true"
+	opErr.OriginalFailure = &originalFailure
+	return nil
 }
