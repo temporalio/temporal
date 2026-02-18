@@ -154,7 +154,7 @@ func (s *prioritySemaphoreSuite) Test_AllThreadsAreWokenUp() {
 
 	wg := sync.WaitGroup{}
 	wg.Add(10)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		go func() {
 			// nolint:testifylint
 			// Must use assert.Assertions instead of require.Assertions here because this is running in a separate goroutine.

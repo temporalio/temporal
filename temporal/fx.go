@@ -95,7 +95,7 @@ type (
 	serverOptionsProvider struct {
 		fx.Out
 		ServerOptions              *serverOptions
-		StopChan                   chan interface{}
+		StopChan                   chan any
 		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
@@ -192,7 +192,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	stopChan := make(chan interface{})
+	stopChan := make(chan any)
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider

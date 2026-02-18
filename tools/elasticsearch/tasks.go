@@ -163,7 +163,7 @@ func (task *SetupTask) updateIndexMappings() error {
 	}
 
 	// Parse the template to extract mappings
-	var template map[string]interface{}
+	var template map[string]any
 	if err := json.Unmarshal([]byte(config.TemplateContent), &template); err != nil {
 		return fmt.Errorf("failed to parse template content: %w", err)
 	}

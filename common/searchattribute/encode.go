@@ -10,7 +10,7 @@ import (
 // Encode encodes map of search attribute values to search attributes.
 // typeMap can be nil (then MetadataType field won't be set).
 // In case of error, it will continue to next search attribute and return last error.
-func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
+func Encode(searchAttributes map[string]any, typeMap *NameTypeMap) (*commonpb.SearchAttributes, error) {
 	if len(searchAttributes) == 0 {
 		return nil, nil
 	}
@@ -47,12 +47,12 @@ func Decode(
 	searchAttributes *commonpb.SearchAttributes,
 	typeMap *NameTypeMap,
 	allowList bool,
-) (map[string]interface{}, error) {
+) (map[string]any, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
 		return nil, nil
 	}
 
-	result := make(map[string]interface{}, len(searchAttributes.GetIndexedFields()))
+	result := make(map[string]any, len(searchAttributes.GetIndexedFields()))
 	var lastErr error
 	for saName, saPayload := range searchAttributes.GetIndexedFields() {
 		saType := enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED

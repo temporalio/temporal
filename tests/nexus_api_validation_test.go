@@ -59,7 +59,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 	taskQueue := testcore.RandomizeStr("task-queue")
 
 	var namespace string
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		namespace += "namespace-is-a-very-long-string"
 	}
 

@@ -347,13 +347,14 @@ func searchAttributeKeyValuesToMap(saSlice []SearchAttributeKeyValue) map[string
 
 func (n *Node) SetRootComponent(
 	rootComponent Component,
-) {
+) error {
 	root := n.root()
 	root.setValue(rootComponent)
 	root.setValueState(valueStateNeedSyncStructure)
 	if componentID, ok := n.registry.ComponentIDFor(rootComponent); ok {
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
+	return root.syncSubComponents()
 }
 
 // setValue sets the value field of the node.
@@ -1788,7 +1789,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 func (n *Node) deserializeComponentTask(
 	componentTask *persistencespb.ChasmComponentAttributes_Task,
 ) (any, error) {
-	registableTask, ok := n.registry.taskByID(componentTask.TypeId)
+	registableTask, ok := n.registry.TaskByID(componentTask.TypeId)
 	if !ok {
 		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
@@ -2975,7 +2976,7 @@ func (n *Node) ValidateSideEffectTask(
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := n.registry.taskByID(taskTypeID)
+	registrableTask, ok := n.registry.TaskByID(taskTypeID)
 	if !ok {
 		return false, softassert.UnexpectedInternalErr(
 			n.logger,
@@ -3060,7 +3061,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := registry.taskByID(taskTypeID)
+	registrableTask, ok := registry.TaskByID(taskTypeID)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
 			n.logger,

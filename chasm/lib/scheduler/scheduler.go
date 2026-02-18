@@ -601,7 +601,7 @@ func (s *Scheduler) ListMatchingTimes(
 
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(frontendReq.StartTime)
-	for i := 0; i < maxListMatchingTimesCount; i++ {
+	for range maxListMatchingTimesCount {
 		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
 			break

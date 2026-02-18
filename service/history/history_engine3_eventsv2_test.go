@@ -150,6 +150,7 @@ func (s *engine3Suite) SetupTest() {
 		},
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
+		workerDeploymentClient:     noopWorkerDeploymentClient{},
 	}
 	s.mockShard.SetEngineForTesting(h)
 

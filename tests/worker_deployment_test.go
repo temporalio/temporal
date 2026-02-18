@@ -390,7 +390,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_So
 
 	numVersions := 10
 
-	for i := 0; i < numVersions; i++ {
+	for i := range numVersions {
 		go s.pollFromDeployment(ctx, tv.WithBuildIDNumber(i))
 
 		// waiting for 1ms to start the next version later.
@@ -1434,7 +1434,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
 	taskQueues := 5
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
 
@@ -1443,7 +1443,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 	s.ensureCreateVersionWithExpectedTaskQueues(ctx, tv, taskQueues)
 
 	// verify that all the registered task-queues have "" set as their ramping version
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 	}
 
@@ -1452,7 +1452,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 	s.setAndVerifyRampingVersion(ctx, tv, false, 50, true, "")
 
 	// verify the task queues have new ramping version
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, tv.DeploymentVersionString(), 50)
 	}
 
@@ -1507,7 +1507,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
 	taskQueues := 5
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
 
@@ -1524,7 +1524,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 	s.setAndVerifyRampingVersionUnversionedOption(ctx, tv, true, false, 75, true, false, true, "")
 
 	// check that the current version's task queues have ramping version == __unversioned__
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), worker_versioning.UnversionedVersionId, 75)
 	}
 
@@ -1698,7 +1698,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	// registering 5 task-queues in the version which would result in the creation of 5 batches, each with 1 task-queue, during the SyncState call.
 	versionCreateTime := timestamppb.Now()
 	taskQueues := 5
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		go s.pollFromDeploymentWithTaskQueueNumber(ctx, tv, i)
 	}
 
@@ -1707,7 +1707,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	s.ensureCreateVersionWithExpectedTaskQueues(ctx, tv, taskQueues)
 
 	// verify that all the registered task-queues have "__unversioned__" as their current version
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), worker_versioning.UnversionedVersionId, "", 0)
 	}
 
@@ -1716,7 +1716,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 	s.setCurrentVersion(ctx, tv, true, "")
 
 	// verify the current version has propogated to all the registered task-queues userData
-	for i := 0; i < taskQueues; i++ {
+	for i := range taskQueues {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}
 
@@ -1972,12 +1972,12 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersio
 	errChan := make(chan error)
 
 	versions := 10
-	for i := 0; i < versions; i++ {
+	for i := range versions {
 		s.startVersionWorkflow(ctx, tv.WithBuildIDNumber(i))
 	}
 
 	// Concurrently set 10 different versions as current version
-	for i := 0; i < versions; i++ {
+	for i := range versions {
 		go func() {
 			_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 				Namespace:               s.Namespace().String(),
@@ -1990,7 +1990,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_DifferentVersio
 		}()
 	}
 
-	for i := 0; i < versions; i++ {
+	for range versions {
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
@@ -2025,7 +2025,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion_NoU
 	s.startVersionWorkflow(ctx, tv) // create version
 
 	// Concurrently set the same version as current version 10 times.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			_, err := s.FrontendClient().SetWorkerDeploymentCurrentVersion(ctx, &workflowservice.SetWorkerDeploymentCurrentVersionRequest{
 				Namespace:               s.Namespace().String(),
@@ -2038,7 +2038,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Concurrent_SameVersion_NoU
 		}()
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
@@ -2071,7 +2071,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	tv := testvars.New(s)
 
 	tqs := 10
-	for i := 0; i < tqs; i++ {
+	for i := range tqs {
 		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
 	}
 
@@ -2079,7 +2079,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	s.setCurrentVersion(ctx, tv, false, "")
 
 	// verify that the task queues, eventually, have this version as the current version in their versioning info
-	for i := 0; i < tqs; i++ {
+	for i := range tqs {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}
 }
@@ -2094,12 +2094,12 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersio
 	errChan := make(chan error)
 
 	versions := 10
-	for i := 0; i < versions; i++ {
+	for i := range versions {
 		s.startVersionWorkflow(ctx, tv.WithBuildIDNumber(i))
 	}
 
 	// Concurrently set 10 different versions as ramping version
-	for i := 0; i < versions; i++ {
+	for i := range versions {
 		go func() {
 			_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 				Namespace:               s.Namespace().String(),
@@ -2113,7 +2113,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersio
 		}()
 	}
 
-	for i := 0; i < versions; i++ {
+	for range versions {
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
@@ -2148,7 +2148,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 	s.startVersionWorkflow(ctx, tv) // create version
 
 	// Concurrently set the same version as ramping version 10 times.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			_, err := s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
 				Namespace:               s.Namespace().String(),
@@ -2162,7 +2162,7 @@ func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_SameVersion_NoU
 		}()
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
@@ -2213,11 +2213,11 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 	start := time.Now()
 
 	// For each version send pollers regularly until all TQs are registered from DescribeVersion POV
-	for i := 0; i < numVersions; i++ {
+	for i := range numVersions {
 		pollCtx, cancelPollers := context.WithTimeout(context.Background(), 5*time.Minute)
 
 		sendPollers := func() {
-			for j := 0; j < numTaskQueues; j++ {
+			for j := range numTaskQueues {
 				go s.pollFromDeployment(pollCtx, tv.WithBuildIDNumber(i).WithTaskQueueNumber(j))
 			}
 		}
@@ -2273,7 +2273,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 	defer cancel()
 
 	// Rapidly perform 20 setCurrent and setRamping operations, each targeting one of the 3 versions
-	for i := 0; i < numOperations; i++ {
+	for i := range numOperations {
 		// Alternate between setCurrent and setRamping
 		targetVersion := i % numVersions
 		versionTV := tv.WithBuildIDNumber(targetVersion)
@@ -2331,7 +2331,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_ManyTaskQueues_RapidRoutin
 	// Verify that the routing info revision number in each of the task queues matches the latest revision number
 	// Note: The public API doesn't expose revision numbers at the task queue level, so we verify that the
 	// versioning info has been propagated correctly by checking the current/ramping versions
-	for j := 0; j < numTaskQueues; j++ {
+	for j := range numTaskQueues {
 		tqTV := tv.WithTaskQueueNumber(j)
 		tqUD, err := s.GetTestCluster().MatchingClient().GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
 			NamespaceId:   s.NamespaceID().String(),
@@ -2356,7 +2356,7 @@ func (s *WorkerDeploymentSuite) TestResourceExhaustedErrors_Converted_To_Readabl
 	errChan := make(chan error, versions)
 
 	// Start all version workflows first
-	for i := 0; i < versions; i++ {
+	for i := range versions {
 		s.startVersionWorkflow(ctx, tv.WithBuildIDNumber(i))
 	}
 
@@ -2409,14 +2409,14 @@ func (s *WorkerDeploymentSuite) testConcurrentRequestsResourceExhausted(
 	requestFn func(int) error,
 ) {
 	// Launch concurrent requests
-	for i := 0; i < versions; i++ {
+	for i := range versions {
 		go func(i int) {
 			errChan <- requestFn(i)
 		}(i)
 	}
 
 	// Expect ResourceExhausted errors to be converted to Internal errors with the appropriate message
-	for i := 0; i < versions; i++ {
+	for range versions {
 		err := <-errChan
 		if err != nil {
 			switch err.(type) {
@@ -3619,7 +3619,7 @@ func (s *WorkerDeploymentSuite) setAndValidateManagerIdentity(ctx context.Contex
 func (s *WorkerDeploymentSuite) createVersionsInDeployments(ctx context.Context, tv *testvars.TestVars, n int) []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary {
 	var expectedDeploymentSummaries []*workflowservice.ListWorkerDeploymentsResponse_WorkerDeploymentSummary
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		deployment := tv.WithDeploymentSeriesNumber(i)
 		version := deployment.WithBuildIDNumber(i)
 

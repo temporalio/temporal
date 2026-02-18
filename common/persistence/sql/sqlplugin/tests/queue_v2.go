@@ -575,7 +575,7 @@ func testRangeDeleteActuallyDeletes(ctx context.Context, t *testing.T, db sqlplu
 		QueueName: queueKey.GetQueueName(),
 	})
 	require.NoError(t, err)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueKey.GetQueueName())
 		require.NoError(t, err)
 	}

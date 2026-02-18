@@ -36,7 +36,7 @@ variable "TAG_LATEST" {
 # NOTE: We use just the tag without a digest pin because digest-pinned manifest lists
 # cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
 variable "ALPINE_TAG" {
-  default = "3.23"
+  default = "3.23.3"
 }
 
 target "admin-tools" {

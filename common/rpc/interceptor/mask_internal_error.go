@@ -43,10 +43,10 @@ func NewMaskInternalErrorDetailsInterceptor(
 
 func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 
 	resp, err := handler(ctx, req)
 
@@ -65,7 +65,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
 }
 
 func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(
-	req interface{}, fullMethodName string, err error,
+	req any, fullMethodName string, err error,
 ) error {
 	statusCode := serviceerror.ToStatus(err).Code()
 

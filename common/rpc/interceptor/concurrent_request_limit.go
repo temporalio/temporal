@@ -68,10 +68,10 @@ func NewConcurrentRequestLimitInterceptor(
 
 func (ni *ConcurrentRequestLimitInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	nsName := MustGetNamespaceName(ni.namespaceRegistry, req)
 	mh := GetMetricsHandlerFromContext(ctx, ni.logger)
 	cleanup, err := ni.Allow(nsName, info.FullMethod, mh, req)

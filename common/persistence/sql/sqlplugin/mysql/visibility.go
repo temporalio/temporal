@@ -329,7 +329,7 @@ func (mdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) error {
 	if row.SearchAttributes != nil {
 		for saName, saValue := range *row.SearchAttributes {
 			switch typedSaValue := saValue.(type) {
-			case []interface{}:
+			case []any:
 				// the only valid type is slice of strings
 				strSlice := make([]string, len(typedSaValue))
 				for i, item := range typedSaValue {

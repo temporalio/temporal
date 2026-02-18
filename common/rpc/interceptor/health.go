@@ -28,10 +28,10 @@ func NewHealthInterceptor() *HealthInterceptor {
 
 func (i *HealthInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	// only enforce health check on WorkflowService and OperatorService
 	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) ||
 		strings.HasPrefix(info.FullMethod, api.OperatorServicePrefix) {

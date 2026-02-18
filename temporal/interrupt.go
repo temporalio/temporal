@@ -6,11 +6,11 @@ import (
 	"syscall"
 )
 
-func InterruptCh() <-chan interface{} {
+func InterruptCh() <-chan any {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	ret := make(chan interface{}, 1)
+	ret := make(chan any, 1)
 	go func() {
 		s := <-c
 		ret <- s

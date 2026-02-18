@@ -8,9 +8,9 @@ type (
 	// ClientCache store initialized clients
 	ClientCache interface {
 		Lookup(key string, index int) (string, error) // pass through to keyResolver
-		GetClientForKey(key string, index int) (interface{}, error)
-		GetClientForClientKey(clientKey string) (interface{}, error)
-		GetAllClients() ([]interface{}, error)
+		GetClientForKey(key string, index int) (any, error)
+		GetClientForClientKey(clientKey string) (any, error)
+		GetAllClients() ([]any, error)
 	}
 
 	keyResolver interface {
@@ -18,14 +18,14 @@ type (
 		GetAllAddresses() ([]string, error)
 	}
 
-	clientProvider func(string) (interface{}, error)
+	clientProvider func(string) (any, error)
 
 	clientCacheImpl struct {
 		keyResolver    keyResolver
 		clientProvider clientProvider
 
 		cacheLock sync.RWMutex
-		clients   map[string]interface{}
+		clients   map[string]any
 	}
 )
 
@@ -39,7 +39,7 @@ func NewClientCache(
 		keyResolver:    keyResolver,
 		clientProvider: clientProvider,
 
-		clients: make(map[string]interface{}),
+		clients: make(map[string]any),
 	}
 }
 
@@ -47,7 +47,7 @@ func (c *clientCacheImpl) Lookup(key string, index int) (string, error) {
 	return c.keyResolver.Lookup(key, index)
 }
 
-func (c *clientCacheImpl) GetClientForKey(key string, index int) (interface{}, error) {
+func (c *clientCacheImpl) GetClientForKey(key string, index int) (any, error) {
 	clientKey, err := c.Lookup(key, index)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (c *clientCacheImpl) GetClientForKey(key string, index int) (interface{}, e
 	return c.GetClientForClientKey(clientKey)
 }
 
-func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (interface{}, error) {
+func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (any, error) {
 	c.cacheLock.RLock()
 	client, ok := c.clients[clientKey]
 	c.cacheLock.RUnlock()
@@ -79,8 +79,8 @@ func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (interface{}, 
 	return client, nil
 }
 
-func (c *clientCacheImpl) GetAllClients() ([]interface{}, error) {
-	var result []interface{}
+func (c *clientCacheImpl) GetAllClients() ([]any, error) {
+	var result []any
 	allAddresses, err := c.keyResolver.GetAllAddresses()
 	if err != nil {
 		return nil, err

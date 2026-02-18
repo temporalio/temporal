@@ -32,34 +32,93 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       job_matrix: ${{ steps.build_matrix.outputs.job_matrix }}
-      runner_x64: ${{ steps.configure_runners.outputs.runner_x64 }}
+      full_test_reason: ${{ steps.determine_scope.outputs.full_test_reason }}
       runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        if: ${{ github.event_name == 'pull_request' }}
+        run: git fetch origin ${{ github.event.pull_request.base.ref }}:${{ github.event.pull_request.base.ref }}
+
+      - name: Compute merge base
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          MERGE_BASE="$(git merge-base "${{ env.COMMIT }}" "${{ github.event.pull_request.base.ref }}")"
+          echo "MERGE_BASE=${MERGE_BASE}" >> "$GITHUB_ENV"
+
+      # If possible, run the "abridged" jobs on PRs to save time.
+      #
+      # The goal is to still cover all persistence code paths:
+      #   1. SQL
+      #   2. NoSQL (ie Cassandra)
+      #   3. Elasticsearch/OpenSearch
+      # All other jobs for the remaining databases only run a small set of smoke tests.
+      #
+      # Exceptions to this optimization:
+      #   1. commit is not a PR
+      #   2. `test-all-dbs` label set on PR
+      #   3. changes to persistence packages were made
+      - name: Determine test scope
+        id: determine_scope
+        run: |
+          FULL_TEST_REASON=""
+
+          event_name="${{ github.event_name }}"
+          labels='${{ toJson(github.event.pull_request.labels.*.name) }}'
+          merge_base="${MERGE_BASE:-}"
+
+          echo "event_name=$event_name"
+          echo "labels=$labels"
+          echo "merge_base=$merge_base"
+
+          # Push events (main, release branches) run all tests on all DBs
+          if [[ "$event_name" == "push" ]]; then
+            FULL_TEST_REASON="Running full tests on all DBs (push event)."
+          # Check for test-all-dbs label
+          elif echo "$labels" | jq -e 'any(. == "test-all-dbs")' > /dev/null 2>&1; then
+            FULL_TEST_REASON="Running full tests on all DBs (test-all-dbs label)."
+          # Check for persistence code changes
+          elif [[ -n "$merge_base" ]]; then
+            echo "Changed persistence files:"
+            git diff --name-only "$merge_base" "$COMMIT" | grep -E "^(common/persistence/|schema/)" || echo "(none)"
+            if git diff --name-only "$merge_base" "$COMMIT" | grep -qE "^(common/persistence/|schema/)"; then
+              FULL_TEST_REASON="Running full tests on all DBs (persistence code changes)."
+            fi
+          fi
+
+          echo "full_test_reason=$FULL_TEST_REASON" >> "$GITHUB_OUTPUT"
+
+      - name: ${{ steps.determine_scope.outputs.full_test_reason && 'ℹ️ Full tests' || 'ℹ️ Smoke tests' }}
+        run: echo "::notice::${{ steps.determine_scope.outputs.full_test_reason || 'Running smoke tests on extended DBs. Add the test-all-dbs label to run all tests on all DBs.' }}"
+
       - name: Configure runners
         id: configure_runners
         run: |
           # Use 8-core runners for temporalio org, standard runners for forks
           if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_x64="ubuntu-latest-8-cores"
             runner_arm="ubuntu-24.04-arm64-8-cores"
           else
-            runner_x64="ubuntu-latest"
             runner_arm="ubuntu-24.04-arm"
           fi
+          echo "runner_arm=$runner_arm" >> "$GITHUB_OUTPUT"
 
-          {
-            echo "runner_x64=$runner_x64"
-            echo "runner_arm=$runner_arm"
-          } >> "$GITHUB_OUTPUT"
-
+      # Primary DBs always get full tests, extended DBs get smoke tests (1 job) in abridged PRs.
       - name: Build job matrix
         id: build_matrix
         env:
+          FULL_TEST_REASON: ${{ steps.determine_scope.outputs.full_test_reason }}
           DB_CONFIGS: |
             cass_es:
               persistence_type: nosql
               persistence_driver: cassandra
               containers: [cassandra, elasticsearch]
+              required: true
             cass_es8:
               persistence_type: nosql
               persistence_driver: cassandra
@@ -76,7 +135,6 @@ jobs:
               persistence_type: sql
               persistence_driver: sqlite
               containers: []
-              arch: arm
             mysql8:
               persistence_type: sql
               persistence_driver: mysql8
@@ -85,6 +143,7 @@ jobs:
               persistence_type: sql
               persistence_driver: postgres12
               containers: [postgresql]
+              required: true
             postgres12_pgx:
               persistence_type: sql
               persistence_driver: postgres12_pgx
@@ -95,6 +154,11 @@ jobs:
               test_timeout: 35m
               github_timeout: 40
               sharded: true
+            smoke:
+              cmd: make functional-test-coverage
+              test_timeout: 5m
+              github_timeout: 10
+              test_args: '"-run=TestActivityTestSuite|TestSignalWorkflowTestSuite|TestWorkflowTestSuite"'
             ndc:
               cmd: make functional-test-ndc-coverage
               test_timeout: 10m
@@ -104,40 +168,53 @@ jobs:
               test_timeout: 30m
               github_timeout: 35
         run: |
+          # Convert YAML inputs to JSON for jq.
+          DBS_JSON=$(yq -o=json <<< "$DB_CONFIGS")
+          JOBS_JSON=$(yq -o=json <<< "$JOB_TYPES")
+
+          # Build the job matrix as a JSON array.
           MATRIX=$(
-            jq -c --argjson shard_count "$SHARD_COUNT" '
-              # Cross-product of every db config × every job type
-              input as $jobs |
-              [ to_entries[] as $db | $jobs | to_entries[] as $job |
+            jq -c -n \
+              --argjson dbs "$DBS_JSON" \
+              --argjson jobs "$JOBS_JSON" \
+              --argjson shard_count "$SHARD_COUNT" \
+              --arg full_test_reason "$FULL_TEST_REASON" \
+            '
+            [
+              $dbs | to_entries[] as $db |
 
-                # Base entry: merge db config + job config (without sharded flag) + name
-                ($db.value + ($job.value | del(.sharded)) + {name: $db.key}) as $base |
+              # Full test suite for required DBs (or all DBs when full_test_reason is set).
+              (if $db.value.required or ($full_test_reason != "") then
+                $jobs | to_entries[] | select(.key != "smoke")
+              else
+                $jobs | to_entries[] | select(.key == "smoke")
+              end) as $job |
 
-                # If sharded, emit one entry per shard; otherwise emit one entry
-                if $job.value.sharded then
-                  range($shard_count) as $i |
-                  $base + {
-                    display_name: "shard\($i)",
-                    shard_index: $i,
-                    total_shards: $shard_count
-                  }
-                else
-                  $base + {display_name: $job.key}
-                end
-              ]
-            ' <(yq -o=json <<< "$DB_CONFIGS") <(yq -o=json <<< "$JOB_TYPES")
+              # Base entry: merge db config + job config + name
+              ($db.value + ($job.value | del(.sharded)) + {name: $db.key}) as $base |
+
+              # If sharded, emit one entry per shard; otherwise emit one entry
+              if $job.value.sharded then
+                range($shard_count) as $i |
+                $base + {
+                  display_name: "shard\($i)",
+                  shard_index: $i,
+                  total_shards: $shard_count
+                }
+              else
+                $base + {display_name: $job.key}
+              end
+            ]
+            '
           )
 
           echo "job_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Generated $(jq length <<< "$MATRIX") jobs"
 
   pre-build:
-    name: Pre-build for cache (${{ matrix.arch }})
+    name: Pre-build for cache
     needs: test-setup
-    strategy:
-      matrix:
-        arch: [x64, arm]
-    runs-on: ${{ matrix.arch == 'arm' && needs.test-setup.outputs.runner_arm || needs.test-setup.outputs.runner_x64 }}
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -290,7 +367,7 @@ jobs:
   integration-test:
     name: Integration test
     needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_x64 }}
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -323,6 +400,12 @@ jobs:
         with:
           path: ~/.cache/go-build
           key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+
+      - name: Wait for containerized dependencies to be healthy
+        run: |
+          # Word splitting is intentional here.
+          # shellcheck disable=SC2046
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
 
       - name: Run integration test
         timeout-minutes: 15
@@ -389,7 +472,7 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.test-setup.outputs.job_matrix) }}
-    runs-on: ${{ matrix.arch == 'arm' && needs.test-setup.outputs.runner_arm || needs.test-setup.outputs.runner_x64 }}
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
@@ -436,12 +519,23 @@ jobs:
           job_name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
           run_id: ${{ github.run_id }}
 
+      - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
+        run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
+
+      - name: Wait for containerized dependencies to be healthy
+        if: ${{ toJson(matrix.containers) != '[]' }}
+        run: |
+          # Word splitting is intentional here.
+          # shellcheck disable=SC2046
+          docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} up --wait $(docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} ps --services)
+
       - name: Run functional test
         timeout-minutes: ${{ matrix.github_timeout }}
         run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
+          TEST_ARGS: "${{ matrix.test_args }}"
 
       - name: Print memory snapshot
         if: always()
@@ -484,7 +578,7 @@ jobs:
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{ steps.get_job_id.outputs.job_id }}--${{github.run_attempt}}--${{matrix.name}}--shard${{matrix.shard_index}}--functional-test
+          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28

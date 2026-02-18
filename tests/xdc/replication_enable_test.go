@@ -44,7 +44,7 @@ func (s *ReplicationEnableTestSuite) SetupSuite() {
 	s.logger = log.NewTestLogger()
 
 	// Minimal dynamic config overrides required for replication enable/disable testing
-	dynamicConfigOverrides := map[dynamicconfig.Key]interface{}{
+	dynamicConfigOverrides := map[dynamicconfig.Key]any{
 		dynamicconfig.ClusterMetadataRefreshInterval.Key():        time.Second * 5,
 		dynamicconfig.EnableReplicationStream.Key():               true,
 		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():   true,
