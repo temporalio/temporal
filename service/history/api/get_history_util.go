@@ -122,40 +122,13 @@ func GetRawHistory(
 				logger := shardContext.GetLogger()
 				metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
 				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
-				logger.Warn("[WFTD] GetRawHistory transient event validation failed, skipping events",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.Error(err))
 			} else {
 				if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
-					shardContext.GetLogger().Warn("[WFTD] GetRawHistory serializing transient events",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt64("events-count", int64(len(transientWorkflowTaskInfo.HistorySuffix))),
-						tag.NewInt64("next-event-id", nextEventID))
 					blob, err := shardContext.GetPayloadSerializer().SerializeEvents(transientWorkflowTaskInfo.HistorySuffix)
 					if err != nil {
-						shardContext.GetLogger().Error("[WFTD] GetRawHistory failed to serialize transient events",
-							tag.WorkflowNamespaceID(namespaceID.String()),
-							tag.WorkflowID(execution.GetWorkflowId()),
-							tag.WorkflowRunID(execution.GetRunId()),
-							tag.Error(err))
 						return nil, nil, err
 					}
 					rawHistory = append(rawHistory, blob)
-					shardContext.GetLogger().Warn("[WFTD] GetRawHistory successfully appended transient events blob",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt("raw-history-count", len(rawHistory)))
-				} else {
-					shardContext.GetLogger().Warn("[WFTD] GetRawHistory transient task has empty HistorySuffix",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt64("next-event-id", nextEventID))
 				}
 			}
 		}
@@ -265,35 +238,12 @@ func GetHistory(
 			// Validate before appending
 			if err := ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
-				logger.Warn("[WFTD] GetHistory transient event validation failed, skipping events",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.Error(err))
 				// Don't append events, but don't fail request
 			} else {
 				if len(transientWorkflowTaskInfo.HistorySuffix) > 0 {
 					// Validation passed, append events
-					logger.Warn("[WFTD] GetHistory appending transient events",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt64("events-count", int64(len(transientWorkflowTaskInfo.HistorySuffix))),
-						tag.NewInt64("next-event-id", nextEventID),
-						tag.NewInt("history-events-before", len(historyEvents)))
 					// Append the transient workflow task events once we are done enumerating everything from the events table
 					historyEvents = append(historyEvents, transientWorkflowTaskInfo.HistorySuffix...)
-					logger.Warn("[WFTD] GetHistory successfully appended transient events",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt("history-events-after", len(historyEvents)))
-				} else {
-					logger.Warn("[WFTD] GetHistory transient task has empty HistorySuffix",
-						tag.WorkflowNamespaceID(namespaceID.String()),
-						tag.WorkflowID(execution.GetWorkflowId()),
-						tag.WorkflowRunID(execution.GetRunId()),
-						tag.NewInt64("next-event-id", nextEventID))
 				}
 			}
 		}

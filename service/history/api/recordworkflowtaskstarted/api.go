@@ -15,7 +15,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -177,22 +176,6 @@ func Invoke(
 				return nil, err
 			}
 
-			// Server Log 3: Mutable state at WFT dispatch
-			isSpeculativeTask := workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE
-			isStickyTask := mutableState.IsStickyTaskQueueSet()
-			isTransientTask := mutableState.IsTransientWorkflowTask()
-			shardContext.GetLogger().Warn("[WFTD] Dispatching workflow task",
-				tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
-				tag.WorkflowID(mutableState.GetExecutionInfo().GetWorkflowId()),
-				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
-				tag.NewInt64("scheduled-event-id", workflowTask.ScheduledEventID),
-				tag.NewInt64("started-event-id", workflowTask.StartedEventID),
-				tag.NewInt64("next-event-id", mutableState.GetNextEventID()),
-				tag.NewBoolTag("is-transient-task", isTransientTask),
-				tag.NewBoolTag("is-speculative", isSpeculativeTask),
-				tag.NewBoolTag("is-sticky", isStickyTask),
-				tag.NewInt32("workflow-task-attempt", workflowTask.Attempt),
-			)
 
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				updateAction.Noop = true
@@ -257,18 +240,6 @@ func Invoke(
 		return nil, err
 	}
 
-	// Log transient workflow task info for correlation with GetWorkflowExecutionHistory
-	if resp != nil && resp.TransientWorkflowTask != nil {
-		shardContext.GetLogger().Warn("[WFTD] Returning transient workflow task in PollWorkflowTaskQueue response",
-			tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
-			tag.WorkflowID(req.WorkflowExecution.WorkflowId),
-			tag.WorkflowRunID(workflowKey.RunID),
-			tag.NewInt64("scheduled-event-id", scheduledEventID),
-			tag.NewInt32("workflow-task-attempt", resp.Attempt),
-			tag.NewInt64("transient-events-count", int64(len(resp.TransientWorkflowTask.GetHistorySuffix()))),
-			tag.NewInt64("next-event-id", resp.NextEventId),
-		)
-	}
 
 	maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
 	err = setHistoryForRecordWfTaskStartedResp(
@@ -325,29 +296,6 @@ func setHistoryForRecordWfTaskStartedResp(
 		}
 	}()
 
-	// Server Log 2: Log transient workflow task info before fetching history
-	transientTask := response.GetTransientWorkflowTask()
-	isSpeculative := transientTask != nil
-	if transientTask != nil {
-		shardContext.GetLogger().Warn("[WFTD] Poll path fetching history with transient workflow task",
-			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-			tag.WorkflowID(workflowKey.GetWorkflowID()),
-			tag.WorkflowRunID(workflowKey.GetRunID()),
-			tag.NewInt64("transient-event-count", int64(len(transientTask.GetHistorySuffix()))),
-			tag.NewInt64("first-event-id", firstEventID),
-			tag.NewInt64("next-event-id", nextEventID),
-			tag.NewBoolTag("is-sticky", response.GetStickyExecutionEnabled()),
-		)
-	} else if isSpeculative {
-		// This should not happen - if we have a speculative task, we should have transient events
-		shardContext.GetLogger().Warn("[WFTD] Speculative task poll response missing transient WFT events",
-			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-			tag.WorkflowID(workflowKey.GetWorkflowID()),
-			tag.WorkflowRunID(workflowKey.GetRunID()),
-			tag.NewInt64("started-event-id", response.StartedEventId),
-			tag.NewInt64("next-event-id", nextEventID),
-		)
-	}
 
 	isInternalRawHistoryEnabled := shardContext.GetConfig().SendRawHistoryBetweenInternalServices()
 	var rawHistory []*commonpb.DataBlob
@@ -355,22 +303,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	var history *historypb.History
 	var err error
 
-	// Log before fetching history for poll response
-	hasTransientTask := response.GetTransientWorkflowTask() != nil
-	var transientEventCount int64
-	if hasTransientTask {
-		transientEventCount = int64(len(response.GetTransientWorkflowTask().GetHistorySuffix()))
-	}
-	shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue assembling history",
-		tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-		tag.WorkflowID(workflowKey.GetWorkflowID()),
-		tag.WorkflowRunID(workflowKey.GetRunID()),
-		tag.NewInt64("first-event-id", firstEventID),
-		tag.NewInt64("next-event-id", nextEventID),
-		tag.NewInt64("started-event-id", response.StartedEventId),
-		tag.NewBoolTag("has-transient-task", hasTransientTask),
-		tag.NewInt64("transient-event-count", transientEventCount),
-		tag.NewBoolTag("is-raw-history", isInternalRawHistoryEnabled))
 
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
@@ -406,44 +338,6 @@ func setHistoryForRecordWfTaskStartedResp(
 		return err
 	}
 
-	// Log after fetching history for poll response
-	var lastHistoryEventIDAfterFetch int64
-	var historyEventCountAfterFetch int
-	if isInternalRawHistoryEnabled {
-		historyEventCountAfterFetch = len(rawHistory)
-		shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue fetched raw history",
-			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-			tag.WorkflowID(workflowKey.GetWorkflowID()),
-			tag.WorkflowRunID(workflowKey.GetRunID()),
-			tag.NewInt("raw-history-blob-count", historyEventCountAfterFetch),
-			tag.NewBoolTag("has-more-pages", len(persistenceToken) > 0))
-	} else if history != nil && len(history.Events) > 0 {
-		historyEventCountAfterFetch = len(history.Events)
-		lastHistoryEventIDAfterFetch = history.Events[len(history.Events)-1].GetEventId()
-		shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue fetched history",
-			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-			tag.WorkflowID(workflowKey.GetWorkflowID()),
-			tag.WorkflowRunID(workflowKey.GetRunID()),
-			tag.NewInt("history-event-count", historyEventCountAfterFetch),
-			tag.NewInt64("last-history-event-id", lastHistoryEventIDAfterFetch),
-			tag.NewBoolTag("has-more-pages", len(persistenceToken) > 0))
-
-		// Critical gap detection - did transient events get appended?
-		if response.StartedEventId > 0 && lastHistoryEventIDAfterFetch > 0 &&
-			response.StartedEventId > lastHistoryEventIDAfterFetch+1 &&
-			len(persistenceToken) == 0 {
-			gap := response.StartedEventId - lastHistoryEventIDAfterFetch
-			shardContext.GetLogger().Warn("[WFTD] CRITICAL: PollWorkflowTaskQueue history missing transient events after fetch",
-				tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-				tag.WorkflowID(workflowKey.GetWorkflowID()),
-				tag.WorkflowRunID(workflowKey.GetRunID()),
-				tag.NewInt64("started-event-id", response.StartedEventId),
-				tag.NewInt64("last-event-id", lastHistoryEventIDAfterFetch),
-				tag.NewInt64("gap", gap),
-				tag.NewBoolTag("had-transient-task", hasTransientTask),
-				tag.NewInt64("transient-event-count", transientEventCount))
-		}
-	}
 
 	var continuation []byte
 	if len(persistenceToken) != 0 {
@@ -472,45 +366,6 @@ func setHistoryForRecordWfTaskStartedResp(
 		response.History = history
 	}
 	response.NextPageToken = continuation
-
-	// Server Log 1: Poll response assembly for speculative/transient tasks
-	var lastHistoryEventID int64
-	var historyEventCount int
-	if history != nil && len(history.Events) > 0 {
-		historyEventCount = len(history.Events)
-		lastHistoryEventID = history.Events[len(history.Events)-1].GetEventId()
-	}
-
-	shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue response assembled",
-		tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-		tag.WorkflowID(workflowKey.GetWorkflowID()),
-		tag.WorkflowRunID(workflowKey.GetRunID()),
-		tag.NewInt64("started-event-id", response.StartedEventId),
-		tag.NewInt64("previous-started-event-id", response.PreviousStartedEventId),
-		tag.NewInt("history-event-count", historyEventCount),
-		tag.NewInt64("last-history-event-id", lastHistoryEventID),
-		tag.NewBoolTag("has-next-page-token", len(response.NextPageToken) > 0),
-		tag.NewBoolTag("is-speculative", isSpeculative),
-		tag.NewInt64("next-event-id", response.NextEventId),
-		tag.NewInt64("first-event-id", firstEventID),
-	)
-
-	// Flag the gap if history ends before StartedEventId with no page token
-	// This is the exact structural condition the SDK detects as "premature end of stream"
-	if response.StartedEventId > 0 && lastHistoryEventID > 0 &&
-		response.StartedEventId > lastHistoryEventID+1 &&
-		len(response.NextPageToken) == 0 {
-		gap := response.StartedEventId - lastHistoryEventID
-		shardContext.GetLogger().Warn("[WFTD] Poll response history ends before StartedEventId with no page token; transient WFT events may be missing",
-			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
-			tag.WorkflowID(workflowKey.GetWorkflowID()),
-			tag.WorkflowRunID(workflowKey.GetRunID()),
-			tag.NewInt64("started-event-id", response.StartedEventId),
-			tag.NewInt64("last-event-id", lastHistoryEventID),
-			tag.NewInt64("gap", gap),
-			tag.NewBoolTag("is-speculative", isSpeculative),
-		)
-	}
 
 	return nil
 }

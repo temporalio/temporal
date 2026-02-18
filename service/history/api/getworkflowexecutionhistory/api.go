@@ -52,17 +52,10 @@ func appendTransientTasks(
 	cachedTransientTasks *historyspb.TransientWorkflowTaskInfo,
 	nextEventID int64,
 ) {
-	logger := shardContext.GetLogger()
-
 	// CLI and UI clients should not receive transient events for backward compatibility
 	// Check this FIRST before doing any work
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
 	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
-		logger.Warn("[WFTD] Skipping transient events for CLI/UI client",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.NewStringTag("client-name", clientName))
 		return
 	}
 
@@ -73,38 +66,10 @@ func appendTransientTasks(
 	// We MUST provide these same events in GetWorkflowExecutionHistory to maintain
 	// consistency, regardless of whether the workflow has since completed.
 	if cachedTransientTasks != nil {
-		logger.Warn("[WFTD] Attempting to use cached transient tasks",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.NewInt64("next-event-id", nextEventID),
-			tag.NewInt64("cached-events-count", int64(len(cachedTransientTasks.GetHistorySuffix()))))
-
 		// Validate cached tasks are still valid (not stale)
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, cachedTransientTasks); err == nil {
-			// Cache is valid, use it (FAST PATH - no second mutable state call)
-			// CRITICAL: Use cached tasks even if workflow has completed since they were cached.
-			// This fixes the race condition where workflow completes between poll and GetWorkflowExecutionHistory.
 			transientWorkflowTask = cachedTransientTasks
-			logger.Warn("[WFTD] Using valid cached transient tasks (workflow may have completed since)",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()))
-		} else {
-			// Cache has stale event IDs, log and fall through to refetch
-			logger.Warn("[WFTD] Cached transient tasks failed validation, will refetch",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.NewInt64("next-event-id", nextEventID),
-				tag.Error(err))
 		}
-	} else {
-		logger.Warn("[WFTD] No cached transient tasks, will fetch from mutable state",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.NewInt64("next-event-id", nextEventID))
 	}
 
 	// PRIORITY 2: If no valid cache, fetch fresh from mutable state
@@ -121,61 +86,26 @@ func appendTransientTasks(
 			eventNotifier,
 		)
 		if err != nil {
-			logger.Warn("[WFTD] Failed to fetch mutable state for transient events",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
 			return
 		}
 
 		// Double-check workflow is still running (it might have completed during the call)
 		if msResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-			logger.Warn("[WFTD] Workflow completed during mutable state fetch, skipping transient events",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.NewStringTag("workflow-status", msResp.GetWorkflowStatus().String()))
 			return
 		}
 
 		transientTasks := msResp.GetTransientOrSpeculativeTasks()
 		if transientTasks == nil {
-			logger.Warn("[WFTD] CRITICAL: No transient events in mutable state",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.NewInt64("ms-next-event-id", msResp.GetNextEventId()),
-				tag.NewInt64("requested-next-event-id", nextEventID),
-				tag.NewBoolTag("workflow-running", msResp.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 			return
 		}
 
-		logger.Warn("[WFTD] Fetched transient events from mutable state",
-			tag.WorkflowNamespaceID(namespaceID.String()),
-			tag.WorkflowID(execution.GetWorkflowId()),
-			tag.WorkflowRunID(execution.GetRunId()),
-			tag.NewInt64("events-count", int64(len(transientTasks.GetHistorySuffix()))))
-
 		// Validate event IDs before using
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientTasks); err != nil {
-			logger.Warn("[WFTD] Transient events from mutable state have invalid event IDs, skipping",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err))
 			return
 		}
 
 		transientWorkflowTask = transientTasks
 	}
-
-	logger.Warn("[WFTD] Appending transient events to history response",
-		tag.WorkflowNamespaceID(namespaceID.String()),
-		tag.WorkflowID(execution.GetWorkflowId()),
-		tag.WorkflowRunID(execution.GetRunId()),
-		tag.NewInt64("events-count", int64(len(transientWorkflowTask.GetHistorySuffix()))),
-		tag.NewBoolTag("use-raw-history", useRawHistory))
 
 	// Manually append transient events to the response
 	if useRawHistory {
@@ -184,12 +114,6 @@ func appendTransientTasks(
 			*historyBlob = append(*historyBlob, transientEventsBlob)
 		} else {
 			softassert.Fail(shardContext.GetLogger(), "GetWorkflowExecutionHistory could not serialize transient workflow tasks")
-			shardContext.GetLogger().Error("[WFTD] Failed to serialize transient workflow tasks",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.Error(err),
-			)
 		}
 	} else {
 		history.Events = append(history.Events, transientWorkflowTask.GetHistorySuffix()...)
@@ -469,14 +393,6 @@ func Invoke(
 				continuationToken = nil
 			}
 		} else {
-			shardContext.GetLogger().Warn("[WFTD] Fetching history page",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.NewInt64("first-event-id", continuationToken.FirstEventId),
-				tag.NewInt64("next-event-id", continuationToken.NextEventId),
-				tag.NewBoolTag("workflow-running", isWorkflowRunning))
-
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
 				historyBlob, continuationToken.PersistenceToken, err = api.GetRawHistory(
 					ctx,
@@ -512,36 +428,12 @@ func Invoke(
 				return nil, err
 			}
 
-			shardContext.GetLogger().Warn("[WFTD] Fetched history page",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.NewInt("history-event-count", len(history.Events)),
-				tag.NewBoolTag("has-more-pages", len(continuationToken.PersistenceToken) > 0))
-
 			// Query and append transient/speculative tasks if on last page
 			// BUG 4 FIX: Always try to append transient tasks on last page, regardless of workflow status.
 			// The appendTransientTasks function will handle the logic of whether to use cached tasks
 			// or fetch fresh ones based on workflow status. This fixes the race condition where the
 			// workflow completes between PollWorkflowTask and GetWorkflowExecutionHistory.
-			shardContext.GetLogger().Warn("[WFTD] Checking if should append transient tasks",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
-				tag.NewBoolTag("is-workflow-running", isWorkflowRunning),
-				tag.NewBoolTag("is-last-page", len(continuationToken.PersistenceToken) == 0),
-				tag.NewBoolTag("has-cached-transient-tasks", cachedTransientTasks != nil),
-				tag.NewInt64("next-event-id", continuationToken.NextEventId))
-
 			if len(continuationToken.PersistenceToken) == 0 {
-
-				shardContext.GetLogger().Warn("[WFTD] Calling appendTransientTasks on last page",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.NewBoolTag("workflow-running", isWorkflowRunning),
-					tag.NewBoolTag("has-cached-tasks", cachedTransientTasks != nil))
-
 				appendTransientTasks(
 					ctx,
 					shardContext,
@@ -555,11 +447,6 @@ func Invoke(
 					cachedTransientTasks,
 					continuationToken.NextEventId,
 				)
-			} else {
-				shardContext.GetLogger().Warn("[WFTD] Skipping appendTransientTasks - not on last page",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()))
 			}
 
 			// here, for long pull on history events, we need to intercept the paging token from cassandra
