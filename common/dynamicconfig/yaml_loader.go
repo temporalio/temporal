@@ -125,19 +125,19 @@ func (lr *YamlLoader) errorf(format string, args ...any) {
 	lr.error(fmt.Errorf(format, args...))
 }
 
-func convertKeyTypeToString(v interface{}) (interface{}, error) {
+func convertKeyTypeToString(v any) (any, error) {
 	switch v := v.(type) {
-	case map[interface{}]interface{}:
+	case map[any]any:
 		return convertKeyTypeToStringMap(v)
-	case []interface{}:
+	case []any:
 		return convertKeyTypeToStringSlice(v)
 	default:
 		return v, nil
 	}
 }
 
-func convertKeyTypeToStringMap(m map[interface{}]interface{}) (map[string]interface{}, error) {
-	stringKeyMap := make(map[string]interface{})
+func convertKeyTypeToStringMap(m map[any]any) (map[string]any, error) {
+	stringKeyMap := make(map[string]any)
 	for key, value := range m {
 		stringKey, ok := key.(string)
 		if !ok {
@@ -152,8 +152,8 @@ func convertKeyTypeToStringMap(m map[interface{}]interface{}) (map[string]interf
 	return stringKeyMap, nil
 }
 
-func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
-	stringKeySlice := make([]interface{}, len(s))
+func convertKeyTypeToStringSlice(s []any) ([]any, error) {
+	stringKeySlice := make([]any, len(s))
 	for idx, value := range s {
 		convertedValue, err := convertKeyTypeToString(value)
 		if err != nil {

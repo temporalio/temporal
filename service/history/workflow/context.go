@@ -737,7 +737,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	}
 	taskUpdated := false
 
-	updateTask := func(task interface{}) bool {
+	updateTask := func(task any) bool {
 		switch t := task.(type) {
 		case *tasks.HistoryReplicationTask:
 			t.NewRunBranchToken = newRunBranchToken

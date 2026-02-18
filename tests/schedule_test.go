@@ -942,7 +942,7 @@ func (s *ScheduleV1FunctionalSuite) TestRateLimit() {
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
 	// create 10 copies of the schedule
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		schedule := &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{
@@ -1429,6 +1429,84 @@ func (s *ScheduleCHASMFunctionalSuite) TestCreateScheduleAlreadyExists() {
 	var alreadyExists *serviceerror.AlreadyExists
 	s.ErrorAs(err, &alreadyExists)
 	s.Contains(err.Error(), sid)
+}
+
+func (s *ScheduleCHASMFunctionalSuite) TestPatchRejectsExcessBackfillers() {
+	sid := "sched-test-too-many-backfillers"
+	wt := "sched-test-too-many-backfillers-wt"
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   "wf-too-many-backfillers",
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+
+	ctx := s.newContext()
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Patch with 50 backfill requests at a time until we reach the limit of 100.
+	now := time.Now()
+	for i := 0; i < 100; i += 50 {
+		backfills := make([]*schedulepb.BackfillRequest, 50)
+		for j := range backfills {
+			backfills[j] = &schedulepb.BackfillRequest{
+				StartTime:     timestamppb.New(now),
+				EndTime:       timestamppb.New(now.Add(time.Minute)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			}
+		}
+		_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+			Patch: &schedulepb.SchedulePatch{
+				BackfillRequest: backfills,
+			},
+			Identity:  "test",
+			RequestId: uuid.NewString(),
+		})
+		s.NoError(err)
+	}
+
+	// The next patch should be rejected.
+	_, err = s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{
+			BackfillRequest: []*schedulepb.BackfillRequest{
+				{
+					StartTime:     timestamppb.New(now),
+					EndTime:       timestamppb.New(now.Add(time.Minute)),
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+			},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.Error(err)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+	s.Contains(err.Error(), "too many concurrent backfillers")
 }
 
 func (s *scheduleFunctionalSuiteBase) TestCountSchedules() {

@@ -517,7 +517,7 @@ func BenchmarkListNamespace(b *testing.B) {
 	})
 	defer m.Stop()
 	// Pre-populate with entries
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("worker%d", i)
 		hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key}
 		m.upsertHeartbeats("benchNs", []*workerpb.WorkerHeartbeat{hb})
@@ -550,7 +550,7 @@ func BenchmarkRandomUpdate(b *testing.B) {
 	}
 	var pairs []pair
 	for _, ns := range namespaces {
-		for i := 0; i < totalHeartbeats; i++ {
+		for i := range totalHeartbeats {
 			key := fmt.Sprintf("%s-worker%d", ns, i)
 			hb := &workerpb.WorkerHeartbeat{WorkerInstanceKey: key, CurrentStickyCacheSize: int32(i)}
 			m.upsertHeartbeats(ns, []*workerpb.WorkerHeartbeat{hb})

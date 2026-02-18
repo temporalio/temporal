@@ -200,8 +200,6 @@ type Config struct {
 	// right now only used by GetMutableState
 	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
-	// encoding the history events
-	EventEncodingType dynamicconfig.StringPropertyFnWithNamespaceFilter
 	// whether or not using ParentClosePolicy
 	EnableParentClosePolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// whether or not enable system workers for processing parent close policy task
@@ -401,12 +399,16 @@ type Config struct {
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Worker-Versioning related settings
-	EnableSuggestCaNOnNewTargetVersion   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	UseRevisionNumberForWorkerVersioning dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VersionMembershipCacheTTL            dynamicconfig.DurationPropertyFn
-	VersionMembershipCacheMaxSize        dynamicconfig.IntPropertyFn
-	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
-	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
+	EnableSuggestCaNOnNewTargetVersion    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSendTargetVersionChanged        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	UseRevisionNumberForWorkerVersioning  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	VersionMembershipCacheTTL             dynamicconfig.DurationPropertyFn
+	VersionMembershipCacheMaxSize         dynamicconfig.IntPropertyFn
+	VersionReactivationSignalCacheTTL     dynamicconfig.DurationPropertyFn
+	VersionReactivationSignalCacheMaxSize dynamicconfig.IntPropertyFn
+	EnableVersionReactivationSignals      dynamicconfig.BoolPropertyFn
+	RoutingInfoCacheTTL                   dynamicconfig.DurationPropertyFn
+	RoutingInfoCacheMaxSize               dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -613,7 +615,6 @@ func NewConfig(
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
 		LongPollExpirationInterval:          dynamicconfig.HistoryLongPollExpirationInterval.Get(dc),
-		EventEncodingType:                   dynamicconfig.DefaultEventEncoding.Get(dc),
 		EnableParentClosePolicy:             dynamicconfig.EnableParentClosePolicy.Get(dc),
 		NumParentClosePolicySystemWorkflows: dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
 		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
@@ -768,12 +769,16 @@ func NewConfig(
 		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
 
 		// Worker-Versioning related
-		UseRevisionNumberForWorkerVersioning: dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
-		EnableSuggestCaNOnNewTargetVersion:   dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
-		VersionMembershipCacheTTL:            dynamicconfig.VersionMembershipCacheTTL.Get(dc),
-		VersionMembershipCacheMaxSize:        dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
-		RoutingInfoCacheTTL:                  dynamicconfig.RoutingInfoCacheTTL.Get(dc),
-		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
+		UseRevisionNumberForWorkerVersioning:  dynamicconfig.UseRevisionNumberForWorkerVersioning.Get(dc),
+		EnableSuggestCaNOnNewTargetVersion:    dynamicconfig.EnableSuggestCaNOnNewTargetVersion.Get(dc),
+		EnableSendTargetVersionChanged:        dynamicconfig.EnableSendTargetVersionChanged.Get(dc),
+		VersionMembershipCacheTTL:             dynamicconfig.VersionMembershipCacheTTL.Get(dc),
+		VersionMembershipCacheMaxSize:         dynamicconfig.VersionMembershipCacheMaxSize.Get(dc),
+		VersionReactivationSignalCacheTTL:     dynamicconfig.VersionReactivationSignalCacheTTL.Get(dc),
+		VersionReactivationSignalCacheMaxSize: dynamicconfig.VersionReactivationSignalCacheMaxSize.Get(dc),
+		EnableVersionReactivationSignals:      dynamicconfig.EnableVersionReactivationSignals.Get(dc),
+		RoutingInfoCacheTTL:                   dynamicconfig.RoutingInfoCacheTTL.Get(dc),
+		RoutingInfoCacheMaxSize:               dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 	}
 
 	return cfg

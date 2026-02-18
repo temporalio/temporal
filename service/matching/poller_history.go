@@ -42,6 +42,10 @@ func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, pollMetadata *
 	pollers.history.Put(id, &pollerInfo{pollMetadata: *pollMetadata})
 }
 
+func (pollers *pollerHistory) removePoller(id pollerIdentity) {
+	pollers.history.Delete(id)
+}
+
 func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*taskqueuepb.PollerInfo {
 	var result []*taskqueuepb.PollerInfo
 

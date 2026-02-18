@@ -28,7 +28,7 @@ type (
 	ServerImpl struct {
 		so               *serverOptions
 		servicesMetadata []*ServicesMetadata
-		stoppedCh        chan interface{}
+		stoppedCh        chan any
 		logger           log.Logger
 		namespaceLogger  resource.NamespaceLogger
 
@@ -57,7 +57,7 @@ func NewServerFxImpl(
 	opts *serverOptions,
 	logger log.Logger,
 	namespaceLogger resource.NamespaceLogger,
-	stoppedCh chan interface{},
+	stoppedCh chan any,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,

@@ -64,7 +64,7 @@ func NewExecutableSyncVersionedTransitionTask(
 	}
 }
 
-func (e *ExecutableSyncVersionedTransitionTask) QueueID() interface{} {
+func (e *ExecutableSyncVersionedTransitionTask) QueueID() any {
 	return e.WorkflowKey
 }
 

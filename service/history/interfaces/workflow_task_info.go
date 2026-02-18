@@ -50,6 +50,8 @@ type WorkflowTaskInfo struct {
 	SuggestContinueAsNew        bool
 	SuggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason
 	HistorySizeBytes            int64
+
+	TargetWorkerDeploymentVersionChanged bool
 	// BuildIdRedirectCounter tracks the started build ID redirect counter for transient/speculative WFT. This
 	// info is to make sure the right redirect counter is used in the WFT started event created later
 	// for a transient/speculative WFT.

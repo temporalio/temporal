@@ -200,7 +200,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return gocql.ConvertError("AddTasks", err)

@@ -66,7 +66,7 @@ func NewExecutableBackfillHistoryEventsTask(
 	}
 }
 
-func (e *ExecutableBackfillHistoryEventsTask) QueueID() interface{} {
+func (e *ExecutableBackfillHistoryEventsTask) QueueID() any {
 	return e.WorkflowKey
 }
 

@@ -453,7 +453,7 @@ func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {
 
 	// Expect RefreshWorkflowTasks to be called with correct parameters
 	mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, req *historyservice.RefreshWorkflowTasksRequest, _ ...interface{}) (*historyservice.RefreshWorkflowTasksResponse, error) {
+		func(_ context.Context, req *historyservice.RefreshWorkflowTasksRequest, _ ...any) (*historyservice.RefreshWorkflowTasksResponse, error) {
 			s.Equal(namespaceID, req.NamespaceId)
 			s.NotZero(req.ArchetypeId) // WorkflowArchetypeID is computed dynamically
 			s.Equal(workflowID, req.Request.Execution.WorkflowId)

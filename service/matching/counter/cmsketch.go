@@ -21,6 +21,9 @@ type (
 		MaxW          int     // cap for W
 	}
 
+	// topKFunc is a callback that returns the top-K entries to preserve during resize.
+	topKFunc func() []TopKEntry
+
 	// cmSketch is a Counter that uses a count-min sketch.
 	// cmSketch is not safe for concurrent use.
 	cmSketch struct {
@@ -31,20 +34,23 @@ type (
 		cells []int64
 
 		skips, incs int // used to calculate skip rate
+
+		topKProvider topKFunc // callback to get top-K entries on resize
 	}
 )
 
 var _ Counter = (*cmSketch)(nil)
 
-func NewCMSketchCounter(params CMSketchParams, src rand.Source) *cmSketch {
-	params.D = max(2, params.D)
-	params.W = max(2, params.W)
+func NewCMSketchCounter(params CMSketchParams, src rand.Source, topKProvider topKFunc) *cmSketch {
+	params.D = max(1, params.D)
+	params.W = max(1, params.W)
 	params.Grow.SkipRateDecay = max(1_000, params.Grow.SkipRateDecay)
 	return &cmSketch{
-		params: params,
-		seed0:  maphash.MakeSeed(),
-		seeds:  makeSeeds(params.D, src),
-		cells:  make([]int64, params.W*params.D),
+		params:       params,
+		seed0:        maphash.MakeSeed(),
+		seeds:        makeSeeds(params.D, src),
+		cells:        make([]int64, params.W*params.D),
+		topKProvider: topKProvider,
 	}
 }
 
@@ -84,6 +90,10 @@ func (s *cmSketch) EstimateDistinctKeys() int {
 	return count / s.params.D
 }
 
+func (s *cmSketch) TopK() []TopKEntry {
+	return s.topKProvider()
+}
+
 func (s *cmSketch) fillIndexes(k string, indexes []int) {
 	w := s.params.W
 	// get 64 bits of hash
@@ -106,10 +116,27 @@ func (s *cmSketch) maybeGrow() {
 		s.SkipRate() < s.params.Grow.Threshold {
 		return
 	}
-	// TODO: instead of throwing away the whole sketch, try to preserve a sample of large values
+	// get top entries before resetting (if provider available)
+	var topK []TopKEntry
+	if s.topKProvider != nil {
+		topK = s.topKProvider()
+	}
+
 	s.params.W = min(int(float64(s.params.W)*s.params.Grow.Ratio), s.params.Grow.MaxW)
 	s.seed0 = maphash.MakeSeed()
 	s.cells = make([]int64, s.params.W*s.params.D)
+	s.skips, s.incs = 0, 0
+
+	if len(topK) > 0 {
+		// restore top entries after resize. GetPass can in theory call back into maybeGrow,
+		// but only if called more than SkipRateDecay times, so just limit to that.
+		topK = topK[:min(len(topK), s.params.Grow.SkipRateDecay)]
+		for _, entry := range topK {
+			_ = s.GetPass(entry.Key, entry.Count, 0)
+		}
+	}
+
+	// reset these again
 	s.skips, s.incs = 0, 0
 }
 
