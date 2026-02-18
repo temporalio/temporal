@@ -873,11 +873,11 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 				)
 			}
 		}()
-		// Note: We pass nil for transientWorkflowTaskInfo here because the current task's
-		// scheduled/started events should not be visible in the history returned to that task.
-		// Transient events are only included in GetWorkflowExecutionHistory API responses,
-		// not in PollWorkflowTask responses. Including them here would show the worker its own
-		// task events, which is incorrect (see issue #7741).
+		// For inline workflow tasks, we need to include the NEW task's transient events
+		// (scheduled+started). The comment about not showing the worker its own task events
+		// only applies to the PREVIOUS task that just completed, not the NEW inline task.
+		// The transient workflow task info is available in matchingResp and contains
+		// the scheduled/started events for the NEW task that must be included.
 
 		// Log before fetching history for inline WorkflowTask
 		handler.logger.Warn("[WFTD] RespondWorkflowTaskCompleted assembling inline task history",
@@ -899,7 +899,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 			nextEventID,
 			maximumPageSize,
 			nil,
-			nil,
+			matchingResp.GetTransientWorkflowTask(),
 			branchToken,
 			handler.persistenceVisibilityMgr,
 		)
