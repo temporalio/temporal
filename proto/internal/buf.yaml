@@ -14,11 +14,6 @@ breaking:
     # example: - temporal/server/api/.../message.proto
     - temporal/server/api/persistence/v1/chasm.proto
     - temporal/server/api/token/v1/message.proto
-<<<<<<< HEAD
-    # TODO: (Chetan) Remove this after merging #8500
-    - temporal/server/api/persistence/v1/executions.proto
-=======
->>>>>>> ddb59e29c24fc1f57beec44a57779f1ea0a2f3af
 lint:
   use:
     - DEFAULT
