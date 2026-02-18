@@ -354,6 +354,24 @@ func setHistoryForRecordWfTaskStartedResp(
 	var persistenceToken []byte
 	var history *historypb.History
 	var err error
+
+	// Log before fetching history for poll response
+	hasTransientTask := response.GetTransientWorkflowTask() != nil
+	var transientEventCount int64
+	if hasTransientTask {
+		transientEventCount = int64(len(response.GetTransientWorkflowTask().GetHistorySuffix()))
+	}
+	shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue assembling history",
+		tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+		tag.WorkflowID(workflowKey.GetWorkflowID()),
+		tag.WorkflowRunID(workflowKey.GetRunID()),
+		tag.NewInt64("first-event-id", firstEventID),
+		tag.NewInt64("next-event-id", nextEventID),
+		tag.NewInt64("started-event-id", response.StartedEventId),
+		tag.NewBoolTag("has-transient-task", hasTransientTask),
+		tag.NewInt64("transient-event-count", transientEventCount),
+		tag.NewBoolTag("is-raw-history", isInternalRawHistoryEnabled))
+
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
 			ctx,
@@ -386,6 +404,45 @@ func setHistoryForRecordWfTaskStartedResp(
 	}
 	if err != nil {
 		return err
+	}
+
+	// Log after fetching history for poll response
+	var lastHistoryEventIDAfterFetch int64
+	var historyEventCountAfterFetch int
+	if isInternalRawHistoryEnabled {
+		historyEventCountAfterFetch = len(rawHistory)
+		shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue fetched raw history",
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()),
+			tag.NewInt("raw-history-blob-count", historyEventCountAfterFetch),
+			tag.NewBoolTag("has-more-pages", len(persistenceToken) > 0))
+	} else if history != nil && len(history.Events) > 0 {
+		historyEventCountAfterFetch = len(history.Events)
+		lastHistoryEventIDAfterFetch = history.Events[len(history.Events)-1].GetEventId()
+		shardContext.GetLogger().Warn("[WFTD] PollWorkflowTaskQueue fetched history",
+			tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+			tag.WorkflowID(workflowKey.GetWorkflowID()),
+			tag.WorkflowRunID(workflowKey.GetRunID()),
+			tag.NewInt("history-event-count", historyEventCountAfterFetch),
+			tag.NewInt64("last-history-event-id", lastHistoryEventIDAfterFetch),
+			tag.NewBoolTag("has-more-pages", len(persistenceToken) > 0))
+
+		// Critical gap detection - did transient events get appended?
+		if response.StartedEventId > 0 && lastHistoryEventIDAfterFetch > 0 &&
+			response.StartedEventId > lastHistoryEventIDAfterFetch+1 &&
+			len(persistenceToken) == 0 {
+			gap := response.StartedEventId - lastHistoryEventIDAfterFetch
+			shardContext.GetLogger().Warn("[WFTD] CRITICAL: PollWorkflowTaskQueue history missing transient events after fetch",
+				tag.WorkflowNamespaceID(workflowKey.GetNamespaceID()),
+				tag.WorkflowID(workflowKey.GetWorkflowID()),
+				tag.WorkflowRunID(workflowKey.GetRunID()),
+				tag.NewInt64("started-event-id", response.StartedEventId),
+				tag.NewInt64("last-event-id", lastHistoryEventIDAfterFetch),
+				tag.NewInt64("gap", gap),
+				tag.NewBoolTag("had-transient-task", hasTransientTask),
+				tag.NewInt64("transient-event-count", transientEventCount))
+		}
 	}
 
 	var continuation []byte

@@ -878,6 +878,17 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		// Transient events are only included in GetWorkflowExecutionHistory API responses,
 		// not in PollWorkflowTask responses. Including them here would show the worker its own
 		// task events, which is incorrect (see issue #7741).
+
+		// Log before fetching history for inline WorkflowTask
+		handler.logger.Warn("[WFTD] RespondWorkflowTaskCompleted assembling inline task history",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(matchingResp.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId()),
+			tag.NewInt64("first-event-id", firstEventID),
+			tag.NewInt64("next-event-id", nextEventID),
+			tag.NewInt64("started-event-id", matchingResp.GetStartedEventId()),
+			tag.NewBoolTag("is-sticky", matchingResp.GetStickyExecutionEnabled()))
+
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
 			handler.shardContext,
@@ -894,6 +905,35 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		)
 		if err != nil {
 			return nil, err
+		}
+
+		// Log after fetching history for inline WorkflowTask
+		var lastHistoryEventID int64
+		var historyEventCount int
+		if history != nil && len(history.Events) > 0 {
+			historyEventCount = len(history.Events)
+			lastHistoryEventID = history.Events[len(history.Events)-1].GetEventId()
+		}
+		handler.logger.Warn("[WFTD] RespondWorkflowTaskCompleted fetched inline task history",
+			tag.WorkflowNamespaceID(namespaceID.String()),
+			tag.WorkflowID(matchingResp.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId()),
+			tag.NewInt("history-event-count", historyEventCount),
+			tag.NewInt64("last-history-event-id", lastHistoryEventID),
+			tag.NewBoolTag("has-more-pages", len(persistenceToken) > 0))
+
+		// Critical gap detection - similar to poll path
+		if matchingResp.GetStartedEventId() > 0 && lastHistoryEventID > 0 &&
+			matchingResp.GetStartedEventId() > lastHistoryEventID+1 &&
+			len(persistenceToken) == 0 {
+			gap := matchingResp.GetStartedEventId() - lastHistoryEventID
+			handler.logger.Warn("[WFTD] CRITICAL: RespondWorkflowTaskCompleted inline task history missing events after fetch",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(matchingResp.GetWorkflowExecution().GetWorkflowId()),
+				tag.WorkflowRunID(matchingResp.GetWorkflowExecution().GetRunId()),
+				tag.NewInt64("started-event-id", matchingResp.GetStartedEventId()),
+				tag.NewInt64("last-event-id", lastHistoryEventID),
+				tag.NewInt64("gap", gap))
 		}
 
 		if len(persistenceToken) != 0 {
