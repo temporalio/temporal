@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 )
 
 var _ Scheduler[Task] = (*FIFOScheduler[Task])(nil)
@@ -26,8 +25,7 @@ type (
 		status  int32
 		options *FIFOSchedulerOptions
 
-		logger         log.Logger
-		metricsHandler metrics.Handler
+		logger log.Logger
 
 		tasksChan  chan T
 		shutdownWG sync.WaitGroup
@@ -43,14 +41,12 @@ type (
 func NewFIFOScheduler[T Task](
 	options *FIFOSchedulerOptions,
 	logger log.Logger,
-	metricsHandler metrics.Handler,
 ) *FIFOScheduler[T] {
 	return &FIFOScheduler[T]{
 		status:  common.DaemonStatusInitialized,
 		options: options,
 
-		logger:         logger,
-		metricsHandler: metricsHandler,
+		logger: logger,
 
 		tasksChan: make(chan T, options.QueueSize),
 	}
@@ -211,12 +207,10 @@ func (f *FIFOScheduler[T]) executeTask(
 			return
 		}
 
-		metrics.FIFOSchedulerTasksFailed.With(f.metricsHandler).Record(1)
 		task.Nack(err)
 		return
 	}
 
-	metrics.FIFOSchedulerTasksCompleted.With(f.metricsHandler).Record(1)
 	task.Ack()
 }
 

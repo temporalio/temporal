@@ -150,7 +150,6 @@ func NewScheduler(
 	fifoScheduler := tasks.NewFIFOScheduler[Executable](
 		fifoSchedulerOptions,
 		logger,
-		metricsHandler,
 	)
 
 	// Wrap the FIFO scheduler with ExecutionAwareScheduler for sequential per-execution processing
