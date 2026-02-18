@@ -363,7 +363,6 @@ func (u *Update) Admit(
 func (u *Update) OnProtocolMessage(
 	protocolMsg *protocolpb.Message,
 	eventStore EventStore,
-	namespace string,
 ) error {
 	if protocolMsg == nil {
 		return serviceerror.NewInvalidArgumentf("Update %s received nil message", u.id)
@@ -390,11 +389,11 @@ func (u *Update) OnProtocolMessage(
 
 	switch updMsg := body.(type) {
 	case *updatepb.Acceptance:
-		return u.onAcceptanceMsg(updMsg, eventStore, namespace)
+		return u.onAcceptanceMsg(updMsg, eventStore)
 	case *updatepb.Rejection:
-		return u.onRejectionMsg(updMsg, eventStore, namespace)
+		return u.onRejectionMsg(updMsg, eventStore)
 	case *updatepb.Response:
-		return u.onResponseMsg(updMsg, eventStore, namespace)
+		return u.onResponseMsg(updMsg, eventStore)
 	default:
 		return serviceerror.NewInvalidArgumentf("Message type %T not supported", body)
 	}
@@ -461,7 +460,6 @@ func (u *Update) outgoingMessageID() string {
 func (u *Update) onAcceptanceMsg(
 	acpt *updatepb.Acceptance,
 	eventStore EventStore,
-	namespace string,
 ) error {
 	// Normally Update goes from stateAdmitted to stateSent and then to stateAccepted,
 	// therefore, the only valid state here is stateSent.
@@ -469,7 +467,7 @@ func (u *Update) onAcceptanceMsg(
 	// it will be recreated by retries in stateAdmitted, and then the worker can accept the previous (cleared) Update
 	// with the same updateID. Because it is, in fact, the same Update, server should process this accepts message w/o error.
 	// Therefore, stateAdmitted is also a valid state.
-	if err := u.checkStateSet(acpt, stateSet(stateSent|stateAdmitted), namespace); err != nil {
+	if err := u.checkStateSet(acpt, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateAcceptanceMsg(acpt); err != nil {
@@ -559,10 +557,9 @@ func (u *Update) onAcceptanceMsg(
 func (u *Update) onRejectionMsg(
 	rej *updatepb.Rejection,
 	effects effect.Controller,
-	namespace string,
 ) error {
 	// See comment in onAcceptanceMsg about stateAdmitted.
-	if err := u.checkStateSet(rej, stateSet(stateSent|stateAdmitted), namespace); err != nil {
+	if err := u.checkStateSet(rej, stateSet(stateSent|stateAdmitted)); err != nil {
 		return err
 	}
 	if err := validateRejectionMsg(rej); err != nil {
@@ -608,9 +605,8 @@ func (u *Update) reject(
 func (u *Update) onResponseMsg(
 	res *updatepb.Response,
 	eventStore EventStore,
-	namespace string,
 ) error {
-	if err := u.checkStateSet(res, stateSet(stateProvisionallyAccepted|stateAccepted), namespace); err != nil {
+	if err := u.checkStateSet(res, stateSet(stateProvisionallyAccepted|stateAccepted)); err != nil {
 		return err
 	}
 	if err := validateResponseMsg(u.id, res); err != nil {
@@ -649,11 +645,11 @@ func (u *Update) onResponseMsg(
 	return nil
 }
 
-func (u *Update) checkStateSet(msg proto.Message, allowed stateSet, namespace string) error {
+func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
 	if u.state.Matches(allowed) {
 		return nil
 	}
-	u.instrumentation.invalidStateTransition(u.id, msg, u.state, namespace)
+	u.instrumentation.invalidStateTransition(u.id, msg, u.state)
 	return serviceerror.NewInvalidArgumentf("invalid state transition attempted for Update %s: "+
 		"received %T message while in state %s", u.id, msg, u.state)
 }

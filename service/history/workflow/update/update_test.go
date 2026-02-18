@@ -409,7 +409,7 @@ func TestUpdateState(t *testing.T) {
 						Body: MarshalAny(t, &updatepb.Acceptance{
 							AcceptedRequestSequencingEventId: testSequencingEventID,
 						}),
-					}, store, "test-namespace")
+					}, store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "accepted_request_message_id is not set")
 
@@ -417,7 +417,7 @@ func TestUpdateState(t *testing.T) {
 						Body: MarshalAny(t, &updatepb.Acceptance{
 							AcceptedRequestMessageId: tv.MessageID(),
 						}),
-					}, store, "test-namespace")
+					}, store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "accepted_request_sequencing_event_id is not set")
 				},
@@ -753,7 +753,7 @@ func TestUpdateState(t *testing.T) {
 
 					err := upd.OnProtocolMessage(&protocolpb.Message{
 						Body: MarshalAny(t, &updatepb.Response{}),
-					}, store, "test-namespace")
+					}, store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "meta is not set")
 
@@ -761,7 +761,7 @@ func TestUpdateState(t *testing.T) {
 						Body: MarshalAny(t, &updatepb.Response{
 							Outcome: failureOutcome,
 						}),
-					}, store, "test-namespace")
+					}, store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "meta is not set")
 
@@ -769,7 +769,7 @@ func TestUpdateState(t *testing.T) {
 						Body: MarshalAny(t, &updatepb.Response{
 							Meta: &updatepb.Meta{},
 						}),
-					}, store, "test-namespace")
+					}, store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "update_id is not set")
 
@@ -777,7 +777,7 @@ func TestUpdateState(t *testing.T) {
 						Body: MarshalAny(t, &updatepb.Response{
 							Meta: &updatepb.Meta{UpdateId: upd.ID()},
 						}),
-					}, store, "test-namespace")
+					}, store)
 					require.ErrorAs(t, err, &invalidArg)
 					require.ErrorContains(t, err, "outcome is not set")
 				},
@@ -981,13 +981,13 @@ func TestOnProtocolMessage(t *testing.T) {
 				TypeUrl: "nonsense",
 				Value:   []byte("even more nonsense"),
 			},
-		}, nil, "test-namespace")
+		}, nil)
 		require.Error(t, err)
 	})
 
 	t.Run("nil message", func(t *testing.T) {
 		upd := update.New(tv.UpdateID())
-		err := upd.OnProtocolMessage(nil, mockEventStore{}, "test-namespace")
+		err := upd.OnProtocolMessage(nil, mockEventStore{})
 
 		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
@@ -997,7 +997,7 @@ func TestOnProtocolMessage(t *testing.T) {
 	t.Run("nil message body", func(t *testing.T) {
 		upd := update.New(tv.UpdateID())
 		emptyMsg := &protocolpb.Message{}
-		err := upd.OnProtocolMessage(emptyMsg, mockEventStore{}, "test-namespace")
+		err := upd.OnProtocolMessage(emptyMsg, mockEventStore{})
 
 		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
@@ -1008,7 +1008,7 @@ func TestOnProtocolMessage(t *testing.T) {
 		upd := update.New(tv.UpdateID())
 		msg := protocolpb.Message{}
 		msg.Body = MarshalAny(t, &historypb.HistoryEvent{})
-		err := upd.OnProtocolMessage(&msg, mockEventStore{}, "test-namespace")
+		err := upd.OnProtocolMessage(&msg, mockEventStore{})
 
 		var invalidArg *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArg)
@@ -1059,7 +1059,7 @@ func reject(t *testing.T, store mockEventStore, upd *update.Update) error {
 				Input: &updatepb.Input{Name: "not_empty"},
 			},
 			Failure: rejectionFailure,
-		})}, store, "test-namespace")
+		})}, store)
 }
 
 func mustAccept(t *testing.T, store mockEventStore, upd *update.Update) {
@@ -1074,7 +1074,7 @@ func accept(t *testing.T, store mockEventStore, upd *update.Update) error {
 		Body: MarshalAny(t, &updatepb.Acceptance{
 			AcceptedRequestMessageId:         tv.MessageID(),
 			AcceptedRequestSequencingEventId: testSequencingEventID,
-		})}, store, "test-namespace")
+		})}, store)
 }
 
 func assertAccepted(t *testing.T, upd *update.Update) {
@@ -1116,7 +1116,7 @@ func respondSuccess(t *testing.T, store mockEventStore, upd *update.Update) erro
 		Body: MarshalAny(t, &updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
 			Outcome: successOutcome,
-		})}, store, "test-namespace")
+		})}, store)
 }
 
 func respondFailure(t *testing.T, store mockEventStore, upd *update.Update) error {
@@ -1125,7 +1125,7 @@ func respondFailure(t *testing.T, store mockEventStore, upd *update.Update) erro
 		Body: MarshalAny(t, &updatepb.Response{
 			Meta:    &updatepb.Meta{UpdateId: upd.ID()},
 			Outcome: failureOutcome,
-		})}, store, "test-namespace")
+		})}, store)
 }
 
 func assertCompleted(t *testing.T, upd *update.Update, outcome *updatepb.Outcome) {

@@ -89,7 +89,6 @@ type (
 		// A store from which Registry is constructed with NewRegistry function,
 		// and completed Updates are loaded. Practically it is a Mutable State.
 		store           UpdateStore
-		namespace       string
 		completedCount  int
 		failoverVersion int64
 		instrumentation instrumentation
@@ -140,7 +139,7 @@ func WithTotalLimitSuggestCAN(f func() float64) Option {
 // WithNamespace sets the namespace name to be used in Registry metrics and logs.
 func WithNamespace(ns string) Option {
 	return func(r *registry) {
-		r.namespace = ns
+		r.instrumentation.namespace = ns
 	}
 }
 
@@ -424,7 +423,7 @@ func (r *registry) payloadSizeLimiter() updateOpt {
 			registrySize := r.GetSize()
 			payloadBytes := req.Size()
 			if registrySize+payloadBytes >= maxInFlightUpdateSize {
-				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes, r.namespace)
+				r.instrumentation.countRegistrySizeLimited(len(r.updates), registrySize, payloadBytes)
 				return &serviceerror.ResourceExhausted{
 					Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 					Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
