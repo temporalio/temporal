@@ -2,13 +2,61 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/failure/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
 message OperationState {
+  // Current status of the operation.
   OperationStatus status = 1;
+
+  // Endpoint ID - used internally to avoid failing requests when endpoint is renamed.
+  string endpoint_id = 2;
+
+  // Endpoint name - resolved from the endpoint registry for this workflow's namespace.
+  string endpoint = 3;
+
+  // Service name.
+  string service = 4;
+
+  // Operation name.
+  string operation = 5;
+
+  // The time when the operation was scheduled.
+  google.protobuf.Timestamp scheduled_time = 6;
+
+  // Schedule-to-start timeout for this operation.
+  google.protobuf.Duration schedule_to_start_timeout = 7;
+
+  // Start-to-close timeout for this operation.
+  google.protobuf.Duration start_to_close_timeout = 8;
+
+  // Schedule-to-close timeout for this operation.
+  google.protobuf.Duration schedule_to_close_timeout = 9;
+
+  // Unique request ID allocated for all retry attempts of the StartOperation request.
+  string request_id = 10;
+
+  // Token for fetching the scheduled event from history.
+  bytes scheduled_event_token = 11;
+
+  // The number of attempts made to deliver the start operation request.
+  // This number represents a minimum bound since the attempt is incremented after the request completes.
+  int32 attempt = 12;
+
+  // The time when the last attempt completed.
+  google.protobuf.Timestamp last_attempt_complete_time = 13;
+
+  // The last attempt's failure, if any.
+  temporal.api.failure.v1.Failure last_attempt_failure = 14;
+
+  // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
+  google.protobuf.Timestamp next_attempt_schedule_time = 15;
+
+  // Operation token - only set for asynchronous operations after a successful StartOperation call.
+  string operation_token = 16;
 }
 
 enum OperationStatus {
