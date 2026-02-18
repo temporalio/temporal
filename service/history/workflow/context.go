@@ -968,6 +968,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
+			update.WithNamespace(nsName),
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),

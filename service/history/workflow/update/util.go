@@ -45,7 +45,6 @@ func (i *instrumentation) countResponseMsg() {
 }
 
 func (i *instrumentation) countRateLimited() {
-	i.metrics.Counter(metrics.WorkflowExecutionUpdateRequestRateLimited.Name()).Record(1, metrics.NamespaceTag("some-namespace"))
 	i.oneOf(metrics.WorkflowExecutionUpdateRequestRateLimited.Name())
 }
 
