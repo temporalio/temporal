@@ -214,7 +214,9 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	if err != nil {
 		t.Fatalf("failed to create scheduler: %v", err)
 	}
-	node.SetRootComponent(sched)
+	if err = node.SetRootComponent(sched); err != nil {
+		t.Fatalf("failed to set root component: %v", err)
+	}
 
 	// Advance Generator's high water mark to 'now'.
 	generator := sched.Generator.Get(ctx)
