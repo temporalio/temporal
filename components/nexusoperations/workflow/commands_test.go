@@ -401,7 +401,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 				},
 			},
 		})
-		var failWFTErr workflow.FailWorkflowTaskError
+		var failWFTErr chasmcommand.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -420,7 +420,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 				},
 			},
 		})
-		var failWFTErr workflow.FailWorkflowTaskError
+		var failWFTErr chasmcommand.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
