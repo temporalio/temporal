@@ -213,14 +213,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			completion := nexusrpc.CompleteOperationOptions{}
 
 			// Set up the CompletionSource field to return our mock completion
-			root.SetRootComponent(&mockNexusCompletionGetterComponent{
+			require.NoError(t, root.SetRootComponent(&mockNexusCompletionGetterComponent{
 				completion: completion,
 				// Create callback in SCHEDULED state
 				Callback: chasm.NewComponentField(
 					chasm.NewMutableContext(context.Background(), root),
 					callback,
 				),
-			})
+			}))
 			_, err = root.CloseTransaction()
 			require.NoError(t, err)
 
@@ -597,14 +597,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 
 			// Set up the CompletionSource field to return our mock completion
-			root.SetRootComponent(&mockNexusCompletionGetterComponent{
+			require.NoError(t, root.SetRootComponent(&mockNexusCompletionGetterComponent{
 				completion: tc.completion,
 				// Create callback in SCHEDULED state
 				Callback: chasm.NewComponentField(
 					chasm.NewMutableContext(context.Background(), root),
 					callback,
 				),
-			})
+			}))
 			_, err = root.CloseTransaction()
 			require.NoError(t, err)
 

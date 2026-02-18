@@ -346,7 +346,7 @@ func (fwdr *Forwarder) handleErr(err error) error {
 
 func newForwarderReqToken(maxOutstanding int) *ForwarderReqToken {
 	reqToken := &ForwarderReqToken{ch: make(chan *ForwarderReqToken, maxOutstanding)}
-	for i := 0; i < maxOutstanding; i++ {
+	for range maxOutstanding {
 		reqToken.ch <- reqToken
 	}
 	return reqToken

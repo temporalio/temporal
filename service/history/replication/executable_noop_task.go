@@ -43,7 +43,7 @@ func NewExecutableNoopTask(
 	}
 }
 
-func (e *ExecutableNoopTask) QueueID() interface{} {
+func (e *ExecutableNoopTask) QueueID() any {
 	return noopTaskID
 }
 

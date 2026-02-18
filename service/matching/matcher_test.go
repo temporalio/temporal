@@ -158,7 +158,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	var remotePollErr error
 	var remotePollResp matchingservice.PollWorkflowTaskQueueResponse
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			task, err := t.rootMatcher.Poll(arg0, &pollMetadata{})
 			if err != nil {
 				remotePollErr = err
@@ -185,7 +185,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 	var remoteSyncMatch bool
 	var req *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			req = arg1
 			task.forwardInfo = req.GetForwardInfo()
 			close(pollSigC)
@@ -269,7 +269,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 	wg.Add(1)
 
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			wg.Done()
 		},
 	).Return(nil, errMatchingHostThrottleTest)
@@ -299,7 +299,7 @@ func (t *MatcherTestSuite) TestForwardingWhenBacklogIsYoung() {
 
 	wg.Add(1)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			// Offer forwarding has occured
 			wg.Done()
 		},
@@ -462,7 +462,7 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 
 	var req *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			req = arg1
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
@@ -476,7 +476,7 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 
 func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
 			t.Assert().ErrorIs(err, errNoTasks)
 		},
@@ -491,7 +491,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 	// send query and expect generic DeadlineExceeded error
 	task = newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
@@ -507,7 +507,7 @@ func (t *MatcherTestSuite) TestQueryNoCurrentPollersButRecentPollers() {
 
 func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			_, err := t.rootMatcher.PollForQuery(arg0, &pollMetadata{})
 			t.Assert().ErrorIs(err, errNoTasks)
 		},
@@ -529,7 +529,7 @@ func (t *MatcherTestSuite) TestQueryNoRecentPoller() {
 	// make the query and expect errNoRecentPoller
 	task = newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
@@ -547,7 +547,7 @@ func (t *MatcherTestSuite) TestQueryNoPollerAtAll() {
 	task := newInternalQueryTask(uuid.NewString(), &matchingservice.QueryWorkflowRequest{})
 
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(ctx context.Context, req *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			task.forwardInfo = req.GetForwardInfo()
 			resp, err := t.rootMatcher.OfferQuery(ctx, task)
 			t.Nil(resp)
@@ -624,7 +624,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 
 	var req *matchingservice.QueryWorkflowRequest
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			req = arg1
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
@@ -670,7 +670,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 
 	var req *matchingservice.QueryWorkflowRequest
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			req = arg1
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
@@ -756,7 +756,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	var req *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			req = arg1
 			task := newInternalTaskForSyncMatch(task.event.AllocatedTaskInfo.Data, req.ForwardInfo, 0, nil)
 			close(pollSigC)
@@ -785,7 +785,7 @@ func (t *MatcherTestSuite) TestRemotePoll() {
 
 	var req *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			req = arg1
 		},
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{
@@ -812,7 +812,7 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 
 	var req *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			req = arg1
 		},
 	).Return(&matchingservice.PollWorkflowTaskQueueResponse{

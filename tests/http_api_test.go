@@ -435,7 +435,7 @@ func (s *HttpApiTestSuite) TestHTTPAPI_Serves_OpenAPIv2_Docs() {
 		"/swagger.json",
 		"",
 	)
-	var spec map[string]interface{}
+	var spec map[string]any
 	// We're not going to validate it here, just verify that it's valid
 	s.Require().NoError(json.Unmarshal(respBody, &spec), string(respBody))
 }
@@ -446,7 +446,7 @@ func (s *HttpApiTestSuite) TestHTTPAPI_Serves_OpenAPIv3_Docs() {
 		"/openapi.yaml",
 		"",
 	)
-	var spec map[string]interface{}
+	var spec map[string]any
 	// We're not going to validate it here, just verify that it's valid
 	s.Require().NoError(yaml.Unmarshal(respBody, &spec), string(respBody))
 }

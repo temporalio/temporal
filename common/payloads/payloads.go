@@ -30,11 +30,11 @@ func EncodeBytes(bytes []byte) *commonpb.Payloads {
 	return ps
 }
 
-func Encode(value ...interface{}) (*commonpb.Payloads, error) {
+func Encode(value ...any) (*commonpb.Payloads, error) {
 	return defaultDataConverter.ToPayloads(value...)
 }
 
-func Decode(ps *commonpb.Payloads, valuePtr ...interface{}) error {
+func Decode(ps *commonpb.Payloads, valuePtr ...any) error {
 	return defaultDataConverter.FromPayloads(ps, valuePtr...)
 }
 

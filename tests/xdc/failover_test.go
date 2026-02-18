@@ -1111,7 +1111,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	}
 
 	// make some progress in cluster0 and did some continueAsNew
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := poller0.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
@@ -1120,7 +1120,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
 	// finish the rest in cluster1
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := poller1.PollAndProcessWorkflowTask()
 		s.logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
@@ -1415,7 +1415,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, err = poller0.PollAndProcessWorkflowTask()
 		if err != nil {
 			timerCreated = false

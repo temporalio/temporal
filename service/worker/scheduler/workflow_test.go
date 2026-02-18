@@ -1958,7 +1958,7 @@ func (s *workflowSuite) TestLotsOfIterations() {
 		callBackRangeStartTime := time.Date(2022, 5, i, 0, 0, 0, 0, time.UTC)
 
 		// add/process maxRuns schedules
-		for j := 0; j < maxRuns; j++ {
+		for j := range maxRuns {
 			runStartTime := time.Date(2022, 5, i, j, 27+j%2, 0, 0, time.UTC)
 			runs = append(runs, workflowRun{
 				id:     "myid-" + runStartTime.Format(time.RFC3339),

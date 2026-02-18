@@ -22,7 +22,7 @@ type fileBasedClientSuite struct {
 	*require.Assertions
 	client     dynamicconfig.Client
 	collection *dynamicconfig.Collection
-	doneCh     chan interface{}
+	doneCh     chan any
 }
 
 func TestFileBasedClientSuite(t *testing.T) {
@@ -32,7 +32,7 @@ func TestFileBasedClientSuite(t *testing.T) {
 
 func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
-	s.doneCh = make(chan interface{})
+	s.doneCh = make(chan any)
 	logger := log.NewNoopLogger()
 	s.client, err = dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
@@ -177,14 +177,14 @@ func (s *fileBasedClientSuite) TestGetStringValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue() {
-	var defaultVal map[string]interface{}
+	var defaultVal map[string]any
 	v := dynamicconfig.NewGlobalMapSetting(testGetMapPropertyKey, defaultVal, "").Get(s.collection)()
-	expectedVal := map[string]interface{}{
+	expectedVal := map[string]any{
 		"key1": "1",
 		"key2": 1,
-		"key3": []interface{}{
+		"key3": []any{
 			false,
-			map[string]interface{}{
+			map[string]any{
 				"key4": true,
 				"key5": 2.1,
 			},
@@ -220,7 +220,7 @@ func (s *fileBasedClientSuite) TestGetTypedValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
-	var defaultVal map[string]interface{}
+	var defaultVal map[string]any
 	v := dynamicconfig.NewNamespaceMapSetting(testGetMapPropertyKey, defaultVal, "").Get(s.collection)("random-namespace")
 	s.Equal(defaultVal, v)
 }
@@ -284,7 +284,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
@@ -378,7 +378,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedTypedValue() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
@@ -431,7 +431,7 @@ func (s *fileBasedClientSuite) TestUpdate_NewEntry() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
@@ -487,7 +487,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 

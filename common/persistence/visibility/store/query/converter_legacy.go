@@ -444,10 +444,10 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 		)
 	}
 
-	colValues, isArray := colValue.([]interface{})
+	colValues, isArray := colValue.([]any)
 	// colValue should be an array only for "in (1,2,3)" queries.
 	if !isArray {
-		colValues = []interface{}{colValue}
+		colValues = []any{colValue}
 	}
 
 	colValues, err = c.fvInterceptor.Values(alias, colName, colValues...)
@@ -512,7 +512,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 
 // convertComparisonExprValue returns a string, int64, float64, bool or
 // a slice with each value of one of those types.
-func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
+func convertComparisonExprValue(expr sqlparser.Expr) (any, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
 		v, err := sqlquery.ParseValue(sqlparser.String(e))
@@ -525,7 +525,7 @@ func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		exprs := []sqlparser.Expr(e)
-		var result []interface{}
+		var result []any
 		for _, expr := range exprs {
 			v, err := convertComparisonExprValue(expr)
 			if err != nil {

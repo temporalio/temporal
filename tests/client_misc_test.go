@@ -64,13 +64,13 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	maxPendingChildWorkflows := testcore.ClientSuiteLimit
 	parentWorkflow := func(ctx workflow.Context) error {
 		childStarted := workflow.GetSignalChannel(ctx, "blocking-child-started")
-		for i := 0; i < maxPendingChildWorkflows; i++ {
+		for i := range maxPendingChildWorkflows {
 			childOptions := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 				WorkflowID: fmt.Sprintf("child-%d", i+1),
 			})
 			workflow.ExecuteChildWorkflow(childOptions, blockingChildWorkflow)
 		}
-		for i := 0; i < maxPendingChildWorkflows; i++ {
+		for range maxPendingChildWorkflows {
 			childStarted.Receive(ctx, nil)
 		}
 		return workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
@@ -138,7 +138,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	readyToScheduleLastActivity := "ready-to-schedule-last-activity"
 	myWorkflow := func(ctx workflow.Context) error {
-		for i := 0; i < testcore.ClientSuiteLimit; i++ {
+		for i := range testcore.ClientSuiteLimit {
 			workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: time.Minute,
 				ActivityID:          fmt.Sprintf("pending-activity-%d", i),
@@ -164,7 +164,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	// wait until all of the activities are started (but not finished) before trying to schedule the last one
 	var activityInfo activity.Info
-	for i := 0; i < testcore.ClientSuiteLimit; i++ {
+	for range testcore.ClientSuiteLimit {
 		activityInfo = <-pendingActivities
 	}
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, workflowID, "", readyToScheduleLastActivity, nil))
@@ -205,7 +205,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		})
 	}
 	s.Worker().RegisterWorkflow(targetWorkflow)
-	for i := 0; i < numTargetWorkflows; i++ {
+	for i := range numTargetWorkflows {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			ID:        fmt.Sprintf("workflow-%d", i),
 			TaskQueue: s.TaskQueue(),
@@ -285,7 +285,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 	signalName := "my-signal"
 	sender := func(ctx workflow.Context, n int) error {
 		var futures []workflow.Future
-		for i := 0; i < n; i++ {
+		for range n {
 			future := workflow.SignalExternalWorkflow(ctx, receiverId, "", signalName, nil)
 			futures = append(futures, future)
 		}
@@ -538,7 +538,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 			UpdateName:   tv.HandlerName(),
 			WorkflowID:   tv.WorkflowID(),
 			RunID:        tv.RunID(),
-			Args:         []interface{}{"update-value"},
+			Args:         []any{"update-value"},
 			WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
 		})
 		updateErrCh <- err
@@ -705,7 +705,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 		// between server starts the workflow task and this code is executed.
 
 		var currentAttemptStartedTime time.Time
-		err := workflow.SideEffect(ctx, func(_ workflow.Context) interface{} {
+		err := workflow.SideEffect(ctx, func(_ workflow.Context) any {
 			rpcCtx := context.Background()
 			if deadline, ok := ctx.Deadline(); ok {
 				var cancel context.CancelFunc
@@ -1227,7 +1227,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 		// now do something bad in a loop.
 		// (we want something that's visible in history, not just failing workflow tasks,
 		// otherwise we wouldn't need a reset to "fix" it, just a new build would be enough.)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			s.NoError(workflow.ExecuteActivity(ao, "badact").Get(ctx, nil))
 			_ = workflow.Sleep(ctx, time.Second)
 		}

@@ -24,8 +24,8 @@ type (
 
 	// ProgressManager is used to record and load archive progress
 	ProgressManager interface {
-		RecordProgress(ctx context.Context, progress interface{}) error
-		LoadProgress(ctx context.Context, valuePtr interface{}) error
+		RecordProgress(ctx context.Context, progress any) error
+		LoadProgress(ctx context.Context, valuePtr any) error
 		HasProgress(ctx context.Context) bool
 	}
 )
@@ -50,12 +50,12 @@ func GetHeartbeatArchiveOption() ArchiveOption {
 
 type heartbeatProgressManager struct{}
 
-func (h *heartbeatProgressManager) RecordProgress(ctx context.Context, progress interface{}) error {
+func (h *heartbeatProgressManager) RecordProgress(ctx context.Context, progress any) error {
 	activity.RecordHeartbeat(ctx, progress)
 	return nil
 }
 
-func (h *heartbeatProgressManager) LoadProgress(ctx context.Context, valuePtr interface{}) error {
+func (h *heartbeatProgressManager) LoadProgress(ctx context.Context, valuePtr any) error {
 	if !h.HasProgress(ctx) {
 		return errors.New("no progress information in the context")
 	}
