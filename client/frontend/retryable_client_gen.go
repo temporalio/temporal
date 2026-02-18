@@ -1541,6 +1541,21 @@ func (c *retryableClient) UpdateWorkerDeploymentVersionMetadata(
 	return resp, err
 }
 
+func (c *retryableClient) UpdateWorkerDeploymentVersionComputeProvider(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerDeploymentVersionComputeProviderRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerDeploymentVersionComputeProviderResponse, error) {
+	var resp *workflowservice.UpdateWorkerDeploymentVersionComputeProviderResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateWorkerDeploymentVersionComputeProvider(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) UpdateWorkerVersioningRules(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkerVersioningRulesRequest,

@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	workercontroller "go.temporal.io/managed-workers/wci/client"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -64,6 +65,7 @@ var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
 	workerdeployment.Module,
+	workercontroller.Module,
 	// Note that with this approach routes may be registered in arbitrary order.
 	// This is okay because our routes don't have overlapping matches.
 	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
@@ -772,6 +774,7 @@ func HandlerProvider(
 	historyClient resource.HistoryClient,
 	matchingClient resource.MatchingClient,
 	workerDeploymentStoreClient workerdeployment.Client,
+	workerControllerClient workercontroller.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	metricsHandler metrics.Handler,
@@ -808,6 +811,7 @@ func HandlerProvider(
 		historyClient,
 		matchingClient,
 		workerDeploymentStoreClient,
+		workerControllerClient,
 		schedulerClient,
 		archiverProvider,
 		payloadSerializer,

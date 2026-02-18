@@ -28,6 +28,7 @@ import (
 	workerpb "go.temporal.io/api/worker/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	workercontroller "go.temporal.io/managed-workers/wci/client"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -130,6 +131,7 @@ type (
 		historyClient                   historyservice.HistoryServiceClient
 		matchingClient                  matchingservice.MatchingServiceClient
 		workerDeploymentClient          workerdeployment.Client
+		workerControllerClient          workercontroller.Client
 		schedulerClient                 schedulerpb.SchedulerServiceClient
 		archiverProvider                provider.ArchiverProvider
 		payloadSerializer               serialization.Serializer
@@ -163,6 +165,7 @@ func NewWorkflowHandler(
 	historyClient historyservice.HistoryServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
 	workerDeploymentClient workerdeployment.Client,
+	workerControllerClient workercontroller.Client,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	archiverProvider provider.ArchiverProvider,
 	payloadSerializer serialization.Serializer,
@@ -207,6 +210,7 @@ func NewWorkflowHandler(
 		historyClient:                   historyClient,
 		matchingClient:                  matchingClient,
 		workerDeploymentClient:          workerDeploymentClient,
+		workerControllerClient:          workerControllerClient,
 		schedulerClient:                 schedulerClient,
 		archiverProvider:                archiverProvider,
 		payloadSerializer:               payloadSerializer,
@@ -1060,7 +1064,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondWorkflowTaskFailedRequest,
 ) (_ *workflowservice.RespondWorkflowTaskFailedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -1428,7 +1431,6 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskCompletedRequest,
 ) (_ *workflowservice.RespondActivityTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -1619,7 +1621,6 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	ctx context.Context,
 	request *workflowservice.RespondActivityTaskFailedRequest,
 ) (_ *workflowservice.RespondActivityTaskFailedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -2215,7 +2216,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		NamespaceId:            namespaceID.String(),
 		SignalWithStartRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -2427,7 +2427,6 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		Query:         strings.Join(query, " AND "),
 	}
 	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(ctx, baseReq)
-
 	if err != nil {
 		return nil, err
 	}
@@ -2542,7 +2541,6 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		Query:         strings.Join(query, " AND "),
 	}
 	persistenceResp, err := wh.visibilityMgr.ListWorkflowExecutions(ctx, baseReq)
-
 	if err != nil {
 		return nil, err
 	}
@@ -2740,7 +2738,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *workflowservice.RespondQueryTaskCompletedRequest,
 ) (_ *workflowservice.RespondQueryTaskCompletedResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3053,7 +3050,6 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -3321,7 +3317,6 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 		FrontendRequest: request,
 	})
 	return res.GetFrontendResponse(), err
-
 }
 
 func (wh *WorkflowHandler) createScheduleWorkflow(
@@ -3395,7 +3390,6 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 			time.Now().UTC(),
 		),
 	)
-
 	if err != nil {
 		return nil, err
 	}
@@ -3605,6 +3599,19 @@ func (wh *WorkflowHandler) DescribeWorkerDeploymentVersion(ctx context.Context, 
 		return nil, err
 	}
 
+	if request.GetDeploymentVersion() != nil {
+		wciDetails, _, err := wh.workerControllerClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, request.GetDeploymentVersion())
+		if err != nil {
+			return nil, err
+		}
+		if wciDetails != nil && wciDetails.ComputeProviderDetails != nil {
+			versionInfo.ComputeProvider = &deploymentpb.ComputeProvider{
+				Type:   string(wciDetails.ComputeProviderDetails.ProviderType),
+				Detail: wciDetails.ComputeProviderDetails.ProviderSettings,
+			}
+		}
+	}
+
 	//nolint:staticcheck // SA1019: worker versioning v0.31
 	versionInfo.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(versionInfo.Version)
 	return &workflowservice.DescribeWorkerDeploymentVersionResponse{
@@ -3808,6 +3815,16 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	for _, vs := range workerDeploymentInfo.VersionSummaries {
 		//nolint:staticcheck // SA1019: worker versioning v0.31
 		vs.DeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(vs.Version)
+
+		details, _, err := wh.workerControllerClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, vs.GetDeploymentVersion())
+		if err != nil && !errors.As(err, new(*serviceerror.NotFound)) {
+			return nil, err
+		}
+		if details != nil && details.ComputeProviderDetails != nil {
+			vs.ComputeProviderSummary = &deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary_ComputeProviderSummary{
+				ComputeProviderType: string(details.ComputeProviderDetails.ProviderType),
+			}
+		}
 	}
 	return &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: workerDeploymentInfo,
@@ -3872,6 +3889,10 @@ func (wh *WorkflowHandler) DeleteWorkerDeploymentVersion(ctx context.Context, re
 		versionStr = worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
 	}
 
+	if err = wh.workerControllerClient.DeleteWorkerControllerInstance(ctx, namespaceEntry, request.GetDeploymentVersion(), request.GetIdentity()); err != nil {
+		return nil, err
+	}
+
 	err = wh.workerDeploymentClient.DeleteWorkerDeploymentVersion(ctx, namespaceEntry, versionStr, request.SkipDrainage, request.Identity)
 	if err != nil {
 		return nil, err
@@ -3910,6 +3931,62 @@ func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionMetadata(ctx context.Con
 
 	return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{
 		Metadata: updatedMetadata,
+	}, nil
+}
+
+func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeProvider(ctx context.Context, request *workflowservice.UpdateWorkerDeploymentVersionComputeProviderRequest) (_ *workflowservice.UpdateWorkerDeploymentVersionComputeProviderResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if request.GetDeploymentVersion() == nil {
+		return nil, serviceerror.NewInvalidArgument("deployment version cannot be empty")
+	}
+
+	versionStr := worker_versioning.ExternalWorkerDeploymentVersionToStringV31(request.GetDeploymentVersion())
+	if _, _, err := wh.workerDeploymentClient.DescribeVersion(ctx, namespaceEntry, versionStr, false); errors.As(err, new(*serviceerror.NotFound)) {
+		if err := wh.workerDeploymentClient.RegisterTaskQueueWorker(
+			ctx,
+			namespaceEntry,
+			request.GetDeploymentVersion().GetDeploymentName(),
+			request.GetDeploymentVersion().GetBuildId(),
+			request.GetTaskQueue(),
+			enumspb.TASK_QUEUE_TYPE_UNSPECIFIED,
+			request.GetIdentity(),
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	var computeProviderDetails *workercontroller.ComputeProviderDetails
+	if request.GetComputeProvider() != nil {
+		computeProviderDetails = &workercontroller.ComputeProviderDetails{
+			ProviderType:     workercontroller.ComputeProviderType(request.GetComputeProvider().GetType()),
+			ProviderSettings: request.GetComputeProvider().GetDetail(),
+		}
+	}
+
+	if err := wh.workerControllerClient.UpdateWorkerControllerInstance(ctx, namespaceEntry, request.GetDeploymentVersion(), request.GetConflictToken(), request.GetIdentity(), computeProviderDetails, nil); err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.UpdateWorkerDeploymentVersionComputeProviderResponse{
+		ConflictToken: request.ConflictToken,
 	}, nil
 }
 
@@ -5325,7 +5402,6 @@ func (wh *WorkflowHandler) StopBatchOperation(
 	ctx context.Context,
 	request *workflowservice.StopBatchOperationRequest,
 ) (_ *workflowservice.StopBatchOperationResponse, retError error) {
-
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if err := wh.versionChecker.ClientSupported(ctx); err != nil {
@@ -6181,7 +6257,6 @@ func (wh *WorkflowHandler) registerOutstandingPollContext(
 	pollerID string,
 	namespaceID string,
 ) context.Context {
-
 	if pollerID != "" {
 		nsPollers, ok := wh.outstandingPollers.Get(namespaceID)
 		if !ok {
@@ -6491,7 +6566,6 @@ func (wh *WorkflowHandler) UpdateActivityOptions(
 		NamespaceId:   namespaceID.String(),
 		UpdateRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -6526,7 +6600,6 @@ func (wh *WorkflowHandler) PauseActivity(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -6558,7 +6631,6 @@ func (wh *WorkflowHandler) UnpauseActivity(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -6590,7 +6662,6 @@ func (wh *WorkflowHandler) ResetActivity(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -6727,7 +6798,6 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 		NamespaceId:       namespaceID.String(),
 		HeartbeartRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -6752,7 +6822,6 @@ func (wh *WorkflowHandler) ListWorkers(
 		NamespaceId: namespaceID.String(),
 		ListRequest: request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -6860,7 +6929,6 @@ func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflow
 		NamespaceId: namespaceID.String(),
 		Request:     request,
 	})
-
 	if err != nil {
 		return nil, err
 	}
