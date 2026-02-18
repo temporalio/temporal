@@ -176,7 +176,6 @@ func Invoke(
 				return nil, err
 			}
 
-
 			if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 				updateAction.Noop = true
 			} else {
@@ -240,7 +239,6 @@ func Invoke(
 		return nil, err
 	}
 
-
 	maxHistoryPageSize := int32(config.HistoryMaxPageSize(namespaceEntry.Name().String()))
 	err = setHistoryForRecordWfTaskStartedResp(
 		ctx,
@@ -296,13 +294,11 @@ func setHistoryForRecordWfTaskStartedResp(
 		}
 	}()
 
-
 	isInternalRawHistoryEnabled := shardContext.GetConfig().SendRawHistoryBetweenInternalServices()
 	var rawHistory []*commonpb.DataBlob
 	var persistenceToken []byte
 	var history *historypb.History
 	var err error
-
 
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
@@ -337,7 +333,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	if err != nil {
 		return err
 	}
-
 
 	var continuation []byte
 	if len(persistenceToken) != 0 {
