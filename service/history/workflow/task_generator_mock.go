@@ -47,17 +47,17 @@ func (m *MockTaskGenerator) EXPECT() *MockTaskGeneratorMockRecorder {
 }
 
 // GenerateActivityCommandTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityCommandTasks(scheduledEventIDs []int64, controlQueue string, commandType enums.ActivityCommandType) error {
+func (m *MockTaskGenerator) GenerateActivityCommandTasks(taskTokens [][]byte, controlQueue string, commandType enums.ActivityCommandType) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityCommandTasks", scheduledEventIDs, controlQueue, commandType)
+	ret := m.ctrl.Call(m, "GenerateActivityCommandTasks", taskTokens, controlQueue, commandType)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // GenerateActivityCommandTasks indicates an expected call of GenerateActivityCommandTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityCommandTasks(scheduledEventIDs, controlQueue, commandType any) *gomock.Call {
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityCommandTasks(taskTokens, controlQueue, commandType any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCommandTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityCommandTasks), scheduledEventIDs, controlQueue, commandType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCommandTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityCommandTasks), taskTokens, controlQueue, commandType)
 }
 
 // GenerateActivityRetryTasks mocks base method.

@@ -175,7 +175,7 @@ func (s *taskSerializerSuite) TestOutboundActivityCommandTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		CommandType:         enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
-		ScheduledEventIDs:   []int64{rand.Int63(), rand.Int63(), rand.Int63()},
+		TaskTokens:          [][]byte{[]byte("token1"), []byte("token2"), []byte("token3")},
 		Destination:         "test-control-queue",
 	}
 

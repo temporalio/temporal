@@ -1457,8 +1457,8 @@ func serializeOutboundTask(
 			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 			TaskDetails: &persistencespb.OutboundTaskInfo_ActivityCommandInfo{
 				ActivityCommandInfo: &persistencespb.ActivityCommandTaskInfo{
-					CommandType:       task.CommandType,
-					ScheduledEventIds: task.ScheduledEventIDs,
+					CommandType: task.CommandType,
+					TaskTokens:  task.TaskTokens,
 				},
 			},
 		}
@@ -1515,7 +1515,7 @@ func deserializeOutboundTask(
 			VisibilityTimestamp: info.VisibilityTime.AsTime(),
 			TaskID:              info.TaskId,
 			CommandType:         activityCommandInfo.GetCommandType(),
-			ScheduledEventIDs:   activityCommandInfo.GetScheduledEventIds(),
+			TaskTokens:          activityCommandInfo.GetTaskTokens(),
 			Destination:         info.Destination,
 		}, nil
 	default:

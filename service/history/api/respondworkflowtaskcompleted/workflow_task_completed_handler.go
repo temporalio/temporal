@@ -67,7 +67,7 @@ type (
 		effects                              effect.Controller
 		initiatedChildExecutionsInBatch      map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                       update.Registry
-		pendingActivityCancelsByControlQueue map[string][]int64 // Batched activity cancels by control queue
+		pendingActivityCancelsByControlQueue map[string][][]byte // Batched activity cancel task tokens by control queue
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -672,12 +672,28 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			handler.activityNotStartedCancelled = true
 		} else if ai.StartedEventId != common.EmptyEventID && ai.WorkerControlTaskQueue != "" {
 			// Activity has started and worker supports Nexus control tasks - collect for batched dispatch.
+			taskToken, err := handler.tokenSerializer.Serialize(tasktoken.NewActivityTaskToken(
+				handler.mutableState.GetNamespaceEntry().ID().String(),
+				handler.mutableState.GetWorkflowKey().WorkflowID,
+				handler.mutableState.GetWorkflowKey().RunID,
+				ai.ScheduledEventId,
+				ai.ActivityId,
+				ai.ActivityType.GetName(),
+				ai.Attempt,
+				nil, // Clock not needed for cancel
+				ai.Version,
+				ai.StartVersion,
+				nil,
+			))
+			if err != nil {
+				return nil, err
+			}
 			if handler.pendingActivityCancelsByControlQueue == nil {
-				handler.pendingActivityCancelsByControlQueue = make(map[string][]int64)
+				handler.pendingActivityCancelsByControlQueue = make(map[string][][]byte)
 			}
 			handler.pendingActivityCancelsByControlQueue[ai.WorkerControlTaskQueue] = append(
 				handler.pendingActivityCancelsByControlQueue[ai.WorkerControlTaskQueue],
-				ai.ScheduledEventId,
+				taskToken,
 			)
 		}
 	}
@@ -687,9 +703,9 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 // flushBatchedActivityCommandTasks creates ActivityCommandTasks for all collected activity cancellations,
 // batched by control queue.
 func (handler *workflowTaskCompletedHandler) flushBatchedActivityCommandTasks() error {
-	for controlQueue, scheduledEventIDs := range handler.pendingActivityCancelsByControlQueue {
+	for controlQueue, taskTokens := range handler.pendingActivityCancelsByControlQueue {
 		if err := handler.mutableState.AddActivityCommandTasks(
-			scheduledEventIDs,
+			taskTokens,
 			controlQueue,
 			enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
 		); err != nil {

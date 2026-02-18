@@ -2358,15 +2358,15 @@ func (*OutboundTaskInfo_ChasmTaskInfo) isOutboundTaskInfo_TaskDetails() {}
 
 func (*OutboundTaskInfo_ActivityCommandInfo) isOutboundTaskInfo_TaskDetails() {}
 
-// ActivityCommandTaskInfo contains details for activity command operations.
+// ActivityCommandTaskInfo contains details for activity command operation.
 type ActivityCommandTaskInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Type of command to send.
 	CommandType v1.ActivityCommandType `protobuf:"varint,1,opt,name=command_type,json=commandType,proto3,enum=temporal.server.api.enums.v1.ActivityCommandType" json:"command_type,omitempty"`
-	// Scheduled event IDs of activities to send command to.
-	ScheduledEventIds []int64 `protobuf:"varint,2,rep,packed,name=scheduled_event_ids,json=scheduledEventIds,proto3" json:"scheduled_event_ids,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Task tokens of activities.
+	TaskTokens    [][]byte `protobuf:"bytes,2,rep,name=task_tokens,json=taskTokens,proto3" json:"task_tokens,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityCommandTaskInfo) Reset() {
@@ -2406,9 +2406,9 @@ func (x *ActivityCommandTaskInfo) GetCommandType() v1.ActivityCommandType {
 	return v1.ActivityCommandType(0)
 }
 
-func (x *ActivityCommandTaskInfo) GetScheduledEventIds() []int64 {
+func (x *ActivityCommandTaskInfo) GetTaskTokens() [][]byte {
 	if x != nil {
-		return x.ScheduledEventIds
+		return x.TaskTokens
 	}
 	return nil
 }
@@ -4919,10 +4919,11 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x0fchasm_task_info\x18\t \x01(\v21.temporal.server.api.persistence.v1.ChasmTaskInfoH\x00R\rchasmTaskInfo\x12q\n" +
 	"\x15activity_command_info\x18\n" +
 	" \x01(\v2;.temporal.server.api.persistence.v1.ActivityCommandTaskInfoH\x00R\x13activityCommandInfoB\x0e\n" +
-	"\ftask_details\"\x9f\x01\n" +
+	"\ftask_details\"\x90\x01\n" +
 	"\x17ActivityCommandTaskInfo\x12T\n" +
-	"\fcommand_type\x18\x01 \x01(\x0e21.temporal.server.api.enums.v1.ActivityCommandTypeR\vcommandType\x12.\n" +
-	"\x13scheduled_event_ids\x18\x02 \x03(\x03R\x11scheduledEventIds\"3\n" +
+	"\fcommand_type\x18\x01 \x01(\x0e21.temporal.server.api.enums.v1.ActivityCommandTypeR\vcommandType\x12\x1f\n" +
+	"\vtask_tokens\x18\x02 \x03(\fR\n" +
+	"taskTokens\"3\n" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +

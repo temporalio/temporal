@@ -20,8 +20,8 @@ type (
 
 		// CommandType specifies the type of command.
 		CommandType enumsspb.ActivityCommandType
-		// ScheduledEventIDs of activities to send command to (batched by worker).
-		ScheduledEventIDs []int64
+		// TaskTokens of activities to send command to (batched by worker).
+		TaskTokens [][]byte
 		// Destination is the worker control task queue for outbound queue grouping.
 		Destination string
 	}
@@ -61,12 +61,12 @@ func (t *ActivityCommandTask) GetDestination() string {
 }
 
 func (t *ActivityCommandTask) String() string {
-	return fmt.Sprintf("ActivityCommandTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, CommandType: %v, ScheduledEventIDs: %v, Destination: %v}",
+	return fmt.Sprintf("ActivityCommandTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, CommandType: %v, TaskTokens: %d, Destination: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
 		t.CommandType,
-		t.ScheduledEventIDs,
+		len(t.TaskTokens),
 		t.Destination,
 	)
 }

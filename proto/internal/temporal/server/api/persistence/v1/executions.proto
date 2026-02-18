@@ -489,12 +489,13 @@ message OutboundTaskInfo {
     }
 }
 
-// ActivityCommandTaskInfo contains details for activity command operations.
+// ActivityCommandTaskInfo contains details for activity command operation.
 message ActivityCommandTaskInfo {
     // Type of command to send.
     temporal.server.api.enums.v1.ActivityCommandType command_type = 1;
-    // Scheduled event IDs of activities to send command to.
-    repeated int64 scheduled_event_ids = 2;
+
+    // Task tokens of activities.
+    repeated bytes task_tokens = 2;
 }
 
 message NexusInvocationTaskInfo {

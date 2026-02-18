@@ -1070,40 +1070,44 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ActivityRetention(t *t
 func TestGenerateActivityCommandTasks(t *testing.T) {
 	t.Parallel()
 
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+
 	testCases := []struct {
-		name              string
-		featureEnabled    bool
-		scheduledEventIDs []int64
-		controlQueue      string
-		expectTask        bool
+		name           string
+		featureEnabled bool
+		taskTokens     [][]byte
+		controlQueue   string
+		expectTask     bool
 	}{
 		{
-			name:              "creates task when enabled with valid inputs",
-			featureEnabled:    true,
-			scheduledEventIDs: []int64{5, 6, 7},
-			controlQueue:      "test-control-queue",
-			expectTask:        true,
+			name:           "creates task when enabled with valid inputs",
+			featureEnabled: true,
+			taskTokens:     [][]byte{token1, token2, token3},
+			controlQueue:   "test-control-queue",
+			expectTask:     true,
 		},
 		{
-			name:              "no task when feature disabled",
-			featureEnabled:    false,
-			scheduledEventIDs: []int64{5, 6, 7},
-			controlQueue:      "test-control-queue",
-			expectTask:        false,
+			name:           "no task when feature disabled",
+			featureEnabled: false,
+			taskTokens:     [][]byte{token1, token2, token3},
+			controlQueue:   "test-control-queue",
+			expectTask:     false,
 		},
 		{
-			name:              "no task when scheduledEventIDs empty",
-			featureEnabled:    true,
-			scheduledEventIDs: []int64{},
-			controlQueue:      "test-control-queue",
-			expectTask:        false,
+			name:           "no task when taskTokens empty",
+			featureEnabled: true,
+			taskTokens:     [][]byte{},
+			controlQueue:   "test-control-queue",
+			expectTask:     false,
 		},
 		{
-			name:              "no task when controlQueue empty",
-			featureEnabled:    true,
-			scheduledEventIDs: []int64{5, 6, 7},
-			controlQueue:      "",
-			expectTask:        false,
+			name:           "no task when controlQueue empty",
+			featureEnabled: true,
+			taskTokens:     [][]byte{token1, token2, token3},
+			controlQueue:   "",
+			expectTask:     false,
 		},
 	}
 
@@ -1128,17 +1132,17 @@ func TestGenerateActivityCommandTasks(t *testing.T) {
 			}
 
 			taskGenerator := NewTaskGenerator(nil, mutableState, cfg, nil, log.NewTestLogger())
-			err := taskGenerator.GenerateActivityCommandTasks(tc.scheduledEventIDs, tc.controlQueue, enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL)
+			err := taskGenerator.GenerateActivityCommandTasks(tc.taskTokens, tc.controlQueue, enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL)
 			require.NoError(t, err)
 
 			if tc.expectTask {
 				require.Len(t, capturedTasks, 1)
-				notifyTask, ok := capturedTasks[0].(*tasks.ActivityCommandTask)
+				commandTask, ok := capturedTasks[0].(*tasks.ActivityCommandTask)
 				require.True(t, ok)
-				assert.Equal(t, tc.scheduledEventIDs, notifyTask.ScheduledEventIDs)
-				assert.Equal(t, tc.controlQueue, notifyTask.Destination)
-				assert.Equal(t, tests.NamespaceID.String(), notifyTask.NamespaceID)
-				assert.Equal(t, enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL, notifyTask.CommandType)
+				assert.Equal(t, tc.taskTokens, commandTask.TaskTokens)
+				assert.Equal(t, tc.controlQueue, commandTask.Destination)
+				assert.Equal(t, tests.NamespaceID.String(), commandTask.NamespaceID)
+				assert.Equal(t, enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL, commandTask.CommandType)
 			}
 		})
 	}

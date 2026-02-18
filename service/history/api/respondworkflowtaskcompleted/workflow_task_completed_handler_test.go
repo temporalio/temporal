@@ -389,20 +389,25 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 func TestFlushBatchedActivityCommandTasks(t *testing.T) {
 	t.Parallel()
 
+	token1 := []byte("token1")
+	token2 := []byte("token2")
+	token3 := []byte("token3")
+	token4 := []byte("token4")
+
 	t.Run("batches activities by control queue", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
 
 		ms.EXPECT().AddActivityCommandTasks(
-			[]int64{5, 6, 7},
+			[][]byte{token1, token2, token3},
 			"control-queue-1",
 			gomock.Any(),
 		).Return(nil).Times(1)
 
 		handler := &workflowTaskCompletedHandler{
 			mutableState: ms,
-			pendingActivityCancelsByControlQueue: map[string][]int64{
-				"control-queue-1": {5, 6, 7},
+			pendingActivityCancelsByControlQueue: map[string][][]byte{
+				"control-queue-1": {token1, token2, token3},
 			},
 		}
 
@@ -415,29 +420,29 @@ func TestFlushBatchedActivityCommandTasks(t *testing.T) {
 		ms := historyi.NewMockMutableState(ctrl)
 
 		// Capture calls to verify both queues are processed
-		calls := make(map[string][]int64)
+		calls := make(map[string][][]byte)
 		ms.EXPECT().AddActivityCommandTasks(
 			gomock.Any(),
 			gomock.Any(),
 			enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
-		).DoAndReturn(func(ids []int64, queue string, _ enumsspb.ActivityCommandType) error {
-			calls[queue] = ids
+		).DoAndReturn(func(tokens [][]byte, queue string, _ enumsspb.ActivityCommandType) error {
+			calls[queue] = tokens
 			return nil
 		}).Times(2)
 
 		handler := &workflowTaskCompletedHandler{
 			mutableState: ms,
-			pendingActivityCancelsByControlQueue: map[string][]int64{
-				"control-queue-1": {5, 6},
-				"control-queue-2": {7, 8},
+			pendingActivityCancelsByControlQueue: map[string][][]byte{
+				"control-queue-1": {token1, token2},
+				"control-queue-2": {token3, token4},
 			},
 		}
 
 		err := handler.flushBatchedActivityCommandTasks()
 		require.NoError(t, err)
 
-		require.Equal(t, []int64{5, 6}, calls["control-queue-1"])
-		require.Equal(t, []int64{7, 8}, calls["control-queue-2"])
+		require.Equal(t, [][]byte{token1, token2}, calls["control-queue-1"])
+		require.Equal(t, [][]byte{token3, token4}, calls["control-queue-2"])
 	})
 
 	t.Run("does nothing when no pending cancels", func(t *testing.T) {
