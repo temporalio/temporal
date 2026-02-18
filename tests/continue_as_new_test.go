@@ -134,7 +134,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWorkflow() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err, strconv.Itoa(i))
@@ -256,7 +256,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewRunTimeout() {
 	time.Sleep(1 * time.Second) // wait 1 second for timeout
 
 	var historyEvents []*historypb.HistoryEvent
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 		})
@@ -641,7 +641,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNew() {
 	s.True(definition.childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		s.Logger.Info("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -755,7 +755,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 	s.True(definition.childExecutionStarted)
 
 	// Process ChildExecution Started event and all generations of child executions
-	for i := 0; i < 11; i++ {
+	for i := range 11 {
 		s.Logger.Info("workflow task", tag.Counter(i))
 		_, err = poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
@@ -793,7 +793,7 @@ func (s *ContinueAsNewTestSuite) TestChildWorkflowWithContinueAsNewParentTermina
 
 	var childDescribeResp *workflowservice.DescribeWorkflowExecutionResponse
 	// Retry 10 times to wait for child to be terminated due to transfer task processing to enforce parent close policy
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		childDescribeResp, err = s.FrontendClient().DescribeWorkflowExecution(
 			testcore.NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{

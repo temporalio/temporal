@@ -228,7 +228,7 @@ func (b *EventStore) assignTaskIDs(
 	}
 
 	taskIDCount := 0
-	for i := 0; i < len(dbEventsBatches); i++ {
+	for i := range dbEventsBatches {
 		taskIDCount += len(dbEventsBatches[i])
 	}
 	taskIDs, err := b.taskIDGenerator(taskIDCount)
@@ -238,9 +238,9 @@ func (b *EventStore) assignTaskIDs(
 
 	taskIDPointer := 0
 	height := len(dbEventsBatches)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		width := len(dbEventsBatches[i])
-		for j := 0; j < width; j++ {
+		for j := range width {
 			dbEventsBatches[i][j].TaskId = taskIDs[taskIDPointer]
 			taskIDPointer++
 		}

@@ -277,7 +277,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 
 	t.Run("exceeds max concurrent operations", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
@@ -807,7 +807,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 		tcx testContext,
 		scheduledEventID int64,
 		eventType enumspb.EventType,
-		eventAttr interface{},
+		eventAttr any,
 		def hsm.EventDefinition,
 	) {
 		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
@@ -864,7 +864,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 	cases := []struct {
 		name      string
 		eventType enumspb.EventType
-		eventAttr interface{}
+		eventAttr any
 		eventDef  hsm.EventDefinition
 	}{
 		{

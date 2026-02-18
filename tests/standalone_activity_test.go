@@ -1178,7 +1178,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 
 		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
 
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			_, err := s.FrontendClient().RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
@@ -3056,7 +3056,7 @@ func (s *standaloneActivityTestSuite) TestListActivityExecutions() {
 		testActivityType := testcore.RandomizeStr(t.Name())
 
 		// Start multiple activities of the same type
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			_, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
 				Namespace:           s.Namespace().String(),
 				ActivityId:          testcore.RandomizeStr(t.Name()),

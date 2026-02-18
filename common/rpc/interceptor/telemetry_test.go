@@ -482,7 +482,7 @@ func TestOperationOverride(t *testing.T) {
 	testCases := []struct {
 		methodName        string
 		fullName          string
-		req               interface{}
+		req               any
 		expectedOperation string
 	}{
 		{

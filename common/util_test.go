@@ -420,12 +420,12 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 		WorkflowId:  source.WorkflowId + "_target",
 	}
 
-	doNotSync := func(v any) []interface{} {
+	doNotSync := func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		return []interface{}{
+		return []any{
 			&info.NamespaceId,
 		}
 	}
@@ -445,12 +445,12 @@ func TestMergeProtoExcludingFields(t *testing.T) {
 	require.Error(t, err)
 
 	source, target = generateExecutionInfo()
-	doNotSync = func(v any) []interface{} {
+	doNotSync = func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		return []interface{}{
+		return []any{
 			&info.WorkflowTaskVersion,
 			&info.WorkflowTaskScheduledEventId,
 			&info.WorkflowTaskStartedEventId,

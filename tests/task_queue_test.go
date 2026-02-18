@@ -88,7 +88,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	defer cancel()
 
 	// start workflows to create a backlog
-	for wfidx := 0; wfidx < maxBacklog; wfidx++ {
+	for wfidx := range maxBacklog {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf%d", wfidx),
@@ -135,7 +135,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 	// start some workers
 	workers := make([]worker.Worker, nWorkers)
-	for i := 0; i < nWorkers; i++ {
+	for i := range nWorkers {
 		workers[i] = worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 		workers[i].RegisterWorkflow(helloRateLimitTest)
 		err := workers[i].Start()

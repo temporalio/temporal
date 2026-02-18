@@ -72,7 +72,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 
 	var failedHostCount float64
 	var hostDeclinedServingCount float64
-	for i := 0; i < len(hosts); i++ {
+	for range hosts {
 		healthState := <-receiveCh
 		switch healthState {
 		case enumsspb.HEALTH_STATE_NOT_SERVING, enumsspb.HEALTH_STATE_UNSPECIFIED:

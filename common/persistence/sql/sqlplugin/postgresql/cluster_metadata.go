@@ -174,7 +174,7 @@ func (pdb *db) GetClusterMembers(
 	filter *sqlplugin.ClusterMembershipFilter,
 ) ([]sqlplugin.ClusterMembershipRow, error) {
 	var queryString strings.Builder
-	var operands []interface{}
+	var operands []any
 	queryString.WriteString(templateGetClusterMembership)
 	operands = append(operands, constMembershipPartition)
 	queryString.WriteString(strconv.Itoa(len(operands)))

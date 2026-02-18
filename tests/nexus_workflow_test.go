@@ -2611,7 +2611,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 		c := workflow.NewNexusClient(endpointName, svc.Name)
 
 		nexusFutures := []workflow.NexusOperationFuture{}
-		for i := 0; i < numCalls; i++ {
+		for range numCalls {
 			fut := c.ExecuteOperation(ctx, op, input, workflow.NexusOperationOptions{})
 			nexusFutures = append(nexusFutures, fut)
 		}

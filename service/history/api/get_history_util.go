@@ -160,6 +160,14 @@ func GetRawHistory(
 			}
 		}
 	}
+
+	// Ensure all raw history is proto3 encoded since data may be stored in other formats during testing.
+	// In production (proto3 encoding), this returns the input unchanged.
+	rawHistory, err = serialization.ReencodeEventBlobsAsProto3(shardContext.GetPayloadSerializer(), rawHistory)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return rawHistory, nextToken, nil
 }
 

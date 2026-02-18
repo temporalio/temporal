@@ -1588,7 +1588,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 	wg.Wait()
 
 	messagesByShard := make(map[int32]*replicationspb.ReplicationMessages)
-	result.Range(func(key, value interface{}) bool {
+	result.Range(func(key, value any) bool {
 		shardID := key.(int32)
 		messagesByShard[shardID] = value.(*replicationspb.ReplicationMessages)
 		return true

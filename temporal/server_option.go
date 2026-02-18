@@ -70,7 +70,7 @@ func WithStaticHosts(hostsByService map[primitives.ServiceName]static.Hosts) Ser
 }
 
 // InterruptOn interrupts server on the signal from server. If channel is nil Start() will block forever.
-func InterruptOn(interruptCh <-chan interface{}) ServerOption {
+func InterruptOn(interruptCh <-chan any) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.startupSynchronizationMode.blockingStart = true
 		s.startupSynchronizationMode.interruptCh = interruptCh

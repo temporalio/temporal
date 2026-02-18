@@ -490,7 +490,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	s.True(seenChildStarted)
 
 	// Run through three executions of the child workflow
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err = pollerChild.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
@@ -529,7 +529,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	startFilter.EarliestTime = timestamppb.New(startParentWorkflowTS)
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,

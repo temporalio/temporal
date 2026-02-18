@@ -173,7 +173,10 @@ func setupSchedulerForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCon
 	if err != nil {
 		t.Fatalf("failed to create scheduler: %v", err)
 	}
-	infra.node.SetRootComponent(sched)
+	err = infra.node.SetRootComponent(sched)
+	if err != nil {
+		t.Fatalf("failed to set root component: %v", err)
+	}
 	_, err = infra.node.CloseTransaction()
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
@@ -190,8 +193,11 @@ func setupSentinelForTest(t *testing.T) (*scheduler.Scheduler, chasm.MutableCont
 	infra := setupTestInfra(t, specProcessor)
 	ctx := chasm.NewMutableContext(context.Background(), infra.node)
 	sentinel := scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID)
-	infra.node.SetRootComponent(sentinel)
-	_, err := infra.node.CloseTransaction()
+	err := infra.node.SetRootComponent(sentinel)
+	if err != nil {
+		t.Fatalf("failed to set root component: %v", err)
+	}
+	_, err = infra.node.CloseTransaction()
 	if err != nil {
 		t.Fatalf("failed to close initial transaction: %v", err)
 	}

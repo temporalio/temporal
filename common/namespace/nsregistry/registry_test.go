@@ -539,7 +539,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		}
 	}
 
-	for i := 0; i < coroutineCountGet; i++ {
+	for range coroutineCountGet {
 		waitGroup.Add(1)
 		go testGetFn()
 	}

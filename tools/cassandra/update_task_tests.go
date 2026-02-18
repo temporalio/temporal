@@ -15,7 +15,8 @@ func (s *UpdateSchemaTestSuite) SetupSuite() {
 	if err != nil {
 		s.Logger.Fatal("Error creating CQLClient", tag.Error(err))
 	}
-	s.SetupSuiteBase(client, "")
+	// No ConnectParams needed: Cassandra CLI defaults work without explicit flags.
+	s.SetupSuiteBase(client, "", test.ConnectParams{})
 }
 
 func (s *UpdateSchemaTestSuite) TearDownSuite() {

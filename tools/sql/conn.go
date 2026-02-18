@@ -56,7 +56,7 @@ func (c *Connection) WriteSchemaUpdateLog(oldVersion string, newVersion string, 
 }
 
 // Exec executes a sql statement
-func (c *Connection) Exec(stmt string, args ...interface{}) error {
+func (c *Connection) Exec(stmt string, args ...any) error {
 	return c.adminDb.Exec(stmt, args...)
 }
 

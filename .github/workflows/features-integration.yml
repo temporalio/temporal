@@ -134,6 +134,14 @@ jobs:
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
 
+  feature-tests-ruby:
+    needs: build-docker-image
+    uses: temporalio/features/.github/workflows/ruby.yaml@main
+    with:
+      version: __latest_features_docker_image__
+      version-is-repo-ref: false
+      docker-image-artifact-name: temporal-server-docker
+
   feature-tests-status:
     name: Tests Status
     needs:
@@ -143,6 +151,7 @@ jobs:
       - feature-tests-python
       - feature-tests-java
       - feature-tests-dotnet
+      - feature-tests-ruby
     runs-on: ubuntu-latest
     if: always()
     env:

@@ -1322,7 +1322,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWorkflow_Excee
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
 
 	var commands []*commandpb.Command
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		commands = append(
 			commands,
 			&commandpb.Command{
@@ -2851,7 +2851,7 @@ func newCreateWorkflowExecutionRequestMatcher(f func(request *persistence.Create
 	}
 }
 
-func (m *createWorkflowExecutionRequestMatcher) Matches(x interface{}) bool {
+func (m *createWorkflowExecutionRequestMatcher) Matches(x any) bool {
 	request, ok := x.(*persistence.CreateWorkflowExecutionRequest)
 	if !ok {
 		return false

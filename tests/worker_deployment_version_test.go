@@ -334,9 +334,9 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 	root, err := tqid.PartitionFromProto(tv.TaskQueue(), s.Namespace().String(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	s.NoError(err)
 	// Making concurrent polls to 4 partitions, 3 polls to each
-	for p := 0; p < 4; p++ {
+	for p := range 4 {
 		tv2 := tv.WithTaskQueue(root.TaskQueue().NormalPartition(p).RpcName())
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			go s.pollFromDeployment(ctx, tv2)
 			go s.pollActivityFromDeployment(ctx, tv2)
 		}
@@ -835,7 +835,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
 
 	// max out the versions
-	for i := 0; i < testMaxVersionsInDeployment; i++ {
+	for i := range testMaxVersionsInDeployment {
 		tvs[i] = testvars.New(s).WithBuildIDNumber(i)
 		s.startVersionWorkflow(ctx, tvs[i])
 	}
@@ -850,7 +850,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	// CI can be slow, keep sending fresh polls to ensure that auto deletion logic sees them when we want to add tvMax so it can't add.
 	pollContext, cancelPolls := context.WithTimeout(context.Background(), 3*time.Second)
 	go func() {
-		for i := 0; i < testMaxVersionsInDeployment; i++ {
+		for i := range testMaxVersionsInDeployment {
 			go s.pollFromDeployment(pollContext, tvs[i])
 		}
 
@@ -860,7 +860,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 			case <-pollContext.Done():
 				return
 			case <-t.C:
-				for i := 0; i < testMaxVersionsInDeployment; i++ {
+				for i := range testMaxVersionsInDeployment {
 					go s.pollFromDeployment(pollContext, tvs[i])
 				}
 			}
@@ -2432,7 +2432,7 @@ func (s *DeploymentVersionSuite) runBatchUpdateWorkflowExecutionOptionsTest(crea
 	// start some unversioned workflows
 	workflowType := "UpdateOptionsBatchTestFunc"
 	workflows := make([]*commonpb.WorkflowExecution, 0)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().Name}, workflowType)
 		s.NoError(err)
 		workflows = append(workflows, &commonpb.WorkflowExecution{
