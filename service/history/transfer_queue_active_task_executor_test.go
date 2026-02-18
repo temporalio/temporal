@@ -1140,7 +1140,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_TERMINATE
 	var commands []*commandpb.Command
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		commands = append(commands, &commandpb.Command{
 			CommandType: commandType,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1160,7 +1160,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		Commands: commands,
 	}, defaultWorkflowTaskCompletionLimits)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
@@ -1237,7 +1237,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_TERMINATE
 	var commands []*commandpb.Command
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		commands = append(commands, &commandpb.Command{
 			CommandType: commandType,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1257,7 +1257,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_ParentW
 		Commands: commands,
 	}, defaultWorkflowTaskCompletionLimits)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{
@@ -1327,7 +1327,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	commandType := enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION
 	parentClosePolicy := enumspb.PARENT_CLOSE_POLICY_ABANDON
 	var commands []*commandpb.Command
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		commands = append(commands, &commandpb.Command{
 			CommandType: commandType,
 			Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -1347,7 +1347,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		Commands: commands,
 	}, defaultWorkflowTaskCompletionLimits)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
 			WorkflowId: "child workflow" + convert.IntToString(i),
 			WorkflowType: &commonpb.WorkflowType{

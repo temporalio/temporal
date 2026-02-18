@@ -200,8 +200,6 @@ type Config struct {
 	// right now only used by GetMutableState
 	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
-	// encoding the history events
-	EventEncodingType dynamicconfig.StringPropertyFnWithNamespaceFilter
 	// whether or not using ParentClosePolicy
 	EnableParentClosePolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// whether or not enable system workers for processing parent close policy task
@@ -617,7 +615,6 @@ func NewConfig(
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
 		LongPollExpirationInterval:          dynamicconfig.HistoryLongPollExpirationInterval.Get(dc),
-		EventEncodingType:                   dynamicconfig.DefaultEventEncoding.Get(dc),
 		EnableParentClosePolicy:             dynamicconfig.EnableParentClosePolicy.Get(dc),
 		NumParentClosePolicySystemWorkflows: dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
 		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),

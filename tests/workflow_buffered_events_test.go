@@ -76,7 +76,7 @@ func (s *WorkflowBufferedEventsTestSuite) TestRateLimitBufferedEvents() {
 		if !signalsSent {
 			signalsSent = true
 			// Buffered Signals
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				buf := new(bytes.Buffer)
 				err := binary.Write(buf, binary.LittleEndian, byte(i))
 				s.NoError(err)

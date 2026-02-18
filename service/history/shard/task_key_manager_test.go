@@ -65,7 +65,7 @@ func (s *taskKeyManagerSuite) TestSetAndTrackTaskKeys() {
 
 	numTask := 5
 	transferTasks := make([]tasks.Task, 0, numTask)
-	for i := 0; i < numTask; i++ {
+	for range numTask {
 		transferTasks = append(
 			transferTasks,
 			tasks.NewFakeTask(

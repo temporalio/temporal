@@ -157,7 +157,7 @@ func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.H
 	})
 	require.NoError(t, err)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		task := &tasks.WorkflowTask{
 			WorkflowKey: workflowKey,
 			TaskID:      int64(i + 1),
@@ -168,7 +168,7 @@ func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.H
 	}
 
 	var nextPageToken []byte
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		readRes, err := manager.ReadTasks(ctx, &persistence.ReadTasksRequest{
 			QueueKey:      queueKey,
 			PageSize:      1,
@@ -237,7 +237,7 @@ func testHistoryTaskQueueManagerDeleteTasks(t *testing.T, manager *persistence.H
 		QueueKey: queueKey,
 	})
 	require.NoError(t, err)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := enqueueTask(ctx, manager, queueKey, &tasks.WorkflowTask{
 			TaskID: int64(i + 1),
 		})

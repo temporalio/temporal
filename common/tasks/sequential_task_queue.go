@@ -5,7 +5,7 @@ type (
 
 	SequentialTaskQueue[T Task] interface {
 		// ID return the ID of the queue, as well as the tasks inside (same)
-		ID() interface{}
+		ID() any
 		// Add push a task to the task set
 		Add(T)
 		// Remove pop a task from the task set

@@ -172,19 +172,19 @@ func (invalidConn) Rebind(query string) string {
 	return query
 }
 
-func (invalidConn) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
+func (invalidConn) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return nil, DatabaseUnavailableError
 }
 
-func (invalidConn) NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error) {
+func (invalidConn) NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error) {
 	return nil, DatabaseUnavailableError
 }
 
-func (invalidConn) GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (invalidConn) GetContext(ctx context.Context, dest any, query string, args ...any) error {
 	return DatabaseUnavailableError
 }
 
-func (invalidConn) SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error {
+func (invalidConn) SelectContext(ctx context.Context, dest any, query string, args ...any) error {
 	return DatabaseUnavailableError
 }
 

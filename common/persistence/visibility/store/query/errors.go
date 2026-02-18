@@ -21,7 +21,7 @@ var (
 	InvalidExpressionErrMessage = "invalid expression"
 )
 
-func NewConverterError(format string, a ...interface{}) error {
+func NewConverterError(format string, a ...any) error {
 	message := fmt.Sprintf(format, a...)
 	return &ConverterError{message: message}
 }

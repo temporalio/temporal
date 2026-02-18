@@ -55,7 +55,7 @@ func (s *CommonSuite) TestListOrdering() {
 
 	// create some endpoints
 	numEndpoints := 40 // minimum number of endpoints to test, there may be more in DB from other tests
-	for i := 0; i < numEndpoints; i++ {
+	for range numEndpoints {
 		s.createNexusEndpoint(testcore.RandomizeStr("test-endpoint-name"))
 	}
 	tableVersion := initialTableVersion + int64(numEndpoints)

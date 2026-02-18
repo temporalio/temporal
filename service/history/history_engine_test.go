@@ -673,9 +673,9 @@ func (s *engineSuite) TestQueryWorkflow_WorkflowTaskDispatch_Timeout() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	var capturedWorkflowType interface{}
+	var capturedWorkflowType any
 	var capturedWorkflowTypeOk bool
-	var capturedTaskQueue interface{}
+	var capturedTaskQueue any
 	var capturedTaskQueueOk bool
 	go func() {
 		metadataCtx := contextutil.WithMetadataContext(context.Background())
@@ -5438,7 +5438,7 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 		s.mockShard.Resource.Logger,
 		s.config.LogAllReqErrors,
 		s.mockErrorHandler)
-	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req any) (any, error) {
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,
@@ -5477,7 +5477,7 @@ func (s *engineSuite) TestEagerWorkflowStart_FromCron_SkipsEager() {
 		s.mockShard.Resource.Logger,
 		s.config.LogAllReqErrors,
 		s.mockErrorHandler)
-	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req any) (any, error) {
 		firstWorkflowTaskBackoff := time.Second
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId:              tests.NamespaceID.String(),
@@ -5521,7 +5521,7 @@ func (s *engineSuite) TestEagerWorkflowStart_WithSearchAttributes() {
 		s.mockShard.Resource.Logger,
 		s.config.LogAllReqErrors,
 		s.mockErrorHandler)
-	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req interface{}) (interface{}, error) {
+	response, err := i.UnaryIntercept(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "StartWorkflowExecution"}, func(ctx context.Context, req any) (any, error) {
 		response, err := s.historyEngine.StartWorkflowExecution(ctx, &historyservice.StartWorkflowExecutionRequest{
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,

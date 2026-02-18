@@ -1,3 +1,8 @@
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 3s
+  timeout: 3s
+  retries: 30
+
 services:
   cassandra:
     image: cassandra:3.11
@@ -9,6 +14,9 @@ services:
       HEAP_NEWSIZE: "200M"
       # Increase native transport threads for handling more concurrent connections
       JVM_EXTRA_OPTS: "-Dcassandra.native_transport_max_threads=512"
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "cqlsh -e 'describe cluster'"]
 
   mysql:
     image: mysql:8.0.29-oracle
@@ -19,6 +27,9 @@ services:
     command: --max-connections=500
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -proot"]
 
   postgresql:
     image: postgres:13.5
@@ -30,6 +41,9 @@ services:
     command: postgres -c max_connections=500
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
 
   elasticsearch:
     image: elasticsearch:7.10.1
@@ -42,6 +56,9 @@ services:
       - cluster.routing.allocation.disk.watermark.flood_stage=128mb
       - discovery.type=single-node
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
 
   elasticsearch8:
     image: elasticsearch:8.5.0
@@ -55,6 +72,9 @@ services:
       - discovery.type=single-node
       - xpack.security.enabled=false
       - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
 
   opensearch2:
     image: opensearchproject/opensearch:2
@@ -68,6 +88,9 @@ services:
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
 
   opensearch3:
     image: opensearchproject/opensearch:3
@@ -81,3 +104,6 @@ services:
       - discovery.type=single-node
       - DISABLE_SECURITY_PLUGIN=true
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+    healthcheck:
+      !!merge <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]

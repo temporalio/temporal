@@ -942,7 +942,7 @@ func (s *ScheduleV1FunctionalSuite) TestRateLimit() {
 	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
 
 	// create 10 copies of the schedule
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		schedule := &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{

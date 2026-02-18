@@ -58,7 +58,7 @@ func newTestCluster(
 		seedNode:     seed,
 	}
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		var err error
 		cluster.channels[i], err = tchannel.NewChannel(ringPopApp, nil)
 		if err != nil {
@@ -126,7 +126,7 @@ func newTestCluster(
 			return res, nil
 		}).AnyTimes()
 
-	for i := 0; i < size; i++ {
+	for i := range size {
 		node := i
 		resolver := func() (string, error) {
 			return buildBroadcastHostPort(cluster.channels[node].PeerInfo(), broadcastAddress)

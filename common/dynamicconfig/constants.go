@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
@@ -2306,11 +2305,6 @@ When the this config is zero or lower we will only update shard info at most onc
 		"history.emitShardLagLog",
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
-	)
-	DefaultEventEncoding = NewNamespaceStringSetting(
-		"history.defaultEventEncoding",
-		enumspb.ENCODING_TYPE_PROTO3.String(),
-		`DefaultEventEncoding is the encoding type for history events`,
 	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",

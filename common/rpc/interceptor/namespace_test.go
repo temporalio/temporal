@@ -156,7 +156,7 @@ func (s *namespaceSuite) TestGetNamespace() {
 	register.EXPECT().GetNamespaceName(namespace.ID("exist")).Return(namespace.Name("exist"), nil)
 	register.EXPECT().GetNamespaceName(namespace.ID("nonexist")).Return(namespace.EmptyName, errors.New("not found"))
 	testCases := []struct {
-		method        interface{}
+		method        any
 		namespaceName namespace.Name
 	}{
 		{

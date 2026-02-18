@@ -1315,12 +1315,12 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	numTests := 50
 	counter := make(map[string]int)
 	runs := make([]sdkclient.WorkflowRun, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
 		s.NoError(err)
 		runs[i] = run
 	}
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		var out string
 		s.NoError(runs[i].Get(ctx, &out))
 		counter[out]++
@@ -4119,7 +4119,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		tp   enumspb.TaskQueueType
 	}
 	remaining := make(map[partAndType]struct{})
-	for i := 0; i < partitionCount; i++ {
+	for i := range partitionCount {
 		for _, tqt := range tqTypes {
 			remaining[partAndType{i, tqt}] = struct{}{}
 		}

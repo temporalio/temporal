@@ -346,7 +346,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
 	defer cancel()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		storeID := tv.Any().String()
 
 		_, err := tests.NewPayloadStoreHandler(
@@ -359,7 +359,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 		s.NoError(err)
 	}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		storeID := tv.Any().String()
 
 		resp, err := tests.NewPayloadStoreHandler(
