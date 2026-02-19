@@ -299,7 +299,6 @@ func setHistoryForRecordWfTaskStartedResp(
 	var persistenceToken []byte
 	var history *historypb.History
 	var err error
-
 	if isInternalRawHistoryEnabled {
 		rawHistory, persistenceToken, err = api.GetRawHistory(
 			ctx,
@@ -361,7 +360,6 @@ func setHistoryForRecordWfTaskStartedResp(
 		response.History = history
 	}
 	response.NextPageToken = continuation
-
 	return nil
 }
 
