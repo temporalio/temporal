@@ -33,12 +33,6 @@ import (
 // This function attempts to use cached transient tasks from the initial mutable state call to avoid a second call.
 // If cached tasks are nil or stale (validation fails), it falls back to querying mutable state.
 // Validation of event IDs is handled by validateTransientWorkflowTaskEvents.
-//
-// IMPORTANT: Cached transient events are used regardless of workflow status because they represent
-// what the worker already saw in the poll response, maintaining consistency between
-// PollWorkflowTask and GetWorkflowExecutionHistory even if the workflow completes in between.
-// If cached tasks are not available, this function queries mutable state to get the CURRENT
-// workflow status and transient events, ensuring we don't use stale status information.
 func appendTransientTasks(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -61,10 +55,7 @@ func appendTransientTasks(
 
 	var transientWorkflowTask *historyspb.TransientWorkflowTaskInfo
 
-	// PRIORITY 1: Try cached tasks first (even if workflow has since completed!)
-	// Cached tasks represent what the worker already saw in PollWorkflowTask response.
-	// We MUST provide these same events in GetWorkflowExecutionHistory to maintain
-	// consistency, regardless of whether the workflow has since completed.
+	// Try cached tasks first
 	if cachedTransientTasks != nil {
 		// Validate cached tasks are still valid (not stale)
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, cachedTransientTasks); err == nil {
@@ -72,9 +63,8 @@ func appendTransientTasks(
 		}
 	}
 
-	// PRIORITY 2: If no valid cache, fetch fresh from mutable state
+	// If no valid cache, fetch fresh from mutable state
 	if transientWorkflowTask == nil {
-
 		msResp, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
@@ -85,26 +75,29 @@ func appendTransientTasks(
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
-		if err != nil {
+		if err != nil || msResp.GetTransientOrSpeculativeTasks() == nil {
+			// Transient events don't exist or are already committed - this is OK
+			// Just return without appending (events are in persisted history)
+			if err != nil {
+				shardContext.GetLogger().Warn("Failed to refetch transient events",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(execution.GetWorkflowId()),
+					tag.WorkflowRunID(execution.GetRunId()),
+					tag.Error(err))
+			}
 			return
 		}
+		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
 
 		// Double-check workflow is still running (it might have completed during the call)
 		if msResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return
 		}
 
-		transientTasks := msResp.GetTransientOrSpeculativeTasks()
-		if transientTasks == nil {
-			return
-		}
-
 		// Validate event IDs before using
-		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientTasks); err != nil {
+		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTask); err != nil {
 			return
 		}
-
-		transientWorkflowTask = transientTasks
 	}
 
 	// Manually append transient events to the response
@@ -114,6 +107,12 @@ func appendTransientTasks(
 			*historyBlob = append(*historyBlob, transientEventsBlob)
 		} else {
 			softassert.Fail(shardContext.GetLogger(), "GetWorkflowExecutionHistory could not serialize transient workflow tasks")
+			shardContext.GetLogger().Error("Failed to serialize transient workflow tasks",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err),
+			)
 		}
 	} else {
 		history.Events = append(history.Events, transientWorkflowTask.GetHistorySuffix()...)
@@ -248,12 +247,6 @@ func Invoke(
 		isWorkflowRunning = continuationToken.IsWorkflowRunning
 
 		// we need to update the current next event ID and whether workflow is running
-		// NOTE: This refresh now happens for ALL requests (not just long-poll) AND regardless of workflow status
-		// to fix system worker race conditions where workflow completes between pages.
-		// System workers use non-long-poll requests (WaitNewEvent defaults to false) - see:
-		//   - service/worker/scheduler/activities.go lines 164-175
-		//   - service/worker/batcher/activities.go lines 806-811
-		// If the non-long-poll behavior changes in the future, this refresh logic may need adjustment.
 		if len(continuationToken.PersistenceToken) == 0 {
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
@@ -285,7 +278,6 @@ func Invoke(
 		continuationToken.NextEventId = nextEventID
 		continuationToken.IsWorkflowRunning = isWorkflowRunning
 		continuationToken.PersistenceToken = nil
-
 	}
 
 	// TODO below is a temporary solution to guard against invalid event batch
@@ -429,10 +421,6 @@ func Invoke(
 			}
 
 			// Query and append transient/speculative tasks if on last page
-			// BUG 4 FIX: Always try to append transient tasks on last page, regardless of workflow status.
-			// The appendTransientTasks function will handle the logic of whether to use cached tasks
-			// or fetch fresh ones based on workflow status. This fixes the race condition where the
-			// workflow completes between PollWorkflowTask and GetWorkflowExecutionHistory.
 			if len(continuationToken.PersistenceToken) == 0 {
 				appendTransientTasks(
 					ctx,
@@ -483,7 +471,6 @@ func Invoke(
 		}
 		historyBlob = nil
 	}
-
 	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
 			History:       history,
