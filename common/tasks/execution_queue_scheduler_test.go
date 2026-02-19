@@ -430,11 +430,9 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 func (s *executionQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 	// Create scheduler with max 2 queues
 	scheduler := newExecutionQueueScheduler(
-		&ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return 2 },
-			QueueTTL:         func() time.Duration { return time.Hour },
-			QueueConcurrency: func() int { return 1 },
-		},
+		func() int { return 2 },
+		func() time.Duration { return time.Hour },
+		func() int { return 1 },
 		executionKeyFn,
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
@@ -574,11 +572,9 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_SameWorkflow() {
 
 func (s *executionQueueSchedulerSuite) newScheduler() *executionQueueScheduler[*MockTask] {
 	return newExecutionQueueScheduler(
-		&ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return 500 },
-			QueueTTL:         func() time.Duration { return 5 * time.Second },
-			QueueConcurrency: func() int { return 1 },
-		},
+		func() int { return 500 },
+		func() time.Duration { return 5 * time.Second },
+		func() int { return 1 },
 		func(task *MockTask) any { return 1 }, // All tasks to same key
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
@@ -588,11 +584,9 @@ func (s *executionQueueSchedulerSuite) newScheduler() *executionQueueScheduler[*
 
 func (s *executionQueueSchedulerSuite) newSchedulerWithExecution(maxQueues int, queueTTL time.Duration) *executionQueueScheduler[*testExecutionTask] {
 	return newExecutionQueueScheduler(
-		&ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return maxQueues },
-			QueueTTL:         func() time.Duration { return queueTTL },
-			QueueConcurrency: func() int { return 1 },
-		},
+		func() int { return maxQueues },
+		func() time.Duration { return queueTTL },
+		func() int { return 1 },
 		executionKeyFn,
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,

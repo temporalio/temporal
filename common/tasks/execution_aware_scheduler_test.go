@@ -384,12 +384,10 @@ func (s *executionAwareSchedulerSuite) createTestTask(workflowID, runID string) 
 
 func (s *executionAwareSchedulerSuite) defaultSchedulerOptions(enabled bool) ExecutionAwareSchedulerOptions {
 	return ExecutionAwareSchedulerOptions{
-		Enabled: func() bool { return enabled },
-		ExecutionQueueSchedulerOptions: ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return 500 },
-			QueueTTL:         func() time.Duration { return 5 * time.Second },
-			QueueConcurrency: func() int { return 1 },
-		},
+		Enabled:          func() bool { return enabled },
+		MaxQueues:        func() int { return 500 },
+		QueueTTL:         func() time.Duration { return 5 * time.Second },
+		QueueConcurrency: func() int { return 1 },
 	}
 }
 
@@ -428,7 +426,7 @@ func (s *executionAwareSchedulerSuite) createSchedulerWithMaxQueues(maxQueues in
 	mockBaseScheduler.EXPECT().Stop().Times(1)
 
 	opts := s.defaultSchedulerOptions(true)
-	opts.ExecutionQueueSchedulerOptions.MaxQueues = func() int { return maxQueues }
+	opts.MaxQueues = func() int { return maxQueues }
 
 	scheduler := NewExecutionAwareScheduler[*testExecutionTask](
 		mockBaseScheduler,

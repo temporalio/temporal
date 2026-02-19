@@ -1,6 +1,8 @@
 package tasks
 
 import (
+	"time"
+
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -13,8 +15,14 @@ type (
 	ExecutionAwareSchedulerOptions struct {
 		// Enabled controls whether the executionQueueScheduler is active.
 		Enabled func() bool
-		// ExecutionQueueSchedulerOptions contains configuration for the executionQueueScheduler.
-		ExecutionQueueSchedulerOptions ExecutionQueueSchedulerOptions
+		// MaxQueues is the maximum number of concurrent execution queues.
+		// When this limit is reached, new queues are rejected and tasks fall back to the base scheduler.
+		MaxQueues func() int
+		// QueueTTL is how long an idle queue stays in the map before being swept.
+		QueueTTL func() time.Duration
+		// QueueConcurrency is the max number of worker goroutines per queue.
+		// Values <= 0 are capped to 1 (strictly sequential).
+		QueueConcurrency func() int
 	}
 
 	// ExecutionAwareScheduler is a scheduler that wraps a base scheduler and adds
@@ -45,7 +53,9 @@ func NewExecutionAwareScheduler[T Task](
 	return &ExecutionAwareScheduler[T]{
 		baseScheduler: baseScheduler,
 		executionQueueScheduler: newExecutionQueueScheduler(
-			&options.ExecutionQueueSchedulerOptions,
+			options.MaxQueues,
+			options.QueueTTL,
+			options.QueueConcurrency,
 			queueKeyFn,
 			logger,
 			metricsHandler,

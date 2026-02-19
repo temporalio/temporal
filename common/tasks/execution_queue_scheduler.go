@@ -13,17 +13,6 @@ import (
 )
 
 type (
-	ExecutionQueueSchedulerOptions struct {
-		// MaxQueues is the maximum number of concurrent execution queues.
-		// When this limit is reached, TrySubmit will reject new queues.
-		MaxQueues func() int
-		// QueueTTL is how long an idle queue stays in the map before being swept.
-		QueueTTL func() time.Duration
-		// QueueConcurrency is the max number of worker goroutines per queue.
-		// Values <= 0 are capped to 1 (strictly sequential).
-		QueueConcurrency func() int
-	}
-
 	// QueueKeyFn extracts a queue key from a task for queue routing.
 	QueueKeyFn[T Task] func(T) any
 
@@ -56,11 +45,13 @@ type (
 		shutdownChan chan struct{}
 		shutdownWG   sync.WaitGroup
 
-		options        *ExecutionQueueSchedulerOptions
-		queueKeyFn     QueueKeyFn[T]
-		logger         log.Logger
-		metricsHandler metrics.Handler
-		timeSource     clock.TimeSource
+		maxQueues        func() int
+		queueTTL         func() time.Duration
+		queueConcurrency func() int
+		queueKeyFn       QueueKeyFn[T]
+		logger           log.Logger
+		metricsHandler   metrics.Handler
+		timeSource       clock.TimeSource
 
 		// mu protects the queues map, sweeperRunning, and all executionQueue fields.
 		// All task submissions and worker pops are serialized through this lock.
@@ -72,20 +63,24 @@ type (
 
 // newExecutionQueueScheduler creates a new executionQueueScheduler.
 func newExecutionQueueScheduler[T Task](
-	options *ExecutionQueueSchedulerOptions,
+	maxQueues func() int,
+	queueTTL func() time.Duration,
+	queueConcurrency func() int,
 	queueKeyFn QueueKeyFn[T],
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	timeSource clock.TimeSource,
 ) *executionQueueScheduler[T] {
 	s := &executionQueueScheduler[T]{
-		shutdownChan:   make(chan struct{}),
-		options:        options,
-		queueKeyFn:     queueKeyFn,
-		logger:         logger,
-		metricsHandler: metricsHandler,
-		timeSource:     timeSource,
-		queues:         make(map[any]*executionQueue[T]),
+		shutdownChan:     make(chan struct{}),
+		maxQueues:        maxQueues,
+		queueTTL:         queueTTL,
+		queueConcurrency: queueConcurrency,
+		queueKeyFn:       queueKeyFn,
+		logger:           logger,
+		metricsHandler:   metricsHandler,
+		timeSource:       timeSource,
+		queues:           make(map[any]*executionQueue[T]),
 	}
 	s.status.Store(common.DaemonStatusInitialized)
 	return s
@@ -144,7 +139,7 @@ func (s *executionQueueScheduler[T]) TrySubmit(task T) bool {
 	}
 
 	q, exists := s.queues[key]
-	if !exists && len(s.queues) >= s.options.MaxQueues() {
+	if !exists && len(s.queues) >= s.maxQueues() {
 		s.mu.Unlock()
 		metrics.ExecutionQueueSchedulerSubmitRejected.With(s.metricsHandler).Record(1)
 		return false
@@ -165,7 +160,7 @@ func (s *executionQueueScheduler[T]) appendTaskLocked(key any, q *executionQueue
 		metrics.ExecutionQueueSchedulerQueueCount.With(s.metricsHandler).Record(float64(len(s.queues)))
 	}
 	q.tasks = append(q.tasks, entry)
-	if q.activeWorkers < max(1, s.options.QueueConcurrency()) {
+	if q.activeWorkers < max(1, s.queueConcurrency()) {
 		q.activeWorkers++
 		s.shutdownWG.Add(1)
 		go s.runWorker(q)
@@ -221,7 +216,7 @@ func (s *executionQueueScheduler[T]) runWorker(q *executionQueue[T]) {
 func (s *executionQueueScheduler[T]) runSweeper() {
 	defer s.shutdownWG.Done()
 
-	ch, t := s.timeSource.NewTimer(s.options.QueueTTL())
+	ch, t := s.timeSource.NewTimer(s.queueTTL())
 	defer t.Stop()
 
 	for {
@@ -230,7 +225,7 @@ func (s *executionQueueScheduler[T]) runSweeper() {
 			if s.sweepIdleQueues() {
 				return
 			}
-			t.Reset(s.options.QueueTTL())
+			t.Reset(s.queueTTL())
 		case <-s.shutdownChan:
 			return
 		}
@@ -245,7 +240,7 @@ func (s *executionQueueScheduler[T]) sweepIdleQueues() bool {
 
 	now := s.timeSource.Now()
 	for key, q := range s.queues {
-		if q.activeWorkers == 0 && len(q.tasks) == 0 && now.Sub(q.lastActive) > s.options.QueueTTL() {
+		if q.activeWorkers == 0 && len(q.tasks) == 0 && now.Sub(q.lastActive) > s.queueTTL() {
 			delete(s.queues, key)
 		}
 	}
