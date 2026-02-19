@@ -641,6 +641,7 @@ var (
 	ServiceDialLatency                       = NewTimerDef("service_dial_latency", WithDescription("The latency of establishing a new TCP connection."))
 	ServiceDialSuccessCount                  = NewCounterDef("service_dial_success", WithDescription("Number of TCP dial attempts that successfully established a connection."))
 	ServiceDialErrorCount                    = NewCounterDef("service_dial_error", WithDescription("Number of TCP dial attempts that failed to establish a connection."))
+	DynamicConfigUpdateFailureCounter        = NewCounterDef("dynamic_config_update_failure", WithDescription("Number of failures to update dynamic config from file."))
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
