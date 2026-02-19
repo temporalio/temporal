@@ -537,6 +537,10 @@ jobs:
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
 
+      - name: Dump container logs
+        if: ${{ failure() && toJson(matrix.containers) != '[]' }}
+        run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
+
       - name: Print memory snapshot
         if: always()
         run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
