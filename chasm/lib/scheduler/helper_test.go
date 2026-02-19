@@ -208,7 +208,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		},
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), node)
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	if err != nil {
@@ -343,7 +343,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 		}
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	return &testInfra{
 		node:        node,
 		nodeBackend: nodeBackend,

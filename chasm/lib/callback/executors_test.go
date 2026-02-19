@@ -191,7 +191,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
+			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
@@ -537,8 +537,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			// Setup history client
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
-			// Setup logger and time source
+			// Setup logger, metricsHandler, and time source
 			logger := log.NewTestLogger()
+			metricsHandler := metrics.NoopMetricsHandler
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
@@ -556,7 +557,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					},
 				},
 				namespaceRegistry: nsRegistry,
-				metricsHandler:    metrics.NoopMetricsHandler,
+				metricsHandler:    metricsHandler,
 				logger:            logger,
 				historyClient:     historyClient,
 			}
@@ -570,7 +571,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
+			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			// Create headers
 			headers := nexus.Header{}
