@@ -182,8 +182,9 @@ func (b *HistoryBuilder) AddWorkflowTaskScheduledEvent(
 	startToCloseTimeout *durationpb.Duration,
 	attempt int32,
 	scheduleTime time.Time,
+	scheduleToStartTimeout *durationpb.Duration,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeout, attempt, scheduleTime)
+	event := b.EventFactory.CreateWorkflowTaskScheduledEvent(taskQueue, startToCloseTimeout, attempt, scheduleTime, scheduleToStartTimeout)
 	event, _ = b.EventStore.add(event)
 	return event
 }
