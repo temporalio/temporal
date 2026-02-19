@@ -2231,8 +2231,8 @@ func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_Reactivate
 }
 
 func (s *DeploymentVersionSuite) TestResetWorkflowExecution_ReactivateVersionOnPinned() {
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 10*time.Second)
-	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, 10*time.Second)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, testLongVersionDrainageVisibilityGracePeriod)
+	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusRefreshInterval, testLongVersionDrainageRefreshInterval)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
