@@ -491,18 +491,38 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	// checking whether targetDeploymentVersion == nil means that we won't send the targetDeploymentVersionChanged=true
-	// to workflows that are about to transition to the target version. This is good because if their transition succeeds,
-	// they don't need to CaN-with-upgrade to start using the new version.
+	// Record the target deployment version from matching on the first WFT of this run (set-once).
+	// This anchors the comparison so that targetDeploymentVersionChanged reflects a real routing
+	// change since this run started, rather than a permanent mismatch between the workflow's
+	// effective deployment and the routing target (which causes infinite CAN loops for pinned workflows).
+	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+	}
+	if versioningInfo.GetTargetVersionOnStart() == nil &&
+		!m.ms.HasCompletedAnyWorkflowTask() &&
+		targetDeploymentVersion != nil {
+		versioningInfo.TargetVersionOnStart = &deploymentpb.WorkerDeploymentVersion{
+			BuildId:        targetDeploymentVersion.BuildId,
+			DeploymentName: targetDeploymentVersion.DeploymentName,
+		}
+	}
+
+	// Compute whether the routing target has changed since this run started.
+	// - Skip when targetDeploymentVersion is nil: the workflow is about to transition to the
+	//   target version, so it doesn't need to CAN.
+	// - Skip when a versioning override is active: the operator explicitly controls the
+	//   workflow's version, so routing changes are irrelevant.
 	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
+		versioningInfo.GetVersioningOverride() == nil &&
 		targetDeploymentVersion != nil {
-		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
-			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
-				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
-			targetDeploymentVersionChanged = true
-		}
+		initialTarget := versioningInfo.GetTargetVersionOnStart()
+		targetDeploymentVersionChanged =
+			initialTarget.GetBuildId() != targetDeploymentVersion.GetBuildId() ||
+			initialTarget.GetDeploymentName() != targetDeploymentVersion.GetDeploymentName()
 	}
 	// emit metric
 	if targetDeploymentVersionChanged {
