@@ -763,7 +763,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		if err != nil {
 			return nil, err
 		}
-
 	}
 
 	// If completedEvent is nil then it means that WT was speculative and
@@ -840,12 +839,6 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 				)
 			}
 		}()
-		// For inline workflow tasks, we need to include the NEW task's transient events
-		// (scheduled+started). The comment about not showing the worker its own task events
-		// only applies to the PREVIOUS task that just completed, not the NEW inline task.
-		// The transient workflow task info is available in matchingResp and contains
-		// the scheduled/started events for the NEW task that must be included.
-
 		history, persistenceToken, err = api.GetHistory(
 			ctx,
 			handler.shardContext,

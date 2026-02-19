@@ -117,7 +117,6 @@ func GetRawHistory(
 	if len(nextToken) == 0 && transientWorkflowTaskInfo != nil {
 		// Check if we should include transient/speculative events
 		if shouldIncludeTransientOrSpeculativeTasks(ctx, transientWorkflowTaskInfo) {
-			// Validate before appending
 			if err := ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				logger := shardContext.GetLogger()
 				metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetRawHistoryScope))
@@ -235,7 +234,6 @@ func GetHistory(
 	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		// Check if we should include transient/speculative events
 		if shouldIncludeTransientOrSpeculativeTasks(ctx, transientWorkflowTaskInfo) {
-			// Validate before appending
 			if err := ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 				metrics.ServiceErrIncompleteHistoryCounter.With(metricsHandler).Record(1)
 				// Don't append events, but don't fail request
