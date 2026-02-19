@@ -5559,8 +5559,8 @@ func (s *Versioning3Suite) testTransitionDuringTransientTask(withSignal bool) {
 
 	// We need to keep pollers until the task queues are properly registered
 	pollCtx, pollCtxCancel := context.WithTimeout(ctx, 60*time.Second)
-	s.idlePollWorkflow(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
-	s.idlePollActivity(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
+	go s.idlePollWorkflow(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
+	go s.idlePollActivity(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
 	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
 	pollCtxCancel()
 
