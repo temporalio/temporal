@@ -211,15 +211,25 @@ func (h *Handler) DeepHealthCheck(
 	var checks []*healthpb.HealthCheck
 	overallState := enumsspb.HEALTH_STATE_SERVING
 
-	// Check 1: gRPC health (graceful shutdown / hysteresis)
-	grpcState := enumsspb.HEALTH_STATE_SERVING
-	grpcMsg := ""
+	// Check 1: gRPC health (graceful shutdown / hysteresis).
+	// If this fails, return early with only this check — no point running
+	// metric checks if we can't even reach the gRPC health server.
 	status, err := h.healthServer.Check(ctx, &grpchealthpb.HealthCheckRequest{Service: serviceName})
 	if err != nil {
-		grpcState = enumsspb.HEALTH_STATE_NOT_SERVING
-		grpcMsg = fmt.Sprintf("gRPC health check failed: %v", err)
-		overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-	} else if status.Status != grpchealthpb.HealthCheckResponse_SERVING {
+		checks = append(checks, &healthpb.HealthCheck{
+			CheckType: healthcheck.CheckTypeGRPCHealth,
+			State:     enumsspb.HEALTH_STATE_NOT_SERVING,
+			Message:   fmt.Sprintf("gRPC health check failed: %v", err),
+		})
+		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
+		return &historyservice.DeepHealthCheckResponse{
+			State:  enumsspb.HEALTH_STATE_NOT_SERVING,
+			Checks: checks,
+		}, nil
+	}
+	grpcState := enumsspb.HEALTH_STATE_SERVING
+	grpcMsg := ""
+	if status.Status != grpchealthpb.HealthCheckResponse_SERVING {
 		grpcState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 		grpcMsg = "gRPC health server not serving"
