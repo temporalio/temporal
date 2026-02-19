@@ -68,7 +68,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		FirstWorkflowTaskBackoff:        request.FirstWorkflowTaskBackoff,
 		FirstExecutionRunId:             firstRunID,
 		OriginalExecutionRunId:          originalRunID,
-		Memo:                            req.Memo,
+		Memo:                            payload.FilterNilMemo(req.Memo),
 		SearchAttributes:                payload.FilterNilSearchAttributes(req.SearchAttributes),
 		WorkflowId:                      req.WorkflowId,
 		SourceVersionStamp:              request.SourceVersionStamp,
@@ -478,7 +478,7 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		Initiator:                    command.Initiator,
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
-		Memo:                         command.Memo,
+		Memo:                         payload.FilterNilMemo(command.Memo),
 		SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
 		InheritBuildId:               command.InheritBuildId,
 	}
@@ -725,7 +725,7 @@ func (b *EventFactory) CreateWorkflowPropertiesModifiedEvent(
 	event.Attributes = &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
 		WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-			UpsertedMemo:                 command.UpsertedMemo,
+			UpsertedMemo:                 payload.FilterNilMemo(command.UpsertedMemo),
 		},
 	}
 	return event
@@ -845,7 +845,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			WorkflowIdReusePolicy:        command.WorkflowIdReusePolicy,
 			RetryPolicy:                  command.RetryPolicy,
 			CronSchedule:                 command.CronSchedule,
-			Memo:                         command.Memo,
+			Memo:                         payload.FilterNilMemo(command.Memo),
 			SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
 			ParentClosePolicy:            command.GetParentClosePolicy(),
 			InheritBuildId:               command.InheritBuildId,

@@ -106,3 +106,19 @@ func FilterNilSearchAttributes(sa *commonpb.SearchAttributes) *commonpb.SearchAt
 	}
 	return &commonpb.SearchAttributes{IndexedFields: filtered}
 }
+
+// FilterNilMemo returns a new Memo with nil/empty payload values filtered out.
+// If the input is nil or all values are nil/empty, returns nil.
+// This is used to filter out nil memo fields from workflow start, continue-as-new, and modify-properties events.
+// Reuses MergeMapOfPayload which already handles nil payload filtering.
+func FilterNilMemo(memo *commonpb.Memo) *commonpb.Memo {
+	if memo == nil || len(memo.GetFields()) == 0 {
+		return nil
+	}
+
+	filtered := MergeMapOfPayload(nil, memo.GetFields())
+	if len(filtered) == 0 {
+		return nil
+	}
+	return &commonpb.Memo{Fields: filtered}
+}

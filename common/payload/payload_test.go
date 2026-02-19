@@ -216,3 +216,65 @@ func TestFilterNilSearchAttributes(t *testing.T) {
 	result = FilterNilSearchAttributes(saAllNil)
 	s.Nil(result)
 }
+
+func TestFilterNilMemo(t *testing.T) {
+	s := assert.New(t)
+
+	// nil input returns nil
+	result := FilterNilMemo(nil)
+	s.Nil(result)
+
+	// empty Memo returns nil
+	emptyMemo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{}}
+	result = FilterNilMemo(emptyMemo)
+	s.Nil(result)
+
+	// Memo with only valid values returns filtered copy
+	validPayload := EncodeString("value")
+	memoNonNil := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"key1": validPayload,
+		},
+	}
+	result = FilterNilMemo(memoNonNil)
+	s.NotNil(result)
+	s.Len(result.Fields, 1)
+	s.Equal(validPayload, result.Fields["key1"])
+
+	// Memo with nil values filters them out
+	nilPayloadVal, _ := Encode(nil)
+	memoMixed := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"valid":  validPayload,
+			"nilVal": nilPayloadVal,
+		},
+	}
+	result = FilterNilMemo(memoMixed)
+	s.NotNil(result)
+	s.Len(result.Fields, 1)
+	s.Equal(validPayload, result.Fields["valid"])
+	s.Nil(result.Fields["nilVal"])
+
+	// Memo with empty slice values filters them out
+	emptySlicePayloadVal, _ := Encode([]string{})
+	memoEmptySlice := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"valid":      validPayload,
+			"emptySlice": emptySlicePayloadVal,
+		},
+	}
+	result = FilterNilMemo(memoEmptySlice)
+	s.NotNil(result)
+	s.Len(result.Fields, 1)
+	s.Equal(validPayload, result.Fields["valid"])
+
+	// Memo with all nil/empty values returns nil
+	memoAllNil := &commonpb.Memo{
+		Fields: map[string]*commonpb.Payload{
+			"nil1": nilPayloadVal,
+			"nil2": emptySlicePayloadVal,
+		},
+	}
+	result = FilterNilMemo(memoAllNil)
+	s.Nil(result)
+}
