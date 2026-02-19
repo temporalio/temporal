@@ -47,6 +47,7 @@ require (
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
 	github.com/tidwall/btree v1.8.1
+	github.com/tursodatabase/go-libsql v0.0.0-20251219133454-43644db490ff
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.16
 	github.com/urfave/cli/v2 v2.27.5
@@ -79,7 +80,11 @@ require (
 	modernc.org/sqlite v1.44.3
 )
 
-require github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+require (
+	github.com/antlr4-go/antlr/v4 v4.13.0 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+	github.com/libsql/sqlite-antlr4-parser v0.0.0-20240327125255-dbf53b6cbf06 // indirect
+)
 
 require (
 	cel.dev/expr v0.23.1 // indirect
