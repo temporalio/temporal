@@ -24,7 +24,7 @@ type (
 
 		controller *gomock.Controller
 
-		scheduler   *ExecutionQueueScheduler[*MockTask]
+		scheduler   *executionQueueScheduler[*MockTask]
 		retryPolicy backoff.RetryPolicy
 	}
 
@@ -64,24 +64,10 @@ func (s *executionQueueSchedulerSuite) TearDownTest() {
 }
 
 // =============================================================================
-// Basic Submit Tests
+// Basic Tests
 // =============================================================================
 
-func (s *executionQueueSchedulerSuite) TestSubmit_Success() {
-	testWG := sync.WaitGroup{}
-	testWG.Add(1)
-
-	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTask.EXPECT().Execute().Return(nil).Times(1)
-	mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-
-	s.scheduler.Submit(mockTask)
-
-	testWG.Wait()
-}
-
-func (s *executionQueueSchedulerSuite) TestSubmit_Failure() {
+func (s *executionQueueSchedulerSuite) TestTrySubmit_Failure() {
 	testWG := sync.WaitGroup{}
 	testWG.Add(1)
 
@@ -93,12 +79,12 @@ func (s *executionQueueSchedulerSuite) TestSubmit_Failure() {
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(false).MaxTimes(1)
 	mockTask.EXPECT().Nack(executionErr).Do(func(_ error) { testWG.Done() }).Times(1)
 
-	s.scheduler.Submit(mockTask)
+	s.scheduler.TrySubmit(mockTask)
 
 	testWG.Wait()
 }
 
-func (s *executionQueueSchedulerSuite) TestSubmit_RetryThenSuccess() {
+func (s *executionQueueSchedulerSuite) TestTrySubmit_RetryThenSuccess() {
 	testWG := sync.WaitGroup{}
 	testWG.Add(1)
 
@@ -118,7 +104,7 @@ func (s *executionQueueSchedulerSuite) TestSubmit_RetryThenSuccess() {
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).Times(2)
 	mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
-	s.scheduler.Submit(mockTask)
+	s.scheduler.TrySubmit(mockTask)
 
 	testWG.Wait()
 }
@@ -151,7 +137,7 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_SameWorkflow() {
 		mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
 		// All tasks have same workflow ID (1)
-		scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
+		scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 	}
 
 	testWG.Wait()
@@ -198,7 +184,7 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_DifferentWorkflow
 			}).Times(1)
 			mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
-			scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: fmt.Sprintf("%d", workflowID), runID: "1"})
+			scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: fmt.Sprintf("%d", workflowID), runID: "1"})
 		}
 	}
 
@@ -296,7 +282,7 @@ func (s *executionQueueSchedulerSuite) TestShutdown_DrainTasks() {
 	mockTask1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 	mockTask1.EXPECT().Execute().Return(nil).Times(1)
 	mockTask1.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-	scheduler.Submit(&testExecutionTask{MockTask: mockTask1, workflowID: "wf1", runID: "run1"})
+	scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask1, workflowID: "wf1", runID: "run1"})
 	testWG.Wait()
 
 	// Stop the scheduler
@@ -305,18 +291,7 @@ func (s *executionQueueSchedulerSuite) TestShutdown_DrainTasks() {
 	// Tasks submitted after stop should be aborted
 	mockTask2 := NewMockTask(s.controller)
 	mockTask2.EXPECT().Abort().Times(1)
-	scheduler.Submit(&testExecutionTask{MockTask: mockTask2, workflowID: "wf1", runID: "run1"})
-}
-
-func (s *executionQueueSchedulerSuite) TestSubmit_AfterShutdown() {
-	scheduler := s.newScheduler()
-	scheduler.Start()
-	scheduler.Stop()
-
-	mockTask := NewMockTask(s.controller)
-	mockTask.EXPECT().Abort().Times(1)
-
-	scheduler.Submit(mockTask)
+	scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask2, workflowID: "wf1", runID: "run1"})
 }
 
 // =============================================================================
@@ -346,7 +321,7 @@ func (s *executionQueueSchedulerSuite) TestHasQueue() {
 	mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
 	// Submit task
-	scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
+	scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 
 	// Wait until task is actually executing
 	<-executingCh
@@ -392,8 +367,8 @@ func (s *executionQueueSchedulerSuite) TestHasQueue_MultipleTasksInQueue() {
 	mockTask2.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
 	// Submit both tasks
-	scheduler.Submit(&testExecutionTask{MockTask: mockTask1, workflowID: "wf1", runID: "run1"})
-	scheduler.Submit(&testExecutionTask{MockTask: mockTask2, workflowID: "wf1", runID: "run1"})
+	scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask1, workflowID: "wf1", runID: "run1"})
+	scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask2, workflowID: "wf1", runID: "run1"})
 
 	// Wait for first task to start executing
 	<-executingCh
@@ -430,7 +405,7 @@ func (s *executionQueueSchedulerSuite) TestQueueTTL_ExpiresAfterIdle() {
 	mockTask.EXPECT().Execute().Return(nil).Times(1)
 	mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
-	scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
+	scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 	testWG.Wait()
 
 	// Queue exists immediately after task completes
@@ -468,7 +443,7 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 
 		// Submit, then wait for the queue to be removed by the sweeper before next submit.
 		// This maximizes the chance of hitting the TTL expiry race.
-		scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
+		scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 
 		// Wait for sweeper to remove the queue before next iteration
 		s.Eventually(func() bool {
@@ -499,196 +474,9 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 // Max Queues Tests
 // =============================================================================
 
-func (s *executionQueueSchedulerSuite) TestSubmit_BlocksUntilQueueAvailable() {
-	// Create scheduler with max 1 queue and short TTL
-	ttl := 50 * time.Millisecond
-	scheduler := NewExecutionQueueScheduler(
-		&ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return 1 },
-			QueueTTL:         func() time.Duration { return ttl },
-			QueueConcurrency: func() int { return 1 },
-		},
-		executionKeyFn,
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-		clock.NewRealTimeSource(),
-	)
-	scheduler.Start()
-	defer scheduler.Stop()
-
-	testWG := sync.WaitGroup{}
-	testWG.Add(1)
-
-	// Submit task for key A — creates queue, succeeds immediately
-	mockTaskA := NewMockTask(s.controller)
-	mockTaskA.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTaskA.EXPECT().Execute().Return(nil).Times(1)
-	mockTaskA.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-	scheduler.Submit(&testExecutionTask{MockTask: mockTaskA, workflowID: "wfA", runID: "run1"})
-	testWG.Wait()
-
-	// Key A's queue is now idle. Submit for key B should block until sweeper frees the slot.
-	submitDone := make(chan struct{})
-	testWG.Add(1)
-
-	mockTaskB := NewMockTask(s.controller)
-	mockTaskB.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTaskB.EXPECT().Execute().Return(nil).Times(1)
-	mockTaskB.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-
-	go func() {
-		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB, workflowID: "wfB", runID: "run1"})
-		close(submitDone)
-	}()
-
-	// Verify Submit is blocked (hasn't returned yet)
-	select {
-	case <-submitDone:
-		s.Fail("Submit should block when MaxQueues is reached")
-	case <-time.After(20 * time.Millisecond):
-		// Good — still blocked
-	}
-
-	// Wait for sweeper to free key A's queue, which should unblock key B's Submit
-	select {
-	case <-submitDone:
-		// Good — unblocked after sweeper ran
-	case <-time.After(5 * time.Second):
-		s.Fail("Submit should unblock after sweeper frees a queue slot")
-	}
-
-	testWG.Wait()
-}
-
-func (s *executionQueueSchedulerSuite) TestSubmit_UnblocksOnStop() {
-	// Create scheduler with max 1 queue and long TTL (sweeper won't help)
-	scheduler := NewExecutionQueueScheduler(
-		&ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return 1 },
-			QueueTTL:         func() time.Duration { return time.Hour },
-			QueueConcurrency: func() int { return 1 },
-		},
-		executionKeyFn,
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-		clock.NewRealTimeSource(),
-	)
-	scheduler.Start()
-
-	blockCh := make(chan struct{})
-
-	// Submit task for key A that blocks execution
-	mockTaskA := NewMockTask(s.controller)
-	mockTaskA.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTaskA.EXPECT().Execute().DoAndReturn(func() error {
-		<-blockCh
-		return nil
-	}).MaxTimes(1)
-	mockTaskA.EXPECT().Ack().MaxTimes(1)
-	mockTaskA.EXPECT().Abort().MaxTimes(1)
-	scheduler.Submit(&testExecutionTask{MockTask: mockTaskA, workflowID: "wfA", runID: "run1"})
-
-	// Submit for key B should block (MaxQueues=1, key A's queue exists)
-	submitDone := make(chan struct{})
-	mockTaskB := NewMockTask(s.controller)
-	mockTaskB.EXPECT().Abort().Times(1)
-
-	go func() {
-		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB, workflowID: "wfB", runID: "run1"})
-		close(submitDone)
-	}()
-
-	// Verify Submit is blocked
-	select {
-	case <-submitDone:
-		s.Fail("Submit should block when MaxQueues is reached")
-	case <-time.After(50 * time.Millisecond):
-		// Good — still blocked
-	}
-
-	// Stop the scheduler — should unblock Submit and abort the task
-	close(blockCh)
-	scheduler.Stop()
-
-	select {
-	case <-submitDone:
-		// Good — unblocked after Stop
-	case <-time.After(5 * time.Second):
-		s.Fail("Submit should unblock after Stop is called")
-	}
-}
-
-func (s *executionQueueSchedulerSuite) TestSubmit_MultipleWaitersForSameKey() {
-	// When two Submit callers block for the same key and one creates the queue,
-	// the other should be woken and append to the existing queue.
-	ttl := 50 * time.Millisecond
-	scheduler := NewExecutionQueueScheduler(
-		&ExecutionQueueSchedulerOptions{
-			MaxQueues:        func() int { return 1 },
-			QueueTTL:         func() time.Duration { return ttl },
-			QueueConcurrency: func() int { return 1 },
-		},
-		executionKeyFn,
-		log.NewNoopLogger(),
-		metrics.NoopMetricsHandler,
-		clock.NewRealTimeSource(),
-	)
-	scheduler.Start()
-	defer scheduler.Stop()
-
-	testWG := sync.WaitGroup{}
-	testWG.Add(1)
-
-	// Fill the one queue slot with key A
-	mockTaskA := NewMockTask(s.controller)
-	mockTaskA.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTaskA.EXPECT().Execute().Return(nil).Times(1)
-	mockTaskA.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-	scheduler.Submit(&testExecutionTask{MockTask: mockTaskA, workflowID: "wfA", runID: "run1"})
-	testWG.Wait()
-
-	// Now submit two tasks for key B — both should block, then both should complete
-	testWG.Add(2)
-	submitsDone := make(chan struct{})
-
-	mockTaskB1 := NewMockTask(s.controller)
-	mockTaskB1.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTaskB1.EXPECT().Execute().Return(nil).Times(1)
-	mockTaskB1.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-
-	mockTaskB2 := NewMockTask(s.controller)
-	mockTaskB2.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
-	mockTaskB2.EXPECT().Execute().Return(nil).Times(1)
-	mockTaskB2.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
-
-	var submitsReturned atomic.Int32
-	go func() {
-		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB1, workflowID: "wfB", runID: "run1"})
-		if submitsReturned.Add(1) == 2 {
-			close(submitsDone)
-		}
-	}()
-	go func() {
-		scheduler.Submit(&testExecutionTask{MockTask: mockTaskB2, workflowID: "wfB", runID: "run1"})
-		if submitsReturned.Add(1) == 2 {
-			close(submitsDone)
-		}
-	}()
-
-	// Both submits should complete after sweeper frees key A's slot
-	select {
-	case <-submitsDone:
-		// Good
-	case <-time.After(5 * time.Second):
-		s.Fail("Both Submit calls for the same key should unblock")
-	}
-
-	testWG.Wait()
-}
-
 func (s *executionQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 	// Create scheduler with max 2 queues
-	scheduler := NewExecutionQueueScheduler(
+	scheduler := newExecutionQueueScheduler(
 		&ExecutionQueueSchedulerOptions{
 			MaxQueues:        func() int { return 2 },
 			QueueTTL:         func() time.Duration { return time.Hour },
@@ -730,7 +518,7 @@ func (s *executionQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 // Concurrency Tests
 // =============================================================================
 
-func (s *executionQueueSchedulerSuite) TestParallelSubmit_DifferentWorkflows() {
+func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_DifferentWorkflows() {
 	scheduler := s.newSchedulerWithExecution(500, 5*time.Second)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -756,7 +544,7 @@ func (s *executionQueueSchedulerSuite) TestParallelSubmit_DifferentWorkflows() {
 				mockTask.EXPECT().Execute().Return(nil).Times(1)
 				mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
-				scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: fmt.Sprintf("%d", submitterID), runID: "1"})
+				scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: fmt.Sprintf("%d", submitterID), runID: "1"})
 			}
 		}()
 	}
@@ -776,7 +564,7 @@ func (s *executionQueueSchedulerSuite) TestParallelSubmit_DifferentWorkflows() {
 	}
 }
 
-func (s *executionQueueSchedulerSuite) TestParallelSubmit_SameWorkflow() {
+func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_SameWorkflow() {
 	scheduler := s.newSchedulerWithExecution(500, 5*time.Second)
 	scheduler.Start()
 	defer scheduler.Stop()
@@ -806,7 +594,7 @@ func (s *executionQueueSchedulerSuite) TestParallelSubmit_SameWorkflow() {
 				mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
 				// All tasks go to same workflow
-				scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
+				scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 			}
 		}()
 	}
@@ -911,7 +699,7 @@ func (s *executionQueueSchedulerSuite) TestMultipleTasksSameWorkflow_AllProcesse
 		}).Times(1)
 		mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
 
-		scheduler.Submit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
+		scheduler.TrySubmit(&testExecutionTask{MockTask: mockTask, workflowID: "wf1", runID: "run1"})
 	}
 
 	testWG.Wait()
@@ -923,8 +711,8 @@ func (s *executionQueueSchedulerSuite) TestMultipleTasksSameWorkflow_AllProcesse
 // Helper Functions
 // =============================================================================
 
-func (s *executionQueueSchedulerSuite) newScheduler() *ExecutionQueueScheduler[*MockTask] {
-	return NewExecutionQueueScheduler(
+func (s *executionQueueSchedulerSuite) newScheduler() *executionQueueScheduler[*MockTask] {
+	return newExecutionQueueScheduler(
 		&ExecutionQueueSchedulerOptions{
 			MaxQueues:        func() int { return 500 },
 			QueueTTL:         func() time.Duration { return 5 * time.Second },
@@ -937,8 +725,8 @@ func (s *executionQueueSchedulerSuite) newScheduler() *ExecutionQueueScheduler[*
 	)
 }
 
-func (s *executionQueueSchedulerSuite) newSchedulerWithExecution(maxQueues int, queueTTL time.Duration) *ExecutionQueueScheduler[*testExecutionTask] {
-	return NewExecutionQueueScheduler(
+func (s *executionQueueSchedulerSuite) newSchedulerWithExecution(maxQueues int, queueTTL time.Duration) *executionQueueScheduler[*testExecutionTask] {
+	return newExecutionQueueScheduler(
 		&ExecutionQueueSchedulerOptions{
 			MaxQueues:        func() int { return maxQueues },
 			QueueTTL:         func() time.Duration { return queueTTL },

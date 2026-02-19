@@ -11,21 +11,21 @@ var _ Scheduler[Task] = (*ExecutionAwareScheduler[Task])(nil)
 type (
 	// ExecutionAwareSchedulerOptions contains configuration for the ExecutionAwareScheduler.
 	ExecutionAwareSchedulerOptions struct {
-		// Enabled controls whether the ExecutionQueueScheduler is active.
+		// Enabled controls whether the executionQueueScheduler is active.
 		Enabled func() bool
-		// ExecutionQueueSchedulerOptions contains configuration for the ExecutionQueueScheduler.
+		// ExecutionQueueSchedulerOptions contains configuration for the executionQueueScheduler.
 		ExecutionQueueSchedulerOptions ExecutionQueueSchedulerOptions
 	}
 
 	// ExecutionAwareScheduler is a scheduler that wraps a base scheduler and adds
-	// an ExecutionQueueScheduler for handling execution contention.
+	// an executionQueueScheduler for handling execution contention.
 	//
 	// By default, tasks are processed by the base scheduler. When an execution experiences
-	// contention (e.g., busy workflow error), it gets routed to the ExecutionQueueScheduler
+	// contention (e.g., busy workflow error), it gets routed to the executionQueueScheduler
 	// which ensures tasks are processed sequentially per execution.
 	ExecutionAwareScheduler[T Task] struct {
 		baseScheduler           Scheduler[T]
-		executionQueueScheduler *ExecutionQueueScheduler[T]
+		executionQueueScheduler *executionQueueScheduler[T]
 
 		queueKeyFn QueueKeyFn[T]
 		options    ExecutionAwareSchedulerOptions
@@ -44,7 +44,7 @@ func NewExecutionAwareScheduler[T Task](
 ) *ExecutionAwareScheduler[T] {
 	return &ExecutionAwareScheduler[T]{
 		baseScheduler: baseScheduler,
-		executionQueueScheduler: NewExecutionQueueScheduler(
+		executionQueueScheduler: newExecutionQueueScheduler(
 			&options.ExecutionQueueSchedulerOptions,
 			queueKeyFn,
 			logger,
@@ -59,7 +59,7 @@ func NewExecutionAwareScheduler[T Task](
 
 func (s *ExecutionAwareScheduler[T]) Start() {
 	s.baseScheduler.Start()
-	// Always start the ExecutionQueueScheduler regardless of current config.
+	// Always start the executionQueueScheduler regardless of current config.
 	// The Enabled check gates task routing, so an idle scheduler has minimal
 	// overhead. This ensures if the config changes from disabled to enabled,
 	// tasks will be processed correctly.
@@ -73,8 +73,10 @@ func (s *ExecutionAwareScheduler[T]) Stop() {
 
 func (s *ExecutionAwareScheduler[T]) Submit(task T) {
 	if s.shouldRouteToExecutionQueueScheduler(task) {
-		s.executionQueueScheduler.Submit(task)
-		return
+		if s.executionQueueScheduler.TrySubmit(task) {
+			return
+		}
+		// executionQueueScheduler is full, fall through to base scheduler.
 	}
 	s.baseScheduler.Submit(task)
 }
@@ -84,12 +86,12 @@ func (s *ExecutionAwareScheduler[T]) TrySubmit(task T) bool {
 		if s.executionQueueScheduler.TrySubmit(task) {
 			return true
 		}
-		// ExecutionQueueScheduler is full, fall through to base scheduler.
+		// executionQueueScheduler is full, fall through to base scheduler.
 	}
 	return s.baseScheduler.TrySubmit(task)
 }
 
-// HandleBusyWorkflow routes a task to the ExecutionQueueScheduler when it
+// HandleBusyWorkflow routes a task to the executionQueueScheduler when it
 // encounters a contention error. Returns true if the task was handled
 // (submitted to EQS), false if the caller should handle it (e.g., feature
 // disabled or EQS at max capacity).
@@ -101,7 +103,7 @@ func (s *ExecutionAwareScheduler[T]) HandleBusyWorkflow(task T) bool {
 }
 
 // HasExecutionQueue returns true if the task's execution has an active queue
-// in the ExecutionQueueScheduler.
+// in the executionQueueScheduler.
 func (s *ExecutionAwareScheduler[T]) HasExecutionQueue(task T) bool {
 	if !s.options.Enabled() {
 		return false

@@ -107,7 +107,7 @@ func (s *executionAwareSchedulerSuite) TestSubmit_RoutesToExecutionQueueSchedule
 	task3 := s.createTestTask("wf1", "run1")
 	s.True(scheduler.HasExecutionQueue(task3))
 
-	// Add a third task via Submit - should route to ExecutionQueueScheduler since queue exists
+	// Add a third task via Submit - should route to executionQueueScheduler since queue exists
 	task4 := s.createTestTask("wf1", "run1")
 	task4.EXPECT().RetryPolicy().Return(backoff.NewExponentialRetryPolicy(time.Millisecond)).AnyTimes()
 	task4.EXPECT().Execute().Return(nil).Times(1)
