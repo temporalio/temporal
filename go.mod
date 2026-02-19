@@ -60,7 +60,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.62.2
+	go.temporal.io/api v1.62.3-0.20260219004129-d78c552c23d4
 	go.temporal.io/sdk v1.38.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
@@ -173,3 +173,4 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
