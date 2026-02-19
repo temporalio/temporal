@@ -406,10 +406,16 @@ fmt: fmt-gofix fmt-imports fmt-yaml
 
 # Some fixes enable others (e.g. rangeint may expose minmax opportunities),
 # so - as recommended by the Go team - we run go fix in a loop until it reaches
-# a fixed point (exit code 0)
+# a fixed point. We check for "files updated" in the output rather than relying
+# on the exit code alone, since go fix can exit non-zero without actually
+# modifying any files (see https://github.com/golang/go/issues/77482).
+GOFIX_FLAGS ?= -any -rangeint
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
-	@while ! go fix -any -rangeint ./...; do \
+	@while true; do \
+		output=$$(go fix $(GOFIX_FLAGS) ./... 2>&1); \
+		echo "$$output"; \
+		if ! echo "$$output" | grep -q "files updated"; then break; fi; \
 		printf $(COLOR) "Re-running go fix..."; \
 	done
 

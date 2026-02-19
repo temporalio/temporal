@@ -41,7 +41,7 @@ func processArtifactsParallel(ctx context.Context, jobs []ArtifactJob, concurren
 
 	// Start worker pool
 	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		wg.Add(1)
 		go worker(ctx, jobChan, resultChan, totalArtifacts, &wg)
 	}
