@@ -1,6 +1,7 @@
 package dynamicconfig_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -538,6 +539,51 @@ testGetFloat64PropertyKey:
 	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
+}
+
+func (s *fileBasedClientSuite) TestUpdate_ReadFileFailRollsBackLastUpdatedTime() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan interface{})
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime called twice (validateStaticConfig + Update), ReadFile once
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh)
+	s.NoError(err)
+
+	// Second update: mod time advanced to t2, but ReadFile fails transiently
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	// Third update: same mod time t2.
+	// If lastUpdatedTime was rolled back to t1, t2.After(t1) is true → ReadFile is called again.
+	// If NOT rolled back (bug), t2.After(t2) is false → update silently skipped → mock expectation fails.
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	s.NoError(client.Update())
 }
 
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
