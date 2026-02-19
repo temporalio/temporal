@@ -19,6 +19,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	healthpb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -34,6 +35,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	healthcheck "go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -65,7 +67,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	grpchealthpb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -206,45 +208,112 @@ func (h *Handler) DeepHealthCheck(
 	_ *historyservice.DeepHealthCheckRequest,
 ) (*historyservice.DeepHealthCheckResponse, error) {
 
-	status, err := h.healthServer.Check(ctx, &healthpb.HealthCheckRequest{Service: serviceName})
+	var checks []*healthpb.HealthCheck
+	overallState := enumsspb.HEALTH_STATE_SERVING
+
+	// Check 1: gRPC health (graceful shutdown / hysteresis)
+	status, err := h.healthServer.Check(ctx, &grpchealthpb.HealthCheckRequest{Service: serviceName})
 	if err != nil {
 		return nil, err
 	}
-	if status.Status != healthpb.HealthCheckResponse_SERVING {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_DECLINED_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
+	grpcState := enumsspb.HEALTH_STATE_SERVING
+	grpcMsg := ""
+	if status.Status != grpchealthpb.HealthCheckResponse_SERVING {
+		grpcState = enumsspb.HEALTH_STATE_DECLINED_SERVING
+		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
+		grpcMsg = "gRPC health server not serving"
 	}
+	checks = append(checks, &healthpb.HealthCheck{
+		CheckType: healthcheck.CheckTypeGRPCHealth,
+		State:     grpcState,
+		Message:   grpcMsg,
+	})
 
-	rsp := h.checkHistoryHealthSignals()
-	if rsp != nil {
-		return rsp, nil
+	// Check 2: RPC latency
+	rpcLatency := h.historyHealthSignal.AverageLatency()
+	rpcLatencyThreshold := h.config.HealthRPCLatencyFailure()
+	rpcLatencyState := enumsspb.HEALTH_STATE_SERVING
+	rpcLatencyMsg := ""
+	if rpcLatency > rpcLatencyThreshold {
+		rpcLatencyState = enumsspb.HEALTH_STATE_NOT_SERVING
+		rpcLatencyMsg = fmt.Sprintf("RPC latency %.2fms exceeded %.2fms threshold", rpcLatency, rpcLatencyThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
 	}
+	checks = append(checks, &healthpb.HealthCheck{
+		CheckType: healthcheck.CheckTypeRPCLatency,
+		State:     rpcLatencyState,
+		Value:     rpcLatency,
+		Threshold: rpcLatencyThreshold,
+		Message:   rpcLatencyMsg,
+	})
 
-	latency := h.persistenceHealthSignal.AverageLatency()
-	errRatio := h.persistenceHealthSignal.ErrorRatio()
-
-	if latency > h.config.HealthPersistenceLatencyFailure() || errRatio > h.config.HealthPersistenceErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
+	// Check 3: RPC error ratio
+	rpcErrRatio := h.historyHealthSignal.ErrorRatio()
+	rpcErrThreshold := h.config.HealthRPCErrorRatio()
+	rpcErrState := enumsspb.HEALTH_STATE_SERVING
+	rpcErrMsg := ""
+	if rpcErrRatio > rpcErrThreshold {
+		rpcErrState = enumsspb.HEALTH_STATE_NOT_SERVING
+		rpcErrMsg = fmt.Sprintf("RPC error ratio %.4f exceeded %.4f threshold", rpcErrRatio, rpcErrThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
 	}
-	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_SERVING))
-	return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
-}
+	checks = append(checks, &healthpb.HealthCheck{
+		CheckType: healthcheck.CheckTypeRPCErrorRatio,
+		State:     rpcErrState,
+		Value:     rpcErrRatio,
+		Threshold: rpcErrThreshold,
+		Message:   rpcErrMsg,
+	})
 
-// checkHistoryHealthSignals checks the history health signal that is captured by the interceptor.
-func (h *Handler) checkHistoryHealthSignals() *historyservice.DeepHealthCheckResponse {
-	// Check that the RPC latency doesn't exceed the threshold.
-	if h.historyHealthSignal.AverageLatency() > h.config.HealthRPCLatencyFailure() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	// Check 4: Persistence latency
+	persLatency := h.persistenceHealthSignal.AverageLatency()
+	persLatencyThreshold := h.config.HealthPersistenceLatencyFailure()
+	persLatencyState := enumsspb.HEALTH_STATE_SERVING
+	persLatencyMsg := ""
+	if persLatency > persLatencyThreshold {
+		persLatencyState = enumsspb.HEALTH_STATE_NOT_SERVING
+		persLatencyMsg = fmt.Sprintf("Persistence latency %.2fms exceeded %.2fms threshold", persLatency, persLatencyThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
 	}
+	checks = append(checks, &healthpb.HealthCheck{
+		CheckType: healthcheck.CheckTypePersistenceLatency,
+		State:     persLatencyState,
+		Value:     persLatency,
+		Threshold: persLatencyThreshold,
+		Message:   persLatencyMsg,
+	})
 
-	// Check if the RPC error ratio exceeds the threshold
-	if h.historyHealthSignal.ErrorRatio() > h.config.HealthRPCErrorRatio() {
-		metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(enumsspb.HEALTH_STATE_NOT_SERVING))
-		return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}
+	// Check 5: Persistence error ratio
+	persErrRatio := h.persistenceHealthSignal.ErrorRatio()
+	persErrThreshold := h.config.HealthPersistenceErrorRatio()
+	persErrState := enumsspb.HEALTH_STATE_SERVING
+	persErrMsg := ""
+	if persErrRatio > persErrThreshold {
+		persErrState = enumsspb.HEALTH_STATE_NOT_SERVING
+		persErrMsg = fmt.Sprintf("Persistence error ratio %.4f exceeded %.4f threshold", persErrRatio, persErrThreshold)
+		if overallState != enumsspb.HEALTH_STATE_DECLINED_SERVING {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
 	}
-	return nil
+	checks = append(checks, &healthpb.HealthCheck{
+		CheckType: healthcheck.CheckTypePersistenceErrRatio,
+		State:     persErrState,
+		Value:     persErrRatio,
+		Threshold: persErrThreshold,
+		Message:   persErrMsg,
+	})
+
+	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
+	return &historyservice.DeepHealthCheckResponse{
+		State:  overallState,
+		Checks: checks,
+	}, nil
 }
 
 // IsWorkflowTaskValid - whether workflow task is still valid
