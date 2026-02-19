@@ -4123,6 +4123,73 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
 	})
 
+	t.Run("HeartbeatWithNoTimeoutDoesNotKillActivity", func(t *testing.T) {
+		// Start activity with no heartbeat timeout, worker accepts, worker
+		// heartbeats, wait for any spurious timeout task to fire, then
+		// verify the activity is still running and can be completed.
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp, err := s.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           s.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        s.tv.ActivityType(),
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(1 * time.Minute),
+			// No HeartbeatTimeout set.
+			RetryPolicy: &commonpb.RetryPolicy{
+				MaximumAttempts: 1,
+			},
+		})
+		require.NoError(t, err)
+
+		pollTaskResp, err := s.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, pollTaskResp.TaskToken)
+
+		_, err = s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Details:   heartbeatDetails,
+		})
+		require.NoError(t, err)
+
+		// Wait long enough for a spurious zero-duration timeout task to fire.
+		time.Sleep(2 * time.Second) //nolint:forbidigo
+
+		// Activity should still be running.
+		descResp, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus(),
+			"activity should still be running but is %s", descResp.GetInfo().GetStatus())
+
+		// Complete the activity to confirm it's still operable.
+		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Result:    defaultResult,
+		})
+		require.NoError(t, err)
+
+		descResp, err = s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      s.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.RunId,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus(),
+			"expected status=Completed but is %s", descResp.GetInfo().GetStatus())
+		protorequire.ProtoEqual(t, defaultResult, descResp.GetOutcome().GetResult())
+	})
+
 	t.Run("RecordHeartbeatByIDStaysAlive", func(t *testing.T) {
 		// Start activity, worker accepts, worker heartbeats within timeout,
 		// more time passes, worker heartbeats again, worker completes.
