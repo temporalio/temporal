@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"      // needed to load mysql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // needed to load postgresql plugin
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"     // needed to load sqlite plugin
@@ -194,9 +195,19 @@ func buildCLI() *cli.App {
 					tag.Bool("debug-mode", debug.Enabled),
 				)
 
+				// TODO: The initialization of the dynamic handler and its dependents should be moved out of main.
+				metricsHandler, err := metrics.MetricsHandlerFromConfig(logger, cfg.Global.Metrics)
+				if err != nil {
+					return cli.Exit(fmt.Sprintf("Unable to create metrics handler. Error: %v", err), 1)
+				}
+				if metricsHandler == metrics.NoopMetricsHandler {
+					logger.Warn("Metrics handler is not configured using default noop metrics handler. Metrics will not be collected.")
+				}
+
 				var dynamicConfigClient dynamicconfig.Client
 				if cfg.DynamicConfigClient != nil {
-					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
+					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(
+						cfg.DynamicConfigClient, logger, temporal.InterruptCh(), metricsHandler)
 					if err != nil {
 						return cli.Exit(fmt.Sprintf("Unable to create dynamic config client. Error: %v", err), 1)
 					}
@@ -234,6 +245,7 @@ func buildCLI() *cli.App {
 					temporal.ForServices(services),
 					temporal.WithConfig(cfg),
 					temporal.WithDynamicConfigClient(dynamicConfigClient),
+					temporal.WithCustomMetricsHandler(metricsHandler),
 					temporal.WithLogger(logger),
 					temporal.InterruptOn(temporal.InterruptCh()),
 					temporal.WithAuthorizer(authorizer),
