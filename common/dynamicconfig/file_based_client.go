@@ -110,19 +110,28 @@ func (fc *fileBasedClient) init() error {
 
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
-func (fc *fileBasedClient) Update() error {
+func (fc *fileBasedClient) Update() (updateErr error) {
 	modtime, err := fc.reader.GetModTime()
 	if err != nil {
-		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
+		updateErr = fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
+		return
 	}
 	if !modtime.After(fc.lastUpdatedTime) {
-		return nil
+		return
 	}
+	prevModtime := fc.lastUpdatedTime
 	fc.lastUpdatedTime = modtime
+	defer func() {
+		if updateErr != nil {
+			fc.lastUpdatedTime = prevModtime
+			// add metric
+		}
+	}()
 
 	contents, err := fc.reader.ReadFile()
 	if err != nil {
-		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
+		updateErr = fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
+		return
 	}
 
 	lr := LoadYamlFile(contents)
@@ -133,8 +142,9 @@ func (fc *fileBasedClient) Update() error {
 		fc.logger.Warn("dynamic config warning", tag.Error(w))
 	}
 	if len(lr.Errors) > 0 {
-		return fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
+		updateErr = fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
 			len(lr.Errors), len(lr.Warnings))
+		return
 	}
 
 	prev := fc.values.Swap(lr.Map)
@@ -143,7 +153,7 @@ func (fc *fileBasedClient) Update() error {
 	fc.logger.Info("Updated dynamic config")
 
 	fc.PublishUpdates(changedMap)
-	return nil
+	return
 }
 
 func (fc *fileBasedClient) validateStaticConfig(config *FileBasedClientConfig) error {
