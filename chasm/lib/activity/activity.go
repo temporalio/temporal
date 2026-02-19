@@ -572,15 +572,17 @@ func (a *Activity) RecordHeartbeat(
 		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
 	})
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: ctx.Now(a).Add(a.GetHeartbeatTimeout().AsDuration()),
-		},
-		&activitypb.HeartbeatTimeoutTask{
-			Stamp: a.LastAttempt.Get(ctx).GetStamp(),
-		},
-	)
+	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: ctx.Now(a).Add(heartbeatTimeout),
+			},
+			&activitypb.HeartbeatTimeoutTask{
+				Stamp: a.LastAttempt.Get(ctx).GetStamp(),
+			},
+		)
+	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		// TODO(saa-preview): ActivityPaused, ActivityReset
