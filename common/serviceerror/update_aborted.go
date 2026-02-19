@@ -1,0 +1,17 @@
+package serviceerror
+
+import (
+	"go.temporal.io/api/serviceerror"
+)
+
+// AbortedByServer wraps a serviceerror.Aborted and is returned when a workflow update
+// is aborted by the server (e.g., when the update registry is cleared).
+// SDKs will automatically retry this error.
+type AbortedByServer struct {
+	*serviceerror.Aborted
+}
+
+// NewAbortedByServer creates an AbortedByServer error with the given message.
+func NewAbortedByServer(msg string) *AbortedByServer {
+	return &AbortedByServer{Aborted: serviceerror.NewAborted(msg).(*serviceerror.Aborted)}
+}

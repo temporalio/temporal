@@ -5,6 +5,7 @@ import (
 
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
 var (
@@ -12,7 +13,7 @@ var (
 	registryClearedErr = errors.New("update registry was cleared")
 	// AbortedByServerErr is an SDK-retryable error returned when an update is aborted by the server
 	// (e.g., when the update registry is cleared). SDKs will automatically retry this error.
-	AbortedByServerErr          = serviceerror.NewAborted("workflow update was aborted")
+	AbortedByServerErr          = serviceerrors.NewAbortedByServer("workflow update was aborted")
 	AbortedByWorkflowClosingErr = serviceerror.NewNotFound("workflow update was aborted by closing workflow")
 	workflowTaskFailErr         = serviceerror.NewWorkflowNotReady("Unable to perform workflow execution update due to unexpected workflow task failure.")
 )
