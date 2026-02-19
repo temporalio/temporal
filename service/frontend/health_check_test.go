@@ -7,7 +7,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	healthpb "go.temporal.io/server/api/health/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
@@ -235,7 +235,7 @@ func (s *healthCheckerSuite) Test_Check_Context_Cancellation() {
 	)
 
 	result, err := checker.Check(ctx)
-	s.NoError(err)                                           // Context cancellation in individual health checks should not fail the overall check
+	s.Require().NoError(err)                                 // Context cancellation in individual health checks should not fail the overall check
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State) // All hosts will return NOT_SERVING due to cancellation
 }
 
@@ -300,7 +300,7 @@ func (s *healthCheckerSuite) Test_Check_ServiceDetail_Populated() {
 	})
 
 	result, err := s.checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.NotNil(result.ServiceDetail)
 	s.Equal("history", result.ServiceDetail.Service)
 	s.Len(result.ServiceDetail.Hosts, 2)
@@ -315,7 +315,7 @@ func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
 		membership.NewHostInfoFromAddress("host1"),
 	})
 
-	checks := []*healthpb.HealthCheck{
+	checks := []*healthspb.HealthCheck{
 		{
 			CheckType: health.CheckTypeRPCLatency,
 			State:     enumsspb.HEALTH_STATE_NOT_SERVING,
@@ -340,7 +340,7 @@ func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
 	)
 
 	result, err := checker.Check(context.Background())
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.NotNil(result.ServiceDetail)
 	s.Require().Len(result.ServiceDetail.Hosts, 1)
 	host := result.ServiceDetail.Hosts[0]
@@ -348,8 +348,8 @@ func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, host.State)
 	s.Require().Len(host.Checks, 1)
 	s.Equal(health.CheckTypeRPCLatency, host.Checks[0].CheckType)
-	s.Equal(850.0, host.Checks[0].Value)
-	s.Equal(500.0, host.Checks[0].Threshold)
+	s.InDelta(850.0, host.Checks[0].Value, 0.01)
+	s.InDelta(500.0, host.Checks[0].Threshold, 0.01)
 }
 
 func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {

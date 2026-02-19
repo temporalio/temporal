@@ -19,7 +19,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	healthpb "go.temporal.io/server/api/health/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -67,7 +67,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
-	grpchealthpb "google.golang.org/grpc/health/grpc_health_v1"
+	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 type (
@@ -208,15 +208,15 @@ func (h *Handler) DeepHealthCheck(
 	_ *historyservice.DeepHealthCheckRequest,
 ) (*historyservice.DeepHealthCheckResponse, error) {
 
-	var checks []*healthpb.HealthCheck
+	var checks []*healthspb.HealthCheck
 	overallState := enumsspb.HEALTH_STATE_SERVING
 
 	// Check 1: gRPC health (graceful shutdown / hysteresis).
 	// If this fails, return early with only this check — no point running
 	// metric checks if we can't even reach the gRPC health server.
-	status, err := h.healthServer.Check(ctx, &grpchealthpb.HealthCheckRequest{Service: serviceName})
+	status, err := h.healthServer.Check(ctx, &grpchealthspb.HealthCheckRequest{Service: serviceName})
 	if err != nil {
-		checks = append(checks, &healthpb.HealthCheck{
+		checks = append(checks, &healthspb.HealthCheck{
 			CheckType: healthcheck.CheckTypeGRPCHealth,
 			State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 			Message:   fmt.Sprintf("gRPC health check failed: %v", err),
@@ -229,12 +229,12 @@ func (h *Handler) DeepHealthCheck(
 	}
 	grpcState := enumsspb.HEALTH_STATE_SERVING
 	grpcMsg := ""
-	if status.Status != grpchealthpb.HealthCheckResponse_SERVING {
+	if status.Status != grpchealthspb.HealthCheckResponse_SERVING {
 		grpcState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 		grpcMsg = "gRPC health server not serving"
 	}
-	checks = append(checks, &healthpb.HealthCheck{
+	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypeGRPCHealth,
 		State:     grpcState,
 		Message:   grpcMsg,
@@ -252,7 +252,7 @@ func (h *Handler) DeepHealthCheck(
 			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
-	checks = append(checks, &healthpb.HealthCheck{
+	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypeRPCLatency,
 		State:     rpcLatencyState,
 		Value:     rpcLatency,
@@ -272,7 +272,7 @@ func (h *Handler) DeepHealthCheck(
 			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
-	checks = append(checks, &healthpb.HealthCheck{
+	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypeRPCErrorRatio,
 		State:     rpcErrState,
 		Value:     rpcErrRatio,
@@ -292,7 +292,7 @@ func (h *Handler) DeepHealthCheck(
 			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
-	checks = append(checks, &healthpb.HealthCheck{
+	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypePersistenceLatency,
 		State:     persLatencyState,
 		Value:     persLatency,
@@ -312,7 +312,7 @@ func (h *Handler) DeepHealthCheck(
 			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
-	checks = append(checks, &healthpb.HealthCheck{
+	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypePersistenceErrRatio,
 		State:     persErrState,
 		Value:     persErrRatio,

@@ -27,7 +27,7 @@ import (
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	healthpb "go.temporal.io/server/api/health/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -68,7 +68,7 @@ import (
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
-	grpchealthpb "google.golang.org/grpc/health/grpc_health_v1"
+	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -239,7 +239,7 @@ func (adh *AdminHandler) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthpb.HealthCheckResponse_SERVING)
+		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthspb.HealthCheckResponse_SERVING)
 	}
 }
 
@@ -250,7 +250,7 @@ func (adh *AdminHandler) Stop() {
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthpb.HealthCheckResponse_NOT_SERVING)
+		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthspb.HealthCheckResponse_NOT_SERVING)
 	}
 }
 
@@ -265,7 +265,7 @@ func (adh *AdminHandler) DeepHealthCheck(
 		return nil, err
 	}
 
-	var services []*healthpb.ServiceHealthDetail
+	var services []*healthspb.ServiceHealthDetail
 	if result.ServiceDetail != nil {
 		services = append(services, result.ServiceDetail)
 	}

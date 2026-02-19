@@ -6,7 +6,7 @@ import (
 	"math"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	healthpb "go.temporal.io/server/api/health/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
@@ -19,7 +19,7 @@ import (
 type (
 	HealthCheckResult struct {
 		State         enumsspb.HealthState
-		ServiceDetail *healthpb.ServiceHealthDetail
+		ServiceDetail *healthspb.ServiceHealthDetail
 	}
 
 	HealthChecker interface {
@@ -64,7 +64,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 	if err != nil {
 		return HealthCheckResult{
 			State: enumsspb.HEALTH_STATE_INTERNAL_ERROR,
-			ServiceDetail: &healthpb.ServiceHealthDetail{
+			ServiceDetail: &healthspb.ServiceHealthDetail{
 				Service: string(h.serviceName),
 				State:   enumsspb.HEALTH_STATE_INTERNAL_ERROR,
 				Message: fmt.Sprintf("failed to get membership resolver: %v", err),
@@ -76,7 +76,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 	if len(hosts) == 0 {
 		return HealthCheckResult{
 			State: enumsspb.HEALTH_STATE_NOT_SERVING,
-			ServiceDetail: &healthpb.ServiceHealthDetail{
+			ServiceDetail: &healthspb.ServiceHealthDetail{
 				Service: string(h.serviceName),
 				State:   enumsspb.HEALTH_STATE_NOT_SERVING,
 				Message: "no available hosts in membership",
@@ -95,7 +95,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 				// here mirrors DeepHealthCheckResponse.State since there's only one check.
 				resp = &historyservice.DeepHealthCheckResponse{
 					State: enumsspb.HEALTH_STATE_NOT_SERVING,
-					Checks: []*healthpb.HealthCheck{
+					Checks: []*healthspb.HealthCheck{
 						{
 							CheckType: health.CheckTypeHostAvailability,
 							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
@@ -108,7 +108,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 				// Synthetic check: the host returned a nil response without error.
 				resp = &historyservice.DeepHealthCheckResponse{
 					State: enumsspb.HEALTH_STATE_NOT_SERVING,
-					Checks: []*healthpb.HealthCheck{
+					Checks: []*healthspb.HealthCheck{
 						{
 							CheckType: health.CheckTypeHostAvailability,
 							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
@@ -123,12 +123,12 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 
 	var failedHostCount float64
 	var hostDeclinedServingCount float64
-	var hostDetails []*healthpb.HostHealthDetail
+	var hostDetails []*healthspb.HostHealthDetail
 	for range hosts {
 		result := <-receiveCh
 		state := result.response.GetState()
 
-		hostDetails = append(hostDetails, &healthpb.HostHealthDetail{
+		hostDetails = append(hostDetails, &healthspb.HostHealthDetail{
 			Address: result.address,
 			State:   state,
 			Checks:  result.response.GetChecks(),
@@ -141,6 +141,8 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 			hostDeclinedServingCount++
 		case enumsspb.HEALTH_STATE_SERVING:
 			// Do nothing.
+		default:
+			failedHostCount++
 		}
 	}
 	close(receiveCh)
@@ -165,7 +167,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 
 	return HealthCheckResult{
 		State: overallState,
-		ServiceDetail: &healthpb.ServiceHealthDetail{
+		ServiceDetail: &healthspb.ServiceHealthDetail{
 			Service: string(h.serviceName),
 			State:   overallState,
 			Hosts:   hostDetails,
