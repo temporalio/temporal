@@ -264,6 +264,10 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 					dynamicconfig.MaxCallbacksPerWorkflow,
 					tc.MaxCallbacksPerWorkflow,
 				)
+				s.OverrideDynamicConfig(
+					dynamicconfig.MaxCHASMCallbacksPerWorkflow,
+					tc.MaxCallbacksPerWorkflow,
+				)
 			}
 
 			tv := testvars.New(s.T())

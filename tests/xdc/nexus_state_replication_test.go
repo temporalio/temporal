@@ -72,6 +72,11 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 			"Pattern": "*", "AllowInsecure": true,
 		}},
 	}
+	if !s.enableTransitionHistory {
+		// CHASM state replicates via transition history. When TH is disabled,
+		// fall back to HSM callbacks which use task-based replication.
+		s.dynamicConfigOverrides[dynamicconfig.EnableCHASMCallbacks.Key()] = false
+	}
 	s.setupSuite()
 }
 
