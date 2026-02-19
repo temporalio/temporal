@@ -212,13 +212,14 @@ func (h *Handler) DeepHealthCheck(
 	overallState := enumsspb.HEALTH_STATE_SERVING
 
 	// Check 1: gRPC health (graceful shutdown / hysteresis)
-	status, err := h.healthServer.Check(ctx, &grpchealthpb.HealthCheckRequest{Service: serviceName})
-	if err != nil {
-		return nil, err
-	}
 	grpcState := enumsspb.HEALTH_STATE_SERVING
 	grpcMsg := ""
-	if status.Status != grpchealthpb.HealthCheckResponse_SERVING {
+	status, err := h.healthServer.Check(ctx, &grpchealthpb.HealthCheckRequest{Service: serviceName})
+	if err != nil {
+		grpcState = enumsspb.HEALTH_STATE_NOT_SERVING
+		grpcMsg = fmt.Sprintf("gRPC health check failed: %v", err)
+		overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+	} else if status.Status != grpchealthpb.HealthCheckResponse_SERVING {
 		grpcState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
 		grpcMsg = "gRPC health server not serving"
