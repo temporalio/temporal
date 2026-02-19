@@ -66,17 +66,6 @@ func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:       "workflow not running",
-			clientName: headers.ClientNameGoSDK,
-			historySuffix: []*historypb.HistoryEvent{
-				{
-					EventId:   10,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-				},
-			},
-			expected: false,
-		},
-		{
 			name:       "invalid events - first event not scheduled",
 			clientName: headers.ClientNameGoSDK,
 			historySuffix: []*historypb.HistoryEvent{
@@ -320,7 +309,7 @@ func TestAreValidTransientOrSpecTasks(t *testing.T) {
 				HistorySuffix: tt.historySuffix,
 			}
 
-			result := AreValidTransientOrSpecEvents(tranOrSpecEvents)
+			result := areValidTransientOrSpecEvents(tranOrSpecEvents)
 			r.Equal(tt.expected, result)
 		})
 	}

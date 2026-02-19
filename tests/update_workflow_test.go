@@ -567,7 +567,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 2:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted`, task.History)
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, task.History)
 				// Message handled rejects update.
 				return nil, nil
 			case 3:
@@ -689,7 +691,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 2:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
-  5 ActivityTaskScheduled`, task.History)
+  5 ActivityTaskScheduled
+  6 WorkflowTaskScheduled
+  7 WorkflowTaskStarted`, task.History)
 				// Message handled rejects update.
 				return nil, nil
 			case 3:
@@ -4431,7 +4435,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted`, task.History)
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, task.History)
 				commands := append(s.UpdateAcceptCompleteCommands(tv2),
 					&commandpb.Command{
 						CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,

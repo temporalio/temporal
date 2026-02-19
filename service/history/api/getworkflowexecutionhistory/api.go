@@ -89,12 +89,10 @@ func appendTransientTasks(
 		}
 		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
 
-		// Double-check workflow is still running (it might have completed during the call)
 		if msResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return
 		}
 
-		// Validate event IDs before using
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTask); err != nil {
 			return
 		}
