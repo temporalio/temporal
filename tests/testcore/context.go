@@ -22,7 +22,7 @@ import (
 // If a parent context is provided, the returned context will be canceled when
 // either the timeout expires OR the parent is canceled.
 func NewContext(parent ...context.Context) context.Context {
-	if len(parent) > 0 && parent[0] != nil && parent[0] != context.Background() {
+	if len(parent) > 0 && parent[0] != nil {
 		// Create RPC context derived from parent
 		ctx, _ := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(
 			parent[0],

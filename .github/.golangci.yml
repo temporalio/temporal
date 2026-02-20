@@ -193,7 +193,7 @@ linters:
         text: "FunctionalTestBase"
         linters:
           - forbidigo
-      - path-except: tests/.+\.go # only enforce in test files
+      - path-except: tests/.+_test\.go # only enforce in test files
         text: "context.Background"
         linters:
           - forbidigo

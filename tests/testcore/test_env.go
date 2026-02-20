@@ -101,6 +101,7 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 
 // WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
 // than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
+// The TEMPORAL_TEST_TIMEOUT environment variable can also set the default timeout in seconds.
 func WithTimeout(duration time.Duration) TestOption {
 	return func(o *testOptions) {
 		o.timeout = duration
