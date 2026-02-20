@@ -144,20 +144,21 @@ Update Registry intact. But it proved to be too error-prone.
 >
 > There are many more issues that were discovered (and probably more that were not).
 
-Instead, the Workflow Update feature relies on SDK retries. So if an Update is removed from
+Instead, the Workflow Update feature relies on internal retries by the history gRPC handler,
+history gRPC client (on the frontend side), and frontend gRPC handler. So if an Update is removed from
 the Registry due to non-related error, a retryable `AbortedByServerErr` error is returned to
-the `UpdateWorkflowExecution` API caller and subsequent SDK retries recreate the Update
+the `UpdateWorkflowExecution` API caller and subsequent internal retries recreate the Update
 in the Registry (see "Aborting an Update" below).
 
 Also, it is important to note that the Workflow context itself is stored in the Workflow cache
 and might be evicted any time. Therefore, the Workflow Update feature relies on a properly
 configured cache size. If the cache is too small, it will evict Workflow contexts too soon and their
 Update Registry will be cleared. Note that in that case, all in-flight Updates are aborted with a
-retryable error; and the SDK will retry the `UpdateWorkflowExecution` call.
+retryable error; and the frontend will retry the `UpdateWorkflowExecution` call.
 
 ### Aborting an Update
 An Update is aborted when:
-1. The Update Registry is cleared. Then, a retryable `AbortedByServerErr` error (retried by SDKs) is returned
+1. The Update Registry is cleared. Then, a retryable `AbortedByServerErr` error is returned
    (see "Update Registry Lifecycle" above).
 2. The Workflow completes itself (e.g., with `COMPLETE_WORKFLOW_EXECUTION` command) or completed externally
    (e.g., terminated or timed out). Then, a non-retryable `AbortedByWorkflowClosingErr` error or failure is returned
@@ -194,13 +195,13 @@ knows that Update has been accepted, it expects any following requests to return
 
 When a Workflow completion command creates a new run, accepted Updates are failed in the same way:
 with the `acceptedUpdateCompletedWorkflowFailure` failure on the `completed` future. Admitted Updates,
-though, are aborted with the retryable `ErrWorkflowClosing` error. The SDK retries this error
-and the next attempt lands on the new run. Because Updates received while the Workflow Task
+though, are aborted with the retryable `ErrWorkflowClosing` error. The server internally retries this error
+and the next attempt should land on the new run. Because Updates received while the Workflow Task
 was running haven't been seen by the Workflow yet, they can be safely retried on the new run.
-This provides a better experience for API callers since they will not notice that the Workflow
+It also provides a better experience for API callers since they will not notice that the Workflow
 started a new run.
 
-`AbortedByServerErr` error is retried by SDKs providing a better experience
+`AbortedByServerErr` error is retried internally by the server providing a better experience
 to the API caller: they will not notice that the Update was lost. Internally this case is communicated
 via `registryClearedErr` error which is set on Update futures every time the Registry is cleared.
 But if Update was already accepted, it is converted to `ACCEPTED` stage (with `nil` error) which is
