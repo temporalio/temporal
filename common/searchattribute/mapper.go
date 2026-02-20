@@ -36,10 +36,9 @@ type (
 	}
 
 	mapperProviderImpl struct {
-		customMapper              Mapper
-		namespaceRegistry         namespace.Registry
-		searchAttributesProvider  Provider
-		enableMapperFromNamespace bool
+		customMapper             Mapper
+		namespaceRegistry        namespace.Registry
+		searchAttributesProvider Provider
 	}
 )
 
@@ -86,22 +85,17 @@ func NewMapperProvider(
 	customMapper Mapper,
 	namespaceRegistry namespace.Registry,
 	searchAttributesProvider Provider,
-	enableMapperFromNamespace bool,
 ) MapperProvider {
 	return &mapperProviderImpl{
-		customMapper:              customMapper,
-		namespaceRegistry:         namespaceRegistry,
-		searchAttributesProvider:  searchAttributesProvider,
-		enableMapperFromNamespace: enableMapperFromNamespace,
+		customMapper:             customMapper,
+		namespaceRegistry:        namespaceRegistry,
+		searchAttributesProvider: searchAttributesProvider,
 	}
 }
 
 func (m *mapperProviderImpl) GetMapper(nsName namespace.Name) (Mapper, error) {
 	if m.customMapper != nil {
 		return m.customMapper, nil
-	}
-	if !m.enableMapperFromNamespace {
-		return &noopMapper{}, nil
 	}
 	saMapper, err := m.namespaceRegistry.GetCustomSearchAttributesMapper(nsName)
 	if err != nil {
