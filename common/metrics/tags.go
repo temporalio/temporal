@@ -264,6 +264,13 @@ func TaskTypeTag(value string) Tag {
 	return Tag{Key: TaskTypeTagName, Value: value}
 }
 
+func ArchetypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ArchetypeTagName, Value: value}
+}
+
 func PartitionTag(partition string) Tag {
 	return Tag{Key: PartitionTagName, Value: partition}
 }

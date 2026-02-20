@@ -89,6 +89,7 @@ var defaultExecutableMetricsTags = []metrics.Tag{
 	metrics.NamespaceUnknownTag(),
 	metrics.TaskTypeTag("__unknown__"),
 	metrics.OperationTag("__unknown__"),
+	metrics.ArchetypeTag("__unknown__"),
 }
 
 const (
@@ -845,12 +846,23 @@ func estimateTaskMetricTags(
 	}
 
 	taskType := taskTypeTagProvider(task, isActive, chasmRegistry)
+	archetypeTag := getArchetypeTag(task, chasmRegistry)
 	return []metrics.Tag{
 		namespaceTag,
 		metrics.TaskTypeTag(taskType),
 		metrics.OperationTag(taskType), // for backward compatibility
+		archetypeTag,
 		// TODO: add task priority tag here as well
 	}
+}
+
+func getArchetypeTag(task tasks.Task, chasmRegistry *chasm.Registry) metrics.Tag {
+	if t, ok := task.(tasks.HasArchetypeID); ok {
+		if name, ok := chasmRegistry.ArchetypeDisplayName(t.GetArchetypeID()); ok {
+			return metrics.ArchetypeTag(name)
+		}
+	}
+	return metrics.ArchetypeTag(chasm.WorkflowComponentName)
 }
 
 // CircuitBreakerExecutable wraps Executable with a circuit breaker.

@@ -1041,6 +1041,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	}
 
 	// Execute all fired pure tasks for a component while holding the workflow lock.
+	archetypeTag := getArchetypeTagForChasmTask(task.GetArchetypeID(), t.shardContext.ChasmRegistry())
 	processedTimers := 0
 	err = t.executeChasmPureTimers(
 		ms,
@@ -1049,9 +1050,11 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
 			// succeed.
 			executed, err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance)
-			if err == nil {
-				processedTimers += 1
-
+			metrics.ChasmPureTaskRequests.With(t.metricsHandler).Record(1, archetypeTag)
+			if err != nil {
+				metrics.ChasmPureTaskErrors.With(t.metricsHandler).Record(1, archetypeTag)
+			} else {
+				processedTimers++
 			}
 
 			return executed, err
