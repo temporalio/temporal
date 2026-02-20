@@ -85,6 +85,8 @@ func (s *ChasmVisibilityManagerSuite) SetupTest() {
 		),
 	}).AnyTimes()
 	library.EXPECT().Tasks().Return(nil).AnyTimes()
+	library.EXPECT().NexusServices().Return(nil).AnyTimes()
+	library.EXPECT().NexusServiceProcessors().Return(nil).AnyTimes()
 
 	s.registry = chasm.NewRegistry(log.NewNoopLogger())
 	err := s.registry.Register(library)
@@ -421,6 +423,8 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 		),
 	}).AnyTimes()
 	library.EXPECT().Tasks().Return(nil).AnyTimes()
+	library.EXPECT().NexusServices().Return(nil).AnyTimes()
+	library.EXPECT().NexusServiceProcessors().Return(nil).AnyTimes()
 
 	registry := chasm.NewRegistry(log.NewNoopLogger())
 	err := registry.Register(library)

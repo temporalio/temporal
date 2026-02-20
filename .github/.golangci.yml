@@ -34,7 +34,7 @@ linters:
       forbid:
         - pattern: time.Sleep
           msg: "Please use require.Eventually or assert.Eventually instead unless you've no other option"
-        - pattern: panic
+        - pattern: "^panic$"
           msg: "Please avoid using panic in application code"
         - pattern: time\.Now
           msg: "Using time.Now is not allowed in chasm/lib package (non-test files), use ctx.Now(component) instead"

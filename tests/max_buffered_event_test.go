@@ -98,7 +98,7 @@ func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
 	<-waitStartChan
 
 	// now send 100 signals, all of them will be buffered
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", i)
 		s.NoError(err)
 	}
@@ -200,7 +200,7 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 	// Send signals until mutable state size limit is exceeded
 	// With 410KB limit and 100KB payloads, the first 3 signals succeed but the 4th exceeds the limit
 	// First three signals should succeed
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 		s.NoError(err, "Signal %d should succeed", i+1)
 	}

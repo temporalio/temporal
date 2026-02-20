@@ -12,6 +12,7 @@ package chasm
 import (
 	reflect "reflect"
 
+	nexus "github.com/nexus-rpc/sdk-go/nexus"
 	gomock "go.uber.org/mock/gomock"
 	grpc "google.golang.org/grpc"
 )
@@ -66,6 +67,34 @@ func (m *MockLibrary) Name() string {
 func (mr *MockLibraryMockRecorder) Name() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Name", reflect.TypeOf((*MockLibrary)(nil).Name))
+}
+
+// NexusServiceProcessors mocks base method.
+func (m *MockLibrary) NexusServiceProcessors() []*NexusServiceProcessor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NexusServiceProcessors")
+	ret0, _ := ret[0].([]*NexusServiceProcessor)
+	return ret0
+}
+
+// NexusServiceProcessors indicates an expected call of NexusServiceProcessors.
+func (mr *MockLibraryMockRecorder) NexusServiceProcessors() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NexusServiceProcessors", reflect.TypeOf((*MockLibrary)(nil).NexusServiceProcessors))
+}
+
+// NexusServices mocks base method.
+func (m *MockLibrary) NexusServices() []*nexus.Service {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NexusServices")
+	ret0, _ := ret[0].([]*nexus.Service)
+	return ret0
+}
+
+// NexusServices indicates an expected call of NexusServices.
+func (mr *MockLibraryMockRecorder) NexusServices() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NexusServices", reflect.TypeOf((*MockLibrary)(nil).NexusServices))
 }
 
 // RegisterServices mocks base method.

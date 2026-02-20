@@ -183,7 +183,7 @@ func replicationStreamLowPrioritySchedulerProvider(
 		}
 		return NewSequentialTaskQueueWithID(workflowKey.NamespaceID + "_" + workflowKey.WorkflowID)
 	}
-	taskQueueHashFunc := func(item interface{}) uint32 {
+	taskQueueHashFunc := func(item any) uint32 {
 		workflowKey, ok := item.(definition.WorkflowKey)
 		if !ok {
 			return 0

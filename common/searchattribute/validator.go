@@ -122,7 +122,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 		}
 		saValue, err := DecodeValue(saPayload, saType, v.allowList(namespace))
 		if err != nil {
-			var invalidValue interface{}
+			var invalidValue any
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}

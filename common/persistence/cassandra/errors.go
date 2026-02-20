@@ -38,15 +38,15 @@ type (
 // Resulting value will be converted to a pointer of underlying type (i.e. *int) and stored in the map.
 // We do it only for "type" field which is checked for `nil` value.
 // All other fields are created automatically by gocql with non-pointer types (i.e. int).
-func newConflictRecord() map[string]interface{} {
+func newConflictRecord() map[string]any {
 	t := new(int)
-	return map[string]interface{}{
+	return map[string]any{
 		"type": &t,
 	}
 }
 
 func convertErrors(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	conflictIter gocql.Iter,
 	currentRecordRunID string,
 	requestShardID int32,
@@ -55,7 +55,7 @@ func convertErrors(
 	requestExecutionCASConditions []executionCASCondition,
 ) error {
 
-	conflictRecords := []map[string]interface{}{conflictRecord}
+	conflictRecords := []map[string]any{conflictRecord}
 	errors := extractErrors(
 		conflictRecord,
 		currentRecordRunID,
@@ -104,7 +104,7 @@ func convertErrors(
 }
 
 func extractErrors(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	currentRecordRunID string,
 	requestShardID int32,
 	requestRangeID int64,
@@ -161,7 +161,7 @@ func sortErrors(
 }
 
 func extractShardOwnershipLostError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	requestShardID int32,
 	requestRangeID int64,
 ) error {
@@ -188,7 +188,7 @@ func extractShardOwnershipLostError(
 }
 
 func extractCurrentWorkflowConflictError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	currentRecordRunID string,
 	requestCurrentRunID string,
 ) error {
@@ -235,7 +235,7 @@ func extractCurrentWorkflowConflictError(
 }
 
 func extractWorkflowConflictError(
-	conflictRecord map[string]interface{},
+	conflictRecord map[string]any,
 	requestRunID string,
 	requestDBVersion int64,
 	requestNextEventID int64, // TODO deprecate this variable once DB version comparison is the default
@@ -284,7 +284,7 @@ func extractWorkflowConflictError(
 }
 
 func printRecords(
-	records []map[string]interface{},
+	records []map[string]any,
 ) string {
 	binary, _ := json.MarshalIndent(records, "", "  ")
 	return string(binary)

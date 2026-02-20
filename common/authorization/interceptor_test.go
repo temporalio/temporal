@@ -85,7 +85,7 @@ func (s *authorizerInterceptorSuite) SetupTest() {
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
 	)
-	s.handler = func(ctx context.Context, req interface{}) (interface{}, error) { return true, nil }
+	s.handler = func(ctx context.Context, req any) (any, error) { return true, nil }
 }
 
 func (s *authorizerInterceptorSuite) TearDownTest() {

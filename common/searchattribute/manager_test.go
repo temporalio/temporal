@@ -104,7 +104,7 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache() {
 
 	wg := sync.WaitGroup{}
 	wg.Add(10)
-	for goroutine := 0; goroutine < 10; goroutine++ {
+	for goroutine := range 10 {
 		go func(goroutine int) {
 			defer wg.Done()
 			for i := 1; i < 1500; i++ {

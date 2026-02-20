@@ -29,7 +29,7 @@ inputs:
   alpine-tag:
     description: "Alpine base image tag"
     required: false
-    default: "3.23"
+    default: "3.23.3"
   dockerhub-username:
     description: "Docker Hub username"
     required: false

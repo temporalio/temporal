@@ -932,7 +932,7 @@ func (s *WorkflowTestSuite) TestTerminateWorkflow() {
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: tv.WorkflowID(),
 			RunId:      we.RunId,
@@ -961,7 +961,7 @@ GetHistoryLoop:
 
 	newExecutionStarted := false
 StartNewExecutionLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		request := &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.NewString(),
 			Namespace:           s.Namespace().String(),
@@ -1131,7 +1131,7 @@ func (s *WorkflowTestSuite) TestSequentialWorkflow() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 		s.NoError(err)
@@ -1216,6 +1216,9 @@ func (s *WorkflowTestSuite) TestCompleteWorkflowTaskAndCreateNewOne() {
 }
 
 func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+
 	tv := testvars.New(s.T())
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
@@ -1229,7 +1232,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 		Identity:            tv.WorkerIdentity(),
 	}
 
-	we, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	we, err0 := s.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err0)
 
 	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
@@ -1294,7 +1297,14 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	const testTag = "[TestWorkflowTaskAndActivityTaskTimeoutsWorkflow] "
 	testStart := time.Now()
 	var lastDropTime time.Time
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
+		// Check if test context has been cancelled/timed out
+		select {
+		case <-ctx.Done():
+			s.FailNow("Test timeout exceeded", "context deadline exceeded after %v", time.Since(testStart))
+		default:
+		}
+
 		iterStart := time.Now()
 		dropWorkflowTask := (i%2 == 0)
 		s.Logger.Info(testTag+"iteration starting",
@@ -1337,6 +1347,13 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	}
 
 	s.Logger.Info(testTag+"waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
+
+	// Check if test context has been cancelled/timed out before final poll
+	select {
+	case <-ctx.Done():
+		s.FailNow("Test timeout exceeded", "context deadline exceeded after %v", time.Since(testStart))
+	default:
+	}
 
 	s.False(workflowComplete)
 	_, err := poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory)
@@ -1451,7 +1468,7 @@ func (s *WorkflowTestSuite) TestWorkflowRetry() {
 	}
 
 	// Check run id links
-	for i := 0; i < maximumAttempts; i++ {
+	for i := range maximumAttempts {
 		events := s.GetHistory(s.Namespace().String(), executions[i])
 		if i == 0 {
 			s.EqualHistoryEvents(fmt.Sprintf(`

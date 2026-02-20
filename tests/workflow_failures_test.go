@@ -64,7 +64,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -91,7 +91,7 @@ GetHistoryLoop:
 
 	closedCount := 0
 ListClosedLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -378,5 +378,6 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, historyEvents)
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, historyEvents)
 }
