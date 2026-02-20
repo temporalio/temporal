@@ -15,10 +15,10 @@ import (
 
 const backfillListNamespacesPageSize = 1000
 
-// InitializeSearchAttributeMappings backfills namespace custom search attribute
+// initializeSearchAttributeMappings backfills namespace custom search attribute
 // aliases from cluster metadata with identity mappings. Runs on frontend startup
 // when Elasticsearch visibility is configured.
-func InitializeSearchAttributeMappings(
+func initializeSearchAttributeMappings(
 	ctx context.Context,
 	metadataManager persistence.MetadataManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,

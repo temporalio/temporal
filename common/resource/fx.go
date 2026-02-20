@@ -160,7 +160,6 @@ func SearchAttributeMapperProviderProvider(
 		saMapper,
 		namespaceRegistry,
 		searchAttributeProvider,
-		true,
 	)
 }
 
