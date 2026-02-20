@@ -89,7 +89,7 @@ func (s *UserTimersTestSuite) TestUserTimers_Sequential() {
 		T:                   s.T(),
 	}
 
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		_, err := poller.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask: completed")
 		s.NoError(err)

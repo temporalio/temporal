@@ -32,7 +32,7 @@ import (
 type (
 	ForceReplicationWorkflowTestSuite struct {
 		suite.Suite
-		forceReplicationWorkflowFn interface{}
+		forceReplicationWorkflowFn any
 	}
 )
 
@@ -40,7 +40,7 @@ func TestForceReplicationWorkflowTestSuite(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name                       string
-		forceReplicationWorkflowFn interface{}
+		forceReplicationWorkflowFn any
 	}{
 		{
 			name:                       "ForceReplicationWorkflow",
@@ -718,7 +718,7 @@ func (i *heartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutbou
 	return i.ActivityInboundInterceptorBase.Init(i)
 }
 
-func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...interface{}) {
+func (i *heartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...any) {
 	if d, ok := details[0].(seedReplicationQueueWithUserDataEntriesHeartbeatDetails); ok {
 		i.seedRecordedHeartbeats = append(i.seedRecordedHeartbeats, d)
 	} else if d, ok := details[0].(replicationTasksHeartbeatDetails); ok {

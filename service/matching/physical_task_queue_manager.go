@@ -323,7 +323,7 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	// The call is placed here instead of backlogMgr.Stop() since there could be a race condition where a task is
 	// added to the backlog after we have emitted the zero values inside of the backlogMgr.Stop() call. This happens
 	// since task reader's and writer's contexts are cancelled after the backlogMgr.Stop() call.
-	c.backlogMgr.getDB().emitZeroBacklogGauges()
+	c.backlogMgr.getDB().emitZeroPhysicalBacklogGauges()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
@@ -434,6 +434,13 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 	drainMgr.FinalGC()
 	drainMgr.Stop()
 	c.logger.Info("Drain completed, unloaded draining backlog manager")
+}
+
+func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
+	if c.priMatcher == nil {
+		return
+	}
+	c.priMatcher.ReprocessRedirectedTasksAfterStop()
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
@@ -550,12 +557,12 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) error {
 	if c.priMatcher == nil {
 		softassert.Fail(c.logger, "AddSpooledTaskToMatcher called on old matcher")
-		return
+		return errInternalMatchError
 	}
-	c.priMatcher.AddTask(task)
+	return c.priMatcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
@@ -605,6 +612,12 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
+}
+
+func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
+	if c.pollerHistory != nil {
+		c.pollerHistory.removePoller(id)
+	}
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes

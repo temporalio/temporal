@@ -38,10 +38,12 @@ type (
 		subqueuesByPriority map[priorityKey]subqueueIndex
 		priorityBySubqueue  map[subqueueIndex]priorityKey
 
-		logger           log.Logger
-		throttledLogger  log.ThrottledLogger
-		matchingClient   matchingservice.MatchingServiceClient
-		metricsHandler   metrics.Handler
+		logger          log.Logger
+		throttledLogger log.ThrottledLogger
+		matchingClient  matchingservice.MatchingServiceClient
+		metricsHandler  metrics.Handler
+		counterFactory  func() counter.Counter
+
 		initializedError *future.FutureImpl[struct{}]
 		// skipFinalUpdate controls behavior on Stop: if it's false, we try to write one final
 		// update before unloading
@@ -77,11 +79,12 @@ func newFairBacklogManager(
 		priorityBySubqueue:  make(map[subqueueIndex]priorityKey),
 		matchingClient:      matchingClient,
 		metricsHandler:      metricsHandler,
+		counterFactory:      counterFactory,
 		logger:              logger,
 		throttledLogger:     throttledLogger,
 		initializedError:    future.NewFuture[struct{}](),
 	}
-	bmg.taskWriter = newFairTaskWriter(bmg, counterFactory)
+	bmg.taskWriter = newFairTaskWriter(bmg, bmg.newCounterForSubqueue)
 	return bmg
 }
 
@@ -390,6 +393,15 @@ func (c *fairBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 
 func (c *fairBacklogManagerImpl) getDB() *taskQueueDB {
 	return c.db
+}
+
+func (c *fairBacklogManagerImpl) newCounterForSubqueue(subqueue subqueueIndex) counter.Counter {
+	cntr := c.counterFactory()
+	// restore persisted keys
+	for _, entry := range c.db.getTopKFairnessKeys(subqueue) {
+		_ = cntr.GetPass(entry.Key, entry.Count, 0)
+	}
+	return cntr
 }
 
 // hasFinishedDraining returns true if this is a draining backlog manager and all tasks have

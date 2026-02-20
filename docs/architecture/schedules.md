@@ -184,6 +184,7 @@ flowchart TD
 
 #### Notes
 * `TriggerImmediately` requests, those which execute only a single action, are *always* immediately buffered into the Invoker's queue (regardless of queue utilization).
+* There is a hard limit on the total number of concurrent Backfiller components per Scheduler (currently 100). Patch requests that would exceed this limit are rejected.
 * At the time of writing, the `Backfiller` doesn't make use of completion callbacks as a signal; for example, if after rescheduling `BackfillerTask`, Invoker managed to drain its queue ahead of the exponential backoff window, Backfiller would sit idle until the timer expires, despite being theoretically able to proceed immediately.
 
 ### Invoker (Execution)

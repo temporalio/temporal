@@ -408,7 +408,8 @@ func (v *CommandAttrValidator) ValidateContinueAsNewWorkflowExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, executionInfo.TaskQueue, executionInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("error validating ContinueAsNewWorkflowExecutionCommand TaskQueue: %w. WorkflowType=%s TaskQueue=%s", err, wfType, attributes.TaskQueue)
 	}
 
@@ -532,7 +533,8 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
 	}
-	if err := tqid.NormalizeAndValidate(attributes.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
+	if err := tqid.NormalizeAndValidateUserDefined(
+		attributes.TaskQueue, parentInfo.TaskQueue, parentInfo.TaskQueue, v.maxIDLengthLimit); err != nil {
 		return failedCause, fmt.Errorf("invalid TaskQueue on StartChildWorkflowExecutionCommand: %w. WorkflowId=%s WorkflowType=%s Namespace=%s TaskQueue=%s", err, wfID, wfType, ns, attributes.TaskQueue)
 	}
 

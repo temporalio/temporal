@@ -549,7 +549,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 
 	addExecutableToSlice := func(readerID int64, slice Slice, namespaceID string, count int) {
 		sliceRange := slice.Scope().Range
-		for i := 0; i < count; i++ {
+		for range count {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()

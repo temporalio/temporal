@@ -29,7 +29,7 @@ type CallTarget struct {
 	// The nexus endpoint name being targeted (if any).
 	NexusEndpointName string
 	// Request contains a deserialized copy of the API request object
-	Request interface{}
+	Request any
 }
 
 // @@@SNIPEND

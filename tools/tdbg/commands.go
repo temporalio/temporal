@@ -52,6 +52,7 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	startEventVerion := int64(c.Int(FlagMinEventVersion))
 	endEventVersion := int64(c.Int(FlagMaxEventVersion))
 	outputFileName := c.String(FlagOutputFilename)
+	decode := c.Bool(FlagDecode)
 
 	client := clientFactory.AdminClient(c)
 	serializer := serialization.NewSerializer()
@@ -116,11 +117,20 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 			errs = append(errs, err)
 			continue
 		}
+		if decode {
+			data = decodePayloadsInJSON(data)
+		}
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, string(data))
 	}
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer, "======== total batches %v, total blob len: %v ======\n", len(histories), totalSize)
+
+	// Show info to user about the option to decode payloads.
+	if !decode {
+		// nolint:errcheck // assuming that write will succeed.
+		fmt.Fprintf(c.App.ErrWriter, "(use --%s to decode payloads to JSON)\n", FlagDecode)
+	}
 
 	err = errors.Join(errs...)
 	if err != nil {
@@ -132,6 +142,9 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 		data, err := encoder.EncodeHistories(historyBatches)
 		if err != nil {
 			return fmt.Errorf("unable to serialize History data: %s", err)
+		}
+		if decode {
+			data = decodePayloadsInJSON(data)
 		}
 		if err := os.WriteFile(outputFileName, data, 0666); err != nil {
 			return fmt.Errorf("unable to write History data file: %s", err)
@@ -473,7 +486,7 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry t
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+	paginationFunc := func(paginationToken []byte) ([]any, []byte, error) {
 		req.NextPageToken = paginationToken
 		response, err := client.ListHistoryTasks(ctx, req)
 		if err != nil {
@@ -481,7 +494,7 @@ func AdminListShardTasks(c *cli.Context, clientFactory ClientFactory, registry t
 		}
 		token := response.NextPageToken
 
-		var items []interface{}
+		var items []any
 		for _, task := range response.Tasks {
 			items = append(items, task)
 		}

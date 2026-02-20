@@ -14,9 +14,10 @@ type (
 		componentType string
 		goType        reflect.Type
 
-		// Those two fields are initialized when the component is registered to a library.
+		// Following three fields are initialized when the component is registered to a library.
 		library     namer
 		componentID uint32
+		fqn         string
 
 		ephemeral     bool
 		singleCluster bool
@@ -161,10 +162,9 @@ func (rc *RegistrableComponent) registerToLibrary(
 	}
 
 	rc.library = library
-
-	fqn := rc.fqType()
-	rc.componentID = GenerateTypeID(fqn)
-	return fqn, rc.componentID, nil
+	rc.fqn = FullyQualifiedName(rc.library.Name(), rc.componentType)
+	rc.componentID = GenerateTypeID(rc.fqn)
+	return rc.fqn, rc.componentID, nil
 }
 
 // SearchAttributesMapper returns the search attributes mapper for this component.
@@ -198,9 +198,9 @@ func (rc *RegistrableComponent) GoType() reflect.Type {
 // the library name and the component type. This is used to uniquely identify
 // the component in the registry.
 func (rc *RegistrableComponent) fqType() string {
-	if rc.library == nil {
+	if rc.fqn == "" {
 		// this should never happen because the component is only accessible from the library.
 		panic("component is not registered to a library")
 	}
-	return FullyQualifiedName(rc.library.Name(), rc.componentType)
+	return rc.fqn
 }

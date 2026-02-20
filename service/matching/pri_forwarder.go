@@ -218,6 +218,7 @@ func ForwardPollWithTarget(
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: source.RpcName(),
 			Conditions:      pollMetadata.conditions,
@@ -241,6 +242,7 @@ func ForwardPollWithTarget(
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: source.RpcName(),
 			Conditions:      pollMetadata.conditions,
@@ -263,6 +265,7 @@ func ForwardPollWithTarget(
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: source.RpcName(),

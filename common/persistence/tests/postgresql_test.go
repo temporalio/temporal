@@ -684,11 +684,13 @@ func (p *PostgreSQLSuite) TestPostgreSQLNexusEndpointPersistence() {
 }
 
 func TestPQ(t *testing.T) {
+	t.Parallel()
 	s := &PostgreSQLSuite{pluginName: "postgres12"}
 	suite.Run(t, s)
 }
 
 func TestPGX(t *testing.T) {
+	t.Parallel()
 	s := &PostgreSQLSuite{pluginName: "postgres12_pgx"}
 	suite.Run(t, s)
 }

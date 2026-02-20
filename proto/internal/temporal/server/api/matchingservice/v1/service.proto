@@ -65,6 +65,14 @@ service MatchingService {
     rpc CancelOutstandingPoll (CancelOutstandingPollRequest) returns (CancelOutstandingPollResponse) {
     }
 
+    // CancelOutstandingWorkerPolls cancels any outstanding polls for a given worker instance key.
+    // These polls could be waiting on different partitions of the task queue.
+    // This is called during worker shutdown to eagerly cancel polls and avoid giving out tasks to workers that are shutting down.
+    // Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
+    // are issued after calling this RPC, otherwise those polls will not be cancelled.
+    rpc CancelOutstandingWorkerPolls (CancelOutstandingWorkerPollsRequest) returns (CancelOutstandingWorkerPollsResponse) {
+    }
+
     // DescribeTaskQueue returns information about the target task queue, right now this API returns the
     // pollers which polled this task queue in last few minutes.
     rpc DescribeTaskQueue (DescribeTaskQueueRequest) returns (DescribeTaskQueueResponse) {

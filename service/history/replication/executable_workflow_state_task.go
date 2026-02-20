@@ -71,7 +71,7 @@ func NewExecutableWorkflowStateTask(
 	}
 }
 
-func (e *ExecutableWorkflowStateTask) QueueID() interface{} {
+func (e *ExecutableWorkflowStateTask) QueueID() any {
 	return e.WorkflowKey
 }
 

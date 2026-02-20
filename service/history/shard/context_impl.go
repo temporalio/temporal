@@ -163,7 +163,7 @@ type (
 	}
 
 	// These are the requests that can be passed to transition to change state:
-	contextRequest interface{}
+	contextRequest any
 
 	contextRequestAcquire    struct{}
 	contextRequestAcquired   struct{ engine historyi.Engine }
@@ -329,7 +329,7 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	defer s.wUnlock()
 
 	result := []int64{}
-	for i := 0; i < number; i++ {
+	for range number {
 		id, err := s.generateTaskIDLocked()
 		if err != nil {
 			return nil, err

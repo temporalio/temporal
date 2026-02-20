@@ -38,6 +38,7 @@ const (
 	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
+	testGetStringPropertyFilteredByNamespaceKey       = "testGetStringPropertyFilteredByNamespaceKey"
 	testGetStringPropertyFilteredByNamespaceIDKey     = "testGetStringPropertyFilteredByNamespaceIDKey"
 	testGetIntPropertyFilteredByDestinationKey        = "testGetIntPropertyFilteredByDestinationKey"
 )
@@ -87,17 +88,17 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
 }
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
-	namespace := "testNamespace"
-	value := dynamicconfig.DefaultEventEncoding.Get(s.cln)
-	// copied default value, change this if it changes
-	s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), value(namespace))
-	s.client.SetValue(dynamicconfig.DefaultEventEncoding.Key().String(), "efg")
-	s.Equal("efg", value(namespace))
+	ns := "testNamespace"
+	setting := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyFilteredByNamespaceKey, "abc", "")
+	value := setting.Get(s.cln)
+	s.Equal("abc", value(ns))
+	s.client.SetValue(testGetStringPropertyFilteredByNamespaceKey, "efg")
+	s.Equal("efg", value(ns))
 }
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
-	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	namespaceID := namespace.ID("testNamespaceID")
+	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	value := setting.Get(s.cln)
 	s.Equal("abc", value(namespaceID))
 	s.client.SetValue(testGetStringPropertyFilteredByNamespaceIDKey, "efg")
@@ -272,7 +273,7 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 }
 
 func (s *collectionSuite) TestGetMapProperty() {
-	def := map[string]interface{}{"testKey": 123}
+	def := map[string]any{"testKey": 123}
 	setting := dynamicconfig.NewGlobalMapSetting(
 		testGetMapPropertyKey,
 		def,

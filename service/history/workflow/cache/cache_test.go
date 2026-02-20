@@ -322,7 +322,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 		release(errors.New("some random error message"))
 	}
 
-	for i := 0; i < coroutineCount; i++ {
+	for range coroutineCount {
 		go testFn()
 	}
 	stopGroup.Wait()

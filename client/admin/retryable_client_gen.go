@@ -491,6 +491,21 @@ func (c *retryableClient) MergeDLQTasks(
 	return resp, err
 }
 
+func (c *retryableClient) MigrateSchedule(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MigrateScheduleResponse, error) {
+	var resp *adminservice.MigrateScheduleResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.MigrateSchedule(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,

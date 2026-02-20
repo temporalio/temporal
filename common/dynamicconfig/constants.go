@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/primitives"
@@ -657,6 +656,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
 	)
+	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
+		"frontend.globalNamespaceWorkerDeploymentReadRPS",
+		50,
+		`FrontendGlobalWorkerDeploymentReadRPS is the global, per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion). The limit is evenly distributed among available frontend service instances.`,
+	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
 		1200,
@@ -896,6 +900,16 @@ and deployment interaction in matching and history.`,
 		"system.useRevisionNumberForWorkerVersioning",
 		false,
 		`UseRevisionNumberForWorkerVersioning enables the use of revision number to resolve consistency problems that may arise during task dispatch time.`,
+	)
+	EnableSuggestCaNOnNewTargetVersion = NewNamespaceBoolSetting(
+		"system.enableSuggestCaNOnNewTargetVersion",
+		false,
+		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
+	)
+	EnableSendTargetVersionChanged = NewNamespaceBoolSetting(
+		"system.enableSendTargetVersionChanged",
+		true,
+		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
@@ -1263,6 +1277,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Second,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
+		"matching.backlogMetricsEmitInterval",
+		time.Minute,
+		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions. Set to zero to disable version-attributed backlog metrics.`,
 	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",
@@ -1791,6 +1810,30 @@ If value less or equal to 0, will fall back to HistoryPersistenceNamespaceMaxQPS
 		time.Hour,
 		`TaskSchedulerInactiveChannelDeletionDelay the time delay before a namespace's' channel is removed from the scheduler`,
 	)
+	TaskSchedulerEnableExecutionQueueScheduler = NewGlobalBoolSetting(
+		"history.taskSchedulerEnableExecutionQueueScheduler",
+		false,
+		`TaskSchedulerEnableExecutionQueueScheduler enables the execution queue scheduler
+that processes tasks for contended workflows sequentially to avoid busy workflow errors`,
+	)
+	TaskSchedulerExecutionQueueSchedulerMaxQueues = NewGlobalIntSetting(
+		"history.taskSchedulerExecutionQueueSchedulerMaxQueues",
+		500,
+		`TaskSchedulerExecutionQueueSchedulerMaxQueues is the maximum number of concurrent per-workflow queues in the execution queue scheduler.
+When this limit is reached, new workflows will fall back to the base FIFO scheduler.`,
+	)
+	TaskSchedulerExecutionQueueSchedulerQueueTTL = NewGlobalDurationSetting(
+		"history.taskSchedulerExecutionQueueSchedulerQueueTTL",
+		5*time.Second,
+		`TaskSchedulerExecutionQueueSchedulerQueueTTL is how long a per-workflow queue goroutine waits idle before exiting.`,
+	)
+
+	TaskSchedulerExecutionQueueSchedulerQueueConcurrency = NewGlobalIntSetting(
+		"history.taskSchedulerExecutionQueueSchedulerQueueConcurrency",
+		2,
+		`TaskSchedulerExecutionQueueSchedulerQueueConcurrency is the max number of worker goroutines per workflow queue.
+Higher values allow limited parallelism per workflow. Values <= 0 are capped to 1.`,
+	)
 
 	TimerTaskBatchSize = NewGlobalIntSetting(
 		"history.timerTaskBatchSize",
@@ -2287,11 +2330,6 @@ When the this config is zero or lower we will only update shard info at most onc
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
 	)
-	DefaultEventEncoding = NewNamespaceStringSetting(
-		"history.defaultEventEncoding",
-		enumspb.ENCODING_TYPE_PROTO3.String(),
-		`DefaultEventEncoding is the encoding type for history events`,
-	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
@@ -2779,6 +2817,27 @@ instead of the previous HSM backed implementation.`,
 		`Maximum number of entries in the version membership cache.`,
 	)
 
+	VersionReactivationSignalCacheTTL = NewGlobalDurationSetting(
+		"history.versionReactivationSignalCacheTTL",
+		10*time.Second,
+		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
+		draining status to DRAINING from DRAINED/INACTIVE states.`,
+	)
+
+	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
+		"history.versionReactivationSignalCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version reactivation signal cache.`,
+	)
+
+	EnableVersionReactivationSignals = NewGlobalBoolSetting(
+		"history.enableVersionReactivationSignals",
+		true,
+		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
+		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
+		globally if load becomes problematic.`,
+	)
+
 	RoutingInfoCacheTTL = NewGlobalDurationSetting(
 		"history.routingInfoCacheTTL",
 		1*time.Second,
@@ -2941,8 +3000,8 @@ because executions scanner support for SQL is not yet implemented.`,
 	HistoryScannerVerifyRetention = NewGlobalBoolSetting(
 		"worker.historyScannerVerifyRetention",
 		true,
-		`HistoryScannerVerifyRetention indicates the history scanner verify data retention.
-If the service configures with archival feature enabled, update worker.historyScannerVerifyRetention to be double of the data retention.`,
+		`HistoryScannerVerifyRetention indicates if the history scavenger should verify data retention.
+When enabled, the scavenger will delete completed workflow execution data that are older than the namespace retention period plus worker.executionDataDurationBuffer.`,
 	)
 	EnableBatcherNamespace = NewNamespaceBoolSetting(
 		"worker.enableNamespaceBatcher",
@@ -3074,6 +3133,14 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkerHeartbeatsEnabled",
 		true,
 		`WorkerHeartbeatsEnabled is a "feature enable" flag. It allows workers to send periodic heartbeats to the server.`,
+	)
+
+	EnableCancelWorkerPollsOnShutdown = NewNamespaceBoolSetting(
+		"frontend.enableCancelWorkerPollsOnShutdown",
+		false,
+		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
+		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
+		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
 	ListWorkersEnabled = NewNamespaceBoolSetting(

@@ -659,6 +659,7 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 		nil,
 		int64(0),
 		nil,
+		true,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -675,6 +676,8 @@ func (s *historyBuilderSuite) TestWorkflowTaskStarted() {
 				SuggestContinueAsNew:        false,
 				SuggestContinueAsNewReasons: nil,
 				HistorySizeBytes:            123678,
+
+				TargetWorkerDeploymentVersionChanged: true,
 			},
 		},
 	}, event)
@@ -2624,7 +2627,7 @@ func (s *historyBuilderSuite) flush() *historypb.HistoryEvent {
 func (s *historyBuilderSuite) taskIDGenerator(number int) ([]int64, error) {
 	nextTaskID := s.nextTaskID
 	result := make([]int64, number)
-	for i := 0; i < number; i++ {
+	for i := range number {
 		result[i] = nextTaskID
 		nextTaskID++
 	}

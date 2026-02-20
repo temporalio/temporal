@@ -20,7 +20,6 @@ communication.
 The frontend exposes the following Nexus HTTP routes over the existing HTTP API (default port is `7243`):
 
 > ⚠️ All of the following routes are considered experimental and may change without notice until the feature stabilizes ⚠️
-
 ### `/namespaces/{namespace}/task-queues/{task_queue}/nexus-services`
 
 Dispatch a nexus task directly to a task queue.
@@ -33,23 +32,21 @@ Dispatch a nexus task directly to a registered endpoint by ID. (more on this lat
 
 Complete a Nexus operation via callback.
 
-# Trying Nexus Out
+# Nexus Environment Configurations
 
-Since Nexus is a new feature with experimental APIs and has not been exercised in production, it is disabled by default
-until it is considered stable.
+Nexus is enabled by default in server version `1.26.0` or newer.
 
-Nexus is only supported in single cluster setups for the time being due to endpoint registry replication not being implemented
-yet.
+> NOTE: Nexus is only supported in single cluster setups due to endpoint registry replication not being implemented.
 
 ## Enabling Nexus
 
 To enable Nexus in your deployment:
 
 > NOTE: Replace `$PUBLIC_URL` with a URL value that is accessible to external callers or internally within the cluster.
-> At the time of writing external Nexus calls are considered experimental so it should be safe to use the address of an
-> internal load balancer for the frontend service.
 
-1. Ensure that the server's static configuration file enables the HTTP API.
+1. Ensure that the server's [static configuration file](https://docs.temporal.io/references/configuration) enables the
+   HTTP API. It is on by default in all of the Temporal provided configurations, including the default configuration
+   for the docker image and in the helm-chart.
 
     ```yaml
     services:
@@ -66,24 +63,35 @@ To enable Nexus in your deployment:
           httpAddress: $PUBLIC_URL:7243
     ```
 
-2. Enable Nexus via dynamic config, set the public callback URL, and set the allowed callback addresses.
+2. Configure Nexus settings in the [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
+
+- 2a. Since version 1.30.0, only turn on using the system callback URL (`temporal://system`), this flag will go away in
+the 1.31.0 release and will be made the default.
 
     ```yaml
-    system.enableNexus:
-      - value: true
+   component.nexusoperations.useSystemCallbackURL:
+    - value: true
+   ```
+
+- 2b. Prior to version 1.30.0, you must set a public callback URL, and allowed callback addresses. These configurations
+  are also required for calling **experimental** external endpoint targets.
+
+    ```yaml
     component.nexusoperations.callback.endpoint.template:
       # The URL must be publicly accessible if the callback is meant to be called by external services.
       # When using Nexus for cross namespace calls, the URL's host is irrelevant as the address is resolved using
       # membership. The URL is a Go template that interpolates the `NamepaceName` and `NamespaceID` variables.
       - value: https://$PUBLIC_URL:7243/namespaces/{{.NamespaceName}}/nexus/callback
     component.callbacks.allowedAddresses:
-      # This list is a security mechanism for limiting which callback URLs are accepted by the server.
-      # Attackers may leverage the callback mechanism to force the server to call arbitrary URLs.
-      # The config below is only recommended for development, tune this to your requirements.
-      - value:
-          - Pattern: "*"
-            AllowInsecure: true
+      # Limits which callback URLs are accepted by the server.
+      # Wildcard patterns (*) and insecure (HTTP) callbacks are intended for development only.
+      # For production, restrict allowed hosts and set AllowInsecure to false
+      # whenever HTTPS/TLS is supported. Allowing HTTP increases MITM and data exposure risk.
+     - value:
+         - Pattern: "*" # Update to restrict allowed callers, e.g. "$PUBLIC_URL:7243/*"
+           AllowInsecure: true # In production, set to false and ensure traffic is HTTPS/TLS encrypted
     ```
+
 
 ## Disabling Nexus
 
@@ -129,8 +137,8 @@ The endpoints table is versioned where every write to the table increments its v
 purposes: to ensure writes are serialized, and to determine whether a node has an up-to-date view of the table when long
 polling.
 
-> ⚠️  At the time of writing, replication for the registry is not implemented and Nexus shouldn't be used in multi cluster
-setups. Replication will be implemented at a later time.⚠️
+> ⚠️  Nexus shouldn't be used in multi cluster setups because replication for the registry is not implemented. 
+> This feature is planned for the future. ⚠️
 
 ## Outbound Task Queue
 

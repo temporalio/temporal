@@ -102,6 +102,7 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeTaskQueueWithReachability": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListDeployments":                   {},
 		"/temporal.api.workflowservice.v1.WorkflowService/GetDeploymentReachability":         {},
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkerDeployments":             {},
 
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":  {},
@@ -201,7 +202,7 @@ func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter,
 	requestTime := time.Now()
 	limitCount := 0
 
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		if !limiter.Allow(requestTime, apiRequest) {
 			limitCount++
 			s.True(limiter.Allow(requestTime, operatorRequest))

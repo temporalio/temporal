@@ -90,7 +90,7 @@ func NewExecutableHistoryTask(
 	}
 }
 
-func (e *ExecutableHistoryTask) QueueID() interface{} {
+func (e *ExecutableHistoryTask) QueueID() any {
 	return e.WorkflowKey
 }
 

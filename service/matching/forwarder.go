@@ -248,6 +248,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 			Conditions:      pollMetadata.conditions,
@@ -271,6 +272,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 			Conditions:      pollMetadata.conditions,
@@ -293,6 +295,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
@@ -343,7 +346,7 @@ func (fwdr *Forwarder) handleErr(err error) error {
 
 func newForwarderReqToken(maxOutstanding int) *ForwarderReqToken {
 	reqToken := &ForwarderReqToken{ch: make(chan *ForwarderReqToken, maxOutstanding)}
-	for i := 0; i < maxOutstanding; i++ {
+	for range maxOutstanding {
 		reqToken.ch <- reqToken
 	}
 	return reqToken

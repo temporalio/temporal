@@ -92,14 +92,14 @@ func (mr *MockEngineMockRecorder) ReadComponent(arg0, arg1, arg2 any, arg3 ...an
 }
 
 // StartExecution mocks base method.
-func (m *MockEngine) StartExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (EngineStartExecutionResult, error) {
+func (m *MockEngine) StartExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (StartExecutionResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "StartExecution", varargs...)
-	ret0, _ := ret[0].(EngineStartExecutionResult)
+	ret0, _ := ret[0].(StartExecutionResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -132,17 +132,16 @@ func (mr *MockEngineMockRecorder) UpdateComponent(arg0, arg1, arg2 any, arg3 ...
 }
 
 // UpdateWithStartExecution mocks base method.
-func (m *MockEngine) UpdateWithStartExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (ExecutionKey, []byte, error) {
+func (m *MockEngine) UpdateWithStartExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (EngineUpdateWithStartExecutionResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "UpdateWithStartExecution", varargs...)
-	ret0, _ := ret[0].(ExecutionKey)
-	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret0, _ := ret[0].(EngineUpdateWithStartExecutionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // UpdateWithStartExecution indicates an expected call of UpdateWithStartExecution.
