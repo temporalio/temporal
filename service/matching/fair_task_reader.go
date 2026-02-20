@@ -680,5 +680,8 @@ func (tr *fairTaskReader) finalGC() {
 	tr.lock.Lock()
 	ackLevel := tr.ackLevel
 	tr.lock.Unlock()
+	if ackLevel.pass == 0 {
+		return
+	}
 	_, _ = tr.doGCAt(ackLevel)
 }
