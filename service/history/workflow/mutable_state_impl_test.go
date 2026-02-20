@@ -2230,6 +2230,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		int64(0),
 		nil,
 		false,
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2289,6 +2290,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		int64(0),
 		nil,
 		false,
+		nil,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2301,6 +2303,71 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 	s.NoError(err)
 
 	return newWorkflowTaskScheduleEvent, newWorkflowTaskStartedEvent
+}
+
+func (s *mutableStateSuite) TestApplyWorkflowTaskStartedEvent_SetsTargetVersionOnStart() {
+	version := int64(12)
+	workflowID := tests.WorkflowID
+	runID := tests.RunID
+	s.mutableState = TestGlobalMutableState(s.mockShard, s.mockEventsCache, s.logger, version, workflowID, runID)
+
+	now := time.Now().UTC()
+	taskqueue := "some-taskqueue"
+	workflowTaskTimeout := 11 * time.Second
+
+	// Bootstrap: workflow start + WFT scheduled.
+	workflowStartEvent := &historypb.HistoryEvent{
+		Version:   version,
+		EventId:   1,
+		EventTime: timestamppb.New(now),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+			WorkflowType:        &commonpb.WorkflowType{Name: "test-workflow-type"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskqueue},
+			WorkflowTaskTimeout: durationpb.New(workflowTaskTimeout),
+		}},
+	}
+	s.mockEventsCache.EXPECT().PutEvent(
+		events.EventKey{
+			NamespaceID: tests.NamespaceID,
+			WorkflowID:  workflowID,
+			RunID:       runID,
+			EventID:     workflowStartEvent.GetEventId(),
+			Version:     version,
+		},
+		workflowStartEvent,
+	)
+	err := s.mutableState.ApplyWorkflowExecutionStartedEvent(
+		nil, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}, uuid.NewString(), workflowStartEvent,
+	)
+	s.NoError(err)
+
+	wt, err := s.mutableState.ApplyWorkflowTaskScheduledEvent(
+		version, 2,
+		&taskqueuepb.TaskQueue{Name: taskqueue},
+		durationpb.New(workflowTaskTimeout),
+		1, nil, nil,
+		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
+	)
+	s.NoError(err)
+	s.NotNil(wt)
+
+	// Apply WFT started with a non-nil anchor.
+	targetVersionOnStart := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "my-deployment",
+		BuildId:        "build-v2",
+	}
+	wt, err = s.mutableState.ApplyWorkflowTaskStartedEvent(
+		nil, version, 2, 3, uuid.NewString(), now,
+		false, 123678, nil, int64(0), nil, false,
+		targetVersionOnStart,
+	)
+	s.NoError(err)
+	s.NotNil(wt)
+
+	// Verify the anchor is stored on executionInfo.VersioningInfo.
+	protorequire.ProtoEqual(s.T(), targetVersionOnStart,
+		s.mutableState.GetExecutionInfo().GetVersioningInfo().GetTargetWorkerDeploymentVersionOnStart())
 }
 
 func (s *mutableStateSuite) newNamespaceCacheEntry() *namespace.Namespace {

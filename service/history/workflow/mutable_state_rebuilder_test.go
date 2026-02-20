@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -1059,6 +1060,10 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	timeout := time.Second * 11
 	scheduledEventID := int64(111)
 	workflowTaskRequestID := uuid.NewString()
+	targetVersionOnStart := &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "my-deployment",
+		BuildId:        "build-v2",
+	}
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED
 	event := &historypb.HistoryEvent{
 		TaskId:    rand.Int63(),
@@ -1067,8 +1072,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 		EventTime: timestamppb.New(now),
 		EventType: evenType,
 		Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			RequestId:        workflowTaskRequestID,
+			ScheduledEventId:                     scheduledEventID,
+			RequestId:                            workflowTaskRequestID,
+			TargetWorkerDeploymentVersionOnStart: targetVersionOnStart,
 		}},
 	}
 	wt := &historyi.WorkflowTaskInfo{
@@ -1082,7 +1088,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskStarted() {
 	}
 	s.mockMutableState.EXPECT().ApplyWorkflowTaskStartedEvent(
 		(*historyi.WorkflowTaskInfo)(nil), event.GetVersion(), scheduledEventID, event.GetEventId(), workflowTaskRequestID, timestamp.TimeValue(event.GetEventTime()),
-		false, gomock.Any(), nil, int64(0), nil, false,
+		false, gomock.Any(), nil, int64(0), nil, false, targetVersionOnStart,
 	).Return(wt, nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(
