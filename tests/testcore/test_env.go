@@ -198,9 +198,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
-	// Setup test timeout monitoring with context
-	ctx := setupTestTimeoutWithContext(t, options.timeout)
-
 	env := &testEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -212,7 +209,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
-		ctx:                ctx,
+		ctx:                setupTestTimeoutWithContext(t, options.timeout),
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
