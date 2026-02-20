@@ -64,13 +64,13 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	maxPendingChildWorkflows := testcore.ClientSuiteLimit
 	parentWorkflow := func(ctx workflow.Context) error {
 		childStarted := workflow.GetSignalChannel(ctx, "blocking-child-started")
-		for i := 0; i < maxPendingChildWorkflows; i++ {
+		for i := range maxPendingChildWorkflows {
 			childOptions := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
 				WorkflowID: fmt.Sprintf("child-%d", i+1),
 			})
 			workflow.ExecuteChildWorkflow(childOptions, blockingChildWorkflow)
 		}
-		for i := 0; i < maxPendingChildWorkflows; i++ {
+		for range maxPendingChildWorkflows {
 			childStarted.Receive(ctx, nil)
 		}
 		return workflow.ExecuteChildWorkflow(workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
@@ -96,9 +96,9 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	s.NoError(err)
 
 	s.WaitForHistoryEventsSuffix(`
- WorkflowTaskScheduled
- WorkflowTaskStarted // 26 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_CHILD_WORKFLOWS_LIMIT_EXCEEDED
  WorkflowTaskFailed {"Cause":26,"Failure":{"Message":"PendingChildWorkflowsLimitExceeded: the number of pending child workflow executions, 10, has reached the per-workflow limit of 10"}}
+ WorkflowTaskScheduled
+ WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: parentWorkflowID})
 	}, 10*time.Second, 500*time.Millisecond)
@@ -138,7 +138,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	readyToScheduleLastActivity := "ready-to-schedule-last-activity"
 	myWorkflow := func(ctx workflow.Context) error {
-		for i := 0; i < testcore.ClientSuiteLimit; i++ {
+		for i := range testcore.ClientSuiteLimit {
 			workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: time.Minute,
 				ActivityID:          fmt.Sprintf("pending-activity-%d", i),
@@ -164,7 +164,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 
 	// wait until all of the activities are started (but not finished) before trying to schedule the last one
 	var activityInfo activity.Info
-	for i := 0; i < testcore.ClientSuiteLimit; i++ {
+	for range testcore.ClientSuiteLimit {
 		activityInfo = <-pendingActivities
 	}
 	s.NoError(s.SdkClient().SignalWorkflow(ctx, workflowID, "", readyToScheduleLastActivity, nil))
@@ -180,9 +180,9 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 	// verify that the workflow's history contains a task that failed because it would otherwise exceed the pending
 	// child workflow limit
 	s.WaitForHistoryEventsSuffix(`
- 19 WorkflowTaskScheduled
- 20 WorkflowTaskStarted // 27 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_ACTIVITIES_LIMIT_EXCEEDED
  21 WorkflowTaskFailed {"Cause":27,"Failure":{"Message":"PendingActivitiesLimitExceeded: the number of pending activities, 10, has reached the per-workflow limit of 10"}}
+ 22 WorkflowTaskScheduled
+ 23 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 		return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID(), RunId: workflowRun.GetRunID()})
 	}, 3*time.Second, 500*time.Millisecond)
@@ -205,7 +205,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		})
 	}
 	s.Worker().RegisterWorkflow(targetWorkflow)
-	for i := 0; i < numTargetWorkflows; i++ {
+	for i := range numTargetWorkflows {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			ID:        fmt.Sprintf("workflow-%d", i),
 			TaskQueue: s.TaskQueue(),
@@ -243,6 +243,8 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 29 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":29,"Failure":{"Message":"PendingRequestCancelLimitExceeded: the number of pending requests to cancel external workflows, 10, has reached the per-workflow limit of 10"}}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 5*time.Second, 500*time.Millisecond)
@@ -285,7 +287,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 	signalName := "my-signal"
 	sender := func(ctx workflow.Context, n int) error {
 		var futures []workflow.Future
-		for i := 0; i < n; i++ {
+		for range n {
 			future := workflow.SignalExternalWorkflow(ctx, receiverId, "", signalName, nil)
 			futures = append(futures, future)
 		}
@@ -331,6 +333,8 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted // 28 below is enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED
   4 WorkflowTaskFailed {"Cause":28,"Failure":{"Message":"PendingSignalsLimitExceeded: the number of pending signals to external workflows, 10, has reached the per-workflow limit of 10"}}
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
 `, func() []*historypb.HistoryEvent {
 			return s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: senderRun.GetID(), RunId: senderRun.GetRunID()})
 		}, 3*time.Second, 500*time.Millisecond)
@@ -538,7 +542,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 			UpdateName:   tv.HandlerName(),
 			WorkflowID:   tv.WorkflowID(),
 			RunID:        tv.RunID(),
-			Args:         []interface{}{"update-value"},
+			Args:         []any{"update-value"},
 			WaitForStage: sdkclient.WorkflowUpdateStageCompleted,
 		})
 		updateErrCh <- err
@@ -705,7 +709,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 		// between server starts the workflow task and this code is executed.
 
 		var currentAttemptStartedTime time.Time
-		err := workflow.SideEffect(ctx, func(_ workflow.Context) interface{} {
+		err := workflow.SideEffect(ctx, func(_ workflow.Context) any {
 			rpcCtx := context.Background()
 			if deadline, ok := ctx.Deadline(); ok {
 				var cancel context.CancelFunc
@@ -1227,7 +1231,7 @@ func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
 		// now do something bad in a loop.
 		// (we want something that's visible in history, not just failing workflow tasks,
 		// otherwise we wouldn't need a reset to "fix" it, just a new build would be enough.)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			s.NoError(workflow.ExecuteActivity(ao, "badact").Get(ctx, nil))
 			_ = workflow.Sleep(ctx, time.Second)
 		}

@@ -543,5 +543,8 @@ func (tr *priTaskReader) finalGC() {
 	tr.lock.Lock()
 	ackLevel := tr.ackLevel
 	tr.lock.Unlock()
+	if ackLevel == 0 {
+		return
+	}
 	_, _ = tr.doGCAt(ackLevel)
 }

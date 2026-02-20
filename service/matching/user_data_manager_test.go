@@ -871,7 +871,7 @@ func TestUserData_Propagation(t *testing.T) {
 	}
 
 	const iters = 5
-	for iter := 0; iter < iters; iter++ {
+	for iter := range iters {
 		newVersion, err := managers[0].UpdateUserData(ctx, UserDataUpdateOptions{}, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 			return data, false, nil
 		})

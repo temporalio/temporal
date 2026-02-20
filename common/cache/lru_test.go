@@ -161,7 +161,7 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 
 	start := make(chan struct{})
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(2)
 
 		// concurrent get and put
@@ -170,7 +170,7 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 
 			<-start
 
-			for j := 0; j < 1000; j++ {
+			for range 1000 {
 				cache.Get("A")
 				cache.Put("A", "fooo")
 			}
@@ -182,7 +182,7 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 
 			<-start
 
-			for j := 0; j < 50; j++ {
+			for range 50 {
 				it := cache.Iterator()
 				for it.HasNext() {
 					_ = it.Next()
@@ -437,7 +437,7 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 		startWG.Wait()
 		assert.True(t, cache.Size() < maxTotalBytes)
 	}()
-	for i := 0; i < numPuts; i++ {
+	for range numPuts {
 		go func() {
 			defer endWG.Done()
 

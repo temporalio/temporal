@@ -37,7 +37,7 @@ func (s *StringifySuite) Test_Stringify() {
 		},
 	}
 
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -82,7 +82,7 @@ func (s *StringifySuite) Test_Stringify_Array() {
 		},
 	}
 
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": []string{"val1", "val2"},
 		"key2": []int64{2, 3, 4},
 		"key3": []bool{true, false, true},
@@ -230,7 +230,7 @@ func (s *StringifySuite) Test_parseValueOrArray() {
 }
 
 func (s *StringifySuite) Test_parseValueTyped() {
-	var res interface{}
+	var res any
 	var err error
 
 	// int
@@ -283,7 +283,7 @@ func (s *StringifySuite) Test_parseValueTyped() {
 }
 
 func (s *StringifySuite) Test_parseValueUnspecified() {
-	var res interface{}
+	var res any
 
 	// int
 	res = parseValueUnspecified("1")
@@ -305,32 +305,32 @@ func (s *StringifySuite) Test_parseValueUnspecified() {
 
 	// array
 	res = parseValueUnspecified(`["a", "b", "c"]`)
-	s.Equal([]interface{}{"a", "b", "c"}, res)
+	s.Equal([]any{"a", "b", "c"}, res)
 
 	// string
 	res = parseValueUnspecified("test string")
 	s.Equal("test string", res)
 }
 
-func (s *StringifySuite) Test_isJsonArray() {
-	s.True(isJsonArray("[1,2,3]"))
-	s.True(isJsonArray("  [1,2,3] "))
-	s.True(isJsonArray(`  ["1","2","3"] `))
-	s.True(isJsonArray("[]"))
-	s.False(isJsonArray("["))
-	s.False(isJsonArray("]"))
-	s.False(isJsonArray("qwe"))
-	s.False(isJsonArray("123"))
+func (s *StringifySuite) Test_isJSONArray() {
+	s.True(isJSONArray("[1,2,3]"))
+	s.True(isJSONArray("  [1,2,3] "))
+	s.True(isJSONArray(`  ["1","2","3"] `))
+	s.True(isJSONArray("[]"))
+	s.False(isJSONArray("["))
+	s.False(isJSONArray("]"))
+	s.False(isJSONArray("qwe"))
+	s.False(isJSONArray("123"))
 }
 
-func (s *StringifySuite) Test_parseJsonArray() {
+func (s *StringifySuite) Test_parseJSONArray() {
 	t1, _ := time.Parse(time.RFC3339Nano, "2019-06-07T16:16:34-08:00")
 	t2, _ := time.Parse(time.RFC3339Nano, "2019-06-07T17:16:34-08:00")
 	testCases := []struct {
 		name             string
 		indexedValueType enumspb.IndexedValueType
 		input            string
-		expected         interface{}
+		expected         any
 	}{
 		{
 			name:             "string",
@@ -366,12 +366,12 @@ func (s *StringifySuite) Test_parseJsonArray() {
 			name:             "unspecified",
 			indexedValueType: enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
 			input:            `["a", "b", "c"]`,
-			expected:         []interface{}{"a", "b", "c"},
+			expected:         []any{"a", "b", "c"},
 		},
 	}
 	for _, testCase := range testCases {
 		s.Run(testCase.name, func() {
-			res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
+			res, err := parseJSONArray(testCase.input, testCase.indexedValueType)
 			s.NoError(err)
 			s.Equal(testCase.expected, res)
 		})
@@ -400,7 +400,7 @@ func (s *StringifySuite) Test_parseJsonArray() {
 		},
 	}
 	for _, testCase := range testCases2 {
-		res, err := parseJsonArray(testCase.input, testCase.indexedValueType)
+		res, err := parseJSONArray(testCase.input, testCase.indexedValueType)
 		s.NotNil(err)
 		s.Nil(res)
 	}

@@ -218,14 +218,14 @@ func (i *historyIterator) reset(stateToken []byte) error {
 type (
 	// SizeEstimator is used to estimate the size of any object
 	SizeEstimator interface {
-		EstimateSize(v interface{}) (int, error)
+		EstimateSize(v any) (int, error)
 	}
 
 	jsonSizeEstimator struct {
 	}
 )
 
-func (e *jsonSizeEstimator) EstimateSize(v interface{}) (int, error) {
+func (e *jsonSizeEstimator) EstimateSize(v any) (int, error) {
 	// protojson must be used for proto structs.
 	if protoMessage, ok := v.(proto.Message); ok {
 		bs, err := protojson.Marshal(protoMessage)

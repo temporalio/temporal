@@ -105,7 +105,7 @@ func NewNotifier(
 	workflowIDToShardID func(namespace.ID, string) int32,
 ) *NotifierImpl {
 
-	hashFn := func(key interface{}) uint32 {
+	hashFn := func(key any) uint32 {
 		notification, ok := key.(Notification)
 		if !ok {
 			return 0
@@ -134,7 +134,7 @@ func (notifier *NotifierImpl) WatchHistoryEvent(
 		subscriberID: channel,
 	}
 
-	_, _, err := notifier.eventsPubsubs.PutOrDo(identifier, subscribers, func(key interface{}, value interface{}) error {
+	_, _, err := notifier.eventsPubsubs.PutOrDo(identifier, subscribers, func(key any, value any) error {
 		subscribers := value.(map[string]chan *Notification)
 
 		if _, ok := subscribers[subscriberID]; ok {
@@ -156,7 +156,7 @@ func (notifier *NotifierImpl) UnwatchHistoryEvent(
 	identifier definition.WorkflowKey, subscriberID string) error {
 
 	success := true
-	notifier.eventsPubsubs.RemoveIf(identifier, func(key interface{}, value interface{}) bool {
+	notifier.eventsPubsubs.RemoveIf(identifier, func(key any, value any) bool {
 		subscribers := value.(map[string]chan *Notification)
 
 		if _, ok := subscribers[subscriberID]; !ok {
@@ -184,7 +184,7 @@ func (notifier *NotifierImpl) dispatchHistoryEventNotification(event *Notificati
 	defer func() {
 		metrics.HistoryEventNotificationFanoutLatency.With(notifier.metricsHandler).Record(time.Since(startTime))
 	}()
-	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key interface{}, value interface{}) error {
+	_, _, _ = notifier.eventsPubsubs.GetAndDo(identifier, func(key any, value any) error {
 		subscribers := value.(map[string]chan *Notification)
 
 		for _, channel := range subscribers {

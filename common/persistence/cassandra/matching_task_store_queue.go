@@ -123,7 +123,7 @@ func (d *taskQueueStore) CreateTaskQueue(
 		request.TaskQueueInfo.EncodingType.String(),
 	).WithContext(ctx)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return gocql.ConvertError("CreateTaskQueue", err)
@@ -171,7 +171,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 ) (*p.UpdateTaskQueueResponse, error) {
 	var err error
 	var applied bool
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 
 	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
@@ -261,7 +261,7 @@ func (d *taskQueueStore) DeleteTaskQueue(
 		request.RangeID,
 	).WithContext(ctx)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return gocql.ConvertError("DeleteTaskQueue", err)

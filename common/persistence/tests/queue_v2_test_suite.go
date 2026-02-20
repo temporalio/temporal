@@ -241,7 +241,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 		}
@@ -302,7 +302,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			msg, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 			assert.Equal(t, int64(persistence.FirstQueueMessageID+i), msg.Metadata.ID)
@@ -338,7 +338,7 @@ func testRangeDeleteMessages(ctx context.Context, t *testing.T, queue persistenc
 			QueueName: queueName,
 		})
 		require.NoError(t, err)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			_, err := persistencetest.EnqueueMessage(ctx, queue, queueType, queueName)
 			require.NoError(t, err)
 		}
@@ -444,7 +444,7 @@ func testListQueues(ctx context.Context, t *testing.T, queue persistence.QueueV2
 		require.Equal(t, int64(0), response.Queues[1].MessageCount)
 
 		// List multiple queues in pages.
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			queueNames = append(queueNames, "test-queue-"+t.Name()+strconv.Itoa(i))
 		}
 		for _, queueName := range queueNames[2:] {

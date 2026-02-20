@@ -1414,7 +1414,7 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 	for _, prob := range []int{0, 100} {
 		s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return prob }
 		s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return prob }
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			shouldGenerate := s.mutableState.shouldGenerateChecksum()
 			shouldVerify := s.mutableState.shouldVerifyChecksum()
 			s.Equal(prob == 100, shouldGenerate)
@@ -5022,12 +5022,12 @@ func (s *mutableStateSuite) TestExecutionInfoClone() {
 	}
 	clone.NamespaceId = "namespace-id"
 	clone.WorkflowId = "workflow-id"
-	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, func(v any) []interface{} {
+	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		return []interface{}{
+		return []any{
 			&info.NamespaceId,
 		}
 	})
@@ -5981,7 +5981,7 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	totalTasks := 2 * s.mockConfig.ChasmMaxInMemoryPureTasks()
 
 	visTimestamp := s.mockShard.GetTimeSource().Now()
-	for i := 0; i < totalTasks; i++ {
+	for range totalTasks {
 		task := &tasks.ChasmTaskPure{
 			VisibilityTimestamp: visTimestamp,
 		}

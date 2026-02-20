@@ -6,6 +6,7 @@ import (
 
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -76,14 +77,14 @@ Uses Go's len() function on header keys and values to determine the total size.`
 
 var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
 	"component.nexusoperations.useSystemCallbackURL",
-	true,
+	false,
 	`UseSystemCallbackURL is a global feature toggle that controls how the executor generates
 	callback URLs for worker targets in Nexus Operations.When set to true,
 	the executor will use the fixed system callback URL ("temporal://system") for all worker targets,
 	instead of generating URLs from the callback URL template.
 	This simplifies configuration and improves reliability for worker callbacks.
-	- false: The executor uses the callback URL template to generate callback URLs for worker targets.
-	- true (default): The executor uses the fixed system callback URL ("temporal://system") for worker targets.
+	- false (default): The executor uses the callback URL template to generate callback URLs for worker targets.
+	- true: The executor uses the fixed system callback URL ("temporal://system") for worker targets.
 	Note: The default will switch to true in future releases.`,
 )
 
@@ -161,6 +162,7 @@ NexusOperationCancelRequestFailed events. Default true.`,
 )
 
 type Config struct {
+	NumHistoryShards                    int32
 	Enabled                             dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -179,7 +181,7 @@ type Config struct {
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
 		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
@@ -205,5 +207,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		NumHistoryShards: cfg.NumHistoryShards,
 	}
 }

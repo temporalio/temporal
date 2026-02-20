@@ -12,9 +12,9 @@ on:
         required: true
         default: "1.5.1"
       alpine-tag:
-        description: "Alpine base image tag (e.g., 3.23)"
+        description: "Alpine base image tag (e.g., 3.23.3)"
         required: true
-        default: "3.23"
+        default: "3.23.3"
       push:
         description: "Push images to Docker Hub"
         required: true

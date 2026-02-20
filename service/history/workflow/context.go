@@ -737,7 +737,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	}
 	taskUpdated := false
 
-	updateTask := func(task interface{}) bool {
+	updateTask := func(task any) bool {
 		switch t := task.(type) {
 		case *tasks.HistoryReplicationTask:
 			t.NewRunBranchToken = newRunBranchToken
@@ -968,6 +968,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
+			update.WithNamespace(nsName),
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
