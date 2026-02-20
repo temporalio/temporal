@@ -59,3 +59,9 @@ message ObsoleteMatchingTaskFailure {
 // between worker deployments.
 message ActivityStartDuringTransitionFailure {
 }
+
+// UpdateAbortedByServerFailure is used as error detail for AbortedByServer errors
+// that cross service boundaries via gRPC, allowing them to be reconstructed
+// as the correct Go type on the receiving side.
+message UpdateAbortedByServerFailure {
+}

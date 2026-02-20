@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -23,4 +24,13 @@ func TestFromToStatus(t *testing.T) {
 	}
 	assert.Equal(t, err.Message, solErr.Message)
 	assert.Equal(t, err.OwnerHost, solErr.OwnerHost)
+}
+
+func TestAbortedByServerRoundTrip(t *testing.T) {
+	original := NewAbortedByServer("workflow update was aborted")
+	st := serviceerror.ToStatus(original)
+	converted := FromStatus(st)
+	var result *AbortedByServer
+	require.ErrorAs(t, converted, &result)
+	require.Equal(t, original.Error(), result.Error())
 }

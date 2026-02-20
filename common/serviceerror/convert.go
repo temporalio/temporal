@@ -34,6 +34,8 @@ func FromStatus(st *status.Status) error {
 			return newRetryReplication(st, errDetails)
 		case *errordetailsspb.SyncStateFailure:
 			return newSyncState(st, errDetails)
+		case *errordetailsspb.UpdateAbortedByServerFailure:
+			return &AbortedByServer{Aborted: serviceerror.NewAborted(st.Message()).(*serviceerror.Aborted)}
 		}
 	case codes.Unavailable:
 		switch errDetails.(type) {
