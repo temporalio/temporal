@@ -5633,7 +5633,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.NoError(uwsRes.err)
 			})
 
-			t.Run("success after internal retry", func(t *testing.T) {
+			t.Run("return retryable error after retry", func(t *testing.T) {
 				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
 				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
 				// start workflow
@@ -5675,19 +5675,14 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					s.NoError(err)
 				}
 
-				// With Aborted being internally retryable, the server will keep retrying
-				// until it succeeds on the new workflow started by the hook.
-				// update-with-start will do an internal retry and succeed
-				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
-					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-						return &workflowservice.RespondWorkflowTaskCompletedRequest{
-							Messages: s.UpdateAcceptCompleteMessages(s.Tv(), task.Messages[0]),
-						}, nil
-					})
-				s.NoError(err)
-
+				// ensure update-with-start returns retryable error
 				uwsRes := <-uwsCh
-				s.NoError(uwsRes.err)
+				s.Error(uwsRes.err)
+				errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
+				s.Len(errs, 2)
+				s.Equal("Operation was aborted.", errs[0].Error())
+				s.ErrorContains(errs[1], update.AbortedByWorkflowClosingErr.Error())
+				s.ErrorAs(errs[1], new(*serviceerror.Aborted))
 			})
 
 			t.Run("do not retry when workflow was started", func(t *testing.T) {
