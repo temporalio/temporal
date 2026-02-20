@@ -509,9 +509,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		}
 	}
 
-	// Compute whether the routing target has changed since this run started.
-	// - Skip when targetDeploymentVersion is nil: the workflow is about to transition to the
-	//   target version, so it doesn't need to CAN.
+	// Compute whether the routing target has changed since this run started, used to set the
+	// target_worker_deployment_version_changed flag that tells pinned workflows to CAN onto the
+	// latest current version.
+	// - Skip when targetDeploymentVersion is nil: matching only sends it when the poller's
+	//   version differs from the routing target, so nil means no change can be detected.
 	// - Skip when a versioning override is active: the operator explicitly controls the
 	//   workflow's version, so routing changes are irrelevant.
 	var targetDeploymentVersionChanged bool
