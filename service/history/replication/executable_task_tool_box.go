@@ -31,6 +31,7 @@ type (
 		LowPriorityTaskScheduler ctasks.Scheduler[TrackableExecutableTask] `name:"LowPriorityTaskScheduler"`
 		MetricsHandler           metrics.Handler
 		Logger                   log.Logger
+		ThrottledLogger          log.ThrottledLogger
 		Serializer               serialization.Serializer
 		DLQWriter                DLQWriter
 		HistoryEventsHandler     eventhandler.HistoryEventsHandler
