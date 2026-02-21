@@ -273,8 +273,8 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0)))
+				// And there is a force CaN or a propagated state change or history got too large
+				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 	})
 	if err != nil {
 		return err

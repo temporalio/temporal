@@ -343,9 +343,9 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 	// there are no pending updates/signals and the state has changed.
 	err = workflow.Await(ctx, func() bool {
 		canContinue := d.deleteDeployment || // deployment is deleted -> it's ok to drop all signals and updates.
-			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			// There is no pending signal or update, but the state is dirty or forceCaN is requested or history got too large:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				(d.forceCAN || d.stateChanged))
+				(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 
 		// TODO(carlydf): remove verbose logging
 		if canContinue {
