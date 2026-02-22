@@ -315,6 +315,7 @@ message QueryDescribeWorkerDeploymentResponse {
 // used as Worker Deployment workflow query response:
 message CreateRequestIDQueryResponse {
     string request_id = 1;
+    bytes conflict_token = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -395,6 +396,18 @@ message SetCurrentVersionArgs {
 message SetCurrentVersionResponse {
     string previous_version = 1;
     bytes conflict_token = 2;
+}
+
+// used as Worker Deployment workflow update input:
+message CreateWorkerDeploymentArgs {
+    string identity = 1;
+    string request_id = 2;
+    temporal.api.compute.v1.ComputeConfig compute_config = 3;
+}
+
+// used as Worker Deployment update response:
+message CreateWorkerDeploymentResponse {
+    bytes conflict_token = 1;
 }
 
 // used as Worker Deployment workflow update input:

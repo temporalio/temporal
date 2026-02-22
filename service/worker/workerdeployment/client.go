@@ -317,8 +317,13 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 		return err
 	}
 
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildId, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+
 	// starting and updating the deployment version workflow, which in turn starts a deployment workflow.
-	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, buildId, &updatepb.Request{
+	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInWorkerDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID, d.getSyncBatchSize())
@@ -558,7 +563,7 @@ func (d *ClientImpl) queryCreateRequestID(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-) (requestID string, retErr error) {
+) (result *deploymentspb.CreateRequestIDQueryResponse, retErr error) {
 	deploymentWorkflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	req := &historyservice.QueryWorkflowRequest{
@@ -576,30 +581,30 @@ func (d *ClientImpl) queryCreateRequestID(
 	if err != nil {
 		var notFound *serviceerror.NotFound
 		if errors.As(err, &notFound) {
-			return "", err
+			return nil, err
 		}
 		var queryFailed *serviceerror.QueryFailed
 		if errors.As(err, &queryFailed) && queryFailed.Error() == errDeploymentDeleted {
-			return "", serviceerror.NewNotFound(errDeploymentDeleted)
+			return nil, serviceerror.NewNotFound(errDeploymentDeleted)
 		}
-		return "", err
+		return nil, err
 	}
 
 	if rej := res.GetResponse().GetQueryRejected(); rej != nil {
-		return "", serviceerror.NewInternalf("create request id query rejected with status %s", rej.GetStatus())
+		return nil, serviceerror.NewInternalf("create request id query rejected with status %s", rej.GetStatus())
 	}
 
 	if res.GetResponse().GetQueryResult() == nil {
-		return "", serviceerror.NewInternal("Did not receive create request id query result")
+		return nil, serviceerror.NewInternal("Did not receive create request id query result")
 	}
 
 	var queryResponse deploymentspb.CreateRequestIDQueryResponse
 	err = sdk.PreferProtoDataConverter.FromPayloads(res.GetResponse().GetQueryResult(), &queryResponse)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return queryResponse.RequestId, nil
+	return &queryResponse, nil
 }
 
 func (d *ClientImpl) workerDeploymentExists(
@@ -716,6 +721,10 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err != nil {
 		return nil, err
 	}
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:                identity,
@@ -739,7 +748,6 @@ func (d *ClientImpl) SetCurrentVersion(
 			ctx,
 			namespaceEntry,
 			deploymentName,
-			versionObj.GetBuildId(),
 			&updatepb.Request{
 				Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
@@ -825,6 +833,10 @@ func (d *ClientImpl) SetRampingVersion(
 	if err != nil {
 		return nil, err
 	}
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
+	if err != nil {
+		return nil, err
+	}
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
@@ -851,7 +863,6 @@ func (d *ClientImpl) SetRampingVersion(
 			ctx,
 			namespaceEntry,
 			deploymentName,
-			versionObj.GetBuildId(),
 			&updatepb.Request{
 				Input: &updatepb.Input{Name: SetRampingVersion, Args: updatePayload},
 				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
@@ -1046,28 +1057,14 @@ func (d *ClientImpl) CreateWorkerDeployment(
 		return nil, err
 	}
 
-	// Check if deployment already exists and whether it was created by this request.
-	existingRequestID, err := d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
+	conflictToken, err := d.ensureWorkerDeploymentDoesNotExist(ctx, namespaceEntry, deploymentName, requestID)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if !errors.As(err, &notFound) {
-			return nil, err
-		}
+		// WD already exists, or other errors
+		return nil, err
 	}
-	if err == nil && strings.HasPrefix(existingRequestID, AutoCreateRequestIDPrefix) {
-		return nil, serviceerror.NewAlreadyExists(
-			fmt.Sprintf("Worker Deployment with name %q already exists (auto-created from worker polls)", deploymentName),
-		)
-	}
-	if existingRequestID != "" { // at this point, empty request id means not-found
-		if existingRequestID == requestID {
-			_, conflictToken, err := d.DescribeWorkerDeployment(ctx, namespaceEntry, deploymentName)
-			if err != nil {
-				return nil, err
-			}
-			return conflictToken, nil
-		}
-		return nil, serviceerror.NewAlreadyExists(fmt.Sprintf("Worker Deployment with name %q already exists", deploymentName))
+	if conflictToken != nil {
+		// WD exists with matching request ID, returning success with conflict token
+		return conflictToken, nil
 	}
 
 	// Check resource limits
@@ -1076,6 +1073,7 @@ func (d *ClientImpl) CreateWorkerDeployment(
 		return nil, err
 	}
 	limit := d.maxDeployments(namespaceEntry.Name().String())
+	fmt.Printf(">>> countWorkerDeployments: %d, limit: %d\n", count, limit)
 	if count >= int64(limit) {
 		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 	}
@@ -1088,76 +1086,91 @@ func (d *ClientImpl) CreateWorkerDeployment(
 		NamespaceId:    namespaceEntry.ID().String(),
 		DeploymentName: deploymentName,
 		State: &deploymentspb.WorkerDeploymentLocalState{
-			SyncBatchSize:   d.getSyncBatchSize(),
-			CreateRequestId: requestID,
-			ComputeConfig:   computeConfig,
+			SyncBatchSize:        d.getSyncBatchSize(),
+			CreateRequestId:      requestID,
+			LastModifierIdentity: identity,
+			ComputeConfig:        computeConfig,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	startReq := makeStartRequest(requestID, workflowID, identity, WorkerDeploymentWorkflowType, namespaceEntry, nil, input)
-	// allow existing closed workflows
-	startReq.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
-	// fail for existing open workflows, except if it has the same request ID
-	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
-
-	historyStartReq := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:  namespaceEntry.ID().String(),
-		StartRequest: startReq,
-	}
-
-	_, err = d.historyClient.StartWorkflowExecution(ctx, historyStartReq)
-	if err != nil {
-		// Handle WorkflowExecutionAlreadyStarted for idempotency
-		var alreadyStarted *serviceerror.WorkflowExecutionAlreadyStarted
-		if !errors.As(err, &alreadyStarted) {
-			return nil, err
-		}
-		if alreadyStarted.StartRequestId != requestID {
-			// The startRequesId can be different only because the workflow itself continued-as-new
-			// In this case, we check the initial request id to keep idempotency.
-			existingRequestID, queryErr := d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
-			if queryErr != nil {
-				var notFound *serviceerror.NotFound
-				if !errors.As(queryErr, &notFound) {
-					return nil, queryErr
-				}
-
-				// TODO: there is a small race condition here that hurts idempotency: which is when the query returns not-found...
-				// 1. Create called with request id abc, workflow created but caller didn't receive success
-				// 2. workflow CaNs -> startRequestId changes to xyz (in-workflow createRequestId remains abc)
-				// 3. Caller retries the request with same request id abc.
-				// 4. We get alreadyStarted error
-				// 5. Someone else deletes the deployment
-				// 6. Our query receives not-found at this part of the code.
-				// 7. We return already-exists error to the user.
-				// The returned error in step 7 is wrong because the from user POV the deployment never existed
-				// before and nobody else sent any other create request. We should've return succes but without
-				// re-creating the workflow, as if create happened before the delete.
-
-				// Right now, the user get the already-exists error. but ideally we should retry the creation.
-				// The window is so small and only the race happens when user
-			}
-			if queryErr == nil && strings.HasPrefix(existingRequestID, AutoCreateRequestIDPrefix) {
-				return nil, serviceerror.NewAlreadyExists(
-					fmt.Sprintf("Worker Deployment with name %q already exists (auto-created from worker polls)", deploymentName),
-				)
-			}
-			if existingRequestID != requestID {
-				return nil, serviceerror.NewAlreadyExists(fmt.Sprintf("Worker Deployment with name %q already exists", deploymentName))
-			}
-		}
-	}
-
-	// Query the deployment to get the conflict token
-	_, conflictToken, err := d.DescribeWorkerDeployment(ctx, namespaceEntry, deploymentName)
+	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentArgs{
+		Identity:      identity,
+		RequestId:     requestID,
+		ComputeConfig: computeConfig,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return conflictToken, nil
+	updateRequest := &updatepb.Request{
+		Input: &updatepb.Input{Name: CreateWorkerDeployment, Args: updateArgs},
+		Meta:  &updatepb.Meta{UpdateId: "_create_" + requestID, Identity: identity},
+	}
+
+	outcome, err := updateWorkflowWithStart(
+		ctx,
+		d.historyClient,
+		namespaceEntry,
+		WorkerDeploymentWorkflowType,
+		workflowID,
+		nil,
+		input,
+		updateRequest,
+		identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errDeploymentAlreadyExists {
+		return nil, serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentAlreadyExists, deploymentName))
+	} else if failure != nil {
+		return nil, serviceerror.NewInternalf("create deployment failed %s", failure.Message)
+	}
+
+	var res deploymentspb.CreateWorkerDeploymentResponse
+	success := outcome.GetSuccess()
+	if err := sdk.PreferProtoDataConverter.FromPayloads(success, &res); err != nil {
+		return nil, err
+	}
+
+	return res.GetConflictToken(), nil
+}
+
+func (d *ClientImpl) ensureWorkerDeploymentDoesNotExist(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	requestID string,
+) ([]byte, error) {
+	// Check if deployment already exists and whether it was created by this request.
+	res, err := d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	if res.GetRequestId() == requestID {
+		_, conflictToken, err := d.DescribeWorkerDeployment(ctx, namespaceEntry, deploymentName)
+		if err != nil {
+			return nil, err
+		}
+		return conflictToken, nil
+	}
+
+	if strings.HasPrefix(res.GetRequestId(), AutoCreateRequestIDPrefix) {
+		return nil, serviceerror.NewAlreadyExists(
+			fmt.Sprintf(ErrWorkerDeploymentAlreadyExists+" (auto-created from worker polls)", deploymentName),
+		)
+	}
+
+	return nil, serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentAlreadyExists, deploymentName))
 }
 
 func (d *ClientImpl) StartWorkerDeployment(
@@ -1291,17 +1304,13 @@ func (d *ClientImpl) SyncVersionWorkflowFromWorkerDeployment(
 func (d *ClientImpl) updateWithStartWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
-	deploymentName, buildID string,
+	deploymentName string,
 	updateRequest *updatepb.Request,
 	identity string,
 	requestID string,
 	syncBatchSize int32,
 ) (*updatepb.Outcome, error) {
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
-	}
-	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
 	if err != nil {
 		return nil, err
 	}

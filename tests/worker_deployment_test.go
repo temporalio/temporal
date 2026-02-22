@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/compute/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -327,6 +327,9 @@ func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	// First deployment version should be fine
 	go s.pollFromDeployment(ctx, tv)
 	s.ensureCreateVersionInDeployment(tv)
+
+	// wait for all existing deployments to show up in visibility
+	s.validateWorkerDeploymentCount(ctx, &workflowservice.ListWorkerDeploymentsRequest{Namespace: s.Namespace().String()}, 1)
 
 	// pollers of the second deployment version should be rejected
 	s.pollFromDeploymentExpectFail(ctx, tv.WithDeploymentSeriesNumber(2), "reached maximum deployments in namespace (1)")
@@ -3742,6 +3745,19 @@ func (s *WorkerDeploymentSuite) startAndValidateWorkerDeployments(
 	}, time.Second*10, time.Millisecond*1000)
 }
 
+func (s *WorkerDeploymentSuite) validateWorkerDeploymentCount(
+	ctx context.Context,
+	request *workflowservice.ListWorkerDeploymentsRequest,
+	expectedCount int,
+) {
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		actualDeploymentSummaries, err := s.listWorkerDeployments(ctx, request)
+		a.NoError(err)
+		a.Len(actualDeploymentSummaries, expectedCount)
+	}, time.Second*5, time.Millisecond*200)
+}
+
 func (s *WorkerDeploymentSuite) buildWorkerDeploymentSummary(
 	deploymentName string, createTime *timestamppb.Timestamp,
 	routingConfig *deploymentpb.RoutingConfig,
@@ -3767,8 +3783,9 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
 
 	deploymentName := tv.DeploymentSeries()
 	requestID := tv.Any().String()
-	computeConfig := &compute.ComputeConfig{
-		Provider: &compute.ComputeProvider{
+	identity := tv.Any().String()
+	computeConfig := &computepb.ComputeConfig{
+		Provider: &computepb.ComputeProvider{
 			Type: "test",
 		},
 	}
@@ -3777,6 +3794,7 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
 	resp, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: deploymentName,
+		Identity:       identity,
 		RequestId:      requestID,
 		ComputeConfig:  computeConfig,
 	})
@@ -3794,6 +3812,7 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_Success() {
 	s.NotNil(descResp)
 	s.NotNil(descResp.WorkerDeploymentInfo)
 	s.Equal(deploymentName, descResp.WorkerDeploymentInfo.Name)
+	s.Equal(identity, descResp.WorkerDeploymentInfo.LastModifierIdentity)
 	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
 	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
 	s.ProtoEqual(computeConfig, descResp.WorkerDeploymentInfo.ComputeConfig)
@@ -3956,6 +3975,9 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_MaxDeploymentsLimit()
 	})
 	s.NoError(err)
 
+	// wait for all existing deployments to show up in visibility
+	s.validateWorkerDeploymentCount(ctx, &workflowservice.ListWorkerDeploymentsRequest{Namespace: s.Namespace().String()}, 2)
+
 	// Try to create third deployment - should fail
 	_, err = s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
@@ -3997,18 +4019,35 @@ func (s *WorkerDeploymentSuite) TestCreateWorkerDeployment_AfterDelete_CanRecrea
 	})
 	s.NoError(err)
 
-	// Wait a bit for deletion to complete
-	time.Sleep(100 * time.Millisecond)
+	computeConfig := &computepb.ComputeConfig{
+		Provider: &computepb.ComputeProvider{
+			Type: "test",
+		},
+	}
 
 	// Should be able to create a deployment with the same name again
 	resp2, err := s.FrontendClient().CreateWorkerDeployment(ctx, &workflowservice.CreateWorkerDeploymentRequest{
 		Namespace:      s.Namespace().String(),
 		DeploymentName: deploymentName,
 		RequestId:      requestID2,
+		ComputeConfig:  computeConfig,
 	})
 	s.NoError(err)
 	s.NotNil(resp2)
 	s.NotEqual(resp1.ConflictToken, resp2.ConflictToken) // Should be a new deployment with different token
+
+	// Verify the deployment was created
+	descResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      s.Namespace().String(),
+		DeploymentName: deploymentName,
+	})
+	s.NoError(err)
+	s.NotNil(descResp)
+	s.NotNil(descResp.WorkerDeploymentInfo)
+	s.Equal(deploymentName, descResp.WorkerDeploymentInfo.Name)
+	s.NotNil(descResp.WorkerDeploymentInfo.CreateTime)
+	s.Empty(descResp.WorkerDeploymentInfo.VersionSummaries) // No versions initially
+	s.ProtoEqual(computeConfig, descResp.WorkerDeploymentInfo.ComputeConfig)
 }
 
 // Name is used by testvars. We use a shortened test name in variables so that physical task queue IDs

@@ -39,7 +39,6 @@ type (
 		logger           sdklog.Logger
 		metrics          sdkclient.MetricsHandler
 		lock             workflow.Mutex
-		conflictToken    []byte
 		deleteDeployment bool
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
@@ -278,11 +277,23 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 			return nil, errors.New(errDeploymentDeleted)
 		}
 		return &deploymentspb.CreateRequestIDQueryResponse{
-			RequestId: d.GetState().GetCreateRequestId(),
+			RequestId:     d.GetState().GetCreateRequestId(),
+			ConflictToken: d.State.GetConflictToken(),
 		}, nil
 	})
 	if err != nil {
 		d.logger.Info("SetQueryHandler failed for WorkerDeployment create request-id query with error: " + err.Error())
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		CreateWorkerDeployment,
+		d.handleCreateWorkerDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateCreateWorkerDeployment,
+		},
+	); err != nil {
 		return err
 	}
 
@@ -428,6 +439,52 @@ func (d *WorkflowRunner) ensureNotDeleted() error {
 		return temporal.NewNonRetryableApplicationError(errDeploymentDeleted, errDeploymentDeleted, nil)
 	}
 	return nil
+}
+
+func (d *WorkflowRunner) validateCreateWorkerDeployment(args *deploymentspb.CreateWorkerDeploymentArgs) error {
+	// Only valid if deployment is deleted or the request ID matches the current one.
+	if d.deleteDeployment || d.State.GetCreateRequestId() == args.GetRequestId() {
+		return nil
+	}
+
+	return temporal.NewNonRetryableApplicationError(errDeploymentAlreadyExists, errDeploymentAlreadyExists, nil)
+}
+
+func (d *WorkflowRunner) handleCreateWorkerDeployment(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentArgs) (*deploymentspb.CreateWorkerDeploymentResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
+
+	// Re-validate after acquiring lock
+	err = d.validateCreateWorkerDeployment(args)
+	if err != nil {
+		return nil, err
+	}
+
+	if d.State.GetCreateRequestId() == args.GetRequestId() {
+		// Duplicate request, return success without writing anything.
+		return &deploymentspb.CreateWorkerDeploymentResponse{
+			ConflictToken: d.State.ConflictToken,
+		}, nil
+	}
+
+	// Revive in case deleted, but a create request came before the workflow is closed
+	err = d.revive(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+
+	return &deploymentspb.CreateWorkerDeploymentResponse{
+		ConflictToken: d.State.ConflictToken,
+	}, nil
 }
 
 func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
@@ -1559,4 +1616,27 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 		LastCurrentTime:      versionSummary.GetLastCurrentTime(),
 		LastDeactivationTime: versionSummary.GetLastDeactivationTime(),
 	}
+}
+
+func (d *WorkflowRunner) revive(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentArgs) error {
+	d.State = &deploymentspb.WorkerDeploymentLocalState{
+		CreateTime:           timestamppb.New(workflow.Now(ctx)),
+		CreateRequestId:      args.GetRequestId(),
+		LastModifierIdentity: args.GetIdentity(),
+		RoutingConfig:        &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
+		Versions:             make(map[string]*deploymentspb.WorkerDeploymentVersionSummary),
+		ComputeConfig:        args.GetComputeConfig(),
+		SyncBatchSize:        d.State.SyncBatchSize,
+	}
+
+	d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+
+	// Update memo to reflect any state changes
+	if err := d.updateMemo(ctx); err != nil {
+		return err
+	}
+
+	d.deleteDeployment = false
+	d.metrics.Counter(metrics.WorkerDeploymentCreated.Name()).Inc(1)
+	return nil
 }
