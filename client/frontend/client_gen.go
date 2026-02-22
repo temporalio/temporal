@@ -49,6 +49,16 @@ func (c *clientImpl) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) CreateWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkerDeploymentResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CreateWorkerDeployment(ctx, request, opts...)
+}
+
 func (c *clientImpl) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,

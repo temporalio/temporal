@@ -25,6 +25,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CreateScheduleResponse:
 		return nil
+	case *workflowservice.CreateWorkerDeploymentRequest:
+		return nil
+	case *workflowservice.CreateWorkerDeploymentResponse:
+		return nil
 	case *workflowservice.CreateWorkflowRuleRequest:
 		return nil
 	case *workflowservice.CreateWorkflowRuleResponse:

@@ -65,6 +65,20 @@ func (c *metricClient) CreateSchedule(
 	return c.client.CreateSchedule(ctx, request, opts...)
 }
 
+func (c *metricClient) CreateWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.CreateWorkerDeploymentResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCreateWorkerDeployment")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CreateWorkerDeployment(ctx, request, opts...)
+}
+
 func (c *metricClient) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,

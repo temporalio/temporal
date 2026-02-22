@@ -273,6 +273,19 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	err = workflow.SetQueryHandler(ctx, QueryCreateRequestID, func() (*deploymentspb.CreateRequestIDQueryResponse, error) {
+		if d.deleteDeployment {
+			return nil, errors.New(errDeploymentDeleted)
+		}
+		return &deploymentspb.CreateRequestIDQueryResponse{
+			RequestId: d.GetState().GetCreateRequestId(),
+		}, nil
+	})
+	if err != nil {
+		d.logger.Info("SetQueryHandler failed for WorkerDeployment create request-id query with error: " + err.Error())
+		return err
+	}
+
 	if err := workflow.SetUpdateHandler(
 		ctx,
 		RegisterWorkerInWorkerDeployment,

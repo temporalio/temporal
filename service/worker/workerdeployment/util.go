@@ -64,6 +64,7 @@ const (
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
 	QueryDescribeDeployment = "describe-deployment" // for Worker Deployment wf
+	QueryCreateRequestID    = "create-request-id"   // for Worker Deployment wf
 
 	// Memos
 	WorkerDeploymentMemoField = "WorkerDeploymentMemo" // for Worker Deployment wf
@@ -93,6 +94,8 @@ const (
 	ErrWorkerDeploymentNotFound               = "no Worker Deployment found with name '%s'; does your Worker Deployment have pollers?"
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
 	ErrTooManyRequests                        = "too many requests issued to Worker Deployment '%s'. Please try again later"
+
+	AutoCreateRequestIDPrefix = "_auto_create_"
 )
 
 var (
