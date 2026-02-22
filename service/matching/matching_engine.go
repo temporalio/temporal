@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -175,6 +176,8 @@ type (
 		reachabilityCache reachabilityCache
 		// Rate limiter to limit the task dispatch
 		rateLimiter TaskDispatchRateLimiter
+
+		taskHookFactories []hooks.TaskHookFactory
 	}
 )
 
@@ -254,6 +257,7 @@ func NewEngine(
 	saMapperProvider searchattribute.MapperProvider,
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
+	taskHookFactories []hooks.TaskHookFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -296,6 +300,7 @@ func NewEngine(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
+		taskHookFactories:         taskHookFactories,
 	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
