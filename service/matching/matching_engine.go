@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -2529,7 +2531,10 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return resp, nil
 	}
 
-	// If we get here it means that task dispatch has occurred locally.
+	// Tag the dispatch span with the nexus task ID so xray can link it to the
+	// worker's PollNexusTaskQueue/RespondNexusTaskCompleted spans.
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("temporalNexusTaskID", taskID))
+
 	// Must wait on result channel to get query result.
 	select {
 	case result := <-resultCh:
@@ -2626,6 +2631,8 @@ pollLoop:
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
 
+		trace.SpanFromContext(ctx).SetAttributes(attribute.String("temporalNexusTaskID", task.nexus.taskID))
+
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2637,6 +2644,7 @@ pollLoop:
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("temporalNexusTaskID", request.GetTaskId()))
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -2650,6 +2658,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+	trace.SpanFromContext(ctx).SetAttributes(attribute.String("temporalNexusTaskID", request.GetTaskId()))
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)

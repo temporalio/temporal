@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -67,8 +69,22 @@ func (n nexusInvocation) Invoke(
 			Destination: taskAttr.Destination,
 		}),
 		Serializer: commonnexus.PayloadSerializer,
+		Propagator: e.propagator,
 	})
 	// Make the call and record metrics.
+	if e.tracerProvider != nil {
+		tracer := e.tracerProvider.Tracer("go.temporal.io/server")
+		var span trace.Span
+		ctx, span = tracer.Start(ctx, "CompleteNexusOperation",
+			trace.WithSpanKind(trace.SpanKindClient),
+			trace.WithAttributes(
+				attribute.String("http.request.method", "POST"),
+				attribute.String("temporalWorkflowID", n.workflowID),
+				attribute.String("temporalNexusNamespace", ns.Name().String()),
+			),
+		)
+		defer span.End()
+	}
 	startTime := time.Now()
 
 	n.completion.Header = n.nexus.Header

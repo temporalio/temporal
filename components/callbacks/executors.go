@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -49,6 +51,8 @@ type TaskExecutorOptions struct {
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
 	ChasmEngine        chasm.Engine
+	Propagator         propagation.TextMapPropagator
+	TracerProvider     trace.TracerProvider
 }
 
 type taskExecutor struct {

@@ -2,12 +2,16 @@ package callbacks
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptrace"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -64,12 +68,37 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 			Destination: task.Destination(),
 		}),
 		Serializer: commonnexus.PayloadSerializer,
+		Propagator: e.Propagator,
 	})
 	// Make the call and record metrics.
+	var span trace.Span
+	if e.TracerProvider != nil {
+		tracer := e.TracerProvider.Tracer("go.temporal.io/server")
+		attrs := []attribute.KeyValue{
+			attribute.String("http.request.method", "POST"),
+			attribute.String("temporalWorkflowID", n.workflowID),
+			attribute.String("temporalNexusNamespace", ns.Name().String()),
+		}
+		if payload := nexusCompletionPayload(n.completion); payload != "" {
+			attrs = append(attrs, attribute.String("http.request.payload", payload))
+		}
+		ctx, span = tracer.Start(ctx, "CompleteNexusOperation",
+			trace.WithSpanKind(trace.SpanKindClient),
+			trace.WithAttributes(attrs...),
+		)
+		defer span.End()
+	}
 	startTime := time.Now()
 
 	n.completion.Header = n.nexus.Header
 	err := client.CompleteOperation(ctx, n.nexus.Url, n.completion)
+	if span.IsRecording() {
+		if err != nil {
+			span.SetAttributes(attribute.String("http.response.status_code", "error"))
+		} else {
+			span.SetAttributes(attribute.String("http.response.status_code", "200"))
+		}
+	}
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination())
@@ -108,4 +137,21 @@ func isRetryableCallError(err error) bool {
 		return handlerError.Retryable()
 	}
 	return true
+}
+
+// nexusCompletionPayload serializes the nexus completion result or error as a
+// JSON string suitable for the http.request.payload span attribute.
+func nexusCompletionPayload(c nexusrpc.CompleteOperationOptions) string {
+	if c.Error != nil {
+		m := map[string]string{
+			"state":   string(c.Error.State),
+			"message": c.Error.Message,
+		}
+		b, _ := json.Marshal(m)
+		return string(b)
+	}
+	if p, ok := c.Result.(*commonpb.Payload); ok && p != nil {
+		return string(p.GetData())
+	}
+	return ""
 }

@@ -10,6 +10,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -65,6 +67,8 @@ func NewNexusHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	propagator propagation.TextMapPropagator,
+	tracerProvider trace.TracerProvider,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -99,10 +103,13 @@ func NewNexusHTTPHandler(
 				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
+				propagator:                    propagator,
+				tracerProvider:                tracerProvider,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
 			Serializer:       commonnexus.PayloadSerializer,
+			Propagator:       propagator,
 		}),
 	}
 }

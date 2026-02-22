@@ -15,6 +15,9 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -326,6 +329,8 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	propagator                    propagation.TextMapPropagator
+	tracerProvider                trace.TracerProvider
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -442,6 +447,8 @@ func (h *nexusHandler) StartOperation(
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
 	// RPC.
+	ctx, span := h.startNexusOperationSpan(ctx, oc, service, operation)
+	defer span.End()
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
 		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
@@ -485,6 +492,7 @@ func (h *nexusHandler) StartOperation(
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
 			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
 			nexus.AddHandlerLinks(ctx, links...)
+			annotateNexusSpanWithLinks(span, t.SyncSuccess.GetLinks())
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, nil
@@ -497,6 +505,7 @@ func (h *nexusHandler) StartOperation(
 			}
 			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
 			nexus.AddHandlerLinks(ctx, links...)
+			annotateNexusSpanWithLinks(span, t.AsyncSuccess.GetLinks())
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
 			}, nil
@@ -574,6 +583,56 @@ func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
 		})
 	}
 	return nexusLinks
+}
+
+// startNexusOperationSpan creates a span for tracking a Nexus DispatchNexusTask operation.
+// The span carries Nexus-specific attributes used by observability tooling to link
+// caller and handler workflows.
+func (h *nexusHandler) startNexusOperationSpan(
+	ctx context.Context,
+	oc *operationContext,
+	service, operation string,
+) (context.Context, trace.Span) {
+	if h.tracerProvider == nil {
+		return ctx, trace.SpanFromContext(ctx)
+	}
+	tracer := h.tracerProvider.Tracer("go.temporal.io/server")
+	ctx, span := tracer.Start(ctx, "DispatchNexusTask")
+	span.SetAttributes(
+		attribute.String("http.request.method", "POST"),
+		attribute.String("temporalNexusEndpoint", oc.endpointName),
+		attribute.String("temporalNexusNamespace", oc.namespaceName),
+		attribute.String("temporalNexusService", service),
+		attribute.String("temporalNexusOperation", operation),
+	)
+	return ctx, span
+}
+
+// annotateNexusSpanWithLinks adds handler workflow link attributes to a Nexus span.
+// These attributes are used by observability tooling to link caller and handler workflows.
+func annotateNexusSpanWithLinks(span trace.Span, links []*nexuspb.Link) {
+	if !span.IsRecording() || len(links) == 0 {
+		return
+	}
+	var linkURLs []string
+	for _, link := range links {
+		linkURLs = append(linkURLs, link.GetUrl())
+		// Extract handler workflow ID from temporal:/// link URLs.
+		if u, err := url.Parse(link.GetUrl()); err == nil && u.Scheme == "temporal" {
+			rawPath := u.RawPath
+			if rawPath == "" {
+				rawPath = u.Path
+			}
+			parts := strings.Split(rawPath, "/")
+			// Path: /namespaces/{ns}/workflows/{wfID}/{runID}/...
+			if len(parts) >= 5 && parts[1] == "namespaces" && parts[3] == "workflows" {
+				if wfID, err := url.PathUnescape(parts[4]); err == nil {
+					span.SetAttributes(attribute.String("temporalNexusHandlerWorkflowID", wfID))
+				}
+			}
+		}
+	}
+	span.SetAttributes(attribute.StringSlice("temporalNexusLinks", linkURLs))
 }
 
 // forwardStartOperation forwards the StartOperation request to the active cluster using an HTTP request.
@@ -797,6 +856,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		HTTPCaller: httpCaller.Do,
 		BaseURL:    baseURL,
 		Service:    service,
+		Propagator: h.propagator,
 	})
 }
 

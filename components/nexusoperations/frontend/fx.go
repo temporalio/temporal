@@ -4,6 +4,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -31,15 +33,17 @@ func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 	}
 }
 
-func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.Router) {
+func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.Router, propagator propagation.TextMapPropagator, tracerProvider trace.TracerProvider) {
 	h := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 		Handler: &completionHandler{
 			options,
 			headers.NewDefaultVersionChecker(),
 			options.MetricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 		},
-		Logger:     log.NewSlogLogger(logger),
-		Serializer: commonnexus.PayloadSerializer,
+		Logger:         log.NewSlogLogger(logger),
+		Serializer:     commonnexus.PayloadSerializer,
+		Propagator:     propagator,
+		TracerProvider: tracerProvider,
 	})
 	router.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Limit the request body to max allowed Payload size.

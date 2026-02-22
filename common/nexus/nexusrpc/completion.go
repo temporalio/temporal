@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // CompletionHTTPClient is a client for sending Nexus operation completion callbacks via HTTP.
@@ -28,6 +30,9 @@ type CompletionHTTPClientOptions struct {
 	// A [failureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
 	FailureConverter FailureConverter
+	// Propagator for injecting trace context into outgoing HTTP requests.
+	// If nil, no trace context is propagated.
+	Propagator propagation.TextMapPropagator
 }
 
 // NewCompletionHTTPClient constructs a [CompletionHTTPClient] from given options for sending Nexus operation completion
@@ -47,6 +52,7 @@ func NewCompletionHTTPClient(options CompletionHTTPClientOptions) *CompletionHTT
 			httpCaller:       options.HTTPCaller,
 			serializer:       options.Serializer,
 			failureConverter: options.FailureConverter,
+			propagator:       options.Propagator,
 		},
 	}
 }
@@ -59,6 +65,9 @@ func (c *CompletionHTTPClient) CompleteOperation(ctx context.Context, url string
 	}
 	if err := completion.applyToHTTPRequest(c, httpReq); err != nil {
 		return err
+	}
+	if c.propagator != nil {
+		c.propagator.Inject(ctx, propagation.HeaderCarrier(httpReq.Header))
 	}
 
 	response, err := c.httpCaller(httpReq)
@@ -220,6 +229,12 @@ type CompletionHandlerOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
 	FailureConverter FailureConverter
+	// Propagator for extracting trace context from incoming HTTP requests.
+	// If nil, no trace context is extracted.
+	Propagator propagation.TextMapPropagator
+	// TracerProvider for creating server-side spans.
+	// If nil, no spans are created.
+	TracerProvider trace.TracerProvider
 }
 
 type completionHTTPHandler struct {
@@ -229,6 +244,15 @@ type completionHTTPHandler struct {
 
 func (h *completionHTTPHandler) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	ctx := request.Context()
+	if h.options.Propagator != nil {
+		ctx = h.options.Propagator.Extract(ctx, propagation.HeaderCarrier(request.Header))
+	}
+	if h.options.TracerProvider != nil {
+		tracer := h.options.TracerProvider.Tracer("go.temporal.io/server")
+		var span trace.Span
+		ctx, span = tracer.Start(ctx, "CompleteNexusOperation", trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
 	completion := CompletionRequest{
 		State:          nexus.OperationState(request.Header.Get(headerOperationState)),
 		OperationToken: request.Header.Get(nexus.HeaderOperationToken),

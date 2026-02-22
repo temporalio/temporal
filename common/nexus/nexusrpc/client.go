@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // HTTPClientOptions are options for creating an [HTTPClient].
@@ -31,6 +32,9 @@ type HTTPClientOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
 	FailureConverter FailureConverter
+	// Propagator for injecting trace context into outgoing HTTP requests.
+	// If nil, no trace context is propagated.
+	Propagator propagation.TextMapPropagator
 }
 
 // User-Agent header set on HTTP requests.
@@ -84,6 +88,8 @@ type baseHTTPClient struct {
 	// A [failureConverter] to convert a [Failure] instance to and from an [error]. Defaults to
 	// [DefaultFailureConverter].
 	failureConverter FailureConverter
+	// propagator for injecting trace context into outgoing HTTP requests.
+	propagator propagation.TextMapPropagator
 }
 
 func (c *baseHTTPClient) failureFromResponse(response *http.Response, body []byte) (nexus.Failure, error) {
@@ -181,6 +187,7 @@ func NewHTTPClient(options HTTPClientOptions) (*HTTPClient, error) {
 			serializer:       options.Serializer,
 			failureConverter: options.FailureConverter,
 			httpCaller:       options.HTTPCaller,
+			propagator:       options.Propagator,
 		},
 		serviceBaseURL: baseURL,
 		service:        options.Service,
@@ -282,6 +289,9 @@ func (c *HTTPClient) StartOperation(
 	}
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
+	if c.propagator != nil {
+		c.propagator.Inject(ctx, propagation.HeaderCarrier(request.Header))
+	}
 
 	response, err := c.httpCaller(request)
 	if err != nil {

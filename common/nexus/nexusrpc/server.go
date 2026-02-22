@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 func applyResultToHTTPResponse(r nexus.HandlerStartOperationResult[any], writer http.ResponseWriter, request *http.Request, handler *httpHandler) {
@@ -283,18 +284,22 @@ func (h *httpHandler) parseRequestTimeoutHeader(writer http.ResponseWriter, requ
 	return 0, true
 }
 
-// contextWithTimeoutFromHTTPRequest extracts the context from the HTTP request and applies the timeout indicated by
-// the Request-Timeout header, if set.
+// contextWithTimeoutFromHTTPRequest extracts the context from the HTTP request, applies the timeout indicated by
+// the Request-Timeout header (if set), and extracts trace context from HTTP headers (if a propagator is configured).
 func (h *httpHandler) contextWithTimeoutFromHTTPRequest(writer http.ResponseWriter, request *http.Request) (context.Context, context.CancelFunc, bool) {
 	requestTimeout, ok := h.parseRequestTimeoutHeader(writer, request)
 	if !ok {
 		return nil, nil, false
 	}
+	ctx := request.Context()
+	if h.options.Propagator != nil {
+		ctx = h.options.Propagator.Extract(ctx, propagation.HeaderCarrier(request.Header))
+	}
 	if requestTimeout > 0 {
-		ctx, cancel := context.WithTimeout(request.Context(), requestTimeout)
+		ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 		return ctx, cancel, true
 	}
-	return request.Context(), func() {}, true
+	return ctx, func() {}, true
 }
 
 // HandlerOptions are options for [NewHTTPHandler].
@@ -315,6 +320,9 @@ type HandlerOptions struct {
 	// A [FailureConverter] to convert a [Failure] instance to and from an [error].
 	// Defaults to [DefaultFailureConverter].
 	FailureConverter FailureConverter
+	// Propagator for extracting trace context from incoming HTTP requests.
+	// If nil, no trace context is extracted.
+	Propagator propagation.TextMapPropagator
 }
 
 func (h *httpHandler) handleRequest(writer http.ResponseWriter, request *http.Request) {

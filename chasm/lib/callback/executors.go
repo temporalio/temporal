@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
@@ -29,6 +31,8 @@ func NewInvocationTaskExecutor(opts InvocationTaskExecutorOptions) *InvocationTa
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		propagator:         opts.Propagator,
+		tracerProvider:     opts.TracerProvider,
 	}
 }
 
@@ -42,6 +46,8 @@ type InvocationTaskExecutorOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	Propagator         propagation.TextMapPropagator
+	TracerProvider     trace.TracerProvider
 }
 
 type InvocationTaskExecutor struct {
@@ -52,6 +58,8 @@ type InvocationTaskExecutor struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	propagator         propagation.TextMapPropagator
+	tracerProvider     trace.TracerProvider
 }
 
 func (e InvocationTaskExecutor) Execute(ctx context.Context, ref chasm.ComponentRef, attrs chasm.TaskAttributes, task *callbackspb.InvocationTask) error {
