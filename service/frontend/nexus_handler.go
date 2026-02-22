@@ -15,6 +15,9 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -33,6 +36,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -303,6 +307,23 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
+func (h *nexusHandler) annotateNexusSpan(
+	ctx context.Context,
+	oc *operationContext,
+	service, operation string,
+) {
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(
+		attribute.String(telemetry.NexusNamespaceKey, oc.namespaceName),
+		attribute.String(telemetry.NexusEndpointKey, oc.endpointName),
+		attribute.String(telemetry.NexusServiceKey, service),
+		attribute.String(telemetry.NexusOperationKey, operation),
+	)
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -326,6 +347,7 @@ type nexusHandler struct {
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	httpTraceProvider             commonnexus.HTTPClientTraceProvider
+	propagator                    propagation.TextMapPropagator
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -391,6 +413,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
+	h.annotateNexusSpan(ctx, oc, service, operation)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
@@ -629,6 +652,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
+	h.annotateNexusSpan(ctx, oc, service, operation)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
@@ -797,6 +821,7 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		HTTPCaller: httpCaller.Do,
 		BaseURL:    baseURL,
 		Service:    service,
+		Propagator: h.propagator,
 	})
 }
 
