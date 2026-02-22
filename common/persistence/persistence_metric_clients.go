@@ -32,9 +32,8 @@ type (
 
 	executionPersistenceClient struct {
 		metricEmitter
-		healthSignals                    HealthSignalAggregator
-		persistence                      ExecutionManager
-		enableCurrentRecordMissingMetric dynamicconfig.BoolPropertyFn
+		healthSignals HealthSignalAggregator
+		persistence   ExecutionManager
 	}
 
 	taskPersistenceClient struct {
@@ -90,16 +89,15 @@ func NewShardPersistenceMetricsClient(persistence ShardManager, metricsHandler m
 }
 
 // NewExecutionPersistenceMetricsClient creates a client to manage executions
-func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger, enableDataLossMetrics dynamicconfig.BoolPropertyFn, enableCurrentRecordMissingMetric dynamicconfig.BoolPropertyFn) ExecutionManager {
+func NewExecutionPersistenceMetricsClient(persistence ExecutionManager, metricsHandler metrics.Handler, healthSignals HealthSignalAggregator, logger log.Logger, enableDataLossMetrics dynamicconfig.BoolPropertyFn) ExecutionManager {
 	return &executionPersistenceClient{
 		metricEmitter: metricEmitter{
 			metricsHandler:        metricsHandler,
 			logger:                logger,
 			enableDataLossMetrics: enableDataLossMetrics,
 		},
-		healthSignals:                    healthSignals,
-		enableCurrentRecordMissingMetric: enableCurrentRecordMissingMetric,
-		persistence:                      persistence,
+		healthSignals: healthSignals,
+		persistence:   persistence,
 	}
 }
 
@@ -1447,7 +1445,7 @@ func (p *metricEmitter) recordDataLossMetrics(operation string, caller string, e
 }
 
 func (p *executionPersistenceClient) recordCurrentRecordMissingMetrics(operation string, caller string, err error, workflowID, runID string) {
-	if IsMissingCurrentRecordError(err) && p.enableCurrentRecordMissingMetric() {
+	if IsMissingCurrentRecordError(err) && p.enableDataLossMetrics() {
 		EmitCurrentRecordMissingMetric(p.metricsHandler, caller, workflowID, runID, operation, err)
 	}
 }

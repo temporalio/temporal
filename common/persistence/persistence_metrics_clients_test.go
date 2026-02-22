@@ -34,7 +34,6 @@ func TestExecutionPersistenceClient_DataLossMetrics_EmittedOnDataLossError(t *te
 		healthSignals,
 		logger,
 		enableDataLossMetrics,
-		func() bool { return false }, // enableCurrentRecordMissingMetric
 	)
 
 	ctx := context.Background()
@@ -96,7 +95,6 @@ func TestExecutionPersistenceClient_DataLossMetrics_NotEmittedWhenDisabled(t *te
 		healthSignals,
 		logger,
 		enableDataLossMetrics,
-		func() bool { return false }, // enableCurrentRecordMissingMetric
 	)
 
 	ctx := context.Background()
@@ -146,7 +144,6 @@ func TestExecutionPersistenceClient_DataLossMetrics_NotEmittedOnNonDataLossError
 		healthSignals,
 		logger,
 		enableDataLossMetrics,
-		func() bool { return false }, // enableCurrentRecordMissingMetric
 	)
 
 	ctx := context.Background()
@@ -196,7 +193,6 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithWrappedDataLossError(t *
 		healthSignals,
 		logger,
 		enableDataLossMetrics,
-		func() bool { return false }, // enableCurrentRecordMissingMetric
 	)
 
 	ctx := context.Background()
@@ -256,7 +252,6 @@ func TestExecutionPersistenceClient_DataLossMetrics_WithEmptyWorkflowDetails(t *
 		healthSignals,
 		logger,
 		enableDataLossMetrics,
-		func() bool { return false }, // enableCurrentRecordMissingMetric
 	)
 
 	ctx := context.Background()
@@ -309,8 +304,7 @@ func TestExecutionPersistenceClient_CurrentRecordMissingMetric_EmittedOnMissingR
 		metricsHandler,
 		healthSignals,
 		logger,
-		func() bool { return false }, // enableDataLossMetrics
-		func() bool { return true },  // enableCurrentRecordMissingMetric
+		func() bool { return true }, // enableDataLossMetrics
 	)
 
 	ctx := context.Background()
@@ -364,7 +358,6 @@ func TestExecutionPersistenceClient_CurrentRecordMissingMetric_NotEmittedForNorm
 		healthSignals,
 		logger,
 		func() bool { return false }, // enableDataLossMetrics
-		func() bool { return true },  // enableCurrentRecordMissingMetric - enabled but should NOT fire
 	)
 
 	ctx := context.Background()
@@ -411,7 +404,6 @@ func TestExecutionPersistenceClient_CurrentRecordMissingMetric_NotEmittedWhenDis
 		healthSignals,
 		logger,
 		func() bool { return false }, // enableDataLossMetrics
-		func() bool { return false }, // enableCurrentRecordMissingMetric - disabled
 	)
 
 	ctx := context.Background()
@@ -457,8 +449,7 @@ func TestExecutionPersistenceClient_CurrentRecordMissingMetric_ConflictResolvePa
 		metricsHandler,
 		healthSignals,
 		logger,
-		func() bool { return false }, // enableDataLossMetrics
-		func() bool { return true },  // enableCurrentRecordMissingMetric
+		func() bool { return true }, // enableDataLossMetrics
 	)
 
 	ctx := context.Background()
@@ -494,6 +485,93 @@ func TestExecutionPersistenceClient_CurrentRecordMissingMetric_ConflictResolvePa
 	assert.Equal(t, "resolve-workflow-id", tags["workflow_id"])
 	assert.Equal(t, "resolve-run-id", tags["run_id"])
 	assert.Equal(t, metrics.PersistenceConflictResolveWorkflowExecutionScope, tags[metrics.OperationTag("").Key])
+}
+
+func TestExecutionPersistenceClient_CurrentRecordMissingMetric_ConflictResolve_NotEmittedWhenDisabled(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	logger := log.NewNoopLogger()
+	mockExecutionManager := NewMockExecutionManager(ctrl)
+	healthSignals := NoopHealthSignalAggregator
+
+	client := NewExecutionPersistenceMetricsClient(
+		mockExecutionManager,
+		metricsHandler,
+		healthSignals,
+		logger,
+		func() bool { return false }, // enableDataLossMetrics - disabled
+	)
+
+	ctx := context.Background()
+	request := &ConflictResolveWorkflowExecutionRequest{
+		ShardID: 1,
+		ResetWorkflowSnapshot: WorkflowSnapshot{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{WorkflowId: "resolve-workflow-id"},
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "resolve-run-id"},
+		},
+	}
+
+	missingRecordErr := &CurrentWorkflowConditionFailedError{
+		Msg:   "current execution record not found",
+		RunID: "", // empty RunID = corruption signal, but flag is off
+	}
+	mockExecutionManager.EXPECT().
+		ConflictResolveWorkflowExecution(ctx, request).
+		Return(nil, missingRecordErr)
+
+	capture := metricsHandler.StartCapture()
+
+	_, err := client.ConflictResolveWorkflowExecution(ctx, request)
+	require.Error(t, err)
+
+	snapshot := capture.Snapshot()
+	assert.Empty(t, snapshot[metrics.CurrentRecordMissingCounter.Name()])
+}
+
+func TestExecutionPersistenceClient_CurrentRecordMissingMetric_ConflictResolve_NotEmittedForNormalConflict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	logger := log.NewNoopLogger()
+	mockExecutionManager := NewMockExecutionManager(ctrl)
+	healthSignals := NoopHealthSignalAggregator
+
+	client := NewExecutionPersistenceMetricsClient(
+		mockExecutionManager,
+		metricsHandler,
+		healthSignals,
+		logger,
+		func() bool { return true }, // enableDataLossMetrics - enabled
+	)
+
+	ctx := context.Background()
+	request := &ConflictResolveWorkflowExecutionRequest{
+		ShardID: 1,
+		ResetWorkflowSnapshot: WorkflowSnapshot{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{WorkflowId: "resolve-workflow-id"},
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "resolve-run-id"},
+		},
+	}
+
+	// Non-empty RunID = another run owns the current record (normal conflict, NOT corruption)
+	normalConflictErr := &CurrentWorkflowConditionFailedError{
+		Msg:   "current workflow conflict",
+		RunID: "other-run-id",
+	}
+	mockExecutionManager.EXPECT().
+		ConflictResolveWorkflowExecution(ctx, request).
+		Return(nil, normalConflictErr)
+
+	capture := metricsHandler.StartCapture()
+
+	_, err := client.ConflictResolveWorkflowExecution(ctx, request)
+	require.Error(t, err)
+
+	snapshot := capture.Snapshot()
+	assert.Empty(t, snapshot[metrics.CurrentRecordMissingCounter.Name()])
 }
 
 func TestIsMissingCurrentRecordError(t *testing.T) {

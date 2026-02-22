@@ -60,7 +60,6 @@ type (
 		shardRateLimiter                            quotas.RequestRateLimiter
 		healthSignals                               persistence.HealthSignalAggregator
 		enableDataLossMetrics                       dynamicconfig.BoolPropertyFn
-		enableCurrentRecordMissingMetric            dynamicconfig.BoolPropertyFn
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 	}
 )
@@ -85,7 +84,6 @@ func NewFactory(
 	logger log.Logger,
 	healthSignals persistence.HealthSignalAggregator,
 	enableDataLossMetrics EnableDataLossMetrics,
-	enableCurrentRecordMissingMetric EnableCurrentRecordMissingMetric,
 	enableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate,
 ) Factory {
 	factory := &factoryImpl{
@@ -101,7 +99,6 @@ func NewFactory(
 		shardRateLimiter:      shardRateLimiter,
 		healthSignals:         healthSignals,
 		enableDataLossMetrics:                       dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
-		enableCurrentRecordMissingMetric:            dynamicconfig.BoolPropertyFn(enableCurrentRecordMissingMetric),
 		enableBestEffortDeleteTasksOnWorkflowUpdate: dynamicconfig.BoolPropertyFn(enableBestEffortDeleteTasksOnWorkflowUpdate),
 	}
 	factory.initDependencies()
@@ -215,7 +212,7 @@ func (f *factoryImpl) NewExecutionManager() (persistence.ExecutionManager, error
 		result = persistence.NewExecutionPersistenceRateLimitedClient(result, f.systemRateLimiter, f.namespaceRateLimiter, f.shardRateLimiter, f.logger)
 	}
 	if f.metricsHandler != nil && f.healthSignals != nil {
-		result = persistence.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger, f.enableDataLossMetrics, f.enableCurrentRecordMissingMetric)
+		result = persistence.NewExecutionPersistenceMetricsClient(result, f.metricsHandler, f.healthSignals, f.logger, f.enableDataLossMetrics)
 	}
 	result = persistence.NewExecutionPersistenceRetryableClient(result, retryPolicy, IsPersistenceTransientError)
 	return result, nil

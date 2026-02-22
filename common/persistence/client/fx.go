@@ -34,7 +34,6 @@ type (
 	DynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 
 	EnableDataLossMetrics                       dynamicconfig.BoolPropertyFn
-	EnableCurrentRecordMissingMetric            dynamicconfig.BoolPropertyFn
 	EnableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 
 	ClusterName string
@@ -57,7 +56,6 @@ type (
 		HealthSignals                               persistence.HealthSignalAggregator
 		DynamicRateLimitingParams                   DynamicRateLimitingParams
 		EnableDataLossMetrics                       EnableDataLossMetrics
-		EnableCurrentRecordMissingMetric            EnableCurrentRecordMissingMetric
 		EnableBestEffortDeleteTasksOnWorkflowUpdate EnableBestEffortDeleteTasksOnWorkflowUpdate
 		Serializer                                  serialization.Serializer
 	}
@@ -83,7 +81,6 @@ var Module = fx.Options(
 	fx.Provide(persistence.NewDLQMetricsEmitter),
 	fx.Provide(EventBlobCacheProvider),
 	fx.Provide(EnableDataLossMetricsProvider),
-	fx.Provide(EnableCurrentRecordMissingMetricProvider),
 	fx.Provide(EnableBestEffortDeleteTasksOnWorkflowUpdateProvider),
 )
 
@@ -107,12 +104,6 @@ func EnableDataLossMetricsProvider(
 	dc *dynamicconfig.Collection,
 ) EnableDataLossMetrics {
 	return EnableDataLossMetrics(dynamicconfig.EnableDataLossMetrics.Get(dc))
-}
-
-func EnableCurrentRecordMissingMetricProvider(
-	dc *dynamicconfig.Collection,
-) EnableCurrentRecordMissingMetric {
-	return EnableCurrentRecordMissingMetric(dynamicconfig.EnableCurrentRecordMissingMetric.Get(dc))
 }
 
 func EnableBestEffortDeleteTasksOnWorkflowUpdateProvider(
@@ -165,7 +156,6 @@ func FactoryProvider(
 		params.Logger,
 		params.HealthSignals,
 		params.EnableDataLossMetrics,
-		params.EnableCurrentRecordMissingMetric,
 		params.EnableBestEffortDeleteTasksOnWorkflowUpdate,
 	)
 }

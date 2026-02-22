@@ -15,14 +15,14 @@ const (
 // EmitDataLossMetric emits a data loss metric for DataLoss errors
 func EmitDataLossMetric(
 	handler metrics.Handler,
-	namespaceName, workflowID, runID, source string,
+	namespaceName, workflowID, runID, operation string,
 	err error,
 ) {
 	metrics.DataLossCounter.With(handler).Record(1,
 		metrics.NamespaceTag(namespaceName),
 		metrics.StringTag(WorkflowIDTagName, workflowID),
 		metrics.StringTag(RunIDTagName, runID),
-		metrics.OperationTag(source),
+		metrics.OperationTag(operation),
 		metrics.StringTag(ErrorTagName, err.Error()),
 	)
 }
@@ -43,14 +43,14 @@ func IsMissingCurrentRecordError(err error) bool {
 // execution record is detected during a workflow update.
 func EmitCurrentRecordMissingMetric(
 	handler metrics.Handler,
-	namespaceName, workflowID, runID, source string,
+	namespaceName, workflowID, runID, operation string,
 	err error,
 ) {
 	metrics.CurrentRecordMissingCounter.With(handler).Record(1,
 		metrics.NamespaceTag(namespaceName),
 		metrics.StringTag(WorkflowIDTagName, workflowID),
 		metrics.StringTag(RunIDTagName, runID),
-		metrics.OperationTag(source),
+		metrics.OperationTag(operation),
 		metrics.StringTag(ErrorTagName, err.Error()),
 	)
 }
