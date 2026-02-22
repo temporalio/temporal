@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	"go.opentelemetry.io/otel/propagation"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -849,6 +850,7 @@ func RegisterNexusHTTPHandler(
 	logger log.Logger,
 	router *mux.Router,
 	httpTraceProvider nexus.HTTPClientTraceProvider,
+	propagator propagation.TextMapPropagator,
 ) {
 	h := NewNexusHTTPHandler(
 		serviceConfig,
@@ -868,6 +870,7 @@ func RegisterNexusHTTPHandler(
 		rateLimitInterceptor,
 		logger,
 		httpTraceProvider,
+		propagator,
 	)
 	h.RegisterRoutes(router)
 }

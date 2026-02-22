@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel/propagation"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -80,6 +81,7 @@ func ClientProviderFactory(
 	clusterMetadata cluster.Metadata,
 	rpcFactory common.RPCFactory,
 	config *Config,
+	propagator propagation.TextMapPropagator,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -137,6 +139,7 @@ func ClientProviderFactory(
 			Service:    service,
 			HTTPCaller: httpCaller,
 			Serializer: commonnexus.PayloadSerializer,
+			Propagator: propagator,
 		})
 	}, nil
 }

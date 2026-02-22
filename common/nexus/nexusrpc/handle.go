@@ -6,6 +6,7 @@ import (
 	"net/url"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 // An OperationHandle is used to cancel operations and get their result and status.
@@ -31,6 +32,9 @@ func (h *OperationHandle[T]) Cancel(ctx context.Context, options nexus.CancelOpe
 	addContextTimeoutToHTTPHeader(ctx, request.Header)
 	request.Header.Set(headerUserAgent, userAgent)
 	addNexusHeaderToHTTPHeader(options.Header, request.Header)
+	if h.client.propagator != nil {
+		h.client.propagator.Inject(ctx, propagation.HeaderCarrier(request.Header))
+	}
 	response, err := h.client.httpCaller(request)
 	if err != nil {
 		return err
