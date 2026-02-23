@@ -40,12 +40,11 @@ type (
 	TestSubComponent1 struct {
 		UnimplementedComponent
 
-		SubComponent1Data    *protoMessageType
-		SubComponent11       Field[*TestSubComponent11]
-		SubComponent11_2     Field[*TestSubComponent11]
-		SubData11            Field[*protoMessageType] // Random proto message.
-		SubComponent2Pointer Field[*TestSubComponent2]
-		DataPointer          Field[*protoMessageType]
+		SubComponent1Data *protoMessageType
+		SubComponent11    Field[*TestSubComponent11]
+		SubComponent11_2  Field[*TestSubComponent11]
+		SubData11         Field[*protoMessageType] // Random proto message.
+		RootPointer Field[*TestComponent]
 
 		ParentPtr ParentPtr[*TestComponent]
 	}
@@ -53,7 +52,9 @@ type (
 	TestSubComponent11 struct {
 		UnimplementedComponent
 
-		SubComponent11Data *protoMessageType
+		SubComponent11Data   *protoMessageType
+		GrandparentPointer   Field[*TestComponent]
+		ParentComponentPtr   Field[*TestSubComponent1]
 
 		ParentPtr ParentPtr[*TestSubComponent1]
 	}
