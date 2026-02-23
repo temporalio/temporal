@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,7 +36,7 @@ func NewContext(parent ...context.Context) context.Context {
 }
 
 // calculateTimeout determines the appropriate timeout duration based on custom timeout,
-// environment variable, test deadline, and default values. Returns 0 if timeout should be skipped.
+// environment variable, and default values.
 //
 // Priority order:
 //  1. Custom timeout (via WithTimeout option)
@@ -64,32 +63,14 @@ func setupTestTimeoutWithContext(t *testing.T, customTimeout time.Duration) cont
 	t.Helper()
 
 	timeout := calculateTimeout(customTimeout)
-	if timeout <= 0 {
-		return headers.SetVersions(t.Context())
-	}
-
 	ctx, cancel := context.WithTimeout(t.Context(), timeout)
 	ctx = headers.SetVersions(ctx)
 
-	// Capture the error that caused context cancellation to avoid race conditions
-	// between timeout expiration and explicit cancel() in cleanup
-	var contextErr atomic.Value
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		<-ctx.Done()
-		// Store the error immediately to capture whether it was DeadlineExceeded or Canceled
-		contextErr.Store(ctx.Err())
-	}()
-
-	// Register cleanup to cancel context and check timeout
-	// t.Cleanup() functions run in LIFO order, so this runs after test code
+	// Register cleanup to cancel context and check timeout.
+	// t.Cleanup() functions run in LIFO order, so this runs after test code.
 	t.Cleanup(func() {
 		cancel()
-		<-done
-
-		// Check the captured error, not the current ctx.Err()
-		if err, ok := contextErr.Load().(error); ok && err == context.DeadlineExceeded {
+		if ctx.Err() == context.DeadlineExceeded {
 			t.Errorf("Test exceeded timeout of %v", timeout)
 		}
 	})
