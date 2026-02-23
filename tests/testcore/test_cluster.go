@@ -74,21 +74,23 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		EnableArchival         bool
-		IsMasterCluster        bool
-		ClusterMetadata        cluster.Config
-		Persistence            persistencetests.TestBaseOptions
-		FrontendConfig         FrontendConfig
-		HistoryConfig          HistoryConfig
-		MatchingConfig         MatchingConfig
-		WorkerConfig           WorkerConfig
-		ESConfig               *esclient.Config
-		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         *config.FaultInjection
-		DynamicConfigOverrides map[dynamicconfig.Key]any
-		EnableMTLS             bool
-		EnableMetricsCapture   bool
-		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		EnableArchival                  bool
+		IsMasterCluster                 bool
+		ClusterMetadata                 cluster.Config
+		Persistence                     persistencetests.TestBaseOptions
+		FrontendConfig                  FrontendConfig
+		HistoryConfig                   HistoryConfig
+		MatchingConfig                  MatchingConfig
+		WorkerConfig                    WorkerConfig
+		ESConfig                        *esclient.Config
+		MockAdminClient                 map[string]adminservice.AdminServiceClient
+		FaultInjection                  *config.FaultInjection
+		DynamicConfigOverrides          map[dynamicconfig.Key]any
+		EnableMTLS                      bool
+		EnableMetricsCapture            bool
+		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
@@ -242,7 +244,13 @@ func newClusterWithPersistenceTestBaseFactory(
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 
 	testBase.Setup(clusterMetadataConfig)
-	archiverBase := newArchiverBase(clusterConfig.EnableArchival, testBase.ExecutionManager, logger)
+	archiverBase := newArchiverBase(
+		clusterConfig.EnableArchival,
+		clusterConfig.CustomHistoryArchiverFactory,
+		clusterConfig.CustomVisibilityArchiverFactory,
+		testBase.ExecutionManager,
+		logger,
+	)
 
 	pConfig := testBase.DefaultTestCluster.Config()
 	pConfig.NumHistoryShards = clusterConfig.HistoryConfig.NumHistoryShards
@@ -495,6 +503,8 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 
 func newArchiverBase(
 	enabled bool,
+	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
+	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 ) *ArchiverBase {
@@ -525,8 +535,8 @@ func newArchiverBase(
 		&config.VisibilityArchiverProvider{
 			Filestore: cfg,
 		},
-		nil,
-		nil,
+		customHistoryArchiverFactory,
+		customVisibilityArchiverFactory,
 		executionManager,
 		logger,
 		metrics.NoopMetricsHandler,
