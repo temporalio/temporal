@@ -32,16 +32,18 @@ func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 }
 
 func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
+	var result []ConstrainedValue
 	for i := len(d.overrides) - 1; i >= 0; i-- {
 		if d.overrides[i].valid && d.overrides[i].key == key {
 			v := d.overrides[i].value
-			if value, ok := v.([]ConstrainedValue); ok {
-				return value
+			if cvs, ok := v.([]ConstrainedValue); ok {
+				result = append(result, cvs...)
+			} else {
+				result = append(result, ConstrainedValue{Value: v})
 			}
-			return []ConstrainedValue{{Value: v}}
 		}
 	}
-	return nil
+	return result
 }
 
 func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (cleanup func()) {

@@ -61,13 +61,11 @@ func newTaskQueueStatsSuite(t *testing.T, env testcore.Env, usePriMatcher bool) 
 
 // TODO(pri): remove once the classic matcher is removed
 func TestTaskQueueStats_Classic_Suite(t *testing.T) {
-	testcore.MustRunSequential(t, "tests flake when run in parallel")
 	t.Parallel()
 	runTaskQueueStatsTests(t, false) // usePriMatcher = false
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	testcore.MustRunSequential(t, "tests flake when run in parallel")
 	t.Parallel()
 	runTaskQueueStatsTests(t, true) // usePriMatcher = true
 }
