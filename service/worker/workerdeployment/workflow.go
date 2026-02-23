@@ -476,7 +476,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeployment(ctx workflow.Context, args
 		}, nil
 	}
 
-	// Revive in case deleted, but a create request came before the workflow is closed
+	// At this point this is either a brand-new workflow or a deleted but unclosed one. Revive would work in both cases.
 	err = d.revive(ctx, args)
 	if err != nil {
 		return nil, err

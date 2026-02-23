@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	update2 "go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -432,29 +431,4 @@ func buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
 	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
 	return sa
-}
-
-func makeNewVersionWorkflowArgs(namespaceEntry *namespace.Namespace, deploymentName, buildID string, syncBatchSize int32) *deploymentspb.WorkerDeploymentVersionWorkflowArgs {
-	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
-		NamespaceName: namespaceEntry.Name().String(),
-		NamespaceId:   namespaceEntry.ID().String(),
-		VersionState:  makeNewVersionState(deploymentName, buildID, syncBatchSize),
-	}
-}
-
-func makeNewVersionState(deploymentName, buildID string, syncBatchSize int32) *deploymentspb.VersionLocalState {
-	return &deploymentspb.VersionLocalState{
-		Version: &deploymentspb.WorkerDeploymentVersion{
-			DeploymentName: deploymentName,
-			BuildId:        buildID,
-		},
-		CreateTime:        timestamppb.Now(),
-		RoutingUpdateTime: nil,
-		CurrentSinceTime:  nil,                                 // not current
-		RampingSinceTime:  nil,                                 // not ramping
-		RampPercentage:    0,                                   // not ramping
-		DrainageInfo:      &deploymentpb.VersionDrainageInfo{}, // not draining or drained
-		Metadata:          nil,
-		SyncBatchSize:     syncBatchSize,
-	}
 }

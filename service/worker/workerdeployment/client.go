@@ -721,10 +721,6 @@ func (d *ClientImpl) SetCurrentVersion(
 	if err != nil {
 		return nil, err
 	}
-	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
-	}
 
 	updatePayload, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.SetCurrentVersionArgs{
 		Identity:                identity,
@@ -737,18 +733,25 @@ func (d *ClientImpl) SetCurrentVersion(
 		return nil, err
 	}
 
-	// Generating a new updateID and requestID for each request. No-ops are handled by the worker-deployment workflow.
 	updateID := uuid.NewString()
 	requestID := uuid.NewString()
 
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
-		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
+		if b := versionObj.GetBuildId(); b != "" {
+			// Empty build id is accepted for unset.
+			err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
+			if err != nil {
+				return nil, err
+			}
+		}
 		outcome, err = d.updateWithStartWorkerDeployment(
 			ctx,
 			namespaceEntry,
 			deploymentName,
 			&updatepb.Request{
+				// we want to start the Worker Deployment workflow if it hasn't been started by a poller
+				// Generating a new updateID and requestID for each request. No-ops are handled by the worker-deployment workflow.
 				Input: &updatepb.Input{Name: SetCurrentVersion, Args: updatePayload},
 				Meta:  &updatepb.Meta{UpdateId: updateID, Identity: identity},
 			},
@@ -833,10 +836,6 @@ func (d *ClientImpl) SetRampingVersion(
 	if err != nil {
 		return nil, err
 	}
-	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
-	if err != nil {
-		return nil, err
-	}
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
@@ -859,6 +858,13 @@ func (d *ClientImpl) SetRampingVersion(
 	var outcome *updatepb.Outcome
 	if allowNoPollers {
 		// we want to start the Worker Deployment workflow if it hasn't been started by a poller
+		if b := versionObj.GetBuildId(); b != "" {
+			// Empty build id is accepted for unset.
+			err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, versionObj.GetBuildId(), d.maxIDLengthLimit())
+			if err != nil {
+				return nil, err
+			}
+		}
 		outcome, err = d.updateWithStartWorkerDeployment(
 			ctx,
 			namespaceEntry,
@@ -1073,7 +1079,6 @@ func (d *ClientImpl) CreateWorkerDeployment(
 		return nil, err
 	}
 	limit := d.maxDeployments(namespaceEntry.Name().String())
-	fmt.Printf(">>> countWorkerDeployments: %d, limit: %d\n", count, limit)
 	if count >= int64(limit) {
 		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 	}
