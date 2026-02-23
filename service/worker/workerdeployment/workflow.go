@@ -598,6 +598,10 @@ func (d *WorkflowRunner) handleDeleteDeployment(ctx workflow.Context) error {
 		d.lock.Unlock()
 	}()
 
+	if err := d.validateDeleteDeployment(); err != nil {
+		return err
+	}
+
 	if len(d.State.Versions) == 0 {
 		d.deleteDeployment = true
 	}
@@ -1619,12 +1623,23 @@ func (d *WorkflowRunner) getWorkerDeploymentInfoVersionSummary(versionSummary *d
 }
 
 func (d *WorkflowRunner) revive(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentArgs) error {
+	// Reset routing config to clear all previous timestamps still present from previous life.
+	routingConfig := &deploymentpb.RoutingConfig{
+		// We preserve the revision number in case of a previous delete while there were propagating revisions.
+		// Note: this assumes the revision number correctly reflects an empty routing config. As of now, this
+		// is the case for brand-new deployments and also deleted ones, because user has to delete all versions,
+		// and hence clear routing config, before deleting the deployment.
+		RevisionNumber: d.State.GetRoutingConfig().GetRevisionNumber(),
+		CurrentVersion: worker_versioning.UnversionedVersionId,
+	}
+
 	d.State = &deploymentspb.WorkerDeploymentLocalState{
 		CreateTime:           timestamppb.New(workflow.Now(ctx)),
 		CreateRequestId:      args.GetRequestId(),
 		LastModifierIdentity: args.GetIdentity(),
-		RoutingConfig:        &deploymentpb.RoutingConfig{CurrentVersion: worker_versioning.UnversionedVersionId},
+		RoutingConfig:        routingConfig,
 		Versions:             make(map[string]*deploymentspb.WorkerDeploymentVersionSummary),
+		PropagatingRevisions: d.State.PropagatingRevisions, // preserve the propagating revisions from the previous life
 		ComputeConfig:        args.GetComputeConfig(),
 		SyncBatchSize:        d.State.SyncBatchSize,
 	}
