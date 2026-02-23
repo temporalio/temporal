@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -64,6 +65,10 @@ type (
 		inGC       bool
 		numToGC    int       // counts approximately how many tasks we can delete with a GC
 		lastGCTime time.Time // last time GCed
+
+		// initialLoadDone is set after the first batch of tasks is loaded from DB.
+		// Used to synchronize draining backlog initialization.
+		initialLoadDone *future.FutureImpl[struct{}]
 	}
 
 	mergeMode int
@@ -104,6 +109,9 @@ func newFairTaskReader(
 
 		// gc state
 		lastGCTime: time.Now(),
+
+		// synchronization
+		initialLoadDone: future.NewFuture[struct{}](),
 	}
 }
 
@@ -111,6 +119,13 @@ func (tr *fairTaskReader) Start() {
 	tr.lock.Lock()
 	defer tr.lock.Unlock()
 	tr.maybeReadTasksLocked()
+}
+
+// WaitForInitialLoad waits for the initial batch of tasks to be loaded from the database.
+// This is used to ensure draining backlog tasks are in the matcher before active tasks.
+func (tr *fairTaskReader) WaitForInitialLoad(ctx context.Context) error {
+	_, err := tr.initialLoadDone.Get(ctx)
+	return err
 }
 
 func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
@@ -243,6 +258,9 @@ func (tr *fairTaskReader) readTasksImpl() {
 	for _, task := range newTasks {
 		tr.addTaskToMatcher(task)
 	}
+
+	// Signal completion after tasks are added to matcher
+	tr.initialLoadDone.SetIfNotReady(struct{}{}, nil)
 }
 
 func (tr *fairTaskReader) readTaskBatch(readLevel fairLevel, loadedTasks int) error {
