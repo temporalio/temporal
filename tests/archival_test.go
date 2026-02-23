@@ -383,8 +383,8 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		Logger:              s.Logger,
 		T:                   s.T(),
 	}
-	for run := 0; run < numRuns; run++ {
-		for i := 0; i < numActivities; i++ {
+	for range numRuns {
+		for i := range numActivities {
 			_, err := poller.PollAndProcessWorkflowTask()
 			s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 			s.NoError(err)

@@ -487,7 +487,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestUpdateWorkflow() {
 		ms, err := wfContext.LoadMutableState(context.Background(), s.workflowTaskCompletedHandler.shardContext)
 		s.NoError(err)
 
-		for i := 0; i < 11; i++ {
+		for i := range 11 {
 			_, _, err = ms.AddTimerStartedEvent(
 				1,
 				&commandpb.StartTimerCommandAttributes{
@@ -605,7 +605,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {
 
 	constructQueryRegistry := func(numQueries int) historyi.QueryRegistry {
 		queryRegistry := workflow.NewQueryRegistry()
-		for i := 0; i < numQueries; i++ {
+		for range numQueries {
 			queryRegistry.BufferQuery(&querypb.WorkflowQuery{})
 		}
 		return queryRegistry

@@ -30,6 +30,26 @@ func (c *clientImpl) AddTasks(
 	return response, nil
 }
 
+func (c *clientImpl) CancelNexusOperation(
+	ctx context.Context,
+	request *historyservice.CancelNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.CancelNexusOperationResponse, error) {
+	shardID := request.GetShardId()
+	var response *historyservice.CancelNexusOperationResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.CancelNexusOperation(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
@@ -1239,6 +1259,26 @@ func (c *clientImpl) SignalWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.SignalWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) StartNexusOperation(
+	ctx context.Context,
+	request *historyservice.StartNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.StartNexusOperationResponse, error) {
+	shardID := request.GetShardId()
+	var response *historyservice.StartNexusOperationResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.StartNexusOperation(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {

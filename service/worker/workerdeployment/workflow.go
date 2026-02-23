@@ -82,8 +82,8 @@ func getWorkflowVersion(ctx workflow.Context, unsafeWorkflowVersionGetter func()
 	if workflow.GetVersion(ctx, "workflowVersionAdded", workflow.DefaultVersion, 0) >= 0 {
 		var ver DeploymentWorkflowVersion
 		err := workflow.MutableSideEffect(ctx, "workflowVersion",
-			func(_ workflow.Context) interface{} { return unsafeWorkflowVersionGetter() },
-			func(a, b interface{}) bool { return a == b }).
+			func(_ workflow.Context) any { return unsafeWorkflowVersionGetter() },
+			func(a, b any) bool { return a == b }).
 			Get(&ver)
 		if err == nil {
 			return ver
@@ -1261,10 +1261,10 @@ func (d *WorkflowRunner) validateAddVersionToWorkerDeployment(args *deploymentsp
 }
 
 func (d *WorkflowRunner) getMaxVersions(ctx workflow.Context) int {
-	getMaxVersionsInDeployment := func(ctx workflow.Context) interface{} {
+	getMaxVersionsInDeployment := func(ctx workflow.Context) any {
 		return d.unsafeMaxVersion()
 	}
-	intEq := func(a, b interface{}) bool {
+	intEq := func(a, b any) bool {
 		return a == b
 	}
 	var maxVersions int

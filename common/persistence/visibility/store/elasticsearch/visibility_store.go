@@ -55,7 +55,7 @@ type (
 	}
 
 	visibilityPageToken struct {
-		SearchAfter []interface{}
+		SearchAfter []any
 	}
 
 	esQueryParams struct {
@@ -308,7 +308,7 @@ func GetVisibilityTaskKey(shardID int32, taskID int64) string {
 func (s *VisibilityStore) addBulkIndexRequestAndWait(
 	ctx context.Context,
 	request *store.InternalVisibilityRequestBase,
-	esDoc map[string]interface{},
+	esDoc map[string]any,
 	visibilityTaskKey string,
 ) error {
 	bulkIndexRequest := &client.BulkableRequest{
@@ -851,7 +851,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 	response := &store.InternalListExecutionsResponse{
 		Executions: make([]*store.InternalExecutionInfo, 0, len(searchResult.Hits.Hits)),
 	}
-	var lastHitSort []interface{}
+	var lastHitSort []any
 	for _, hit := range searchResult.Hits.Hits {
 		workflowExecutionInfo, err := s.ParseESDoc(hit.Id, hit.Source, typeMap, namespace, chasmMapper)
 		if err != nil {
@@ -904,8 +904,8 @@ func (s *VisibilityStore) serializePageToken(token *visibilityPageToken) ([]byte
 func (s *VisibilityStore) GenerateESDoc(
 	request *store.InternalVisibilityRequestBase,
 	visibilityTaskKey string,
-) (map[string]interface{}, error) {
-	doc := map[string]interface{}{
+) (map[string]any, error) {
+	doc := map[string]any{
 		sadefs.VisibilityTaskKey: visibilityTaskKey,
 		sadefs.NamespaceID:       request.NamespaceID,
 		sadefs.WorkflowID:        request.WorkflowID,
@@ -965,7 +965,7 @@ func (s *VisibilityStore) GenerateESDoc(
 func (s *VisibilityStore) GenerateClosedESDoc(
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 	visibilityTaskKey string,
-) (map[string]interface{}, error) {
+) (map[string]any, error) {
 	doc, err := s.GenerateESDoc(request.InternalVisibilityRequestBase, visibilityTaskKey)
 	if err != nil {
 		return nil, err
@@ -988,12 +988,12 @@ func (s *VisibilityStore) ParseESDoc(
 	namespaceName namespace.Name,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) (*store.InternalExecutionInfo, error) {
-	logParseError := func(fieldName string, fieldValue interface{}, err error, docID string) error {
+	logParseError := func(fieldName string, fieldValue any, err error, docID string) error {
 		metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
 		return serviceerror.NewInternalf("unable to parse Elasticsearch document(%s) %q field value %q: %v", docID, fieldName, fieldValue, err)
 	}
 
-	var sourceMap map[string]interface{}
+	var sourceMap map[string]any
 	d := json.NewDecoder(bytes.NewReader(docSource))
 	// Very important line. See finishParseJSONValue bellow.
 	d.UseNumber()
@@ -1008,7 +1008,7 @@ func (s *VisibilityStore) ParseESDoc(
 		isValidType         bool
 		memo                []byte
 		memoEncoding        string
-		allSearchAttributes map[string]interface{}
+		allSearchAttributes map[string]any
 	)
 	record := &store.InternalExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
@@ -1088,7 +1088,7 @@ func (s *VisibilityStore) ParseESDoc(
 			record.RootRunID = fieldValueParsed.(string)
 		default:
 			if allSearchAttributes == nil {
-				allSearchAttributes = map[string]interface{}{}
+				allSearchAttributes = map[string]any{}
 			}
 			allSearchAttributes[fieldName] = fieldValueParsed
 		}
@@ -1217,12 +1217,12 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 //	[]interface{}, for JSON arrays
 //	map[string]interface{}, for JSON objects (should never be a case)
 //	nil for JSON null
-func finishParseJSONValue(val interface{}, t enumspb.IndexedValueType) (interface{}, error) {
+func finishParseJSONValue(val any, t enumspb.IndexedValueType) (any, error) {
 	// Custom search attributes support array of a particular type.
-	if arrayValue, isArray := val.([]interface{}); isArray {
-		retArray := make([]interface{}, len(arrayValue))
+	if arrayValue, isArray := val.([]any); isArray {
+		retArray := make([]any, len(arrayValue))
 		var lastErr error
-		for i := 0; i < len(retArray); i++ {
+		for i := range retArray {
 			retArray[i], lastErr = finishParseJSONValue(arrayValue[i], t)
 		}
 		return retArray, lastErr
@@ -1304,7 +1304,7 @@ func isDefaultSorter(sorter []elastic.Sorter) bool {
 	if len(sorter) != len(defaultSorter) {
 		return false
 	}
-	for i := 0; i < len(defaultSorter); i++ {
+	for i := range defaultSorter {
 		if &sorter[i] != &defaultSorter[i] {
 			return false
 		}
@@ -1336,7 +1336,7 @@ func buildPaginationQuery(
 	}
 
 	parsedSearchAfter := make([]any, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		tp, err := saTypeMap.GetType(sorterFields[i].name)
 		if err != nil {
 			return nil, err
@@ -1356,7 +1356,7 @@ func buildPaginationQuery(
 	}
 
 	shouldQueries := make([]elastic.Query, 0, len(sorterFields))
-	for k := 0; k < len(sorterFields); k++ {
+	for k := range sorterFields {
 		bq := elastic.NewBoolQuery()
 		for i := 0; i <= k; i++ {
 			field := sorterFields[i]

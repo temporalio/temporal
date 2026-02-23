@@ -102,7 +102,7 @@ func (m *MetadataStore) CreateNamespace(
 ) (*p.CreateNamespaceResponse, error) {
 
 	query := m.session.Query(templateCreateNamespaceQuery, request.ID, request.Name).WithContext(ctx)
-	existingRow := make(map[string]interface{})
+	existingRow := make(map[string]any)
 	applied, err := query.MapScanCAS(existingRow)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err)
@@ -146,7 +146,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	)
 	m.updateMetadataBatch(batch, metadata.NotificationVersion)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return nil, serviceerror.NewUnavailablef("CreateNamespace operation failed. Inserting into namespaces table. Error: %v", err)
@@ -167,7 +167,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 			return nil, err
 		}
 		if !matched {
-			m := make(map[string]interface{})
+			m := make(map[string]any)
 			if iter.MapScan(m) {
 				previous = m
 			}
@@ -218,7 +218,7 @@ func (m *MetadataStore) UpdateNamespace(
 	)
 	m.updateMetadataBatch(batch, request.NotificationVersion)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return serviceerror.NewUnavailablef("UpdateNamespace operation failed. Error: %v", err)
@@ -272,7 +272,7 @@ func (m *MetadataStore) RenameNamespace(
 	)
 	m.updateMetadataBatch(batch, request.NotificationVersion)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return serviceerror.NewUnavailablef("RenameNamespace operation failed. Error: %v", err)
@@ -509,7 +509,7 @@ func (m *MetadataStore) Close() {
 	}
 }
 
-func hasNameConflict[T comparable](row map[string]interface{}, column string, value T) (bool, error) {
+func hasNameConflict[T comparable](row map[string]any, column string, value T) (bool, error) {
 	existingValue, ok := row[column]
 	if !ok {
 		msg := fmt.Sprintf("Unexpected error: column not found %q", column)

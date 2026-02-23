@@ -211,7 +211,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersPagination() {
 	// Create 5 workers with predictable keys for pagination testing
 	workerKeys := make([]string, 5)
 	heartbeats := make([]*workerpb.WorkerHeartbeat, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		workerKeys[i] = fmt.Sprintf("%s_worker_%02d", s.tv.WorkerIdentity(), i)
 		heartbeats[i] = &workerpb.WorkerHeartbeat{
 			WorkerInstanceKey:   workerKeys[i],

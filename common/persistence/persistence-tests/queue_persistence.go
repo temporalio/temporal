@@ -55,7 +55,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
-		for i := 0; i < numMessages; i++ {
+		for i := range numMessages {
 			messageChan <- &replicationspb.ReplicationTask{
 				TaskType: taskType,
 				Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
@@ -71,7 +71,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	wg := sync.WaitGroup{}
 	wg.Add(concurrentSenders)
 
-	for i := 0; i < concurrentSenders; i++ {
+	for i := range concurrentSenders {
 		go func(senderNum int) {
 			defer wg.Done()
 			for message := range messageChan {
@@ -132,7 +132,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
-		for i := 0; i < numMessages; i++ {
+		for i := range numMessages {
 			messageChan <- &replicationspb.ReplicationTask{
 				TaskType: taskType,
 				Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
@@ -148,7 +148,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	wg := sync.WaitGroup{}
 	wg.Add(concurrentSenders)
 
-	for i := 0; i < concurrentSenders; i++ {
+	for i := range concurrentSenders {
 		go func(senderNum int) {
 			defer wg.Done()
 			for message := range messageChan {

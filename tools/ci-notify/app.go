@@ -234,7 +234,7 @@ func runDigestCommand(c *cli.Context) error {
 	return nil
 }
 
-func marshalIndent(v interface{}) (string, error) {
+func marshalIndent(v any) (string, error) {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return "", err

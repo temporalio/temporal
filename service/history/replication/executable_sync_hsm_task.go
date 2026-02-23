@@ -68,7 +68,7 @@ func NewExecutableSyncHSMTask(
 	}
 }
 
-func (e *ExecutableSyncHSMTask) QueueID() interface{} {
+func (e *ExecutableSyncHSMTask) QueueID() any {
 	return e.WorkflowKey
 }
 

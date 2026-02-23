@@ -118,7 +118,7 @@ func NewExecutableActivityStateTask(
 	}
 }
 
-func (e *ExecutableActivityStateTask) QueueID() interface{} {
+func (e *ExecutableActivityStateTask) QueueID() any {
 	return e.WorkflowKey
 }
 

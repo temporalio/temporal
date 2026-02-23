@@ -114,7 +114,7 @@ func (h *frontendHandler) DescribeActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := ValidateDescribeActivityExecutionRequest(
+	err := validateDescribeActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -143,7 +143,7 @@ func (h *frontendHandler) PollActivityExecution(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	err := ValidatePollActivityExecutionRequest(
+	err := validatePollActivityExecutionRequest(
 		req,
 		h.config.MaxIDLengthLimit(),
 	)
@@ -276,26 +276,18 @@ func (h *frontendHandler) TerminateActivityExecution(
 		return nil, err
 	}
 
-	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
-	req = common.CloneProto(req)
-
-	maxIDLen := h.config.MaxIDLengthLimit()
-	if len(req.GetRequestId()) > maxIDLen {
-		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
-	}
-
 	if req.GetRequestId() == "" {
+		// Since this mutates the request, we clone it first so that any retries use the original request.
+		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
 
-	if err := validateInputSize(
-		req.GetActivityId(),
-		"activity-termination",
+	if err := validateTerminateActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
 		h.config.BlobSizeLimitError,
 		h.config.BlobSizeLimitWarn,
-		len(req.GetReason()),
-		h.logger,
-		namespaceName); err != nil {
+		h.logger); err != nil {
 		return nil, err
 	}
 
@@ -323,21 +315,19 @@ func (h *frontendHandler) RequestCancelActivityExecution(
 		return nil, err
 	}
 
-	// Since validation potentially mutates the request, we clone it first so that any retries use the original request.
-	req = common.CloneProto(req)
-
-	maxIDLen := h.config.MaxIDLengthLimit()
-
-	if len(req.GetRequestId()) > maxIDLen {
-		return nil, serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
-	}
-
 	if req.GetRequestId() == "" {
+		// Since this mutates the request, we clone it first so that any retries use the original request.
+		req = common.CloneProto(req)
 		req.RequestId = uuid.NewString()
 	}
 
-	if len(req.GetReason()) > maxIDLen {
-		return nil, serviceerror.NewInvalidArgument("Reason length exceeds limit.")
+	if err := validateRequestCancelActivityExecutionRequest(
+		req,
+		h.config.MaxIDLengthLimit(),
+		h.config.BlobSizeLimitError,
+		h.config.BlobSizeLimitWarn,
+		h.logger); err != nil {
+		return nil, err
 	}
 
 	_, err = h.client.RequestCancelActivityExecution(ctx, &activitypb.RequestCancelActivityExecutionRequest{
@@ -397,23 +387,31 @@ func (h *frontendHandler) validateAndNormalizeStartActivityExecutionRequest(
 		req.RequestId = uuid.NewString()
 	}
 
-	if len(req.GetRequestId()) > h.config.MaxIDLengthLimit() {
-		return serviceerror.NewInvalidArgument("RequestID length exceeds limit.")
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
 	}
 
 	if err := normalizeAndValidateIDPolicy(req); err != nil {
 		return err
 	}
 
-	if err := validateInputSize(
+	if err := validateBlobSize(
 		req.GetActivityId(),
-		req.GetActivityType().GetName(),
+		"StartActivityExecution",
 		h.config.BlobSizeLimitError,
 		h.config.BlobSizeLimitWarn,
 		req.Input.Size(),
 		h.logger,
 		req.GetNamespace()); err != nil {
-		return err
+		return serviceerror.NewInvalidArgument("input exceeds length limit")
 	}
 
 	if req.GetSearchAttributes() != nil {

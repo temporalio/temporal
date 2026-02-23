@@ -234,7 +234,7 @@ func (s *Scanner) Stop() {
 	s.wg.Wait()
 }
 
-func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...interface{}) {
+func (s *Scanner) startWorkflowWithRetry(ctx context.Context, options sdkclient.StartWorkflowOptions, workflowType string, workflowArgs ...any) {
 	defer s.wg.Done()
 
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
@@ -262,7 +262,7 @@ func (s *Scanner) startWorkflow(
 	client sdkclient.Client,
 	options sdkclient.StartWorkflowOptions,
 	workflowType string,
-	workflowArgs ...interface{},
+	workflowArgs ...any,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	_, err := client.ExecuteWorkflow(ctx, options, workflowType, workflowArgs...)

@@ -7,9 +7,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/chasm"
-	activitystatepb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -177,28 +174,28 @@ func normalizeAndValidateIDPolicy(req *workflowservice.StartActivityExecutionReq
 	return nil
 }
 
-func validateInputSize(
+func validateBlobSize(
 	activityID string,
 	blobSizeViolationTagValue string,
 	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	inputSize int,
+	blobSize int,
 	logger log.Logger,
 	namespaceName string,
 ) error {
 	sizeWarnLimit := blobSizeLimitWarn(namespaceName)
 	sizeErrorLimit := blobSizeLimitError(namespaceName)
 
-	if inputSize > sizeWarnLimit {
-		logger.Warn("Activity input size exceeds the warning limit.",
+	if blobSize > sizeWarnLimit {
+		logger.Warn("Activity blob size exceeds the warning limit.",
 			tag.WorkflowNamespace(namespaceName),
 			tag.ActivityID(activityID),
-			tag.ActivitySize(int64(inputSize)),
+			tag.ActivitySize(int64(blobSize)),
 			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
+	}
 
-		if inputSize > sizeErrorLimit {
-			return common.ErrBlobSizeExceedsLimit
-		}
+	if blobSize > sizeErrorLimit {
+		return common.ErrBlobSizeExceedsLimit
 	}
 
 	return nil
@@ -228,8 +225,7 @@ func validateAndNormalizeSearchAttributes(
 	return saValidator.ValidateSize(saToValidate, namespaceName)
 }
 
-// ValidateDescribeActivityExecutionRequest validates DescribeActivityExecutionRequest.
-func ValidateDescribeActivityExecutionRequest(
+func validateDescribeActivityExecutionRequest(
 	req *workflowservice.DescribeActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -255,8 +251,7 @@ func ValidateDescribeActivityExecutionRequest(
 	return nil
 }
 
-// ValidatePollActivityExecutionRequest validates PollActivityExecutionRequest.
-func ValidatePollActivityExecutionRequest(
+func validatePollActivityExecutionRequest(
 	req *workflowservice.PollActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
@@ -276,18 +271,98 @@ func ValidatePollActivityExecutionRequest(
 	return nil
 }
 
-// ValidateActivityTaskToken validates a task token against the current activity state.
-func ValidateActivityTaskToken(
-	ctx chasm.Context,
-	a *Activity,
-	token *tokenspb.Task,
+func validateRequestCancelActivityExecutionRequest(
+	req *workflowservice.RequestCancelActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
 ) error {
-	if a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_STARTED &&
-		a.Status != activitystatepb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
-		return serviceerror.NewNotFound("activity task not found")
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
-	if token.Attempt != a.LastAttempt.Get(ctx).GetCount() {
-		return serviceerror.NewNotFound("activity task not found")
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
 	}
+
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	err := validateBlobSize(
+		req.GetActivityId(),
+		"RequestCancelActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
+	return nil
+}
+
+func validateTerminateActivityExecutionRequest(
+	req *workflowservice.TerminateActivityExecutionRequest,
+	maxIDLengthLimit int,
+	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	logger log.Logger,
+) error {
+	if req.GetActivityId() == "" {
+		return serviceerror.NewInvalidArgument("activity ID is required")
+	}
+
+	if len(req.GetActivityId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("activity ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetActivityId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetRequestId()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRequestId()), maxIDLengthLimit)
+	}
+
+	if len(req.GetIdentity()) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), maxIDLengthLimit)
+	}
+
+	if runID := req.GetRunId(); runID != "" {
+		_, err := uuid.Parse(runID)
+		if err != nil {
+			return serviceerror.NewInvalidArgument("invalid run id: must be a valid UUID")
+		}
+	}
+
+	err := validateBlobSize(
+		req.GetActivityId(),
+		"TerminateActivityExecution",
+		blobSizeLimitError,
+		blobSizeLimitWarn,
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
 	return nil
 }
