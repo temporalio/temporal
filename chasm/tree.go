@@ -2064,36 +2064,45 @@ func (n *Node) resolveDeferredPointers() error {
 			internalV := field.val.FieldByName(internalFieldName)
 			internal, _ := internalV.Interface().(fieldInternal) //nolint:revive
 
-			if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
-				// Must resolve the deferred pointer or fail the transaction.
-				var resolvedPath []string
-				var err error
+		if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
+			// Must resolve the deferred pointer or fail the transaction.
+			var resolvedPath []string
+			var err error
 
-				switch value := internal.value().(type) {
-				case Component:
-					resolvedPath, err = n.componentNodePath(value)
-				case proto.Message:
-					resolvedPath, err = n.dataNodePath(value)
-				default:
-					err = softassert.UnexpectedInternalErr(
-						n.logger,
-						"unable to create a deferred pointer for values of type",
-						fmt.Errorf("%T", value))
+			switch value := internal.value().(type) {
+			case Component:
+				resolvedPath, err = n.componentNodePath(value)
+				if err == nil {
+					targetNode := n.valueToNode[value]
+					if !targetNode.isAncestorOf(node) {
+						err = fmt.Errorf(
+							"pointer target is not an ancestor of component at path %v",
+							node.path(),
+						)
+					}
 				}
-				if err != nil {
-					return softassert.UnexpectedInternalErr(
-						n.logger,
-						"failed to resolve deferred pointer during transaction close",
-						err)
-				}
-
-				// Update the field to be a regular pointer, reusing the existing serializedNode,
-				// and update the serializedNode's value.
-				newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
-				newInternal.node = internal.node
-				newInternal.node.setValue(resolvedPath)
-				internalV.Set(reflect.ValueOf(newInternal))
+			case proto.Message:
+				resolvedPath, err = n.dataNodePath(value)
+			default:
+				err = softassert.UnexpectedInternalErr(
+					n.logger,
+					"unable to create a deferred pointer for values of type",
+					fmt.Errorf("%T", value))
 			}
+			if err != nil {
+				return softassert.UnexpectedInternalErr(
+					n.logger,
+					"failed to resolve deferred pointer during transaction close",
+					err)
+			}
+
+			// Update the field to be a regular pointer, reusing the existing serializedNode,
+			// and update the serializedNode's value.
+			newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
+			newInternal.node = internal.node
+			newInternal.node.setValue(resolvedPath)
+			internalV.Set(reflect.ValueOf(newInternal))
+		}
 		}
 	}
 	return nil
@@ -2470,6 +2479,19 @@ func (n *Node) findNode(
 		return nil, false
 	}
 	return childNode.findNode(path[1:])
+}
+
+// isAncestorOf returns true if n is a proper ancestor of descendant.
+// It walks from descendant up through parent links to check if n is encountered.
+func (n *Node) isAncestorOf(descendant *Node) bool {
+	current := descendant.parent
+	for current != nil {
+		if current == n {
+			return true
+		}
+		current = current.parent
+	}
+	return false
 }
 
 func (n *Node) delete(isSystemDelete bool) error {
