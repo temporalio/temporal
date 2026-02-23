@@ -113,6 +113,7 @@ type terminateEvent struct {
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
 
+// LifecycleState implements the chasm.Component interface.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
@@ -125,6 +126,15 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
+}
+
+// Terminate implements the chasm.RootComponent interface.
+func (a *Activity) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// TODO: Implement terminate logic.
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
