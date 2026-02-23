@@ -3153,7 +3153,7 @@ func (n *Node) ExecuteSideEffectTask(
 		ctx,
 		ref,
 		taskAttributes,
-		taskValue,
+		taskValue.Interface(),
 	)
 }
 
@@ -3206,7 +3206,7 @@ func makeValidationFn(
 			ctx,
 			component,
 			taskAttributes,
-			taskValue,
+			taskValue.Interface(),
 			registry,
 		)
 		if err != nil {
