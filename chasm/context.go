@@ -195,6 +195,7 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 // Added key-value pairs will be accessible via the Value() method on the returned Context,
 // and the behavior of the key-value pair is the same as context.Context.WithValue().
 func ContextWithValue[C Context](c C, key any, value any) C {
+	//nolint:revive // unchecked-type-assertion
 	return any(c.withValue(key, value)).(C)
 }
 

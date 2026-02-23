@@ -203,7 +203,9 @@ func (s *PayloadStore) Terminate(
 		return chasm.TerminateComponentResponse{}, err
 	}
 
-	s.Close(mutableContext, nil)
+	if _, err := s.Close(mutableContext, nil); err != nil {
+		return chasm.TerminateComponentResponse{}, err
+	}
 	return chasm.TerminateComponentResponse{}, nil
 }
 
