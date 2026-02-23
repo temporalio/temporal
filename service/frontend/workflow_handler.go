@@ -885,7 +885,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	}
 
 	if request.TaskQueue.GetKind() == enumspb.TASK_QUEUE_KIND_UNSPECIFIED {
-		wh.logger.Warn("Unspecified task queue kind",
+		wh.logger.Debug("Unspecified task queue kind",
 			tag.WorkflowTaskQueueName(request.TaskQueue.GetName()),
 			tag.WorkflowNamespace(namespace.Name(request.GetNamespace()).String()),
 		)
