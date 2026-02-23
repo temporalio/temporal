@@ -181,6 +181,8 @@ func classifyFailures(grouped map[string][]TestFailure) (flaky, timeout, crash m
 			crash[testName] = failures
 		case "flaky":
 			flaky[testName] = failures
+		default:
+			panic("unknown failure classification: " + classifyFailure(failures[0].Name))
 		}
 	}
 
