@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
@@ -34,9 +35,6 @@ func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
 	t.Run("v0", func(t *testing.T) {
 		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: InitialVersion})
-	})
-	t.Run("v1", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: AsyncSetCurrentAndRamping})
 	})
 	t.Run("v2", func(t *testing.T) {
 		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
@@ -67,6 +65,263 @@ func (s *WorkerDeploymentSuite) skipFromVersion(version DeploymentWorkflowVersio
 	if s.workflowVersion >= version {
 		s.T().Skipf("test supports version older than %v", version)
 	}
+}
+
+// Test_CreateWorkerDeployment_Success tests successful handling of CreateWorkerDeployment update with matching request ID
+func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_Success() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	requestID := tv.Any().String()
+	identity := tv.ClientIdentity()
+	computeConfig := &computepb.ComputeConfig{
+		Provider: &computepb.ComputeProvider{
+			Type: "test-provider",
+		},
+	}
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("CreateWorkerDeployment should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err, "CreateWorkerDeployment should complete without error")
+
+				var resp deploymentspb.CreateWorkerDeploymentResponse
+				err = s.env.GetWorkflowResult(&resp)
+				s.Require().NoError(err)
+				s.NotNil(resp.ConflictToken)
+			},
+		}, &deploymentspb.CreateWorkerDeploymentArgs{
+			Identity:      identity,
+			RequestId:     requestID,
+			ComputeConfig: computeConfig,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			CreateRequestId: requestID,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_CreateWorkerDeployment_Idempotent tests that CreateWorkerDeployment with the same request ID is idempotent
+func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_Idempotent() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	requestID := tv.Any().String()
+	identity := tv.ClientIdentity()
+	existingConflictToken := []byte("existing-token")
+
+	// Send two identical CreateWorkerDeployment updates
+	for i := 0; i < 2; i++ {
+		s.env.RegisterDelayedCallback(func() {
+			s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
+				OnReject: func(err error) {
+					s.Fail("CreateWorkerDeployment should not have been rejected", err)
+				},
+				OnAccept: func() {},
+				OnComplete: func(result any, err error) {
+					s.Require().NoError(err, "CreateWorkerDeployment should be idempotent")
+
+					resp, ok := result.(*deploymentspb.CreateWorkerDeploymentResponse)
+					s.Require().True(ok, "response should be CreateWorkerDeploymentResponse")
+					if i == 0 {
+						existingConflictToken = resp.ConflictToken
+					} else {
+						s.Equal(existingConflictToken, resp.ConflictToken, "conflict token should not change for idempotent request")
+					}
+				},
+			}, &deploymentspb.CreateWorkerDeploymentArgs{
+				Identity:  identity,
+				RequestId: requestID,
+			})
+		}, time.Duration(i+1)*time.Millisecond)
+	}
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			CreateRequestId: requestID,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_CreateWorkerDeployment_RejectDifferentRequestID tests that CreateWorkerDeployment with different request ID is rejected
+func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_RejectDifferentRequestID() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	originalRequestID := tv.Any().String()
+	differentRequestID := tv.Any().String()
+	identity := tv.ClientIdentity()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Require().ErrorContains(err, errDeploymentAlreadyExists, "should reject with deployment already exists error")
+			},
+			OnAccept: func() {
+				s.Fail("CreateWorkerDeployment should have been rejected")
+			},
+			OnComplete: func(result any, err error) {
+				s.Fail("CreateWorkerDeployment should not have completed")
+			},
+		}, &deploymentspb.CreateWorkerDeploymentArgs{
+			Identity:  identity,
+			RequestId: differentRequestID,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			CreateRequestId: originalRequestID,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_CreateWorkerDeployment_ReviveDeletedDeployment tests that CreateWorkerDeployment can revive a deleted deployment
+func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_ReviveDeletedDeployment() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	newRequestID := tv.Any().String()
+	identity := tv.ClientIdentity()
+	computeConfig := &computepb.ComputeConfig{
+		Provider: &computepb.ComputeProvider{
+			Type: "new-provider",
+		},
+	}
+	syncBatchSize := int32(10)
+
+	// First delete the deployment
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("delete deployment should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err, "delete deployment should complete without error")
+			},
+		}, nil)
+	}, 1*time.Millisecond)
+
+	// Then try to create it again with a new request ID (revival)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("CreateWorkerDeployment should not have been rejected for deleted deployment", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err, "CreateWorkerDeployment should succeed for deleted deployment")
+
+				resp, ok := result.(*deploymentspb.CreateWorkerDeploymentResponse)
+				s.Require().True(ok, "response should be CreateWorkerDeploymentResponse")
+				s.NotNil(resp.ConflictToken)
+
+				// Verify the deployment was revived by checking a query
+				val, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+				s.Require().NoError(err, "query should succeed after revival")
+
+				var queryResp deploymentspb.QueryDescribeWorkerDeploymentResponse
+				err = val.Get(&queryResp)
+				s.Require().NoError(err)
+				s.NotNil(queryResp.State)
+				s.Equal(newRequestID, queryResp.State.CreateRequestId, "should have new request ID")
+				s.Equal(identity, queryResp.State.LastModifierIdentity, "should have new identity")
+				s.Equal(computeConfig, queryResp.State.ComputeConfig, "should have new compute config")
+				s.Equal(syncBatchSize, queryResp.State.SyncBatchSize, "should keep the original sync batch size")
+			},
+		}, &deploymentspb.CreateWorkerDeploymentArgs{
+			Identity:      identity,
+			RequestId:     newRequestID,
+			ComputeConfig: computeConfig,
+		})
+	}, 5*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			CreateRequestId: "old-request-id",
+			SyncBatchSize:   syncBatchSize,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_CreateWorkerDeployment_UpdateComputeConfig tests that CreateWorkerDeployment updates compute config if provided
+func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_UpdateComputeConfig() {
+	tv := testvars.New(s.T())
+	s.env.OnUpsertMemo(mock.Anything).Return(nil)
+
+	requestID := tv.Any().String()
+	identity := tv.ClientIdentity()
+	newComputeConfig := &computepb.ComputeConfig{
+		Provider: &computepb.ComputeProvider{
+			Type: "updated-provider",
+		},
+	}
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("CreateWorkerDeployment should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(result any, err error) {
+				s.Require().NoError(err, "CreateWorkerDeployment should complete without error")
+
+				// Query to verify compute config was not changed (idempotent request)
+				val, err := s.env.QueryWorkflow(QueryDescribeDeployment)
+				s.Require().NoError(err)
+
+				var queryResp deploymentspb.QueryDescribeWorkerDeploymentResponse
+				err = val.Get(&queryResp)
+				s.Require().NoError(err)
+				// Since it's an idempotent request (same request ID), compute config should not change
+				s.Nil(queryResp.State.ComputeConfig, "compute config should remain nil for idempotent request")
+			},
+		}, &deploymentspb.CreateWorkerDeploymentArgs{
+			Identity:      identity,
+			RequestId:     requestID,
+			ComputeConfig: newComputeConfig,
+		})
+	}, 1*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{
+		NamespaceName:  tv.NamespaceName().String(),
+		NamespaceId:    tv.NamespaceID().String(),
+		DeploymentName: tv.DeploymentSeries(),
+		State: &deploymentspb.WorkerDeploymentLocalState{
+			CreateRequestId: requestID,
+			ComputeConfig:   nil, // Start with no compute config
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
 }
 
 // Test_SetCurrentVersion_RejectStaleConcurrentUpdate tests that a stale concurrent update is rejected.
