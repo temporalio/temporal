@@ -452,7 +452,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		SubComponent11: NewComponentField(nil, sc11),
 	}
 
-	s.Run("Sync and serialize component with pointer", func() {
+	s.Run("Sync and serialize component with ancestor pointer", func() {
 		var nilSerializedNodes map[string]*persistencespb.ChasmNode
 		rootNode, err := s.newTestTree(nilSerializedNodes)
 		s.NoError(err)
@@ -463,26 +463,33 @@ func (s *nodeSuite) TestPointerAttributes() {
 			MSPointer:                    NewMSPointer(s.nodeBackend),
 			SubComponent1:                NewComponentField(nil, sc1),
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
-			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
 		}
+
+		// sc11 points to root (grandparent) -- an ancestor pointer.
+		sc11.GrandparentPointer = ComponentPointerTo(ctx, rootComponent)
+
 		s.NoError(rootNode.SetRootComponent(rootComponent))
 
-		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
+		s.Equal(fieldTypeDeferredPointer, sc11.GrandparentPointer.Internal.ft)
 
 		mutations, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, SubComponent11Pointer, and SubComponentInterfacePointer must be updated")
+		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, GrandparentPointer, and SubComponentInterfacePointer must be updated")
 		s.Empty(mutations.DeletedNodes)
 
-		s.Equal([]string{"SubComponent1", "SubComponent11"}, rootNode.children["SubComponent11Pointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath())
+		sc11Node := rootNode.children["SubComponent1"].children["SubComponent11"]
+		s.Equal(
+			[]string{},
+			sc11Node.children["GrandparentPointer"].serializedNode.GetMetadata().GetPointerAttributes().GetNodePath(),
+		)
 
-		// Save it use in other subtests.
+		// Save for use in other subtests.
 		persistedNodes = common.CloneProtoMap(mutations.UpdatedNodes)
 	})
 
 	s.NotNil(persistedNodes)
 
-	s.Run("Deserialize pointer component", func() {
+	s.Run("Deserialize ancestor pointer component", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
@@ -494,9 +501,14 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.NotNil(testComponent.MSPointer)
 
 		chasmContext := NewMutableContext(context.Background(), rootNode)
-		sc11Des := testComponent.SubComponent11Pointer.Get(chasmContext)
+		sc1Des := testComponent.SubComponent1.Get(chasmContext)
+		s.NotNil(sc1Des)
+		sc11Des := sc1Des.SubComponent11.Get(chasmContext)
 		s.NotNil(sc11Des)
-		s.Equal(sc11.SubComponent11Data.GetRunId(), sc11Des.SubComponent11Data.GetRunId())
+
+		rootViaPointer := sc11Des.GrandparentPointer.Get(chasmContext)
+		s.NotNil(rootViaPointer)
+		s.Equal(testComponent, rootViaPointer)
 
 		ifacePtr := testComponent.SubComponentInterfacePointer.Get(chasmContext)
 		s.NotNil(ifacePtr)
@@ -506,7 +518,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 		s.ProtoEqual(sc1ptr.SubComponent1Data, sc1.SubComponent1Data)
 	})
 
-	s.Run("Clear pointer by setting it to the empty field", func() {
+	s.Run("Clear ancestor pointer by setting it to the empty field", func() {
 		rootNode, err := s.newTestTree(persistedNodes)
 		s.NoError(err)
 
@@ -514,13 +526,15 @@ func (s *nodeSuite) TestPointerAttributes() {
 		component, err := rootNode.Component(mutableContext, ComponentRef{})
 		s.NoError(err)
 		testComponent := component.(*TestComponent)
+		sc1Des := testComponent.SubComponent1.Get(mutableContext)
+		sc11Des := sc1Des.SubComponent11.Get(mutableContext)
 
-		testComponent.SubComponent11Pointer = NewEmptyField[*TestSubComponent11]()
+		sc11Des.GrandparentPointer = NewEmptyField[*TestComponent]()
 
 		mutation, err := rootNode.CloseTransaction()
 		s.NoError(err)
-		s.Len(mutation.UpdatedNodes, 1, "root should be updated")
-		s.Len(mutation.DeletedNodes, 1, "SubComponent11Pointer must be deleted")
+		s.NotEmpty(mutation.UpdatedNodes)
+		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
 	})
 }
 
