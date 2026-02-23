@@ -18,6 +18,9 @@ type (
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		SetupDraining()
+		// WaitForDrainingInitialized waits for the draining backlog manager to be initialized.
+		// Returns nil if there is no draining backlog manager or if it initializes successfully.
+		WaitForDrainingInitialized(context.Context) error
 		// FinishedDraining is called by a draining backlog manager when it has fully drained.
 		FinishedDraining()
 		// ReprocessRedirectedTasksAfterStop sends tasks in the matcher that came from other

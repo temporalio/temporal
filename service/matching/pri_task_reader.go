@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -57,6 +58,10 @@ type (
 		inGC       bool
 		gcAckLevel int64     // last ack level GCed
 		lastGCTime time.Time // last time GCed
+
+		// initialLoadDone is set after the first batch of tasks is loaded from DB.
+		// Used to synchronize draining backlog initialization.
+		initialLoadDone *future.FutureImpl[struct{}]
 	}
 )
 
@@ -87,12 +92,22 @@ func newPriTaskReader(
 
 		// gc state
 		lastGCTime: time.Now(),
+
+		// synchronization
+		initialLoadDone: future.NewFuture[struct{}](),
 	}
 }
 
 // Start priTaskReader background goroutines.
 func (tr *priTaskReader) Start() {
 	go tr.getTasksPump()
+}
+
+// WaitForInitialLoad waits for the initial batch of tasks to be loaded from the database.
+// This is used to ensure draining backlog tasks are in the matcher before active tasks.
+func (tr *priTaskReader) WaitForInitialLoad(ctx context.Context) error {
+	_, err := tr.initialLoadDone.Get(ctx)
+	return err
 }
 
 func (tr *priTaskReader) SignalTaskLoading() {
@@ -185,6 +200,8 @@ func (tr *priTaskReader) getTasksPump() {
 
 		if len(batch.tasks) == 0 {
 			tr.setReadLevelAfterGap(batch.readLevel)
+			// Signal initial load done even if no tasks found
+			tr.initialLoadDone.SetIfNotReady(struct{}{}, nil)
 			if !batch.isReadBatchDone {
 				tr.SignalTaskLoading()
 			}
