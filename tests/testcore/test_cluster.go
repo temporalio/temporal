@@ -186,7 +186,12 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	return persistencetests.NewTestBase(options)
 }
 
-func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+func newClusterWithPersistenceTestBaseFactory(
+	t *testing.T,
+	clusterConfig *TestClusterConfig,
+	logger log.Logger,
+	tbFactory PersistenceTestBaseFactory,
+) (*TestCluster, error) {
 	// determine number of hosts per service
 	const minNodes = 1
 	clusterConfig.FrontendConfig.NumFrontendHosts = max(minNodes, clusterConfig.FrontendConfig.NumFrontendHosts)
@@ -488,12 +493,16 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 	}
 }
 
-func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager, logger log.Logger) *ArchiverBase {
+func newArchiverBase(
+	enabled bool,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+) *ArchiverBase {
 	dcCollection := dynamicconfig.NewNoopCollection()
 	if !enabled {
 		return &ArchiverBase{
 			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-			provider: provider.NewArchiverProvider(nil, nil, nil, logger, metrics.NoopMetricsHandler),
+			provider: provider.NewArchiverProvider(nil, nil, nil, nil, nil, logger, metrics.NoopMetricsHandler),
 		}
 	}
 
@@ -516,6 +525,8 @@ func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager
 		&config.VisibilityArchiverProvider{
 			Filestore: cfg,
 		},
+		nil,
+		nil,
 		executionManager,
 		logger,
 		metrics.NoopMetricsHandler,

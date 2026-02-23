@@ -350,7 +350,7 @@ func ArchiverProviderProvider(
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
 ) provider.ArchiverProvider {
-	return provider.NewArchiverProviderWithFactories(
+	return provider.NewArchiverProvider(
 		cfg.Archival.History.Provider,
 		cfg.Archival.Visibility.Provider,
 		customHistoryArchiverFactory,

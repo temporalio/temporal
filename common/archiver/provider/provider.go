@@ -50,14 +50,14 @@ type (
 
 	// CustomHistoryArchiverFactory constructs a history archiver for the given scheme.
 	// Return ErrUnknownScheme to fall back to the default implementation.
-	// If a non-nil archiver is returned, it takes precedence over built-in schemes.
+	// If a non-nil archiver is returned, it takes precedence over built-in archiver implementations.
 	CustomHistoryArchiverFactory interface {
 		NewCustomHistoryArchiver(NewCustomHistoryArchiverParams) (archiver.HistoryArchiver, error)
 	}
 
 	// CustomVisibilityArchiverFactory constructs a visibility archiver for the given scheme.
 	// Return ErrUnknownScheme to fall back to the default implementation.
-	// If a non-nil archiver is returned, it takes precedence over built-in schemes.
+	// If a non-nil archiver is returned, it takes precedence over built-in archiver implementations.
 	CustomVisibilityArchiverFactory interface {
 		NewCustomVisibilityArchiver(NewCustomVisibilityArchiverParams) (archiver.VisibilityArchiver, error)
 	}
@@ -99,24 +99,6 @@ func (f CustomVisibilityArchiverFactoryFunc) NewCustomVisibilityArchiver(
 
 // NewArchiverProvider returns a new Archiver provider
 func NewArchiverProvider(
-	historyArchiverConfigs *config.HistoryArchiverProvider,
-	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
-	executionManager persistence.ExecutionManager,
-	logger log.Logger,
-	metricsHandler metrics.Handler,
-) ArchiverProvider {
-	return NewArchiverProviderWithFactories(
-		historyArchiverConfigs,
-		visibilityArchiverConfigs,
-		nil,
-		nil,
-		executionManager,
-		logger,
-		metricsHandler,
-	)
-}
-
-func NewArchiverProviderWithFactories(
 	historyArchiverConfigs *config.HistoryArchiverProvider,
 	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
 	customHistoryArchiverFactory CustomHistoryArchiverFactory,
