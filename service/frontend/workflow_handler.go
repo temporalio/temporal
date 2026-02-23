@@ -3815,6 +3815,53 @@ func (wh *WorkflowHandler) DescribeWorkerDeployment(ctx context.Context, request
 	}, nil
 }
 
+func (wh *WorkflowHandler) CreateWorkerDeployment(ctx context.Context, request *workflowservice.CreateWorkerDeploymentRequest) (_ *workflowservice.CreateWorkerDeploymentResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if request.DeploymentName == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate request ID if not provided (for idempotency)
+	requestID := request.RequestId
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	conflictToken, err := wh.workerDeploymentClient.CreateWorkerDeployment(
+		ctx,
+		namespaceEntry,
+		request.DeploymentName,
+		request.GetComputeConfig(),
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.CreateWorkerDeploymentResponse{
+		ConflictToken: conflictToken,
+	}, nil
+}
+
 func (wh *WorkflowHandler) SetWorkerDeploymentManager(ctx context.Context, request *workflowservice.SetWorkerDeploymentManagerRequest) (_ *workflowservice.SetWorkerDeploymentManagerResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

@@ -71,6 +71,21 @@ func (c *retryableClient) CreateSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) CreateWorkerDeployment(
+	ctx context.Context,
+	request *workflowservice.CreateWorkerDeploymentRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateWorkerDeploymentResponse, error) {
+	var resp *workflowservice.CreateWorkerDeploymentResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CreateWorkerDeployment(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CreateWorkflowRule(
 	ctx context.Context,
 	request *workflowservice.CreateWorkflowRuleRequest,

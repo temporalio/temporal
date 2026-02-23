@@ -6,6 +6,7 @@ option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/enums/v1/deployment.proto";
+import "temporal/api/compute/v1/config.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/common/v1/message.proto";
@@ -174,6 +175,10 @@ message WorkerDeploymentLocalState {
     // Track async propagations in progress per build ID. Map: build_id -> revision numbers.
     // Used to track which propagations are still pending across continue-as-new.
     map<string, PropagatingRevisions> propagating_revisions = 8;
+    // Request ID used to create this worker deployment.
+    string create_request_id = 9;
+    // Compute config provided during deployment creation.
+    temporal.api.compute.v1.ComputeConfig compute_config = 10;
 }
 
 // Tracks revision numbers that are currently propagating for a specific build ID
@@ -307,6 +312,12 @@ message QueryDescribeWorkerDeploymentResponse {
     WorkerDeploymentLocalState state = 1;
 }
 
+// used as Worker Deployment workflow query response:
+message CreateRequestIDQueryResponse {
+    string request_id = 1;
+    bytes conflict_token = 2;
+}
+
 // used as Worker Deployment Version workflow activity input:
 message StartWorkerDeploymentRequest {
     string deployment_name = 1;
@@ -385,6 +396,18 @@ message SetCurrentVersionArgs {
 message SetCurrentVersionResponse {
     string previous_version = 1;
     bytes conflict_token = 2;
+}
+
+// used as Worker Deployment workflow update input:
+message CreateWorkerDeploymentArgs {
+    string identity = 1;
+    string request_id = 2;
+    temporal.api.compute.v1.ComputeConfig compute_config = 3;
+}
+
+// used as Worker Deployment update response:
+message CreateWorkerDeploymentResponse {
+    bytes conflict_token = 1;
 }
 
 // used as Worker Deployment workflow update input:

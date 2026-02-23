@@ -123,6 +123,7 @@ var (
 		"SetWorkerDeploymentRampingVersion":     func() any { return &workflowservice.SetWorkerDeploymentRampingVersionResponse{} },
 		"SetWorkerDeploymentManager":            func() any { return &workflowservice.SetWorkerDeploymentManagerResponse{} },
 		"ListWorkerDeployments":                 func() any { return &workflowservice.ListWorkerDeploymentsResponse{} },
+		"CreateWorkerDeployment":                func() any { return &workflowservice.CreateWorkerDeploymentResponse{} },
 		"DeleteWorkerDeployment":                func() any { return &workflowservice.DeleteWorkerDeploymentResponse{} },
 		"DeleteWorkerDeploymentVersion":         func() any { return &workflowservice.DeleteWorkerDeploymentVersionResponse{} },
 		"UpdateWorkerDeploymentVersionMetadata": func() any { return &workflowservice.UpdateWorkerDeploymentVersionMetadataResponse{} },
