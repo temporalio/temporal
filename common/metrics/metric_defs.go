@@ -31,6 +31,7 @@ const (
 	WorkerPluginNameTagName     = "worker_plugin_name"
 	headerCallsiteTagName       = "header_callsite"
 	ArchetypeTagName            = "archetype"
+	ChasmTaskTypeTagName        = "chasm_task_type"
 )
 
 // This package should hold all the metrics and tags for temporal
