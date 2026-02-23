@@ -581,11 +581,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	}
 	if d.deleteVersion {
 		// In case it was marked as deleted we make it undeleted
-		d.deleteVersion = false
-		if withRevisionNumbers {
-			// If we're changing the version data, we need to increment the revision number
-			d.GetVersionState().RevisionNumber++
-		}
+		d.reviveDeleted()
 	}
 
 	// Add the task queue to the local state.
@@ -614,6 +610,19 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		err = d.syncRegisteredTaskQueueOld(ctx, args)
 	}
 	return err
+}
+
+func (d *VersionWorkflowRunner) reviveDeleted() {
+	// Resetting state to get rid of the info from the past life.
+	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, d.VersionState.SyncBatchSize)
+
+	state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+	// Preserve the revision number due to possible ongoing propagations.
+	// Still increment because the delete flag is covered by the revision number.
+	state.RevisionNumber = d.VersionState.RevisionNumber + 1
+
+	d.VersionState = state
+	d.deleteVersion = false
 }
 
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueOld(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) error {
