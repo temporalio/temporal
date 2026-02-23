@@ -2,6 +2,7 @@ package counter
 
 import (
 	"fmt"
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -86,4 +87,44 @@ func TestMapCounter_TopK_ManyEntries(t *testing.T) {
 		TopKEntry{Key: "key96", Count: 96},
 		TopKEntry{Key: "key95", Count: 95},
 	}, m.TopK())
+}
+
+func TestMapCounter_HeapCorrectness(t *testing.T) {
+	m := NewMapCounter(10)
+
+	// add three keys
+	m.GetPass("key1", 0, 100)
+	m.GetPass("key2", 0, 200)
+	m.GetPass("key3", 0, 50)
+
+	// key3 (50) should be at root (index 0)
+	assert.Equal(t, "key3", m.heap[0].Key)
+
+	// update key3 to be the largest
+	m.GetPass("key3", 0, 300)
+
+	// key3 count is now 350. it should have moved down.
+	// key1 (100) should now be the new root.
+	assert.Equal(t, "key1", m.heap[0].Key)
+	assert.Equal(t, int64(100), m.heap[0].Count)
+
+	// verify map and heap are in sync
+	for key, idx := range m.m {
+		assert.Equal(t, key, m.heap[idx].Key)
+	}
+}
+
+func TestMapCounter_HeapIndexTracking(t *testing.T) {
+	m := NewMapCounter(5)
+
+	for i := range 1000 {
+		// update 10 keys with random increments
+		key := fmt.Sprintf("k%d", i%10)
+		m.GetPass(key, 0, int64(rand.Intn(100)))
+
+		// check after each operation
+		for k, idx := range m.m {
+			assert.Equal(t, k, m.heap[idx].Key)
+		}
+	}
 }

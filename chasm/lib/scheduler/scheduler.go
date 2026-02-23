@@ -218,12 +218,22 @@ func CreateScheduler(
 	return sched, nil
 }
 
+// LifecycleState implements the chasm.Component interface.
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
 		return chasm.LifecycleStateCompleted
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+// Terminate implements the chasm.RootComponent interface.
+func (s *Scheduler) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// TODO: Implement terminate logic.
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 // NewRangeBackfiller returns an intialized Backfiller component, which should

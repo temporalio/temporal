@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
@@ -1136,9 +1137,10 @@ func (c *ContextImpl) forceTerminateWorkflow(
 
 	if !mutableState.IsWorkflow() {
 		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity: consts.IdentityHistoryService,
-			Reason:   failureReason,
-			Details:  nil,
+			Identity:  consts.IdentityHistoryService,
+			Reason:    failureReason,
+			Details:   nil,
+			RequestID: primitives.NewUUID().String(),
 		})
 	}
 

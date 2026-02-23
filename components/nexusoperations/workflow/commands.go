@@ -148,7 +148,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
-	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
+	if attrs.Endpoint != commonnexus.SystemEndpoint && !validator.IsValidPayloadSize(attrs.Input.Size()) {
 		return workflow.FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message:           "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
