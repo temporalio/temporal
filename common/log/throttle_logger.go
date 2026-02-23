@@ -57,21 +57,15 @@ func (tl *throttledLogger) Error(msg string, tags ...tag.Tag) {
 }
 
 func (tl *throttledLogger) DPanic(msg string, tags ...tag.Tag) {
-	tl.rateLimit(func() {
-		tl.logger.DPanic(msg, tags...)
-	})
+	tl.logger.DPanic(msg, tags...)
 }
 
 func (tl *throttledLogger) Panic(msg string, tags ...tag.Tag) {
-	tl.rateLimit(func() {
-		tl.logger.Panic(msg, tags...)
-	})
+	tl.logger.Panic(msg, tags...)
 }
 
 func (tl *throttledLogger) Fatal(msg string, tags ...tag.Tag) {
-	tl.rateLimit(func() {
-		tl.logger.Fatal(msg, tags...)
-	})
+	tl.logger.Fatal(msg, tags...)
 }
 
 // Return a logger with the specified key-value pairs set, to be included in a subsequent normal logging call
