@@ -74,7 +74,7 @@ func GenerateTestCerts(tempDir string, commonName string, num int) ([]*tls.Certi
 	}
 
 	chains := make([]*tls.Certificate, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		certPubFile := tempDir + fmt.Sprintf("/cert_pub_%d.pem", i)
 		certPrivFile := tempDir + fmt.Sprintf("/cert_priv_%d.pem", i)
 		cert, err := GenerateServerCert(caCert, commonName, int64(i+100), certPubFile, certPrivFile)

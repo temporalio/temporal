@@ -39,7 +39,7 @@ type (
 		reader          FileReader
 		lastUpdatedTime time.Time
 		config          *FileBasedClientConfig
-		doneCh          <-chan interface{}
+		doneCh          <-chan any
 
 		NotifyingClientImpl
 	}
@@ -50,7 +50,7 @@ type (
 )
 
 // NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
 	if config == nil {
 		return nil, errors.New("configuration for dynamic config client is nil")
 	}
@@ -58,7 +58,7 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 	return NewFileBasedClientWithReader(reader, config, logger, doneCh)
 }
 
-func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
 	client := &fileBasedClient{
 		logger:              logger,
 		reader:              reader,

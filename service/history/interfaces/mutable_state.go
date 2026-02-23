@@ -243,7 +243,7 @@ type (
 		ApplyWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowTaskFailedEvent() error
 		ApplyWorkflowTaskScheduledEvent(int64, int64, *taskqueuepb.TaskQueue, *durationpb.Duration, int32, *timestamppb.Timestamp, *timestamppb.Timestamp, enumsspb.WorkflowTaskType) (*WorkflowTaskInfo, error)
-		ApplyWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64, *commonpb.WorkerVersionStamp, int64, []enumspb.SuggestContinueAsNewReason) (*WorkflowTaskInfo, error)
+		ApplyWorkflowTaskStartedEvent(*WorkflowTaskInfo, int64, int64, int64, string, time.Time, bool, int64, *commonpb.WorkerVersionStamp, int64, []enumspb.SuggestContinueAsNewReason, bool) (*WorkflowTaskInfo, error)
 		ApplyWorkflowTaskTimedOutEvent(enumspb.TimeoutType) error
 		ApplyExternalWorkflowExecutionCancelRequested(*historypb.HistoryEvent) error
 		ApplyExternalWorkflowExecutionSignaled(*historypb.HistoryEvent) error
@@ -289,6 +289,7 @@ type (
 		UpdateBuildIdAssignment(buildId string) error
 		ApplyBuildIdRedirect(startingTaskScheduledEventId int64, buildId string, redirectCounter int64) error
 		RefreshExpirationTimeoutTask(ctx context.Context) error
+		SetContextMetadata(context.Context)
 
 		GetHistorySize() int64
 		AddHistorySize(size int64)

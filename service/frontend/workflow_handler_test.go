@@ -719,7 +719,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	s.ErrorContains(err, "link exceeds allowed size of 4000")
 
 	req.Links = []*commonpb.Link{}
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		req.Links = append(req.Links, &commonpb.Link{
 			Variant: &commonpb.Link_WorkflowEvent_{
 				WorkflowEvent: &commonpb.Link_WorkflowEvent{
@@ -900,7 +900,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 
 	// add 10 links and one of them is duplicated in the callback
 	req.Links = []*commonpb.Link{}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		req.Links = append(req.Links, &commonpb.Link{
 			Variant: &commonpb.Link_WorkflowEvent_{
 				WorkflowEvent: &commonpb.Link_WorkflowEvent{
@@ -2192,7 +2192,7 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	logger := log.NewTestLogger()
 	events := make([]*historyspb.StrippedHistoryEvent, 50)
-	for i := 0; i < len(events); i++ {
+	for i := range events {
 		events[i] = &historyspb.StrippedHistoryEvent{EventId: int64(i + 1)}
 	}
 	var eventsWithHoles []*historyspb.StrippedHistoryEvent
@@ -3829,6 +3829,133 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 	if err != nil {
 		s.Fail("ShutdownWorker failed:", err)
 	}
+}
+
+func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// Expect cancellation for 2 partitions x 2 task types = 4 calls (in any order due to parallelization)
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(4)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	if err != nil {
+		s.Fail("ShutdownWorker with eager poll cancellation failed:", err)
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
+	// Verifies graceful degradation: ShutdownWorker succeeds even when poll cancellation fails.
+	// This ensures backward compatibility during rolling upgrades.
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(1)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// CancelOutstandingWorkerPolls returns an error (simulates old matching node)
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewUnimplemented("method not implemented")).
+		Times(2) // 1 partition x 2 task types
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	// ShutdownWorker should succeed despite cancellation errors
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	s.NoError(err, "ShutdownWorker should succeed even when poll cancellation fails")
+}
+
+func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure() {
+	// Verifies ShutdownWorker succeeds when some cancellation calls succeed and others fail.
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// Mixed results: some succeed, some fail (2 partitions x 2 task types = 4 calls)
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(2)
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewUnavailable("temporary error")).
+		Times(2)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	// ShutdownWorker should succeed despite partial failures
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	s.NoError(err, "ShutdownWorker should succeed even with partial cancellation failures")
 }
 
 func (s *WorkflowHandlerSuite) TestPatchSchedule_TriggerImmediatelyScheduledTime() {

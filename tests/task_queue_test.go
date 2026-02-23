@@ -88,7 +88,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 	defer cancel()
 
 	// start workflows to create a backlog
-	for wfidx := 0; wfidx < maxBacklog; wfidx++ {
+	for wfidx := range maxBacklog {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			TaskQueue: tv.TaskQueue().GetName(),
 			ID:        fmt.Sprintf("wf%d", wfidx),
@@ -135,7 +135,7 @@ func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeT
 
 	// start some workers
 	workers := make([]worker.Worker, nWorkers)
-	for i := 0; i < nWorkers; i++ {
+	for i := range nWorkers {
 		workers[i] = worker.New(s.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 		workers[i].RegisterWorkflow(helloRateLimitTest)
 		err := workers[i].Start()
@@ -942,4 +942,75 @@ func (s *TaskQueueSuite) runActivitiesWithPriorities(
 	// perKeyTimes : Used to verify that each key's activities are throttled correctly.
 	// allTimes : Used to verify the overall throughput of the task queue.
 	return perKeyTimes, allTimes
+}
+
+func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true)
+
+	tv := testvars.New(s.T())
+	workerInstanceKey := uuid.NewString()
+
+	// Use a long poll timeout (2 minutes) to ensure we're testing cancellation, not timeout.
+	pollTimeout := 2 * time.Minute
+
+	// Start 2 long polls in goroutines to verify bulk cancellation
+	var wg sync.WaitGroup
+	pollResults := make(chan struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}, 2)
+
+	for range 2 {
+		wg.Go(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+			defer cancel()
+			resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace:         s.Namespace().String(),
+				TaskQueue:         tv.TaskQueue(),
+				Identity:          tv.WorkerIdentity(),
+				WorkerInstanceKey: workerInstanceKey,
+			})
+			pollResults <- struct {
+				resp *workflowservice.PollWorkflowTaskQueueResponse
+				err  error
+			}{resp, err}
+		})
+	}
+
+	// Keep calling ShutdownWorker until all polls are cancelled and complete.
+	// Polls register asynchronously, so we retry until all are caught.
+	ctx := context.Background()
+	s.Eventually(func() bool {
+		_, err := s.FrontendClient().ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+			Namespace:         s.Namespace().String(),
+			StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+			Identity:          tv.WorkerIdentity(),
+			Reason:            "graceful shutdown test",
+			WorkerInstanceKey: workerInstanceKey,
+			TaskQueue:         tv.TaskQueue().GetName(),
+		})
+		s.NoError(err)
+		// Check if all polls have completed (short timeout to just check status)
+		return common.AwaitWaitGroup(&wg, 50*time.Millisecond)
+	}, 30*time.Second, 200*time.Millisecond, "polls did not complete after repeated shutdown attempts")
+
+	close(pollResults)
+
+	// Verify both polls returned empty responses (no task token)
+	for result := range pollResults {
+		s.NoError(result.err)
+		s.NotNil(result.resp)
+		s.Empty(result.resp.GetTaskToken(), "poll should return empty response after shutdown")
+	}
+
+	// Verify poller is removed from DescribeTaskQueue (eager poller history cleanup)
+	descResp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+	})
+	s.NoError(err)
+	for _, poller := range descResp.GetPollers() {
+		s.NotEqual(tv.WorkerIdentity(), poller.GetIdentity(),
+			"poller should be removed from DescribeTaskQueue after shutdown")
+	}
 }

@@ -319,10 +319,10 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 	s.shardController.acquireShards(context.Background())
 
 	var workerWG sync.WaitGroup
-	for w := 0; w < 10; w++ {
+	for range 10 {
 		workerWG.Add(1)
 		go func() {
-			for attempt := 0; attempt < 10; attempt++ {
+			for range 10 {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
 					shard, err := s.shardController.GetShardByID(shardID)
 					s.NoError(err)
@@ -345,10 +345,10 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.shardController.CloseShardByID(shardID)
 	}
 
-	for w := 0; w < 10; w++ {
+	for range 10 {
 		workerWG.Add(1)
 		go func() {
-			for attempt := 0; attempt < 10; attempt++ {
+			for range 10 {
 				for shardID := int32(3); shardID <= numShards; shardID++ {
 					shard, err := s.shardController.GetShardByID(shardID)
 					s.NoError(err)
@@ -363,7 +363,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		}()
 	}
 
-	for w := 0; w < 10; w++ {
+	for range 10 {
 		workerWG.Add(1)
 		go func() {
 			shardLost := false
@@ -417,7 +417,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 	s.shardController.acquireShards(context.Background())
 
 	var workerWG sync.WaitGroup
-	for w := 0; w < 10; w++ {
+	for range 10 {
 		workerWG.Add(1)
 		go func() {
 			shardLost := false
@@ -672,7 +672,7 @@ func (s *controllerSuite) TestShardControllerFuzz() {
 	s.shardController.acquireShards(context.Background())
 
 	var workers goro.Group
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		workers.Go(worker)
 	}
 
@@ -1148,7 +1148,7 @@ var _ fmt.Stringer = (*ContextImpl)(nil)
 
 type contextMatcher int32
 
-func (s contextMatcher) Matches(x interface{}) bool {
+func (s contextMatcher) Matches(x any) bool {
 	shardContext, ok := x.(historyi.ShardContext)
 	return ok && shardContext.GetShardID() == int32(s)
 }
@@ -1159,7 +1159,7 @@ func (s contextMatcher) String() string {
 
 type getOrCreateShardRequestMatcher int32
 
-func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
+func (s getOrCreateShardRequestMatcher) Matches(x any) bool {
 	req, ok := x.(*persistence.GetOrCreateShardRequest)
 	return ok && req.ShardID == int32(s)
 }
@@ -1170,7 +1170,7 @@ func (s getOrCreateShardRequestMatcher) String() string {
 
 type updateShardRequestMatcher persistence.UpdateShardRequest
 
-func (m updateShardRequestMatcher) Matches(x interface{}) bool {
+func (m updateShardRequestMatcher) Matches(x any) bool {
 	req, ok := x.(*persistence.UpdateShardRequest)
 	if !ok {
 		return false

@@ -166,7 +166,9 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 		s.nodePathEncoder,
 		s.logger,
 	)
-	rootNode.SetRootComponent(rootComponent)
+	if err := rootNode.SetRootComponent(rootComponent); err != nil {
+		return nil, nil, err
+	}
 
 	return rootNode, NewMutableContext(context.Background(), rootNode), nil
 }
@@ -205,6 +207,13 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
+
+	// Get components from tree to mark nodes as needing sync.
+
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1 = rootComponent.SubComponent1.Get(ctx)
 
 	// Create deferred pointers.
 	sc1.SubComponent2Pointer = ComponentPointerTo(ctx, sc2)
@@ -277,6 +286,11 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
+	// Get components from tree to mark nodes as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, existingComponent)
 
 	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
@@ -288,7 +302,7 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	// otherwise those nodes will not be marked as dirty.
 
 	ctx2 := NewMutableContext(context.Background(), rootNode)
-	rootComponentInterface, err := rootNode.Component(ctx2, ComponentRef{})
+	rootComponentInterface, err = rootNode.Component(ctx2, ComponentRef{})
 	s.NoError(err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
@@ -350,6 +364,11 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
+
+	// Get component from tree to mark node as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
 
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
 	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())

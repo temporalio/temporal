@@ -1,11 +1,15 @@
 package testcore
 
 import (
+	_ "embed"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -17,14 +21,21 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 )
 
+// shardSalt is used to distribute functional tests across shards.
+// This value is automatically updated by the optimize-test-sharding workflow.
+//
+//go:embed shard_salt.txt
+var shardSalt string
+
 var (
-	_                Env = (*testEnv)(nil)
-	sequentialSuites sync.Map
+	_                Env      = (*testEnv)(nil)
+	sequentialSuites sync.Map // map[string]*sequentialSuite
 )
 
 type Env interface {
 	T() *testing.T
 	Namespace() namespace.Name
+	NamespaceID() namespace.ID
 	FrontendClient() workflowservice.WorkflowServiceClient
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
@@ -40,6 +51,7 @@ type testEnv struct {
 
 	cluster    *TestCluster
 	nsName     namespace.Name
+	nsID       namespace.ID
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
@@ -80,9 +92,16 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
+// sequentialSuite holds state for a suite marked with MustRunSequential.
+// It manages a single dedicated cluster shared by all tests in the suite.
+type sequentialSuite struct {
+	cluster *FunctionalTestBase
+}
+
 // MustRunSequential marks a test suite to run its tests sequentially instead
 // of in parallel. Call this at the start of your test suite before any
-// subtests are created.
+// subtests are created. A single dedicated cluster will be created for this
+// suite and torn down when the suite completes.
 func MustRunSequential(t *testing.T, reason string) {
 	if strings.Contains(t.Name(), "/") {
 		panic("MustRunSequential must be called from a top-level test, not a subtest")
@@ -90,18 +109,37 @@ func MustRunSequential(t *testing.T, reason string) {
 	if reason == "" {
 		panic("MustRunSequential requires a reason")
 	}
-	sequentialSuites.Store(t.Name(), true)
+
+	// Create a dedicated cluster for this suite.
+	suite := &sequentialSuite{
+		cluster: testClusterPool.createCluster(t, nil, false),
+	}
+	sequentialSuites.Store(t.Name(), suite)
+
+	// Register cleanup to tear down the suite's cluster when the parent test completes.
+	t.Cleanup(func() {
+		sequentialSuites.Delete(t.Name())
+		if err := suite.cluster.testCluster.TearDownCluster(); err != nil {
+			t.Logf("Failed to tear down sequential suite cluster: %v", err)
+		}
+	})
 }
 
 // NewEnv creates a new test environment with access to a Temporal cluster.
-// Tests are run in parallel - use MustRunSequential to run suite sequentially.
+//
+// By default, tests are marked as parallel. Use MustRunSequential on the
+// test's parent `testing.T` to run them sequentially instead.
 func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
+	// Check test sharding early, before any expensive operations.
+	checkTestShard(t)
+
 	// Check if this is a sequential suite by looking up the parent test name.
 	suiteName := t.Name()
 	if idx := strings.Index(suiteName, "/"); idx != -1 {
 		suiteName = suiteName[:idx]
 	}
-	if _, sequential := sequentialSuites.Load(suiteName); !sequential {
+	suiteVal, sequential := sequentialSuites.Load(suiteName)
+	if !sequential {
 		t.Parallel()
 	}
 
@@ -110,28 +148,37 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		opt(&options)
 	}
 
-	// For dedicated clusters, pass all dynamic config settings at cluster creation.
-	var startupConfig map[dynamicconfig.Key]any
-	if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
-		startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
-		for _, override := range options.dynamicConfigSettings {
-			startupConfig[override.setting.Key()] = override.value
+	var base *FunctionalTestBase
+	if sequential {
+		// Sequential suites use a single dedicated cluster for all tests.
+		suite := suiteVal.(*sequentialSuite)
+		base = suite.cluster
+		base.SetT(t)
+	} else {
+		// For dedicated clusters, pass all dynamic config settings at cluster creation.
+		var startupConfig map[dynamicconfig.Key]any
+		if options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
+			startupConfig = make(map[dynamicconfig.Key]any, len(options.dynamicConfigSettings))
+			for _, override := range options.dynamicConfigSettings {
+				startupConfig[override.setting.Key()] = override.value
+			}
 		}
-	}
 
-	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+		// Obtain the test cluster from the pool.
+		base = testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	}
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
 	ns := namespace.Name(RandomizeStr(t.Name()))
-	if _, err := base.RegisterNamespace(
+	nsID, err := base.RegisterNamespace(
 		ns,
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
 		"",
 		"",
-	); err != nil {
+	)
+	if err != nil {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
@@ -141,6 +188,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		HistoryRequire:     historyrequire.New(t),
 		cluster:            cluster,
 		nsName:             ns,
+		nsID:               nsID,
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
@@ -160,6 +208,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 // Use test env-specific namespace here for test isolation.
 func (e *testEnv) Namespace() namespace.Name {
 	return e.nsName
+}
+
+func (e *testEnv) NamespaceID() namespace.ID {
+	return e.nsID
 }
 
 func (e *testEnv) TaskPoller() *taskpoller.TaskPoller {
@@ -211,4 +263,29 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
+}
+
+// checkTestShard supports test sharding based on environment variables.
+// This distributes tests across multiple CI shards for parallel execution.
+func checkTestShard(t *testing.T) {
+	totalStr := os.Getenv("TEST_TOTAL_SHARDS")
+	indexStr := os.Getenv("TEST_SHARD_INDEX")
+	if totalStr == "" || indexStr == "" {
+		return
+	}
+	total, err := strconv.Atoi(totalStr)
+	if err != nil || total < 1 {
+		t.Fatal("Couldn't convert TEST_TOTAL_SHARDS")
+	}
+	index, err := strconv.Atoi(indexStr)
+	if err != nil || index < 0 || index >= total {
+		t.Fatal("Couldn't convert TEST_SHARD_INDEX")
+	}
+
+	nameToHash := t.Name() + strings.TrimSpace(shardSalt)
+	testIndex := int(farm.Fingerprint32([]byte(nameToHash))) % total
+	if testIndex != index {
+		t.Skipf("Skipping %s in test shard %d/%d (it runs in %d)", t.Name(), index+1, total, testIndex+1)
+	}
+	t.Logf("Running %s in test shard %d/%d", t.Name(), index+1, total)
 }

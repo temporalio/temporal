@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
@@ -1413,7 +1414,7 @@ func (s *mutableStateSuite) TestChecksumProbabilities() {
 	for _, prob := range []int{0, 100} {
 		s.mockConfig.MutableStateChecksumGenProbability = func(namespace string) int { return prob }
 		s.mockConfig.MutableStateChecksumVerifyProbability = func(namespace string) int { return prob }
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			shouldGenerate := s.mutableState.shouldGenerateChecksum()
 			shouldVerify := s.mutableState.shouldVerifyChecksum()
 			s.Equal(prob == 100, shouldGenerate)
@@ -2228,6 +2229,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 		nil,
+		false,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -2286,6 +2288,7 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchAppl
 		nil,
 		int64(0),
 		nil,
+		false,
 	)
 	s.Nil(err)
 	s.NotNil(wt)
@@ -5019,12 +5022,12 @@ func (s *mutableStateSuite) TestExecutionInfoClone() {
 	}
 	clone.NamespaceId = "namespace-id"
 	clone.WorkflowId = "workflow-id"
-	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, func(v any) []interface{} {
+	err := common.MergeProtoExcludingFields(s.mutableState.executionInfo, clone, func(v any) []any {
 		info, ok := v.(*persistencespb.WorkflowExecutionInfo)
 		if !ok || info == nil {
 			return nil
 		}
-		return []interface{}{
+		return []any{
 			&info.NamespaceId,
 		}
 	})
@@ -5978,7 +5981,7 @@ func (s *mutableStateSuite) TestAddTasks_CHASMPureTask() {
 	totalTasks := 2 * s.mockConfig.ChasmMaxInMemoryPureTasks()
 
 	visTimestamp := s.mockShard.GetTimeSource().Now()
-	for i := 0; i < totalTasks; i++ {
+	for range totalTasks {
 		task := &tasks.ChasmTaskPure{
 			VisibilityTimestamp: visTimestamp,
 		}
@@ -6109,4 +6112,41 @@ func (s *mutableStateSuite) TestCHASMNodeSize() {
 	expectedTotalSize += updateNode.Size() - dbState.ChasmNodes[nodeKeyToUpdate].Size()
 	expectedTotalSize += len(newNodeKey) + newNode.Size()
 	s.Equal(expectedTotalSize, mutableState.GetApproximatePersistedSize())
+}
+
+func (s *mutableStateSuite) TestSetContextMetadata() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+
+	ctx := contextutil.WithMetadataContext(context.Background())
+	workflowType := "test-workflow-type"
+	taskQueue := "test-task-queue"
+
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowId:   tests.WorkflowID,
+				WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+			},
+		},
+	)
+	s.NoError(err)
+
+	s.mutableState.SetContextMetadata(ctx)
+
+	// Verify metadata was set correctly
+	wfType, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowType)
+	s.True(ok)
+	s.Equal(workflowType, wfType)
+
+	tq, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
+	s.True(ok)
+	s.Equal(taskQueue, tq)
 }

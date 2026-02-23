@@ -129,9 +129,9 @@ func (s *fifoSchedulerSuite) TestParallelSubmitProcess() {
 
 	startWaitGroup.Add(numSubmitter)
 
-	for i := 0; i < numSubmitter; i++ {
+	for range numSubmitter {
 		channel := make(chan *MockTask, numTasks)
-		for j := 0; j < numTasks; j++ {
+		for j := range numTasks {
 			mockTask := NewMockTask(s.controller)
 			mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 			switch j % 2 {

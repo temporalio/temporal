@@ -157,7 +157,7 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 
 	// Create tasks that will write to the same DLQ (same category, source, target)
 	testTasks := make([]*tasks.WorkflowTask, numConcurrentWrites)
-	for i := 0; i < numConcurrentWrites; i++ {
+	for i := range numConcurrentWrites {
 		testTasks[i] = &tasks.WorkflowTask{
 			WorkflowKey: definition.WorkflowKey{
 				NamespaceID: string(tests.NamespaceID),
@@ -190,7 +190,7 @@ func TestDLQWriter_ConcurrentWrites(t *testing.T) {
 	}
 
 	// Launch concurrent writes to the same DLQ
-	for i := 0; i < numConcurrentWrites; i++ {
+	for i := range numConcurrentWrites {
 		task := testTasks[i]
 		g.Go(func() error {
 			err := writer.WriteTaskToDLQ(
@@ -254,7 +254,7 @@ func TestDLQWriter_ConcurrentWritesDifferentQueues(t *testing.T) {
 	}
 
 	// Launch concurrent writes to DIFFERENT target clusters (different DLQs)
-	for i := 0; i < numConcurrentWrites; i++ {
+	for i := range numConcurrentWrites {
 		index := i
 		g.Go(func() error {
 			task := &tasks.WorkflowTask{

@@ -25,9 +25,9 @@ func BenchmarkFutureAvailable(b *testing.B) {
 	b.ReportAllocs()
 
 	ctx := context.Background()
-	futures := make([]*FutureImpl[interface{}], b.N)
+	futures := make([]*FutureImpl[any], b.N)
 	for n := 0; n < b.N; n++ {
-		futures[n] = NewFuture[interface{}]()
+		futures[n] = NewFuture[any]()
 	}
 
 	b.ResetTimer()
@@ -41,7 +41,7 @@ func BenchmarkFutureAvailable(b *testing.B) {
 func BenchmarkFutureGet(b *testing.B) {
 	b.ReportAllocs()
 
-	future := NewFuture[interface{}]()
+	future := NewFuture[any]()
 	future.Set(nil, nil)
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
@@ -52,7 +52,7 @@ func BenchmarkFutureGet(b *testing.B) {
 func BenchmarkFutureReady(b *testing.B) {
 	b.ReportAllocs()
 
-	future := NewFuture[interface{}]()
+	future := NewFuture[any]()
 	future.Set(nil, nil)
 	for n := 0; n < b.N; n++ {
 		_ = future.Ready()
@@ -106,7 +106,7 @@ func (s *futureSuite) TestSetGetReady_Parallel() {
 		startWG.Wait()
 		s.future.Set(s.value, s.err)
 	}()
-	for i := 0; i < numGets; i++ {
+	for range numGets {
 		go func() {
 			defer endWG.Done()
 
@@ -148,7 +148,7 @@ func (s *futureSuite) TestSetReadyGet_Parallel() {
 		startWG.Wait()
 		s.future.Set(s.value, s.err)
 	}()
-	for i := 0; i < numGets; i++ {
+	for range numGets {
 		go func() {
 			defer endWG.Done()
 

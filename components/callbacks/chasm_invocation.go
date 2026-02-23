@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -25,7 +24,7 @@ import (
 type chasmInvocation struct {
 	nexus      *persistencespb.Callback_Nexus
 	attempt    int32
-	completion nexusrpc.OperationCompletion
+	completion nexusrpc.CompleteOperationOptions
 	requestID  string
 }
 
@@ -87,22 +86,13 @@ func (c chasmInvocation) getHistoryRequest(
 		RequestId:    c.requestID,
 	}
 
-	switch op := c.completion.(type) {
-	case *nexusrpc.OperationCompletionSuccessful:
-		payloadBody, err := io.ReadAll(op.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read payload: %v", err)
-		}
-
+	if c.completion.Error == nil {
 		var payload *commonpb.Payload
-		if payloadBody != nil {
-			content := &nexus.Content{
-				Header: op.Reader.Header,
-				Data:   payloadBody,
-			}
-			err := commonnexus.PayloadSerializer.Deserialize(content, &payload)
-			if err != nil {
-				return nil, fmt.Errorf("failed to deserialize payload: %v", err)
+		if c.completion.Result != nil {
+			var ok bool
+			payload, ok = c.completion.Result.(*commonpb.Payload)
+			if !ok {
+				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", c.completion.Result)
 			}
 		}
 
@@ -110,13 +100,21 @@ func (c chasmInvocation) getHistoryRequest(
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
 				Success: payload,
 			},
-			CloseTime:  timestamppb.New(op.CloseTime),
+			CloseTime:  timestamppb.New(c.completion.CloseTime),
 			Completion: completion,
 		}
-	case *nexusrpc.OperationCompletionUnsuccessful:
-		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
+	} else {
+		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %v", err)
+			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
+		}
+		// Unwrap the operation error since it's not meant to be sent for Temporal->Temporal completions.
+		if failure.Cause != nil {
+			failure = *failure.Cause
+		}
+		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert failure type: %w", err)
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
@@ -124,10 +122,8 @@ func (c chasmInvocation) getHistoryRequest(
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
 				Failure: apiFailure,
 			},
-			CloseTime: timestamppb.New(op.CloseTime),
+			CloseTime: timestamppb.New(c.completion.CloseTime),
 		}
-	default:
-		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", completion)
 	}
 
 	return req, nil
