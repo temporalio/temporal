@@ -962,6 +962,12 @@ func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Ke
 	return cleanup
 }
 
+func (c *TemporalImpl) partialOverrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
+	cleanup := c.dcClient.PartialOverrideValue(name, value)
+	t.Cleanup(cleanup)
+	return cleanup
+}
+
 func mustPortFromAddress(addr string) httpPort {
 	_, port, err := net.SplitHostPort(addr)
 	if err != nil {

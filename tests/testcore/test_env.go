@@ -268,6 +268,7 @@ func (e *testEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 				Value:       value,
 			}}
 		}
+		return e.cluster.host.partialOverrideDynamicConfig(e.t, setting.Key(), value)
 	}
 	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
 }
