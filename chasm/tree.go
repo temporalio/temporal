@@ -2040,45 +2040,45 @@ func (n *Node) resolveDeferredPointers() error {
 			internalV := field.val.FieldByName(internalFieldName)
 			internal, _ := internalV.Interface().(fieldInternal) //nolint:revive
 
-		if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
-			// Must resolve the deferred pointer or fail the transaction.
-			var resolvedPath []string
-			var err error
+			if internal.fieldType() == fieldTypeDeferredPointer && internal.value() != nil {
+				// Must resolve the deferred pointer or fail the transaction.
+				var resolvedPath []string
+				var err error
 
-			switch value := internal.value().(type) {
-			case Component:
-				resolvedPath, err = n.componentNodePath(value)
-				if err == nil {
-					targetNode := n.valueToNode[value]
-					if !targetNode.isAncestorOf(node) {
-						err = fmt.Errorf(
-							"pointer target is not an ancestor of component at path %v",
-							node.path(),
-						)
+				switch value := internal.value().(type) {
+				case Component:
+					resolvedPath, err = n.componentNodePath(value)
+					if err == nil {
+						targetNode := n.valueToNode[value]
+						if !targetNode.isAncestorOf(node) {
+							err = fmt.Errorf(
+								"pointer target is not an ancestor of component at path %v",
+								node.path(),
+							)
+						}
 					}
+				case proto.Message:
+					resolvedPath, err = n.dataNodePath(value)
+				default:
+					err = softassert.UnexpectedInternalErr(
+						n.logger,
+						"unable to create a deferred pointer for values of type",
+						fmt.Errorf("%T", value))
 				}
-			case proto.Message:
-				resolvedPath, err = n.dataNodePath(value)
-			default:
-				err = softassert.UnexpectedInternalErr(
-					n.logger,
-					"unable to create a deferred pointer for values of type",
-					fmt.Errorf("%T", value))
-			}
-			if err != nil {
-				return softassert.UnexpectedInternalErr(
-					n.logger,
-					"failed to resolve deferred pointer during transaction close",
-					err)
-			}
+				if err != nil {
+					return softassert.UnexpectedInternalErr(
+						n.logger,
+						"failed to resolve deferred pointer during transaction close",
+						err)
+				}
 
-			// Update the field to be a regular pointer, reusing the existing serializedNode,
-			// and update the serializedNode's value.
-			newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
-			newInternal.node = internal.node
-			newInternal.node.setValue(resolvedPath)
-			internalV.Set(reflect.ValueOf(newInternal))
-		}
+				// Update the field to be a regular pointer, reusing the existing serializedNode,
+				// and update the serializedNode's value.
+				newInternal := newFieldInternalWithValue(fieldTypePointer, resolvedPath)
+				newInternal.node = internal.node
+				newInternal.node.setValue(resolvedPath)
+				internalV.Set(reflect.ValueOf(newInternal))
+			}
 		}
 	}
 	return nil
