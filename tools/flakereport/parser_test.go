@@ -2,8 +2,10 @@ package flakereport
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNormalizeTestName(t *testing.T) {
@@ -118,43 +120,129 @@ func TestBuildGitHubURL(t *testing.T) {
 }
 
 func TestClassifyFailures(t *testing.T) {
-	grouped := map[string][]TestFailure{
-		"TestNormal": {
-			{Name: "TestNormal"}, {Name: "TestNormal"},
-		},
-		"TestFlaky": {
-			{Name: "TestFlaky"}, {Name: "TestFlaky"},
-			{Name: "TestFlaky"}, {Name: "TestFlaky"},
-			{Name: "TestFlaky"},
-		},
-		"TestTimeout (timeout)": {
-			{Name: "TestTimeout (timeout)"}, {Name: "TestTimeout (timeout)"},
-		},
-		"TestCrash": {
-			{Name: "TestCrash"}, {Name: "TestCrash"},
-		},
+	// Simulate the real flow: raw failures → groupFailuresByTest → classifyFailures.
+	// groupFailuresByTest normalizes names, stripping suffixes like (timeout), (retry N).
+	failures := []TestFailure{
+		{Name: "TestNormal"},
+		{Name: "TestNormal"},
+		{Name: "TestFlaky"},
+		{Name: "TestFlaky"},
+		{Name: "TestFlaky"},
+		{Name: "TestFlaky"},
+		{Name: "TestFlaky"},
+		{Name: "TestTimeout (timeout)"},
+		{Name: "TestTimeout (timeout)"},
+		{Name: "TestTimeout (timeout) (retry 1)"},
+		{Name: "TestFoo (crash)"},
+		{Name: "TestFoo (crash)"},
 	}
 
-	// Modify the test name to include "crash"
-	grouped["TestCrashHandler"] = []TestFailure{
-		{Name: "TestCrashHandler"}, {Name: "TestCrashHandler"},
-	}
-	delete(grouped, "TestCrash")
-
+	grouped := groupFailuresByTest(failures)
 	flaky, timeout, crash := classifyFailures(grouped)
 
-	// TestFlaky should be in flaky (>3 failures)
+	// TestFlaky should be in flaky
 	assert.Contains(t, flaky, "TestFlaky")
 	assert.Len(t, flaky["TestFlaky"], 5)
 
-	// TestTimeout should be in timeout
-	assert.Contains(t, timeout, "TestTimeout (timeout)")
-	assert.Len(t, timeout["TestTimeout (timeout)"], 2)
+	// TestTimeout should be in timeout (normalized key has no suffix)
+	assert.Contains(t, timeout, "TestTimeout")
+	assert.Len(t, timeout["TestTimeout"], 3)
 
-	// TestCrashHandler should be in crash
-	assert.Contains(t, crash, "TestCrashHandler")
-	assert.Len(t, crash["TestCrashHandler"], 2)
+	// TestFoo (crash) should be in crash (normalized key has no suffix)
+	assert.Contains(t, crash, "TestFoo")
+	assert.Len(t, crash["TestFoo"], 2)
 
-	// TestNormal should not be in flaky (only 2 failures)
-	assert.NotContains(t, flaky, "TestNormal")
+	// TestNormal should be in flaky
+	assert.Contains(t, flaky, "TestNormal")
+	assert.Len(t, flaky["TestNormal"], 2)
+}
+
+func TestGenerateSuiteReports(t *testing.T) {
+	now := time.Now()
+	twoDaysAgo := now.Add(-48 * time.Hour)
+	oneDayAgo := now.Add(-24 * time.Hour)
+
+	failures := []TestFailure{
+		// SuiteA: original failure in run 1
+		{Name: "TestFoo", SuiteName: "TestFunctionalSuiteA", RunID: 1, Timestamp: twoDaysAgo},
+		// SuiteA: retry failure in run 1 (should be excluded from suite flake rate)
+		{Name: "TestFoo (retry 1)", SuiteName: "TestFunctionalSuiteA", RunID: 1, Timestamp: twoDaysAgo},
+		// SuiteA: original failure in run 2
+		{Name: "TestBar", SuiteName: "TestFunctionalSuiteA", RunID: 2, Timestamp: oneDayAgo},
+		// SuiteB: original failure in run 1
+		{Name: "TestBaz", SuiteName: "TestFunctionalSuiteB", RunID: 1, Timestamp: twoDaysAgo},
+	}
+
+	allRuns := []TestRun{
+		// SuiteA present in runs 1, 2, 3
+		{SuiteName: "TestFunctionalSuiteA", Name: "TestFoo", RunID: 1},
+		{SuiteName: "TestFunctionalSuiteA", Name: "TestFoo (retry 1)", RunID: 1},
+		{SuiteName: "TestFunctionalSuiteA", Name: "TestBar", RunID: 2},
+		{SuiteName: "TestFunctionalSuiteA", Name: "TestFoo", RunID: 3},
+		// SuiteB present in runs 1, 2
+		{SuiteName: "TestFunctionalSuiteB", Name: "TestBaz", RunID: 1},
+		{SuiteName: "TestFunctionalSuiteB", Name: "TestBaz", RunID: 2},
+		// Skipped test should not count
+		{SuiteName: "TestFunctionalSuiteC", Name: "TestSkipped", RunID: 1, Skipped: true},
+		// Non-suite names should be filtered out
+		{SuiteName: "DATA RACE", Name: "DATA RACE: detected", RunID: 1},
+		{SuiteName: "TestStandalone", Name: "TestStandalone", RunID: 1},
+		// Suite with no failures should be excluded
+		{SuiteName: "TestHealthySuite", Name: "TestOk", RunID: 1},
+		{SuiteName: "TestHealthySuite", Name: "TestOk", RunID: 2},
+	}
+
+	reports := generateSuiteReports(failures, allRuns)
+
+	// Should have SuiteA and SuiteB (SuiteC is all skipped)
+	require.Len(t, reports, 2)
+
+	// Sorted by suite name
+	require.Equal(t, "TestFunctionalSuiteA", reports[0].SuiteName)
+	require.Equal(t, "TestFunctionalSuiteB", reports[1].SuiteName)
+
+	// SuiteA: 2 failed runs (run 1 and run 2) out of 3 total runs
+	require.Equal(t, 2, reports[0].FailedRuns)
+	require.Equal(t, 3, reports[0].TotalRuns)
+	require.InDelta(t, 66.7, reports[0].FlakeRate, 0.1)
+	require.Equal(t, oneDayAgo, reports[0].LastFailure)
+
+	// SuiteB: 1 failed run (run 1) out of 2 total runs
+	require.Equal(t, 1, reports[1].FailedRuns)
+	require.Equal(t, 2, reports[1].TotalRuns)
+	require.InDelta(t, 50.0, reports[1].FlakeRate, 0.1)
+	require.Equal(t, twoDaysAgo, reports[1].LastFailure)
+}
+
+func TestNormalizeTestNameFinal(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "retry with final suffix",
+			input:    "TestFoo (retry 2) (final)",
+			expected: "TestFoo",
+		},
+		{
+			name:     "no suffix",
+			input:    "TestFoo",
+			expected: "TestFoo",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.expected, normalizeTestName(tt.input))
+		})
+	}
+}
+
+func TestIsFinalRetry(t *testing.T) {
+	require.True(t, isFinalRetry("TestFoo (retry 2) (final)"))
+	require.True(t, isFinalRetry("TestFoo/SubTest (retry 1) (final)"))
+	require.False(t, isFinalRetry("TestFoo"))
+	require.False(t, isFinalRetry("TestFoo (retry 1)"))
+	require.False(t, isFinalRetry("TestFinal"))
 }
