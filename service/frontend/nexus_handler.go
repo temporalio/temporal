@@ -582,6 +582,16 @@ func (h *nexusHandler) StartOperation(
 				token = t.AsyncSuccess.GetOperationId()
 			}
 			nexus.AddHandlerLinks(ctx, parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)...)
+			// Stamp handler workflow ID on the DispatchNexusTask HTTP span so spandb
+			// can link caller and handler workflows. They are in separate OTEL traces
+			// (History creates no outgoing span), so callerWfID lives on the root span
+			// and handlerWfID uses a separate attribute to avoid overwriting it.
+			if wfID := extractWorkflowIDFromProtoLinks(t.AsyncSuccess.GetLinks()); wfID != "" {
+				span := oteltrace.SpanFromContext(ctx)
+				if span.IsRecording() {
+					span.SetAttributes(attribute.String(telemetry.NexusHandlerWorkflowIDKey, wfID))
+				}
+			}
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
 			}, nil
