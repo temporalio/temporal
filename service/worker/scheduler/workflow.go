@@ -127,8 +127,7 @@ type (
 		// Signal requests
 		pendingPatch     *schedulepb.SchedulePatch
 		pendingUpdate    *schedulespb.FullUpdateRequest
-		forceCAN         bool
-		pendingMigration bool
+		forceCAN bool
 
 		uuidBatch []string
 
@@ -314,14 +313,7 @@ func (s *scheduler) run() error {
 			)
 		}
 
-		if s.pendingMigration {
-			// Pause the V1 scheduler to prevent it from starting new workflows
-			// while migration is in progress.
-			wasPaused := s.Schedule.State.Paused
-			previousNotes := s.Schedule.State.Notes
-			s.Schedule.State.Paused = true
-			s.Schedule.State.Notes = "paused for migration to CHASM"
-
+		if s.State.PendingMigration {
 			err := s.executeMigration()
 			if err == nil {
 				s.logger.Info("Migration to CHASM succeeded, closing V1 workflow",
@@ -337,10 +329,6 @@ func (s *scheduler) run() error {
 				"error", err,
 			)
 			s.metrics.Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
-			// Restore the original pause state on failure.
-			s.Schedule.State.Paused = wasPaused
-			s.Schedule.State.Notes = previousNotes
-			s.pendingMigration = false
 		}
 
 		// process backfills if we have any too
@@ -999,7 +987,7 @@ func (s *scheduler) handleMigrateSignal(ch workflow.ReceiveChannel, _ bool) {
 		"namespace", s.State.Namespace,
 		"schedule-id", s.State.ScheduleId,
 	)
-	s.pendingMigration = true
+	s.State.PendingMigration = true
 }
 
 func (s *scheduler) executeMigration() error {

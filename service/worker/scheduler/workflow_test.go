@@ -2327,6 +2327,43 @@ func (s *workflowSuite) TestMigrateFailure() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
+	// First attempt fails, second attempt succeeds (on next run loop iteration).
+	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+		Return(errors.New("migration failed"))
+	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+		Return(nil)
+
+	// Send migrate signal after the first iteration.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameMigrate, nil)
+	}, 1*time.Second)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	// Migration should succeed on second attempt without a new signal,
+	// proving PendingMigration persists across run loop iterations.
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+}
+
 func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	// Mock MigrateSchedule activity to always fail (no retries, single attempt).
 	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).
@@ -2336,12 +2373,9 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNameMigrate, nil)
 	}, 1*time.Second)
-	// After migration fails (immediately, no retries), original pause state should be restored.
-	// Send a pause patch and verify it's processed, proving the workflow kept running.
+	// After migration failure, send a pause patch and verify it's processed,
+	// proving the workflow kept running and still handles signals.
 	s.env.RegisterDelayedCallback(func() {
-		desc := s.describe()
-		s.False(desc.Schedule.State.Paused, "schedule should be unpaused after migration failure")
-		s.Empty(desc.Schedule.State.Notes)
 		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 			Pause: "paused after failed migration",
 		})
