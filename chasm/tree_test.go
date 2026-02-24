@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -47,6 +48,7 @@ type (
 		timeSource      *clock.EventTimeSource
 		nodePathEncoder NodePathEncoder
 		logger          log.Logger
+		metricsHandler  metrics.Handler
 	}
 )
 
@@ -61,6 +63,7 @@ func (s *nodeSuite) SetupTest() {
 	s.testLibrary = newTestLibrary(s.controller)
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(s.testLibrary)
 	s.NoError(err)
@@ -218,12 +221,12 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 }
 
 func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.Equal(WorkflowArchetypeID, rootNode.ArchetypeID())
 	rootComponent := &TestComponent{
 		MSPointer: NewMSPointer(s.nodeBackend),
 	}
-	rootNode.SetRootComponent(rootComponent)
+	s.NoError(rootNode.SetRootComponent(rootComponent))
 	s.Equal(testComponentTypeID, rootNode.ArchetypeID())
 	s.NotEqual(WorkflowArchetypeID, rootNode.ArchetypeID())
 }
@@ -465,7 +468,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 			SubComponentInterfacePointer: NewComponentField[Component](nil, sc1),
 			SubComponent11Pointer:        ComponentPointerTo(ctx, sc11),
 		}
-		rootNode.SetRootComponent(rootComponent)
+		s.NoError(rootNode.SetRootComponent(rootComponent))
 
 		s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.ft)
 
@@ -1458,7 +1461,9 @@ func (s *nodeSuite) TestValidateAccess() {
 		name            string
 		valid           bool
 		intent          OperationIntent
-		lifecycleStatus enumspb.WorkflowExecutionStatus // TestComponent borrows the WorkflowExecutionStatus struct
+		componentStatus enumspb.WorkflowExecutionStatus // TestComponent borrows the WorkflowExecutionStatus struct
+		executionStatus enumspb.WorkflowExecutionStatus
+		executionState  enumsspb.WorkflowExecutionState
 		terminated      bool
 
 		setup func(*Node, Context) error
@@ -1467,7 +1472,9 @@ func (s *nodeSuite) TestValidateAccess() {
 			name:            "access check applies only to ancestors (terminated)",
 			valid:           true,
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			terminated:      false,
 			setup: func(target *Node, ctx Context) error {
 				// Set the terminated flag on the target node instead of an ancestor
@@ -1479,7 +1486,9 @@ func (s *nodeSuite) TestValidateAccess() {
 			name:            "access check applies only to ancestors (closed)",
 			valid:           true,
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			terminated:      false,
 			setup: func(target *Node, ctx Context) error {
 				if err := target.prepareComponentValue(ctx); err != nil {
@@ -1493,36 +1502,55 @@ func (s *nodeSuite) TestValidateAccess() {
 		{
 			name:            "read-only always succeeds",
 			intent:          OperationIntentObserve,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			terminated:      true,
 			valid:           true,
 		},
 		{
 			name:            "valid write access",
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			terminated:      false,
 			valid:           true,
 		},
 		{
 			name:            "invalid write access (parent closed)",
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			terminated:      false,
 			valid:           false,
 		},
 		{
 			name:            "invalid write access (component terminated)",
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			terminated:      true,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			terminated:      true, // terminated in current transaction
+			valid:           false,
+		},
+		{
+			name:            "invalid write access (component terminated and reload)",
+			intent:          OperationIntentProgress,
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			terminated:      false, // terminated in previous transaction and mutable state reloaded
 			valid:           false,
 		},
 		{
 			name:            "detached node skips parent validation",
 			valid:           true,
 			intent:          OperationIntentProgress,
-			lifecycleStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, // root is closed
+			componentStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			executionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, // root is closed
+			executionState:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			terminated:      false,
 			setup: func(target *Node, _ Context) error {
 				// Set the parent node (SubComponent1) as detached.
@@ -1550,7 +1578,7 @@ func (s *nodeSuite) TestValidateAccess() {
 			root.terminated = tc.terminated
 			component, ok := root.value.(*TestComponent)
 			if ok {
-				component.ComponentData.Status = tc.lifecycleStatus
+				component.ComponentData.Status = tc.componentStatus
 			}
 
 			// Find target node
@@ -1561,6 +1589,13 @@ func (s *nodeSuite) TestValidateAccess() {
 
 			if tc.setup != nil {
 				s.NoError(tc.setup(node, ctx))
+			}
+
+			s.nodeBackend.HandleGetExecutionState = func() *persistencespb.WorkflowExecutionState {
+				return &persistencespb.WorkflowExecutionState{
+					State:  tc.executionState,
+					Status: tc.executionStatus,
+				}
 			}
 
 			// Validation begins on the target node, checking ancestors only.
@@ -1698,7 +1733,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component, _ *Registry) error {
 					return errValidation
 				},
 			},
@@ -1715,7 +1750,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component, _ *Registry) error {
 					return nil
 				},
 			},
@@ -2600,6 +2635,28 @@ func (s *nodeSuite) TestTerminate() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 
+	// Test updating a terminated node will NOT change the state & status in mutable state.
+	// Here we simulate mutable state reload case since the terminate flag is not persisted.
+	s.nodeBackend.HandleGetExecutionState = func() *persistencespb.WorkflowExecutionState {
+		return &persistencespb.WorkflowExecutionState{
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		}
+	}
+
+	snapshot := node.Snapshot(nil)
+	node, err = s.newTestTree(snapshot.Nodes)
+	s.NoError(err)
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	_, err = node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+
+	mutations, err = node.CloseTransaction()
+	s.NoError(err)
+	s.Len(mutations.UpdatedNodes, 1)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
 }
 
 func (s *nodeSuite) preorderAndAssertParent(
@@ -3296,7 +3353,7 @@ func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger), nil
+		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
-	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 }

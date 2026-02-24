@@ -24,6 +24,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protopath"
@@ -688,7 +690,7 @@ func DiscardUnknownProto(m proto.Message) error {
 
 // MergeProtoExcludingFields merges fields from source into target, excluding specific fields.
 // The fields to exclude are specified as pointers to fields in the target struct.
-func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []interface{}) error {
+func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(v any) []any) error {
 	if target == nil || source == nil {
 		return serviceerror.NewInvalidArgument("target and source cannot be nil")
 	}
@@ -723,7 +725,7 @@ func MergeProtoExcludingFields(target, source proto.Message, doNotSyncFunc func(
 	return nil
 }
 
-func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string, error) {
+func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 	structVal := reflect.ValueOf(structPtr).Elem()
 	for i := 0; i < structVal.NumField(); i++ {
 		field := structVal.Field(i)
@@ -732,4 +734,32 @@ func getFieldNameFromStruct(structPtr interface{}, fieldPtr interface{}) (string
 		}
 	}
 	return "", serviceerror.NewInternal("field not found in the struct")
+}
+
+// IsRetryableRPCError checks if the error is a retryable gRPC error.
+func IsRetryableRPCError(err error) bool {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
+			return false
+		}
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
 }

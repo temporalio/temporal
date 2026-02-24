@@ -103,10 +103,10 @@ func NewNamespaceValidatorInterceptor(
 
 func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	err := ni.setNamespaceIfNotPresent(req)
 	if err != nil {
 		return nil, err
@@ -130,7 +130,7 @@ func (ni *NamespaceValidatorInterceptor) ValidateName(ns string) error {
 }
 
 func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
-	req interface{},
+	req any,
 ) error {
 	switch request := req.(type) {
 	case NamespaceNameGetter:
@@ -149,7 +149,7 @@ func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
 
 func (ni *NamespaceValidatorInterceptor) setNamespace(
 	namespaceEntry *namespace.Namespace,
-	req interface{},
+	req any,
 ) {
 	switch request := req.(type) {
 	case *workflowservice.RespondQueryTaskCompletedRequest:
@@ -194,10 +194,10 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 // StateValidationIntercept runs ValidateState - see docstring for that method.
 func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	namespaceEntry, err := ni.extractNamespace(req)
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace
 	return ni.checkReplicationState(namespaceEntry, fullMethod)
 }
 
-func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*namespace.Namespace, error) {
+func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {
 	// Token namespace has priority over request namespace. Check it first.
 	tokenNamespaceEntry, tokenErr := ni.extractNamespaceFromTaskToken(req)
 	if tokenErr != nil {
@@ -249,7 +249,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*nam
 	return requestNamespaceEntry, nil
 }
 
-func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interface{}) (*namespace.Namespace, error) {
+func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*namespace.Namespace, error) {
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
 	if !hasNamespace {
 		return nil, nil
@@ -314,7 +314,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req interface{}) (*namespace.Namespace, error) {
+func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req any) (*namespace.Namespace, error) {
 	reqWithTaskToken, hasTaskToken := req.(TaskTokenGetter)
 	if !hasTaskToken {
 		return nil, nil

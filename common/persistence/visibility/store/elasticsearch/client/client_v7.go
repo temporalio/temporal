@@ -212,7 +212,7 @@ func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]s
 	}
 
 	// Decode body
-	var body map[string]interface{}
+	var body map[string]any
 	if err := json.Unmarshal(res.Body, &body); err != nil {
 		return nil, err
 	}
@@ -226,7 +226,7 @@ func (c *clientImpl) GetDateFieldType() string {
 
 func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
 	if body == nil {
-		body = make(map[string]interface{})
+		body = make(map[string]any)
 	}
 	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
@@ -365,45 +365,45 @@ func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOption
 	}
 }
 
-func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]interface{} {
-	properties := make(map[string]interface{}, len(mapping))
+func buildMappingBody(mapping map[string]enumspb.IndexedValueType) map[string]any {
+	properties := make(map[string]any, len(mapping))
 	for fieldName, fieldType := range mapping {
-		var typeMap map[string]interface{}
+		var typeMap map[string]any
 		switch fieldType {
 		case enumspb.INDEXED_VALUE_TYPE_TEXT:
-			typeMap = map[string]interface{}{"type": "text"}
+			typeMap = map[string]any{"type": "text"}
 		case enumspb.INDEXED_VALUE_TYPE_KEYWORD, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
-			typeMap = map[string]interface{}{"type": "keyword"}
+			typeMap = map[string]any{"type": "keyword"}
 		case enumspb.INDEXED_VALUE_TYPE_INT:
-			typeMap = map[string]interface{}{"type": "long"}
+			typeMap = map[string]any{"type": "long"}
 		case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
-			typeMap = map[string]interface{}{
+			typeMap = map[string]any{
 				"type":           "scaled_float",
 				"scaling_factor": 10000,
 			}
 		case enumspb.INDEXED_VALUE_TYPE_BOOL:
-			typeMap = map[string]interface{}{"type": "boolean"}
+			typeMap = map[string]any{"type": "boolean"}
 		case enumspb.INDEXED_VALUE_TYPE_DATETIME:
-			typeMap = map[string]interface{}{"type": "date_nanos"}
+			typeMap = map[string]any{"type": "date_nanos"}
 		}
 		if typeMap != nil {
 			properties[fieldName] = typeMap
 		}
 	}
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"properties": properties,
 	}
 	return body
 }
 
-func convertMappingBody(esMapping map[string]interface{}, indexName string) map[string]string {
+func convertMappingBody(esMapping map[string]any, indexName string) map[string]string {
 	result := make(map[string]string)
 	index, ok := esMapping[indexName]
 	if !ok {
 		return result
 	}
-	indexMap, ok := index.(map[string]interface{})
+	indexMap, ok := index.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -411,7 +411,7 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	if !ok {
 		return result
 	}
-	mappingsMap, ok := mappings.(map[string]interface{})
+	mappingsMap, ok := mappings.(map[string]any)
 	if !ok {
 		return result
 	}
@@ -420,13 +420,13 @@ func convertMappingBody(esMapping map[string]interface{}, indexName string) map[
 	if !ok {
 		return result
 	}
-	propMap, ok := properties.(map[string]interface{})
+	propMap, ok := properties.(map[string]any)
 	if !ok {
 		return result
 	}
 
 	for fieldName, fieldProp := range propMap {
-		fieldPropMap, ok := fieldProp.(map[string]interface{})
+		fieldPropMap, ok := fieldProp.(map[string]any)
 		if !ok {
 			continue
 		}

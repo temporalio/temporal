@@ -1,6 +1,6 @@
 module go.temporal.io/server
 
-go 1.25.5
+go 1.26.0
 
 retract (
 	v1.30.0
@@ -33,7 +33,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/nexus-rpc/sdk-go v0.5.1
+	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pkg/errors v0.9.1
@@ -60,7 +60,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.34.0
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
-	go.temporal.io/api v1.61.1-0.20260128230845-c246540cf2ed
+	go.temporal.io/api v1.62.2
 	go.temporal.io/sdk v1.38.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
@@ -105,7 +105,7 @@ require (
 	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/dustin/go-humanize v1.0.1
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect

@@ -237,7 +237,7 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 	var err error
 
 	// insert 3x --> success
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		data, err = insertAssignmentRule(mkAssignmentRuleWithoutRamp("1"), data, clock, 0, maxRules)
 		assert.NoError(t, err)
 	}
@@ -584,7 +584,7 @@ func TestAddRedirectRuleMaxRules(t *testing.T) {
 	var err error
 
 	// insert 3x --> success
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		src := fmt.Sprintf("%d", i)
 		dst := fmt.Sprintf("%d", i+1)
 		data, err = insertRedirectRule(mkRedirectRule(src, dst), data, clock, maxRules, ignoreMaxUpstreamBuildIDs)

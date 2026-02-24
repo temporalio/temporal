@@ -40,13 +40,13 @@ type mockNexusCompletionGetterComponent struct {
 
 	Empty *emptypb.Empty
 
-	completion nexusrpc.OperationCompletion
+	completion nexusrpc.CompleteOperationOptions
 	err        error
 
 	Callback chasm.Field[*Callback]
 }
 
-func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.OperationCompletion, error) {
+func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.completion, m.err
 }
 
@@ -81,7 +81,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
-			expectedMetricOutcome: "status:200",
+			expectedMetricOutcome: "success",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
@@ -104,7 +104,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
-			expectedMetricOutcome: "status:500",
+			expectedMetricOutcome: "handler-error:INTERNAL",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -116,7 +116,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			caller: func(r *http.Request) (*http.Response, error) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
-			expectedMetricOutcome: "status:400",
+			expectedMetricOutcome: "handler-error:BAD_REQUEST",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
@@ -191,7 +191,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
+			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
@@ -210,18 +210,17 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Create completion
-			completion, err := nexusrpc.NewOperationCompletionSuccessful(nil, nexusrpc.OperationCompletionSuccessfulOptions{})
-			require.NoError(t, err)
+			completion := nexusrpc.CompleteOperationOptions{}
 
 			// Set up the CompletionSource field to return our mock completion
-			root.SetRootComponent(&mockNexusCompletionGetterComponent{
+			require.NoError(t, root.SetRootComponent(&mockNexusCompletionGetterComponent{
 				completion: completion,
 				// Create callback in SCHEDULED state
 				Callback: chasm.NewComponentField(
 					chasm.NewMutableContext(context.Background(), root),
 					callback,
 				),
-			})
+			}))
 			_, err = root.CloseTransaction()
 			require.NoError(t, err)
 
@@ -230,7 +229,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) error {
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
 						return timeSource.Now()
@@ -239,14 +238,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						return []byte{}, nil
 					},
 				}
-				return readFn(mockCtx, callback)
+				return readFn(mockCtx, callback, chasmRegistry)
 			})
 
 			mockEngine.EXPECT().UpdateComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) ([]any, error) {
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
 						HandleNow: func(component chasm.Component) time.Time {
@@ -257,7 +256,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						},
 					},
 				}
-				err := updateFn(mockCtx, callback)
+				err := updateFn(mockCtx, callback, chasmRegistry)
 				return nil, err
 			})
 
@@ -371,7 +370,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 	cases := []struct {
 		name               string
 		setupHistoryClient func(*testing.T, *gomock.Controller) resource.HistoryClient
-		completion         nexusrpc.OperationCompletion
+		completion         nexusrpc.CompleteOperationOptions
 		headerValue        string
 		assertOutcome      func(*testing.T, *Callback, error)
 	}{
@@ -397,16 +396,11 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				})
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-						CloseTime:  dummyTime,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result:    createPayloadBytes([]byte("result-data")),
+					CloseTime: dummyTime,
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -430,18 +424,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				})
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionUnsuccessful(
-					&nexus.OperationError{
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Error: &nexus.OperationError{
 						State: nexus.OperationStateFailed,
 						Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "operation failed"}},
 					},
-					nexusrpc.OperationCompletionUnsuccessfulOptions{
-						CloseTime: dummyTime,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+					CloseTime: dummyTime,
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -459,15 +449,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				).Return(nil, status.Error(codes.Unavailable, "service unavailable"))
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -485,15 +470,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				).Return(nil, status.Error(codes.InvalidArgument, "invalid request"))
 				return client
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: encodedRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -507,15 +487,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				// No RPC call expected
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: "invalid-base64!!!",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -529,15 +504,10 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				// No RPC call expected
 				return historyservicemock.NewMockHistoryServiceClient(ctrl)
 			},
-			completion: func() nexusrpc.OperationCompletion {
-				comp, err := nexusrpc.NewOperationCompletionSuccessful(
-					createPayloadBytes([]byte("result-data")),
-					nexusrpc.OperationCompletionSuccessfulOptions{
-						Serializer: commonnexus.PayloadSerializer,
-					},
-				)
-				require.NoError(t, err)
-				return comp
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
 			}(),
 			headerValue: base64.RawURLEncoding.EncodeToString([]byte("not-valid-protobuf")),
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
@@ -567,8 +537,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			// Setup history client
 			historyClient := tc.setupHistoryClient(t, ctrl)
 
-			// Setup logger and time source
+			// Setup logger, metricsHandler, and time source
 			logger := log.NewTestLogger()
+			metricsHandler := metrics.NoopMetricsHandler
 			timeSource := clock.NewEventTimeSource()
 			timeSource.Update(time.Now())
 
@@ -586,7 +557,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					},
 				},
 				namespaceRegistry: nsRegistry,
-				metricsHandler:    metrics.NoopMetricsHandler,
+				metricsHandler:    metricsHandler,
 				logger:            logger,
 				historyClient:     historyClient,
 			}
@@ -600,7 +571,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger)
+			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			// Create headers
 			headers := nexus.Header{}
@@ -627,14 +598,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 
 			// Set up the CompletionSource field to return our mock completion
-			root.SetRootComponent(&mockNexusCompletionGetterComponent{
+			require.NoError(t, root.SetRootComponent(&mockNexusCompletionGetterComponent{
 				completion: tc.completion,
 				// Create callback in SCHEDULED state
 				Callback: chasm.NewComponentField(
 					chasm.NewMutableContext(context.Background(), root),
 					callback,
 				),
-			})
+			}))
 			_, err = root.CloseTransaction()
 			require.NoError(t, err)
 
@@ -642,7 +613,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, opts ...chasm.TransitionOption) error {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) error {
 				// Create a mock context
 				mockCtx := &chasm.MockContext{
 					HandleNow: func(component chasm.Component) time.Time {
@@ -661,14 +632,14 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				}
 
 				// Call the readFn with our callback
-				return readFn(mockCtx, callback)
+				return readFn(mockCtx, callback, chasmRegistry)
 			})
 
 			mockEngine.EXPECT().UpdateComponent(
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Any(),
-			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, opts ...chasm.TransitionOption) ([]any, error) {
+			).DoAndReturn(func(ctx context.Context, ref chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, opts ...chasm.TransitionOption) ([]any, error) {
 				// Create a mock mutable context
 				mockCtx := &chasm.MockMutableContext{
 					MockContext: chasm.MockContext{
@@ -682,7 +653,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				}
 
 				// Call the updateFn with our callback
-				err := updateFn(mockCtx, callback)
+				err := updateFn(mockCtx, callback, chasmRegistry)
 				return nil, err
 			})
 

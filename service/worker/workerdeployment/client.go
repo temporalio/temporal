@@ -172,6 +172,15 @@ type Client interface {
 		args *deploymentspb.RegisterWorkerInVersionArgs,
 		identity string,
 	) error
+
+	// SignalVersionReactivation sends a reactivation signal to a version workflow.
+	// Used when workflows are pinned to a potentially DRAINED/INACTIVE version.
+	// This is a fire-and-forget operation - errors are logged but returned for caller handling.
+	SignalVersionReactivation(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName, buildID string,
+	) error
 }
 
 type ErrRegister struct{ error }
@@ -1626,6 +1635,33 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 	}
 
 	return nil
+}
+
+func (d *ClientImpl) SignalVersionReactivation(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName, buildID string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.convertAndRecordError("SignalVersionReactivation", deploymentName, &retErr, buildID)()
+
+	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
+
+	signalRequest := &historyservice.SignalWorkflowExecutionRequest{
+		NamespaceId: namespaceEntry.ID().String(),
+		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace: namespaceEntry.Name().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+			},
+			SignalName: ReactivateVersionSignalName,
+			Input:      nil,
+			Identity:   "history-service",
+		},
+	}
+
+	_, err := d.historyClient.SignalWorkflowExecution(ctx, signalRequest)
+	return err
 }
 
 func (d *ClientImpl) getSyncBatchSize() int32 {

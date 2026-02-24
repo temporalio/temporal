@@ -222,10 +222,12 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	WorkerHeartbeatsEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ListWorkersEnabled      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkerCommandsEnabled   dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowPauseEnabled    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerHeartbeatsEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
+	ListWorkersEnabled                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -380,16 +382,18 @@ func NewConfig(
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
-		HistoryHostErrorPercentage:     dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion: dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
-		LogAllReqErrors:                dynamicconfig.LogAllReqErrors.Get(dc),
-		EnableEagerWorkflowStart:       dynamicconfig.EnableEagerWorkflowStart.Get(dc),
-		WorkflowRulesAPIsEnabled:       dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
-		MaxWorkflowRulesPerNamespace:   dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
-		WorkerHeartbeatsEnabled:        dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
-		ListWorkersEnabled:             dynamicconfig.ListWorkersEnabled.Get(dc),
-		WorkerCommandsEnabled:          dynamicconfig.WorkerCommandsEnabled.Get(dc),
-		WorkflowPauseEnabled:           dynamicconfig.WorkflowPauseEnabled.Get(dc),
+		HistoryHostErrorPercentage:        dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		HistoryHostSelfErrorProportion:    dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
+		LogAllReqErrors:                   dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		WorkflowRulesAPIsEnabled:          dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
+		MaxWorkflowRulesPerNamespace:      dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
+		WorkerHeartbeatsEnabled:           dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
+		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
+		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		ListWorkersEnabled:                dynamicconfig.ListWorkersEnabled.Get(dc),
+		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
+		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),

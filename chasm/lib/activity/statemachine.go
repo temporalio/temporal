@@ -100,11 +100,13 @@ var TransitionRescheduled = chasm.NewTransition(
 			return err
 		}
 
+		retryScheduledTime := attemptScheduleTimeForRetry(attempt).AsTime()
+
 		if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
 			ctx.AddTask(
 				a,
 				chasm.TaskAttributes{
-					ScheduledTime: currentTime.Add(timeout).Add(event.retryInterval),
+					ScheduledTime: retryScheduledTime.Add(timeout),
 				},
 				&activitypb.ScheduleToStartTimeoutTask{
 					Stamp: attempt.GetStamp(),
@@ -114,7 +116,7 @@ var TransitionRescheduled = chasm.NewTransition(
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
-				ScheduledTime: currentTime.Add(event.retryInterval),
+				ScheduledTime: retryScheduledTime,
 			},
 			&activitypb.ActivityDispatchTask{
 				Stamp: attempt.GetStamp(),

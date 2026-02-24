@@ -25,7 +25,7 @@ import (
 type (
 	synchronizationModeParams struct {
 		blockingStart bool
-		interruptCh   <-chan interface{}
+		interruptCh   <-chan any
 	}
 
 	serverOptions struct {

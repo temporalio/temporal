@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
@@ -737,7 +738,7 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 	}
 	taskUpdated := false
 
-	updateTask := func(task interface{}) bool {
+	updateTask := func(task any) bool {
 		switch t := task.(type) {
 		case *tasks.HistoryReplicationTask:
 			t.NewRunBranchToken = newRunBranchToken
@@ -968,6 +969,7 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
+			update.WithNamespace(nsName),
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
@@ -1135,9 +1137,10 @@ func (c *ContextImpl) forceTerminateWorkflow(
 
 	if !mutableState.IsWorkflow() {
 		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity: consts.IdentityHistoryService,
-			Reason:   failureReason,
-			Details:  nil,
+			Identity:  consts.IdentityHistoryService,
+			Reason:    failureReason,
+			Details:   nil,
+			RequestID: primitives.NewUUID().String(),
 		})
 	}
 

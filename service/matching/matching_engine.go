@@ -110,6 +110,14 @@ type (
 		lock                          sync.Mutex
 	}
 
+	// workerPollerTracker tracks cancel funcs by worker instance key for bulk cancellation
+	// during worker shutdown. Thread-safe via internal mutex.
+	// The inner map uses a UUID key (not pollerID) because pollerID is reused when forwarded.
+	workerPollerTracker struct {
+		lock    sync.Mutex
+		pollers map[string]map[string]context.CancelFunc // workerInstanceKey -> pollerTrackerKey -> cancel
+	}
+
 	// Implements matching.Engine
 	matchingEngineImpl struct {
 		status                        int32
@@ -155,6 +163,8 @@ type (
 		// the frontend detects client connection is closed to prevent tasks being dispatched
 		// to zombie pollers.
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
+		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
+		workerInstancePollers workerPollerTracker
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -167,6 +177,34 @@ type (
 		rateLimiter TaskDispatchRateLimiter
 	}
 )
+
+// Add registers a poller for a worker instance. Thread-safe.
+func (t *workerPollerTracker) Add(workerKey, pollerID string, cancel context.CancelFunc) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	util.GetOrSetMap(t.pollers, workerKey)[pollerID] = cancel
+}
+
+// Remove unregisters a poller. Cleans up empty worker entries to prevent memory leak. Thread-safe.
+func (t *workerPollerTracker) Remove(workerKey, pollerID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	util.DeleteFromMap(t.pollers, workerKey, pollerID)
+}
+
+// CancelAll cancels all pollers for a worker and removes the worker entry. Returns cancelled count. Thread-safe.
+func (t *workerPollerTracker) CancelAll(workerKey string) int32 {
+	t.lock.Lock()
+	pollerCancels := t.pollers[workerKey]
+	delete(t.pollers, workerKey)
+	t.lock.Unlock()
+
+	// Cancel all pollers for the worker.
+	for _, cancel := range pollerCancels {
+		cancel()
+	}
+	return int32(len(pollerCancels))
+}
 
 var (
 	// EmptyPollWorkflowTaskQueueResponse is the response when there are no workflow tasks to hand out
@@ -254,6 +292,7 @@ func NewEngine(
 		queryResults:              collection.NewSyncMap[string, chan *queryResult](),
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
+		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -1169,6 +1208,51 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	return nil
 }
 
+func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+	e.removePollerFromHistory(ctx, request)
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// removePollerFromHistory eagerly removes the worker from pollerHistory so
+// DescribeTaskQueue doesn't show stale pollers after worker shutdown.
+func (e *matchingEngineImpl) removePollerFromHistory(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+) {
+	workerIdentity := request.GetWorkerIdentity()
+	if workerIdentity == "" {
+		return
+	}
+
+	taskQueueName := request.GetTaskQueue().GetName()
+	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		e.logger.Warn("Invalid task queue for poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
+	if err != nil {
+		e.logger.Warn("Failed to get task queue partition manager for poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+	if pm == nil {
+		e.logger.Debug("Partition manager not loaded, skipping poller history cleanup",
+			tag.WorkflowTaskQueueName(taskQueueName))
+		return
+	}
+
+	pm.RemovePoller(pollerIdentity(workerIdentity))
+}
+
 func (e *matchingEngineImpl) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
@@ -1237,7 +1321,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 			}
 			numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
 			for _, taskQueueType := range req.TaskQueueTypes {
-				for i := 0; i < numPartitions; i++ {
+				for i := range numPartitions {
 					partitionResp, err := e.matchingRawClient.DescribeTaskQueuePartition(ctx, &matchingservice.DescribeTaskQueuePartitionRequest{
 						NamespaceId: request.GetNamespaceId(),
 						TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -2453,8 +2537,14 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 			return nil, result.internalError
 		}
 		if result.failedWorkerResponse != nil {
-			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
-				HandlerError: result.failedWorkerResponse.GetRequest().GetError(),
+			if result.failedWorkerResponse.GetRequest().GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+				// Deprecated case. Kept for backwards-compatibility with older SDKs that are sending errors instead of failures.
+				return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_HandlerError{
+					HandlerError: result.failedWorkerResponse.GetRequest().GetError(), // nolint:staticcheck // checking deprecated field for backwards compatibility
+				}}, nil
+			}
+			return &matchingservice.DispatchNexusTaskResponse{Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+				Failure: result.failedWorkerResponse.GetRequest().GetFailure(),
 			}}, nil
 		}
 
@@ -2747,7 +2837,7 @@ func (e *matchingEngineImpl) getAllPartitionRpcNames(
 	}
 
 	n := e.config.NumTaskqueueWritePartitions(ns.String(), taskQueueFamily.Name(), taskQueueType)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		partitionKeys = append(partitionKeys, taskQueueFamily.TaskQueue(taskQueueType).NormalPartition(i).RpcName())
 	}
 	return partitionKeys, nil
@@ -2774,7 +2864,21 @@ func (e *matchingEngineImpl) pollTask(
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-		defer e.outstandingPollers.Delete(pollerID)
+
+		// Also track by worker instance key for bulk cancellation during shutdown.
+		// Use UUID (not pollerID) because pollerID is reused when forwarded.
+		workerInstanceKey := pollMetadata.workerInstanceKey
+		pollerTrackerKey := uuid.NewString()
+		if workerInstanceKey != "" {
+			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		}
+
+		defer func() {
+			e.outstandingPollers.Delete(pollerID)
+			if workerInstanceKey != "" {
+				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+			}
+		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
