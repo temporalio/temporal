@@ -282,10 +282,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	if err != nil {
 		return err
 	}
-	if err := targetWorkflow.Revive(); err != nil {
-		return err
-	}
-	if err := r.taskRefresher.Refresh(ctx, targetWorkflow.GetMutableState(), false); err != nil {
+	if err := targetWorkflow.Revive(ctx, r.taskRefresher); err != nil {
 		return err
 	}
 

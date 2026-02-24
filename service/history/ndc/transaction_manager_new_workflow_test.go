@@ -467,7 +467,7 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_SuppressC
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	currentWorkflowPolicy := historyi.TransactionPolicyActive
 	currentWorkflow.EXPECT().SuppressBy(targetWorkflow).Return(currentWorkflowPolicy, nil)
-	targetWorkflow.EXPECT().Revive().Return(nil)
+	targetWorkflow.EXPECT().Revive(gomock.Any(), gomock.Any()).Return(nil)
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
 		gomock.Any(),

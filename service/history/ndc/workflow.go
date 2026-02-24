@@ -3,6 +3,7 @@
 package ndc
 
 import (
+	"context"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -25,7 +27,7 @@ type (
 		GetVectorClock() (int64, int64, error)
 
 		HappensAfter(that Workflow) (bool, error)
-		Revive() error
+		Revive(ctx context.Context, taskRefresher workflow.TaskRefresher) error
 		SuppressBy(incomingWorkflow Workflow) (historyi.TransactionPolicy, error)
 		FlushBufferedEvents() error
 	}
@@ -112,7 +114,7 @@ func (r *WorkflowImpl) HappensAfter(
 	), nil
 }
 
-func (r *WorkflowImpl) Revive() error {
+func (r *WorkflowImpl) Revive(ctx context.Context, taskRefresher workflow.TaskRefresher) error {
 
 	state, _ := r.mutableState.GetWorkflowStateStatus()
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
@@ -131,7 +133,10 @@ func (r *WorkflowImpl) Revive() error {
 		state,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return taskRefresher.Refresh(ctx, r.mutableState, false)
 }
 
 func (r *WorkflowImpl) SuppressBy(

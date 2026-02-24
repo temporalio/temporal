@@ -321,7 +321,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 			return err
 		}
 	}
-	if err := targetWorkflow.Revive(); err != nil {
+	if err := targetWorkflow.Revive(ctx, r.taskRefresher); err != nil {
 		return err
 	}
 
@@ -331,19 +331,10 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 	if newWorkflow != nil {
 		newContext = newWorkflow.GetContext()
 		newMutableState = newWorkflow.GetMutableState()
-		if err := newWorkflow.Revive(); err != nil {
+		if err := newWorkflow.Revive(ctx, r.taskRefresher); err != nil {
 			return err
 		}
 		newWorkflowPolicy = historyi.TransactionPolicyPassive.Ptr()
-	}
-
-	if err := r.taskRefresher.Refresh(ctx, targetWorkflow.GetMutableState(), false); err != nil {
-		return err
-	}
-	if newWorkflow != nil {
-		if err := r.taskRefresher.Refresh(ctx, newWorkflow.GetMutableState(), false); err != nil {
-			return err
-		}
 	}
 
 	return targetWorkflow.GetContext().ConflictResolveWorkflowExecution(
