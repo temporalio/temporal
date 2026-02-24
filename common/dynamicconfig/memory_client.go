@@ -37,21 +37,15 @@ func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
 	for i := len(d.overrides) - 1; i >= 0; i-- {
 		if d.overrides[i].valid && d.overrides[i].key == key {
 			v := d.overrides[i].value
-			if d.overrides[i].mergeable {
-				if cvs, ok := v.([]ConstrainedValue); ok {
-					result = append(result, cvs...)
-				} else {
-					result = append(result, ConstrainedValue{Value: v})
-				}
-				continue
-			}
-			// Non-mergeable: take this value and stop.
 			if cvs, ok := v.([]ConstrainedValue); ok {
 				result = append(result, cvs...)
 			} else {
 				result = append(result, ConstrainedValue{Value: v})
 			}
-			return result
+			if !d.overrides[i].mergeable {
+				// Non-mergeable: take this value and stop.
+				return result
+			}
 		}
 	}
 	return result
