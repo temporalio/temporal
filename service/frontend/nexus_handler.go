@@ -324,6 +324,22 @@ func (h *nexusHandler) annotateNexusSpan(
 	)
 }
 
+// annotateNexusSpanLinks records Nexus response links (e.g. handler workflow URLs) on the current span.
+func annotateNexusSpanLinks(ctx context.Context, links []nexus.Link) {
+	if len(links) == 0 {
+		return
+	}
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	urls := make([]string, 0, len(links))
+	for _, link := range links {
+		urls = append(urls, link.URL.String())
+	}
+	span.SetAttributes(attribute.StringSlice(telemetry.NexusLinksKey, urls))
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -508,6 +524,7 @@ func (h *nexusHandler) StartOperation(
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
 			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
 			nexus.AddHandlerLinks(ctx, links...)
+			annotateNexusSpanLinks(ctx, links)
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, nil
@@ -520,6 +537,7 @@ func (h *nexusHandler) StartOperation(
 			}
 			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
 			nexus.AddHandlerLinks(ctx, links...)
+			annotateNexusSpanLinks(ctx, links)
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
 			}, nil

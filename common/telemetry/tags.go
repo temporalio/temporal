@@ -17,4 +17,5 @@ const (
 	NexusEndpointKey  = "temporalNexusEndpoint"
 	NexusServiceKey   = "temporalNexusService"
 	NexusOperationKey = "temporalNexusOperation"
+	NexusLinksKey     = "temporalNexusLinks"
 )
