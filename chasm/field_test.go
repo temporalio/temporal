@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -29,6 +30,7 @@ type fieldSuite struct {
 	timeSource      *clock.EventTimeSource
 	nodePathEncoder NodePathEncoder
 	logger          log.Logger
+	metricsHandler  metrics.Handler
 }
 
 func TestFieldSuite(t *testing.T) {
@@ -41,6 +43,7 @@ func (s *fieldSuite) SetupTest() {
 	s.nodeBackend = &MockNodeBackend{}
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
@@ -145,6 +148,7 @@ func (s *fieldSuite) newTestTree(
 			s.nodeBackend,
 			s.nodePathEncoder,
 			s.logger,
+			s.metricsHandler,
 		), nil
 	}
 	return NewTreeFromDB(
@@ -154,6 +158,7 @@ func (s *fieldSuite) newTestTree(
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
+		s.metricsHandler,
 	)
 }
 
@@ -165,6 +170,7 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
+		s.metricsHandler,
 	)
 	if err := rootNode.SetRootComponent(rootComponent); err != nil {
 		return nil, nil, err

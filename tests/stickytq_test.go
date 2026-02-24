@@ -193,7 +193,8 @@ WaitForStickyTimeoutLoop:
  12 WorkflowExecutionSignaled
  13 WorkflowTaskScheduled
  14 WorkflowTaskStarted
- 15 WorkflowTaskFailed`, events)
+ 15 WorkflowTaskFailed
+ 16 WorkflowTaskScheduled`, events)
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))
@@ -381,7 +382,8 @@ WaitForStickyTimeoutLoop:
  12 WorkflowExecutionSignaled
  13 WorkflowTaskScheduled
  14 WorkflowTaskStarted
- 15 WorkflowTaskFailed`, events)
+ 15 WorkflowTaskFailed
+ 16 WorkflowTaskScheduled`, events)
 
 	// Complete workflow execution
 	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDumpHistory, testcore.WithRespondSticky, testcore.WithExpectedAttemptCount(3))

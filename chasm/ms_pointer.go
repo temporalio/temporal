@@ -35,5 +35,5 @@ func (m MSPointer) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
-	return m.backend.GetNexusCompletion(ctx.getContext(), requestID)
+	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
 }

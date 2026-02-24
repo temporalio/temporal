@@ -89,6 +89,15 @@ message SubqueueInfo {
     // Max read level keeps track of the highest task level ever written, but is only
     // maintained best-effort. Do not trust these values.
     temporal.server.api.taskqueue.v1.FairLevel fair_max_read_level = 5;
+
+    // We can persist a limited number of fairness key counts in task queue
+    // metadata so they're not lost on migration.
+    repeated FairnessKeyCount top_k_fairness_counts = 6;
+}
+
+message FairnessKeyCount {
+    string key = 1;
+    int64 count = 2;
 }
 
 message SubqueueKey {

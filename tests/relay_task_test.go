@@ -97,7 +97,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	workflowTaskTimeout := false
 	for range 3 {
 		events := s.GetHistory(s.Namespace().String(), workflowExecution)
-		if len(events) == 8 {
+		if len(events) >= 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -106,7 +106,8 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
   5 MarkerRecorded
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE`, events)
+  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE
+  9 WorkflowTaskScheduled`, events)
 			workflowTaskTimeout = true
 			break
 		}

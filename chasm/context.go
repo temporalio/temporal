@@ -6,6 +6,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -32,14 +33,23 @@ type Context interface {
 	NamespaceEntry() *namespace.Namespace
 	// EndpointByName resolves a nexus endpoint entry.
 	EndpointByName(reg EndpointRegistry, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+	// MetricsHandler returns a metrics handler with bare minimum tags (no namespace tag).
+	MetricsHandler() metrics.Handler
+	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
+	// Use WithContextValues RegistrableComponentOption to set key values pair for a component upon registration.
+	// Registered key-value pairs will automatically be added to the Context whenever framework accesses the component.
+	// Alternatively, use ContextWithValue() to manually set values on Context.
+	Value(key any) any
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
 
-	// getContext returns the underlying context.Context for use in I/O operations (e.g., RPC calls).
-	getContext() context.Context
-
+	// withValue should only be used by ContextWithValue() function, do NOT call it directly.
+	// For structs implementing this method, although the returned value has type Context,
+	// the concrete type MUST be the same concrete type as the receiver.
+	withValue(key any, value any) Context
 	structuredRef(Component) (ComponentRef, error)
+	goContext() context.Context
 }
 
 type EndpointRegistry interface {
@@ -137,6 +147,22 @@ func (c *immutableCtx) Logger() log.Logger {
 	return c.root.logger
 }
 
+func (c *immutableCtx) MetricsHandler() metrics.Handler {
+	return c.root.metricsHandler
+}
+
+func (c *immutableCtx) Value(key any) any {
+	return c.goContext().Value(key)
+}
+
+func (c *immutableCtx) withValue(key any, value any) Context {
+	return &immutableCtx{
+		ctx:          context.WithValue(c.goContext(), key, value),
+		root:         c.root,
+		executionKey: c.executionKey,
+	}
+}
+
 func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) {
 	return c.root.structuredRef(component)
 }
@@ -145,7 +171,7 @@ func (c *immutableCtx) NamespaceEntry() *namespace.Namespace {
 	return c.root.backend.GetNamespaceEntry()
 }
 
-func (c *immutableCtx) getContext() context.Context {
+func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
 }
 
@@ -159,10 +185,10 @@ func (c *immutableCtx) EndpointByName(reg EndpointRegistry, name string) (*persi
 // [UpdateWithStartExecution], or [StartExecution] APIs.
 func NewMutableContext(
 	ctx context.Context,
-	root *Node,
+	node *Node,
 ) MutableContext {
 	return &mutableCtx{
-		immutableCtx: newContext(ctx, root),
+		immutableCtx: newContext(ctx, node),
 	}
 }
 
@@ -172,4 +198,50 @@ func (c *mutableCtx) AddTask(
 	payload any,
 ) {
 	c.root.AddTask(component, attributes, payload)
+}
+
+func (c *mutableCtx) withValue(key any, value any) Context {
+	return &mutableCtx{
+		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
+	}
+}
+
+// ContextWithValue returns a new Context with the given key-value pair added.
+// Added key-value pairs will be accessible via the Value() method on the returned Context,
+// and the behavior of the key-value pair is the same as context.Context.WithValue().
+func ContextWithValue[C Context](c C, key any, value any) C {
+	//nolint:revive // unchecked-type-assertion
+	return any(c.withValue(key, value)).(C)
+}
+
+// AugmentContextForComponent returns a new Context with all context values
+// associated with the given component in the registry added.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func AugmentContextForComponent[C Context](
+	ctx C,
+	component any,
+	registry *Registry,
+) C {
+	rc, ok := registry.componentFor(component)
+	if ok {
+		for key, value := range rc.contextValues {
+			ctx = ContextWithValue(ctx, key, value)
+		}
+	}
+	return ctx
+}
+
+func augmentContextForArchetypeID[C Context](
+	ctx C,
+	archetypeID ArchetypeID,
+	registry *Registry,
+) C {
+	rc, ok := registry.ComponentByID(archetypeID)
+	if ok {
+		for key, value := range rc.contextValues {
+			ctx = ContextWithValue(ctx, key, value)
+		}
+	}
+	return ctx
 }
