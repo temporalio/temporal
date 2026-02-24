@@ -42,14 +42,8 @@ func TestNewServer(t *testing.T) {
 
 // TestNewServerWithOTEL verifies that NewServer doesn't cause any fx errors when OTEL is enabled.
 func TestNewServerWithOTEL(t *testing.T) {
-	t.Setenv("OTEL_TRACES_EXPORTER", "otlp")
-	t.Setenv("OTEL_BSP_SCHEDULE_DELAY", "100")
-	t.Setenv("OTEL_EXPORTER_OTLP_TRACES_INSECURE", "true")
-
 	t.Run("with OTEL Collector running", func(t *testing.T) {
-		collector, err := testtelemetry.StartMemoryCollector(t)
-		require.NoError(t, err)
-		t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Addr())
+		collector := testtelemetry.SetupMemoryCollector(t)
 		runAndTestServer(t)
 		require.NotEmpty(t, collector.Spans(), "expected at least one OTEL span")
 	})

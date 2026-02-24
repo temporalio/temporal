@@ -307,25 +307,61 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
-func (h *nexusHandler) annotateNexusSpan(
-	ctx context.Context,
-	oc *operationContext,
-	service, operation string,
-) {
-	span := oteltrace.SpanFromContext(ctx)
-	if !span.IsRecording() {
-		return
+
+// workflowIDFromTemporalURL parses a temporal:/// URL string and returns the
+// workflow ID embedded in its path, or "" if the URL is not a valid temporal
+// workflow URL.  Uses the percent-encoded path so that "/"  characters inside
+// the workflow ID (encoded as "%2F") are not mis-treated as path separators.
+func workflowIDFromTemporalURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
 	}
-	span.SetAttributes(
-		attribute.String(telemetry.NexusNamespaceKey, oc.namespaceName),
-		attribute.String(telemetry.NexusEndpointKey, oc.endpointName),
-		attribute.String(telemetry.NexusServiceKey, service),
-		attribute.String(telemetry.NexusOperationKey, operation),
-	)
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "temporal" {
+		return ""
+	}
+	// path: /namespaces/{ns}/workflows/{wfid}/...
+	parts := strings.SplitN(strings.TrimPrefix(u.EscapedPath(), "/"), "/", 5)
+	if len(parts) >= 4 && parts[0] == "namespaces" && parts[2] == "workflows" {
+		wfID, err := url.PathUnescape(parts[3])
+		if err == nil && wfID != "" {
+			return wfID
+		}
+	}
+	return ""
 }
 
-// annotateNexusSpanLinks records Nexus response links (e.g. handler workflow URLs) on the current span.
-func annotateNexusSpanLinks(ctx context.Context, links []nexus.Link) {
+// extractWorkflowIDFromProtoLinks extracts the first workflow ID found in a set
+// of nexus proto links, or "" if none is present.
+func extractWorkflowIDFromProtoLinks(links []*nexuspb.Link) string {
+	for _, link := range links {
+		if id := workflowIDFromTemporalURL(link.GetUrl()); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+// annotateNexusPollSpan sets the caller's workflow ID on the PollNexusTaskQueue
+// gRPC span. The poll trace is separate from the main OTEL trace, so this
+// annotation is needed for spandb to index it under the caller workflow.
+func annotateNexusPollSpan(ctx context.Context, req *nexuspb.Request) {
+	if so := req.GetStartOperation(); so != nil {
+		if wfID := extractWorkflowIDFromProtoLinks(so.GetLinks()); wfID != "" {
+			span := oteltrace.SpanFromContext(ctx)
+			if span.IsRecording() {
+				span.SetAttributes(attribute.String(telemetry.WorkflowIDKey, wfID))
+			}
+		}
+	}
+}
+
+// annotateNexusRespondSpan sets the handler workflow ID as temporalWorkflowID on
+// the RespondNexusTaskCompleted gRPC span for workflow-backed async operations.
+// Because spandb indexes traces by workflow ID, this causes the poll/respond
+// trace to be automatically included when xray renders the handler workflow view,
+// which is itself linked to the caller workflow via Nexus links.
+func annotateNexusRespondSpan(ctx context.Context, links []*nexuspb.Link) {
 	if len(links) == 0 {
 		return
 	}
@@ -333,11 +369,9 @@ func annotateNexusSpanLinks(ctx context.Context, links []nexus.Link) {
 	if !span.IsRecording() {
 		return
 	}
-	urls := make([]string, 0, len(links))
-	for _, link := range links {
-		urls = append(urls, link.URL.String())
+	if wfID := extractWorkflowIDFromProtoLinks(links); wfID != "" {
+		span.SetAttributes(attribute.String(telemetry.WorkflowIDKey, wfID))
 	}
-	span.SetAttributes(attribute.StringSlice(telemetry.NexusLinksKey, urls))
 }
 
 // Key to extract a nexusContext object from a context.Context.
@@ -429,7 +463,21 @@ func (h *nexusHandler) StartOperation(
 		return nil, err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
-	h.annotateNexusSpan(ctx, oc, service, operation)
+	// Set the caller's workflow ID on the DispatchNexusTask HTTP span so spandb
+	// can index this trace under the caller workflow. This trace is separate from
+	// History's OTEL trace (the executor context carries no span), so this is the
+	// only index path into it.
+	for _, link := range options.Links {
+		if link.URL != nil {
+			if wfID := workflowIDFromTemporalURL(link.URL.String()); wfID != "" {
+				span := oteltrace.SpanFromContext(ctx)
+				if span.IsRecording() {
+					span.SetAttributes(attribute.String(telemetry.WorkflowIDKey, wfID))
+				}
+				break
+			}
+		}
+	}
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
@@ -522,9 +570,7 @@ func (h *nexusHandler) StartOperation(
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
-			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
-			nexus.AddHandlerLinks(ctx, links...)
-			annotateNexusSpanLinks(ctx, links)
+			nexus.AddHandlerLinks(ctx, parseLinks(t.SyncSuccess.GetLinks(), oc.logger)...)
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, nil
@@ -535,9 +581,7 @@ func (h *nexusHandler) StartOperation(
 			if token == "" {
 				token = t.AsyncSuccess.GetOperationId()
 			}
-			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
-			nexus.AddHandlerLinks(ctx, links...)
-			annotateNexusSpanLinks(ctx, links)
+			nexus.AddHandlerLinks(ctx, parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)...)
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
 			}, nil
@@ -670,7 +714,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
-	h.annotateNexusSpan(ctx, oc, service, operation)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 

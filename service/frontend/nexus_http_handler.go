@@ -119,18 +119,20 @@ func NewNexusHTTPHandler(
 }
 
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
-	registerRoute := func(route string, handlerFunc http.HandlerFunc) {
+	registerRoute := func(route, spanName string, handlerFunc http.HandlerFunc) {
 		var handler http.Handler = handlerFunc
 		if telemetry.IsTracingEnabled(h.tracerProvider) {
-			handler = otelhttp.NewHandler(handlerFunc, route,
+			handler = otelhttp.NewHandler(
+				telemetry.DebugHTTPMiddleware(handlerFunc),
+				spanName,
 				otelhttp.WithTracerProvider(h.tracerProvider),
 				otelhttp.WithPropagators(h.propagator),
 			)
 		}
 		r.PathPrefix("/" + route + "/").Handler(handler)
 	}
-	registerRoute(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation(), h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	registerRoute(commonnexus.RouteDispatchNexusTaskByEndpoint.Representation(), h.dispatchNexusTaskByEndpoint)
+	registerRoute(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation(), "DispatchNexusTask", h.dispatchNexusTaskByNamespaceAndTaskQueue)
+	registerRoute(commonnexus.RouteDispatchNexusTaskByEndpoint.Representation(), "DispatchNexusTask", h.dispatchNexusTaskByEndpoint)
 }
 
 func (h *NexusHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {

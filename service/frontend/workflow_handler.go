@@ -5641,7 +5641,9 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return nil, err
 	}
 
-	return matchingResponse.GetResponse(), nil
+	resp := matchingResponse.GetResponse()
+	annotateNexusPollSpan(ctx, resp.GetRequest())
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, request *workflowservice.RespondNexusTaskCompletedRequest) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
@@ -5689,6 +5691,12 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
 		}
 	}
+
+	// For workflow-backed async operations the handler workflow ID is in the
+	// response links. Recording it as temporalWorkflowID lets spandb link the
+	// poll/respond trace to the handler workflow, which is itself linked to the
+	// caller workflow via the StartNexusOperation Nexus links.
+	annotateNexusRespondSpan(ctx, request.GetResponse().GetStartOperation().GetAsyncSuccess().GetLinks())
 
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
 		NamespaceId: namespaceId.String(),

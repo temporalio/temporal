@@ -23,7 +23,22 @@ type MemoryCollector struct {
 	spans     []*trace.ResourceSpans
 }
 
-func StartMemoryCollector(tb testing.TB) (*MemoryCollector, error) {
+// SetupMemoryCollector configures OTEL env vars, starts an in-memory gRPC collector,
+// and returns it.
+func SetupMemoryCollector(tb testing.TB) *MemoryCollector {
+	tb.Helper()
+	tb.Setenv("OTEL_TRACES_EXPORTER", "otlp")
+	tb.Setenv("OTEL_BSP_SCHEDULE_DELAY", "100")
+	tb.Setenv("OTEL_EXPORTER_OTLP_TRACES_INSECURE", "true")
+	collector, err := startMemoryCollector(tb)
+	if err != nil {
+		tb.Fatalf("failed to start memory collector: %v", err)
+	}
+	tb.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", collector.Addr())
+	return collector
+}
+
+func startMemoryCollector(tb testing.TB) (*MemoryCollector, error) {
 	grpcServer := grpc.NewServer()
 	l := &MemoryCollector{
 		addr: fmt.Sprintf("localhost:%d", freeport.MustGetFreePort()),
