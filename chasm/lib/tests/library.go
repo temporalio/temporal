@@ -27,7 +27,8 @@ func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 
 func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*PayloadStore]("payloadStore",
+		chasm.NewRegistrableComponent[*PayloadStore](
+			"payloadStore",
 			chasm.WithBusinessIDAlias("PayloadStoreId"),
 			chasm.WithSearchAttributes(
 				PayloadTotalCountSearchAttribute,
@@ -35,6 +36,9 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 				ExecutionStatusSearchAttribute,
 				chasm.SearchAttributeTaskQueue,
 			),
+			chasm.WithContextValues(map[any]any{
+				componentCtxKey: componentCtxVal,
+			}),
 		),
 	}
 }
