@@ -171,6 +171,37 @@ func Test_Decode_NilMap(t *testing.T) {
 	r.Nil(vals["key6"])
 }
 
+func Test_Decode_SkipsUnknownSearchAttributes(t *testing.T) {
+	r := require.New(t)
+
+	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}}
+	sa, err := Encode(map[string]any{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, typeMap)
+	r.NoError(err)
+
+	// Decode with a typeMap that doesn't include key2: key2 should be silently skipped.
+	vals, err := Decode(
+		sa,
+		&NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+		}},
+		true,
+	)
+	r.NoError(err)
+	r.Len(vals, 2)
+	r.Equal("val1", vals["key1"])
+	r.NotContains(vals, "key2")
+	r.Equal(true, vals["key3"])
+}
+
 func Test_Decode_Error(t *testing.T) {
 	r := require.New(t)
 
@@ -186,27 +217,11 @@ func Test_Decode_Error(t *testing.T) {
 	}, typeMap)
 	r.NoError(err)
 
-	vals, err := Decode(
-		sa,
-		&NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
-			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"key4": enumspb.INDEXED_VALUE_TYPE_INT,
-			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
-		}},
-		true,
-	)
-	r.Error(err)
-	r.ErrorIs(err, ErrInvalidName)
-	r.Len(sa.IndexedFields, 3)
-	r.Equal("val1", vals["key1"])
-	r.Equal(int64(2), vals["key2"])
-	r.Equal(true, vals["key3"])
-
 	delete(sa.IndexedFields["key1"].Metadata, "type")
 	delete(sa.IndexedFields["key2"].Metadata, "type")
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
-	vals, err = Decode(sa, nil, true)
+	vals, err := Decode(sa, nil, true)
 	r.Error(err)
 	r.ErrorIs(err, ErrInvalidType)
 	r.Len(vals, 3)

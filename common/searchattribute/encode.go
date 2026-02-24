@@ -1,6 +1,8 @@
 package searchattribute
 
 import (
+	"errors"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
@@ -59,8 +61,13 @@ func Decode(
 		if typeMap != nil {
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
-			// TODO: Evaluate if we should get the chasm search attribute mapper when upserting search attributes.
-			if err != nil && !sadefs.IsChasmSearchAttribute(saName) {
+			if err != nil {
+				if errors.Is(err, ErrInvalidName) {
+					// Silently skip unknown search attributes. This can happen due to
+					// version mismatches where a newer server wrote a predefined SA
+					// that this server doesn't recognize.
+					continue
+				}
 				lastErr = err
 			}
 		}

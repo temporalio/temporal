@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -876,8 +875,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		tp, err := combinedTypeMap.GetType(name)
 		if err != nil {
-			// Silently ignore ErrInvalidName for unregistered chasm search attributes
-			if sadefs.IsChasmSearchAttribute(name) && errors.Is(err, searchattribute.ErrInvalidName) {
+			if errors.Is(err, searchattribute.ErrInvalidName) {
 				continue
 			}
 			return nil, err
