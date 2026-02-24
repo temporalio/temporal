@@ -120,16 +120,12 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 		hostDetails = append(hostDetails, detail)
 
 		switch state {
-		case enumsspb.HEALTH_STATE_NOT_SERVING, enumsspb.HEALTH_STATE_UNSPECIFIED, enumsspb.HEALTH_STATE_INTERNAL_ERROR:
-			failedHostCount++
-			if exampleFailedHost == nil {
-				exampleFailedHost = detail
-			}
-		case enumsspb.HEALTH_STATE_DECLINED_SERVING:
-			hostDeclinedServingCount++
 		case enumsspb.HEALTH_STATE_SERVING:
 			// Do nothing.
+		case enumsspb.HEALTH_STATE_DECLINED_SERVING:
+			hostDeclinedServingCount++
 		default:
+			// NOT_SERVING, UNSPECIFIED, INTERNAL_ERROR, or any unknown state.
 			failedHostCount++
 			if exampleFailedHost == nil {
 				exampleFailedHost = detail
