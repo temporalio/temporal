@@ -107,25 +107,33 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 	var failedHostCount float64
 	var hostDeclinedServingCount float64
 	var hostDetails []*healthspb.HostHealthDetail
+	var exampleFailedHost *healthspb.HostHealthDetail
 	for range hosts {
 		result := <-receiveCh
 		state := result.response.GetState()
 
-		hostDetails = append(hostDetails, &healthspb.HostHealthDetail{
+		detail := &healthspb.HostHealthDetail{
 			Address: result.address,
 			State:   state,
 			Checks:  result.response.GetChecks(),
-		})
+		}
+		hostDetails = append(hostDetails, detail)
 
 		switch state {
 		case enumsspb.HEALTH_STATE_NOT_SERVING, enumsspb.HEALTH_STATE_UNSPECIFIED, enumsspb.HEALTH_STATE_INTERNAL_ERROR:
 			failedHostCount++
+			if exampleFailedHost == nil {
+				exampleFailedHost = detail
+			}
 		case enumsspb.HEALTH_STATE_DECLINED_SERVING:
 			hostDeclinedServingCount++
 		case enumsspb.HEALTH_STATE_SERVING:
 			// Do nothing.
 		default:
 			failedHostCount++
+			if exampleFailedHost == nil {
+				exampleFailedHost = detail
+			}
 		}
 	}
 	close(receiveCh)
@@ -141,7 +149,12 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 	} else {
 		failedHostCountProportion := failedHostCount / float64(len(hosts))
 		if failedHostCountProportion+hostDeclinedServingProportion > h.hostFailurePercentage() {
-			h.logger.Warn("health check exceeded host failure percentage threshold", tag.Float64("host failure percentage threshold", h.hostFailurePercentage()), tag.Float64("host failure percentage", failedHostCountProportion), tag.Float64("host declined serving percentage", hostDeclinedServingProportion))
+			h.logger.Warn("health check exceeded host failure percentage threshold",
+				tag.Float64("host failure percentage threshold", h.hostFailurePercentage()),
+				tag.Float64("host failure percentage", failedHostCountProportion),
+				tag.Float64("host declined serving percentage", hostDeclinedServingProportion),
+				tag.NewStringTag("example_failed_host", failedHostSummary(exampleFailedHost)),
+			)
 			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		} else {
 			overallState = enumsspb.HEALTH_STATE_SERVING
@@ -179,6 +192,18 @@ func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (
 		}
 	}
 	return resp, nil
+}
+
+func failedHostSummary(host *healthspb.HostHealthDetail) string {
+	if host == nil {
+		return "unknown"
+	}
+	for _, check := range host.GetChecks() {
+		if check.GetState() != enumsspb.HEALTH_STATE_SERVING && check.GetMessage() != "" {
+			return fmt.Sprintf("%s: %s", host.GetAddress(), check.GetMessage())
+		}
+	}
+	return fmt.Sprintf("%s: %s", host.GetAddress(), host.GetState().String())
 }
 
 func ensureMinimumProportionOfHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
