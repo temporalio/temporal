@@ -132,7 +132,7 @@ func ClosePayloadStoreHandler(
 			},
 		),
 		(*PayloadStore).Close,
-		request,
+		nil,
 	)
 	return resp, err
 }

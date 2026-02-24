@@ -5855,23 +5855,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	branchToken := []byte{1, 2, 3}
 	persistenceToken := []byte("some random persistence token")
 	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-		RunId:            we.GetRunId(),
-		FirstEventId:     common.FirstEventID,
-		NextEventId:      5,
-		PersistenceToken: persistenceToken,
-		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
-			HistorySuffix: []*historypb.HistoryEvent{
-				{
-					EventId:   5,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
-				},
-				{
-					EventId:   6,
-					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
-				},
-			},
-		},
-		BranchToken: branchToken,
+		RunId:             we.GetRunId(),
+		FirstEventId:      common.FirstEventID,
+		NextEventId:       5,
+		PersistenceToken:  persistenceToken,
+		BranchToken:       branchToken,
+		IsWorkflowRunning: true, // Workflow is running, so we'll query MS for transient events
 	})
 	s.NoError(err)
 	s.config.SendRawWorkflowHistory = func(string) bool { return true }
@@ -5888,6 +5877,40 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDec
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).AnyTimes()
+
+	// Mock GetMutableState to return transient workflow task events
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				RunId:  we.RunId,
+			},
+			NextEventId: 5,
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId:                  tests.NamespaceID.String(),
+				WorkflowId:                   we.WorkflowId,
+				WorkflowTaskScheduledEventId: 5,
+				WorkflowTaskStartedEventId:   6,
+				WorkflowTaskAttempt:          2, // Attempt > 1 makes it transient
+				TaskQueue:                    "test-task-queue",
+				WorkflowTypeName:             "test-workflow-type",
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: branchToken,
+							Items: []*historyspb.VersionHistoryItem{
+								{EventId: 4, Version: 0},
+							},
+						},
+					},
+				},
+			},
+		},
+		MutableStateStats: persistence.MutableStateStatistics{},
+	}, nil).Times(1)
+
 	historyBlob1, err := s.mockShard.GetPayloadSerializer().SerializeEvents(
 		[]*historypb.HistoryEvent{
 			{

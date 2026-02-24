@@ -113,6 +113,7 @@ type terminateEvent struct {
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
 
+// LifecycleState implements the chasm.Component interface.
 func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
@@ -125,6 +126,15 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
+}
+
+// Terminate implements the chasm.RootComponent interface.
+func (a *Activity) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// TODO: Implement terminate logic.
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
@@ -220,14 +230,16 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	requestData := a.RequestData.Get(ctx)
 	attempt := a.LastAttempt.Get(ctx)
+
 	return &historyservice.RecordActivityTaskStartedResponse{
-		StartedTime:       attempt.GetStartedTime(),
-		Attempt:           attempt.GetCount(),
-		Priority:          a.GetPriority(),
-		RetryPolicy:       a.GetRetryPolicy(),
-		ActivityRunId:     key.RunID,
-		WorkflowNamespace: namespace,
-		HeartbeatDetails:  lastHeartbeat.GetDetails(),
+		StartedTime:                 attempt.GetStartedTime(),
+		Attempt:                     attempt.GetCount(),
+		Priority:                    a.GetPriority(),
+		RetryPolicy:                 a.GetRetryPolicy(),
+		ActivityRunId:               key.RunID,
+		WorkflowNamespace:           namespace,
+		HeartbeatDetails:            lastHeartbeat.GetDetails(),
+		CurrentAttemptScheduledTime: a.attemptScheduleTime(attempt),
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 			EventTime: a.GetScheduleTime(),
@@ -246,6 +258,27 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 			},
 		},
 	}, nil
+}
+
+// attemptScheduleTime returns when the given attempt was scheduled to run:
+// the activity's original schedule time for the first attempt, or
+// calculated from attemptScheduleTimeForRetry on retries.
+func (a *Activity) attemptScheduleTime(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+	if attempt.GetCount() == 1 {
+		return a.GetScheduleTime()
+	}
+	return attemptScheduleTimeForRetry(attempt)
+}
+
+// attemptScheduleTimeForRetry computes the time a retried attempt is scheduled to start,
+// as complete_time + retry_interval. Returns nil if either field is missing or zero.
+func attemptScheduleTimeForRetry(attempt *activitypb.ActivityAttemptState) *timestamppb.Timestamp {
+	retryInterval := attempt.GetCurrentRetryInterval()
+	completeTime := attempt.GetCompleteTime()
+	if retryInterval != nil && retryInterval.AsDuration() > 0 && completeTime != nil {
+		return timestamppb.New(completeTime.AsTime().Add(retryInterval.AsDuration()))
+	}
+	return nil
 }
 
 // RecordCompleted applies the provided function to record activity completion.
@@ -572,15 +605,17 @@ func (a *Activity) RecordHeartbeat(
 		RecordedTime: timestamppb.New(ctx.Now(a)),
 		Details:      input.Request.GetHeartbeatRequest().GetDetails(),
 	})
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: ctx.Now(a).Add(a.GetHeartbeatTimeout().AsDuration()),
-		},
-		&activitypb.HeartbeatTimeoutTask{
-			Stamp: a.LastAttempt.Get(ctx).GetStamp(),
-		},
-	)
+	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{
+				ScheduledTime: ctx.Now(a).Add(heartbeatTimeout),
+			},
+			&activitypb.HeartbeatTimeoutTask{
+				Stamp: a.LastAttempt.Get(ctx).GetStamp(),
+			},
+		)
+	}
 	return &historyservice.RecordActivityTaskHeartbeatResponse{
 		CancelRequested: a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		// TODO(saa-preview): ActivityPaused, ActivityReset
@@ -641,14 +676,6 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 	heartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	key := ctx.ExecutionKey()
 
-	// TODO(saa-preview): debating if we should persist next attempt schedule time for stronger consistency
-	var nextAttemptScheduleTime *timestamppb.Timestamp
-	interval := attempt.GetCurrentRetryInterval()
-	completeTime := attempt.GetCompleteTime()
-	if interval != nil && interval.AsDuration() > 0 && completeTime != nil {
-		nextAttemptScheduleTime = timestamppb.New(completeTime.AsTime().Add(interval.AsDuration()))
-	}
-
 	var closeTime *timestamppb.Timestamp
 	var executionDuration *durationpb.Duration
 	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
@@ -682,7 +709,7 @@ func (a *Activity) buildActivityExecutionInfo(ctx chasm.Context) *apiactivitypb.
 		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
 		LastStartedTime:         attempt.GetStartedTime(),
 		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
-		NextAttemptScheduleTime: nextAttemptScheduleTime,
+		NextAttemptScheduleTime: attemptScheduleTimeForRetry(attempt),
 		Priority:                a.GetPriority(),
 		RetryPolicy:             a.GetRetryPolicy(),
 		RunId:                   key.RunID,

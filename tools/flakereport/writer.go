@@ -1,7 +1,7 @@
 package flakereport
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,52 +9,27 @@ import (
 	"time"
 )
 
-// writeReportFiles writes all report files to output directory
-// Files: flaky.txt, flaky_slack.txt, flaky_count.txt, timeout.txt, crash.txt
-func writeReportFiles(outputDir string, summary *ReportSummary, maxLinks int) error {
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+// writeFailuresJSON writes failures.json containing every individual test failure (for analytics).
+func writeFailuresJSON(outputDir string, failures []TestFailure, repo string) error {
+	records := make([]FailedTestRecord, 0, len(failures))
+	for _, f := range failures {
+		runIDStr := strconv.FormatInt(f.RunID, 10)
+		records = append(records, FailedTestRecord{
+			SuiteName:   f.SuiteName,
+			TestName:    f.Name,
+			FailureDate: f.Timestamp.Format(time.RFC3339),
+			Link:        buildGitHubURL(repo, runIDStr, f.JobID),
+			FailureType: classifyFailure(f.Name),
+		})
 	}
 
-	// Generate report content (all flaky tests shown)
-	flakyMarkdown, flakySlack, flakyCount := generateFlakyReport(summary.FlakyTests, maxLinks)
-	timeoutMarkdown := generateStandardReport(summary.Timeouts, maxLinks)
-	crashMarkdown := generateStandardReport(summary.Crashes, maxLinks)
-	ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
-
-	// Write flaky.txt (markdown with links, top 10)
-	if err := os.WriteFile(filepath.Join(outputDir, "flaky.txt"), []byte(flakyMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write flaky.txt: %w", err)
+	data, err := json.MarshalIndent(records, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal failures.json: %w", err)
 	}
-
-	// Write flaky_slack.txt (plain text without links, top 10)
-	if err := os.WriteFile(filepath.Join(outputDir, "flaky_slack.txt"), []byte(flakySlack), 0644); err != nil {
-		return fmt.Errorf("failed to write flaky_slack.txt: %w", err)
+	if err := os.WriteFile(filepath.Join(outputDir, "failures.json"), data, 0644); err != nil {
+		return fmt.Errorf("failed to write failures.json: %w", err)
 	}
-
-	// Write flaky_count.txt (total count of flaky tests)
-	countStr := strconv.Itoa(flakyCount)
-	if err := os.WriteFile(filepath.Join(outputDir, "flaky_count.txt"), []byte(countStr), 0644); err != nil {
-		return fmt.Errorf("failed to write flaky_count.txt: %w", err)
-	}
-
-	// Write timeout.txt (all timeouts)
-	if err := os.WriteFile(filepath.Join(outputDir, "timeout.txt"), []byte(timeoutMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write timeout.txt: %w", err)
-	}
-
-	// Write crash.txt (all crashes)
-	if err := os.WriteFile(filepath.Join(outputDir, "crash.txt"), []byte(crashMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write crash.txt: %w", err)
-	}
-
-	// Write ci_breakers.txt (tests that broke CI by failing all retries)
-	if err := os.WriteFile(filepath.Join(outputDir, "ci_breakers.txt"), []byte(ciBreakerMarkdown), 0644); err != nil {
-		return fmt.Errorf("failed to write ci_breakers.txt: %w", err)
-	}
-
-	fmt.Printf("Report files written to %s\n", outputDir)
 	return nil
 }
 
@@ -90,29 +65,31 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	// CI Breakers section (tests that failed all retries)
 	if len(summary.CIBreakers) > 0 {
 		content += "### CI Breakers (Failed All Retries)\n\n"
-		ciBreakerMarkdown, _ := generateCIBreakerReport(summary.CIBreakers, maxLinks)
-		content += ciBreakerMarkdown + "\n\n"
+		content += generateCIBreakerTable(summary.CIBreakers, maxLinks) + "\n"
 	}
 
 	// Crashes section
 	if len(summary.Crashes) > 0 {
 		content += "### Crashes\n\n"
-		crashReport := generateStandardReport(summary.Crashes, maxLinks)
-		content += crashReport + "\n\n"
+		content += generateTestReportTable(summary.Crashes, maxLinks) + "\n"
 	}
 
 	// Timeouts section
 	if len(summary.Timeouts) > 0 {
 		content += "### Timeouts\n\n"
-		timeoutReport := generateStandardReport(summary.Timeouts, maxLinks)
-		content += timeoutReport + "\n\n"
+		content += generateTestReportTable(summary.Timeouts, maxLinks) + "\n"
 	}
 
 	// Flaky tests section (show ALL tests)
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
-		flakyMarkdown, _, _ := generateFlakyReport(summary.FlakyTests, maxLinks)
-		content += flakyMarkdown + "\n\n"
+		content += generateTestReportTable(summary.FlakyTests, maxLinks) + "\n"
+	}
+
+	// Flaky suites
+	if len(summary.Suites) > 0 {
+		content += "### Flaky Suites\n\n"
+		content += generateSuiteBreakdownTable(summary.Suites) + "\n"
 	}
 
 	// Link to run
@@ -123,11 +100,20 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	return content
 }
 
-// writeGitHubSummary writes summary to GITHUB_STEP_SUMMARY env var
-func writeGitHubSummary(content string) error {
+// writeGitHubSummary writes markdown summary to GITHUB_STEP_SUMMARY (if set)
+// and always writes to outputDir/github-report.md.
+func writeGitHubSummary(content string, outputDir string) error {
+	// Always write to output dir
+	outPath := filepath.Join(outputDir, "github-report.md")
+	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write github-report.md: %w", err)
+	}
+	fmt.Printf("GitHub report written to %s\n", outPath)
+
+	// Also write to GITHUB_STEP_SUMMARY if available
 	summaryFile := os.Getenv("GITHUB_STEP_SUMMARY")
 	if summaryFile == "" {
-		return errors.New("GITHUB_STEP_SUMMARY environment variable not set")
+		return nil
 	}
 
 	file, err := os.OpenFile(summaryFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
@@ -144,6 +130,6 @@ func writeGitHubSummary(content string) error {
 		return fmt.Errorf("failed to write summary: %w", err)
 	}
 
-	fmt.Println("GitHub Actions summary written successfully")
+	fmt.Println("GitHub Actions step summary written")
 	return nil
 }
