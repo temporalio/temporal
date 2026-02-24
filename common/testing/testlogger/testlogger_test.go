@@ -80,13 +80,13 @@ func assertMatches(t *testing.T, level testlogger.Level, msg string, tags []tag.
 func TestTestLogger_ExpectationsMatch(t *testing.T) {
 	for _, level := range []testlogger.Level{testlogger.Error, testlogger.DPanic, testlogger.Panic, testlogger.Fatal} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
-			assertMatches(t, level, "message with tags", []tag.Tag{tag.NewStringTag("key", "value")})
+			assertMatches(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
 		})
 		t.Run(level.String()+" without tags", func(t *testing.T) {
 			assertMatches(t, level, "message without tags", nil)
 		})
 		t.Run(level.String()+" no message only tags", func(t *testing.T) {
-			assertMatches(t, level, "", []tag.Tag{tag.NewStringTag("key", "value")})
+			assertMatches(t, level, "", []tag.Tag{tag.String("key", "value")})
 		})
 	}
 
@@ -118,20 +118,20 @@ func TestTestLogger_Uncaught(t *testing.T) {
 	// Non-panicking levels
 	for _, level := range []testlogger.Level{testlogger.Error, testlogger.DPanic} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
-			assertFails(t, level, "message with tags", []tag.Tag{tag.NewStringTag("key", "value")})
+			assertFails(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
 		})
 		t.Run(level.String()+" without tags", func(t *testing.T) {
 			assertFails(t, level, "message without tags", nil)
 		})
 		t.Run(level.String()+" no message only tags", func(t *testing.T) {
-			assertFails(t, level, "", []tag.Tag{tag.NewStringTag("key", "value")})
+			assertFails(t, level, "", []tag.Tag{tag.String("key", "value")})
 		})
 	}
 	// Panicking levels
 	for _, level := range []testlogger.Level{testlogger.Panic, testlogger.Fatal} {
 		t.Run(level.String()+" with tags", func(t *testing.T) {
 			require.Panics(t, func() {
-				assertFails(t, level, "message with tags", []tag.Tag{tag.NewStringTag("key", "value")})
+				assertFails(t, level, "message with tags", []tag.Tag{tag.String("key", "value")})
 			})
 		})
 		t.Run(level.String()+" without tags", func(t *testing.T) {
@@ -141,7 +141,7 @@ func TestTestLogger_Uncaught(t *testing.T) {
 		})
 		t.Run(level.String()+" no message only tags", func(t *testing.T) {
 			require.Panics(t, func() {
-				assertFails(t, level, "", []tag.Tag{tag.NewStringTag("key", "value")})
+				assertFails(t, level, "", []tag.Tag{tag.String("key", "value")})
 			})
 		})
 	}

@@ -38,6 +38,7 @@ const (
 	testGetDurationPropertyStructuredDefaults         = "testGetDurationPropertyStructuredDefaults"
 	testGetBoolPropertyFilteredByNamespaceIDKey       = "testGetBoolPropertyFilteredByNamespaceIDKey"
 	testGetBoolPropertyFilteredByTaskQueueInfoKey     = "testGetBoolPropertyFilteredByTaskQueueInfoKey"
+	testGetStringPropertyFilteredByNamespaceKey       = "testGetStringPropertyFilteredByNamespaceKey"
 	testGetStringPropertyFilteredByNamespaceIDKey     = "testGetStringPropertyFilteredByNamespaceIDKey"
 	testGetIntPropertyFilteredByDestinationKey        = "testGetIntPropertyFilteredByDestinationKey"
 )
@@ -87,17 +88,17 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
 }
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
-	namespace := "testNamespace"
-	value := dynamicconfig.DefaultEventEncoding.Get(s.cln)
-	// copied default value, change this if it changes
-	s.Equal(enumspb.ENCODING_TYPE_PROTO3.String(), value(namespace))
-	s.client.SetValue(dynamicconfig.DefaultEventEncoding.Key(), "efg")
-	s.Equal("efg", value(namespace))
+	ns := "testNamespace"
+	setting := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyFilteredByNamespaceKey, "abc", "")
+	value := setting.Get(s.cln)
+	s.Equal("abc", value(ns))
+	s.client.SetValue(testGetStringPropertyFilteredByNamespaceKey, "efg")
+	s.Equal("efg", value(ns))
 }
 
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespaceID() {
-	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	namespaceID := namespace.ID("testNamespaceID")
+	setting := dynamicconfig.NewNamespaceIDStringSetting(testGetStringPropertyFilteredByNamespaceIDKey, "abc", "")
 	value := setting.Get(s.cln)
 	s.Equal("abc", value(namespaceID))
 	s.client.SetValue(testGetStringPropertyFilteredByNamespaceIDKey, "efg")
@@ -272,7 +273,7 @@ func (s *collectionSuite) TestGetDurationPropertyStructuredDefaults() {
 }
 
 func (s *collectionSuite) TestGetMapProperty() {
-	def := map[string]interface{}{"testKey": 123}
+	def := map[string]any{"testKey": 123}
 	setting := dynamicconfig.NewGlobalMapSetting(
 		testGetMapPropertyKey,
 		def,
@@ -603,11 +604,12 @@ func (c *testSubscribableClient) GetValue(k dynamicconfig.Key) []dynamicconfig.C
 	return c.m[k]
 }
 
-func (c *testSubscribableClient) SetValue(k dynamicconfig.Key, v any) {
+func (c *testSubscribableClient) SetValue(k string, v any) {
 	c.Set(k, []dynamicconfig.ConstrainedValue{{Value: v}})
 }
 
-func (c *testSubscribableClient) Set(k dynamicconfig.Key, cvs []dynamicconfig.ConstrainedValue) {
+func (c *testSubscribableClient) Set(ks string, cvs []dynamicconfig.ConstrainedValue) {
+	k := dynamicconfig.MakeKey(ks)
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.m[k] = cvs
@@ -625,17 +627,17 @@ func (s *subscriptionSuite) TestSubscriptionGlobal() {
 
 	s.False(initial)
 
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{{Value: true}})
 	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
 	s.True(<-vals)
 
-	s.client.Set(setting.Key(), nil) // back to default
+	s.client.Set(setting.Key().String(), nil) // back to default
 	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
 	s.False(<-vals)
 
 	cancel()
 
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{{Value: true}})
 	// no update should be delivered
 	time.Sleep(10 * time.Millisecond)
 	s.Empty(vals, "should not deliver update")
@@ -647,7 +649,7 @@ func (s *subscriptionSuite) TestSubscriptionGlobal_DoesNotCallUnchanged() {
 	cb := func(newVal bool) { vals <- newVal }
 	initial, _ := setting.Subscribe(s.cln)(cb)
 	s.True(initial)
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: true}})
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{{Value: true}})
 	time.Sleep(10 * time.Millisecond)
 	s.Empty(vals, "should not deliver update")
 }
@@ -655,7 +657,7 @@ func (s *subscriptionSuite) TestSubscriptionGlobal_DoesNotCallUnchanged() {
 func (s *subscriptionSuite) TestSubscriptionNamespace() {
 	setting := dynamicconfig.NewNamespaceIntSetting(testGetIntPropertyKey, 0, "")
 
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns1"}, Value: 1},
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 3},
 	})
@@ -672,7 +674,7 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 	s.Equal(3, init3)
 
 	// change ns3 to 33
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns1"}, Value: 1},
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 33},
 	})
@@ -683,7 +685,7 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 	s.Empty(vals2)
 
 	// add ns2
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns1"}, Value: 1},
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns3"}, Value: 33},
@@ -694,7 +696,7 @@ func (s *subscriptionSuite) TestSubscriptionNamespace() {
 	s.Empty(vals3)
 
 	// remove ns1 and ns3
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Constraints: dynamicconfig.Constraints{Namespace: "ns2"}, Value: 2},
 	})
 	s.Require().Eventually(
@@ -709,14 +711,14 @@ func (s *subscriptionSuite) TestSubscriptionWithDefault() {
 	baseSetting := dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 	setting := baseSetting.WithDefault(100)
 
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{{Value: 50}})
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{{Value: 50}})
 
 	vals := make(chan int, 1)
 	init, _ := setting.Subscribe(s.cln)(func(n int) { vals <- n })
 	s.Equal(50, init)
 
 	// remove, should get default
-	s.client.Set(setting.Key(), nil)
+	s.client.Set(setting.Key().String(), nil)
 	s.Require().Eventually(func() bool { return len(vals) == 1 }, time.Second, time.Millisecond)
 	s.Equal(100, <-vals)
 
@@ -761,24 +763,24 @@ func (s *subscriptionSuite) TestSubscriptionConstrainedDefaults() {
 	s.Equal(34, specialInit) // Should get the constrained default for "special"
 
 	// set a value for special
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Value: 200, Constraints: dynamicconfig.Constraints{Namespace: "special"}},
 	})
 	waitFor(10, 200, 0, 1)
 
 	// set a value for normal
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Value: 123, Constraints: dynamicconfig.Constraints{Namespace: "normal"}},
 	})
 	waitFor(123, 34, 1, 2)
 
 	// set a default value
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
 		{Value: 19},
 	})
 	waitFor(19, 34, 2, 2)
 
 	// remove values
-	s.client.Set(setting.Key(), []dynamicconfig.ConstrainedValue{})
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{})
 	waitFor(10, 34, 3, 2)
 }

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
@@ -161,7 +161,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 
 			// Execute that workflow
 			// We need to track the workflow ID so that we can filter out tasks from this test suite
-			workflowID := uuid.New()
+			workflowID := uuid.NewString()
 			s.workflowID.Store(&workflowID)
 			s.shouldSkip.Store(true)
 			s.skippedTasks = make(chan tasks.Task)
@@ -184,7 +184,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			}
 
 			s.shouldSkip.Store(false)
-			blob, err := serialization.NewTaskSerializer().SerializeTask(task)
+			blob, err := serialization.NewSerializer().SerializeTask(task)
 			s.NoError(err)
 			shardID := tasks.GetShardIDForTask(task, int(s.GetTestClusterConfig().HistoryConfig.NumHistoryShards))
 			request := &adminservice.AddTasksRequest{

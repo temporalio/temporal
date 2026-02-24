@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -9,6 +8,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -36,6 +36,9 @@ type (
 			manual bool,
 			limit *int,
 		) (*ProcessedTimeRange, error)
+
+		// NextTime provides a peek at the next time in the spec following 'after'.
+		NextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error)
 	}
 
 	SpecProcessorImpl struct {
@@ -49,6 +52,10 @@ type (
 		NextWakeupTime time.Time
 		LastActionTime time.Time
 		BufferedStarts []*schedulespb.BufferedStart
+		// DroppedCount is the number of actions that would have been buffered but
+		// were dropped due to the limit being reached. Only populated when a limit
+		// is provided.
+		DroppedCount int64
 	}
 )
 
@@ -76,13 +83,14 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	limit *int,
 ) (*ProcessedTimeRange, error) {
 	tweakables := s.config.Tweakables(scheduler.Namespace)
+	metricsHandler := newTaggedMetricsHandler(s.metricsHandler, scheduler)
 	overlapPolicy = scheduler.resolveOverlapPolicy(overlapPolicy)
 
 	s.logger.Debug("ProcessTimeRange",
-		tag.NewTimeTag("start", start),
-		tag.NewTimeTag("end", end),
-		tag.NewAnyTag("overlap-policy", overlapPolicy),
-		tag.NewBoolTag("manual", manual))
+		tag.Time("start", start),
+		tag.Time("end", end),
+		tag.Any("overlap-policy", overlapPolicy),
+		tag.Bool("manual", manual))
 
 	// Peek at paused/remaining actions state and don't bother if we're not going to
 	// take an action now. (Don't count as missed catchup window either.)
@@ -91,7 +99,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	// Manual (backfill/patch) runs are always buffered here.
 	if !scheduler.useScheduledAction(false) && !manual {
 		// Use end as last action time so that we don't reprocess time spent paused.
-		next, err := s.getNextTime(scheduler, end)
+		next, err := s.NextTime(scheduler, end)
 		if err != nil {
 			return nil, err
 		}
@@ -104,41 +112,63 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 	}
 
 	catchupWindow := catchupWindow(scheduler, tweakables)
-	lastAction := start
+
+	// lastAction is used to set the high water mark for future ProcessTimeRange
+	// invocations. The code below will set a "last action" even when none is taken,
+	// simply to indicate that processing can permanently skip that period of time
+	// (e.g., it was prior to an update or past a catchup).
+	lastAction := end
+
 	var next legacyscheduler.GetNextTimeResult
 	var err error
 	var bufferedStarts []*schedulespb.BufferedStart
-	for next, err = s.getNextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.getNextTime(scheduler, next.Next) {
-		if scheduler.Info.UpdateTime.AsTime().After(next.Next) {
+	var droppedCount int64
+	limitReached := false
+	for next, err = s.NextTime(scheduler, start); err == nil && (!next.Next.IsZero() && !next.Next.After(end)); next, err = s.NextTime(scheduler, next.Next) {
+		lastAction = next.Next
+
+		if scheduler.Info.UpdateTime.AsTime().After(next.Next) && !manual {
 			// If we've received an update that took effect after the LastProcessedTime high
 			// water mark, discard actions that were scheduled to kick off before the update.
+			// Skip this check for manual (backfill) actions since they explicitly request
+			// past times.
+			s.logger.Info("ProcessBuffer skipped an action due to update time",
+				tag.Time("updateTime", scheduler.Info.UpdateTime.AsTime()),
+				tag.Time("droppedActionTime", next.Next))
 			continue
 		}
 
 		if !manual && end.Sub(next.Next) > catchupWindow {
-			s.logger.Warn("Schedule missed catchup window",
-				tag.NewTimeTag("now", end),
-				tag.NewTimeTag("time", next.Next))
-			s.metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
+			s.logger.Info("Schedule missed catchup window",
+				tag.Time("now", end),
+				tag.Time("time", next.Next))
+			metricsHandler.Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
 			continue
 		}
 
-		nominalTimeSec := next.Nominal.Truncate(time.Second)
+		if limitReached {
+			droppedCount++
+			continue
+		}
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
 			NominalTime:   timestamppb.New(next.Nominal),
 			ActualTime:    timestamppb.New(next.Next),
 			OverlapPolicy: overlapPolicy,
 			Manual:        manual,
 			RequestId:     generateRequestID(scheduler, backfillID, next.Nominal, next.Next),
-			WorkflowId:    fmt.Sprintf("%s-%s", workflowID, nominalTimeSec.Format(time.RFC3339)),
+			WorkflowId:    schedulescommon.GenerateWorkflowID(workflowID, next.Nominal),
 		})
-		lastAction = next.Next
 
 		if limit != nil {
 			if (*limit)--; *limit <= 0 {
-				break
+				// For manual (backfill) actions, break immediately so the caller
+				// can retry later. For automated actions, continue to count dropped.
+				if manual {
+					break
+				}
+				limitReached = true
 			}
 		}
 	}
@@ -151,7 +181,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 }
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
-	cw := s.Schedule.Policies.CatchupWindow
+	cw := s.Schedule.GetPolicies().GetCatchupWindow()
 	if cw == nil {
 		return tweakables.DefaultCatchupWindow
 	}
@@ -159,8 +189,8 @@ func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	return max(cw.AsDuration(), tweakables.MinCatchupWindow)
 }
 
-// getNextTime returns the next time result, or an error if the schedule cannot be compiled.
-func (s *SpecProcessorImpl) getNextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
+// NextTime returns the next time result, or an error if the schedule cannot be compiled.
+func (s *SpecProcessorImpl) NextTime(scheduler *Scheduler, after time.Time) (legacyscheduler.GetNextTimeResult, error) {
 	spec, err := scheduler.getCompiledSpec(s.specBuilder)
 	if err != nil {
 		s.logger.Error("Invalid schedule", tag.Error(err))

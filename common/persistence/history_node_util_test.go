@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -40,8 +40,8 @@ func (s *historyNodeMetadataSuite) TearDownTest() {
 
 func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	branch := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 	}
 	numNodeIDs := 10
 	nodePerNodeID := 10
@@ -50,7 +50,7 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 	transactionIDToNode := map[int64]historyNodeMetadata{}
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		var nextTransactionID *int64
-		for i := 0; i < nodePerNodeID; i++ {
+		for range nodePerNodeID {
 			transactionID := rand.Int63()
 			if nextTransactionID == nil || *nextTransactionID < transactionID {
 				nextTransactionID = &transactionID
@@ -72,8 +72,8 @@ func (s *historyNodeMetadataSuite) TestIndexNodeIDToNode() {
 
 func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 	branch := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 	}
 	numNodeIDs := 10
 	nodePerNodeID := 10
@@ -83,7 +83,7 @@ func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 	transactionIDToNode := map[int64]historyNodeMetadata{}
 	for nodeID := common.FirstEventID; nodeID < int64(numNodeIDs+1); nodeID++ {
 		var nextTransactionID *int64
-		for i := 0; i < nodePerNodeID; i++ {
+		for range nodePerNodeID {
 			transactionID := rand.Int63()
 			if nextTransactionID == nil || *nextTransactionID < transactionID {
 				nextTransactionID = &transactionID
@@ -105,8 +105,8 @@ func (s *historyNodeMetadataSuite) TestReverselyLinkNode() {
 
 func (s *historyNodeMetadataSuite) TestTrimNodes() {
 	branch := &persistencespb.HistoryBranch{
-		TreeId:   uuid.New(),
-		BranchId: uuid.New(),
+		TreeId:   uuid.NewString(),
+		BranchId: uuid.NewString(),
 	}
 
 	node1Valid := s.newRandomHistoryNodeMetadata(branch, 1, rand.Int63(), 0)

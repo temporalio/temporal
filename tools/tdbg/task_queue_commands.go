@@ -51,7 +51,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 		MinPass:       minPass,
 	}
 
-	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+	paginationFunc := func(paginationToken []byte) ([]any, []byte, error) {
 		ctx, cancel := newContext(c)
 		defer cancel()
 
@@ -78,7 +78,7 @@ func AdminListTaskQueueTasks(c *cli.Context, clientFactory ClientFactory) error 
 			tasks = filteredTasks
 		}
 
-		var items []interface{}
+		var items []any
 		for _, task := range tasks {
 			items = append(items, task)
 		}

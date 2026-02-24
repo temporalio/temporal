@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -148,6 +149,7 @@ func processActivityOptionsUpdate(
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
 		StartToCloseTimeout:    ai.StartToCloseTimeout,
 		HeartbeatTimeout:       ai.HeartbeatTimeout,
+		Priority:               common.CloneProto(ai.Priority),
 		RetryPolicy: &commonpb.RetryPolicy{
 			BackoffCoefficient: ai.RetryBackoffCoefficient,
 			InitialInterval:    ai.RetryInitialInterval,
@@ -202,8 +204,46 @@ func mergeActivityOptions(
 		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
 	}
 
+	if _, ok := updateFields["priority"]; ok {
+		mergeInto.Priority = mergeFrom.Priority
+	}
+
+	if _, ok := updateFields["priority.priorityKey"]; ok {
+		if mergeFrom.Priority == nil {
+			return serviceerror.NewInvalidArgument("Priority is not provided")
+		}
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.PriorityKey = mergeFrom.Priority.PriorityKey
+	}
+
+	if _, ok := updateFields["priority.fairnessKey"]; ok {
+		if mergeFrom.Priority == nil {
+			return serviceerror.NewInvalidArgument("Priority is not provided")
+		}
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.FairnessKey = mergeFrom.Priority.FairnessKey
+	}
+
+	if _, ok := updateFields["priority.fairnessWeight"]; ok {
+		if mergeFrom.Priority == nil {
+			return serviceerror.NewInvalidArgument("Priority is not provided")
+		}
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.FairnessWeight
+	}
+
 	if mergeInto.RetryPolicy == nil {
 		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
+	}
+
+	if _, ok := updateFields["retryPolicy"]; ok {
+		mergeInto.RetryPolicy = mergeFrom.RetryPolicy
 	}
 
 	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
@@ -295,6 +335,7 @@ func updateActivityOptions(
 		activityInfo.ScheduleToStartTimeout = activityOptions.ScheduleToStartTimeout
 		activityInfo.StartToCloseTimeout = activityOptions.StartToCloseTimeout
 		activityInfo.HeartbeatTimeout = activityOptions.HeartbeatTimeout
+		activityInfo.Priority = activityOptions.Priority
 		activityInfo.RetryMaximumInterval = activityOptions.RetryPolicy.MaximumInterval
 		activityInfo.RetryBackoffCoefficient = activityOptions.RetryPolicy.BackoffCoefficient
 		activityInfo.RetryInitialInterval = activityOptions.RetryPolicy.InitialInterval
@@ -375,6 +416,7 @@ func restoreOriginalOptions(
 			ScheduleToStartTimeout: originalOptions.ScheduleToStartTimeout,
 			StartToCloseTimeout:    originalOptions.StartToCloseTimeout,
 			HeartbeatTimeout:       originalOptions.HeartbeatTimeout,
+			Priority:               originalOptions.Priority,
 			RetryPolicy:            originalOptions.RetryPolicy,
 		}
 

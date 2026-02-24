@@ -50,7 +50,7 @@ func Invoke(
 	}
 
 	if len(request.Request.Execution.RunId) == 0 {
-		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentRunID(
+		request.Request.Execution.RunId, err = workflowConsistencyChecker.GetCurrentWorkflowRunID(
 			ctx,
 			request.NamespaceId,
 			request.Request.Execution.WorkflowId,
@@ -80,6 +80,11 @@ func Invoke(
 		workflowLease.GetReleaseFn()(nil)
 	}()
 
+	// Context metadata is automatically set during mutable state transaction close for operations that mutate state.
+	// Since QueryWorkflow is readonly and never closes the transaction, we explicitly call SetContextMetadata
+	// here to ensure successful requests have workflow metadata populated in the context.
+	workflowLease.GetMutableState().SetContextMetadata(ctx)
+
 	req := request.GetRequest()
 	_, mutableStateStatus := workflowLease.GetMutableState().GetWorkflowStateStatus()
 	scope = scope.WithTags(metrics.StringTag("workflow_status", mutableStateStatus.String()))
@@ -95,6 +100,16 @@ func Invoke(
 				},
 			}, nil
 		}
+	}
+	// If workflow is paused, return query rejected with PAUSED status.
+	if mutableStateStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		return &historyservice.QueryWorkflowResponse{
+			Response: &workflowservice.QueryWorkflowResponse{
+				QueryRejected: &querypb.QueryRejected{
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+				},
+			},
+		}, nil
 	}
 
 	mutableState := workflowLease.GetMutableState()
@@ -327,6 +342,7 @@ func queryDirectlyThroughMatching(
 		msResp.GetPreviousStartedEventId() != common.EmptyEventID,
 		workflow.GetEffectiveVersioningBehavior(msResp.GetVersioningInfo()),
 		workflow.GetEffectiveDeployment(msResp.GetVersioningInfo()),
+		msResp.GetVersioningInfo().GetRevisionNumber(),
 	)
 
 	if msResp.GetIsStickyTaskQueueEnabled() &&

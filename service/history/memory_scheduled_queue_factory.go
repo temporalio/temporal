@@ -2,6 +2,7 @@ package history
 
 import (
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -26,6 +27,7 @@ type (
 		WorkflowCache     wcache.Cache
 		Config            *configs.Config
 		TimeSource        clock.TimeSource
+		ChasmRegistry     *chasm.Registry
 		MetricsHandler    metrics.Handler
 		TracerProvider    trace.TracerProvider
 		Logger            log.SnTaggedLogger
@@ -41,6 +43,7 @@ type (
 		clusterMetadata   cluster.Metadata
 		workflowCache     wcache.Cache
 		timeSource        clock.TimeSource
+		chasmRegistry     *chasm.Registry
 		metricsHandler    metrics.Handler
 		tracer            trace.Tracer
 		logger            log.SnTaggedLogger
@@ -64,12 +67,16 @@ func NewMemoryScheduledQueueFactory(
 	)
 
 	return &memoryScheduledQueueFactory{
-		scheduler:         hostScheduler,
-		priorityAssigner:  queues.NewPriorityAssigner(),
+		scheduler: hostScheduler,
+		priorityAssigner: queues.NewPriorityAssigner(
+			params.NamespaceRegistry,
+			params.ClusterMetadata.GetCurrentClusterName(),
+		),
 		namespaceRegistry: params.NamespaceRegistry,
 		clusterMetadata:   params.ClusterMetadata,
 		workflowCache:     params.WorkflowCache,
 		timeSource:        params.TimeSource,
+		chasmRegistry:     params.ChasmRegistry,
 		metricsHandler:    metricsHandler,
 		tracer:            params.TracerProvider.Tracer(telemetry.ComponentQueueMemory),
 		logger:            logger,
@@ -112,6 +119,7 @@ func (f *memoryScheduledQueueFactory) CreateQueue(
 		f.namespaceRegistry,
 		f.clusterMetadata,
 		f.timeSource,
+		f.chasmRegistry,
 		f.metricsHandler,
 		f.tracer,
 		f.logger,

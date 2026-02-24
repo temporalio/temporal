@@ -3,6 +3,7 @@ package chasm
 import (
 	"context"
 	"sync"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -25,12 +26,13 @@ type MockNodeBackend struct {
 	HandleGetWorkflowKey             func() definition.WorkflowKey
 	HandleUpdateWorkflowStateStatus  func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                 func() bool
-	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.OperationCompletion, error)
+	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 
 	// Recorded calls (protected by mu).
-	mu              sync.Mutex
-	TasksByCategory map[tasks.Category][]tasks.Task
-	UpdateCalls     []struct {
+	mu                  sync.Mutex
+	TasksByCategory     map[tasks.Category][]tasks.Task
+	DeletePureTaskCalls []time.Time
+	UpdateCalls         []struct {
 		State  enumsspb.WorkflowExecutionState
 		Status enumspb.WorkflowExecutionStatus
 	}
@@ -40,14 +42,14 @@ func (m *MockNodeBackend) GetExecutionState() *persistencespb.WorkflowExecutionS
 	if m.HandleGetExecutionState != nil {
 		return m.HandleGetExecutionState()
 	}
-	return nil
+	return &persistencespb.WorkflowExecutionState{}
 }
 
 func (m *MockNodeBackend) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
 	if m.HandleGetExecutionInfo != nil {
 		return m.HandleGetExecutionInfo()
 	}
-	return nil
+	return &persistencespb.WorkflowExecutionInfo{}
 }
 
 func (m *MockNodeBackend) GetCurrentVersion() int64 {
@@ -88,6 +90,23 @@ func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
 		category := task.GetCategory()
 		m.TasksByCategory[category] = append(m.TasksByCategory[category], task)
 	}
+}
+
+func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.DeletePureTaskCalls = append(m.DeletePureTaskCalls, maxScheduledTime)
+}
+
+func (m *MockNodeBackend) LastDeletePureTaskCall() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.DeletePureTaskCalls) == 0 {
+		return time.Time{}
+	}
+	return m.DeletePureTaskCalls[len(m.DeletePureTaskCalls)-1]
 }
 
 func (m *MockNodeBackend) UpdateWorkflowStateStatus(
@@ -145,11 +164,11 @@ func (m *MockNodeBackend) IsWorkflow() bool {
 func (m *MockNodeBackend) GetNexusCompletion(
 	ctx context.Context,
 	requestID string,
-) (nexusrpc.OperationCompletion, error) {
+) (nexusrpc.CompleteOperationOptions, error) {
 	if m.HandleGetNexusCompletion != nil {
 		return m.HandleGetNexusCompletion(ctx, requestID)
 	}
-	return nil, nil
+	return nexusrpc.CompleteOperationOptions{}, nil
 }
 
 func (m *MockNodeBackend) NumTasksAdded() int {

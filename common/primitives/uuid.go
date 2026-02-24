@@ -70,7 +70,7 @@ func ValidateUUID(s string) (string, error) {
 func NewUUID() UUID {
 	u, err := guuid.NewV7()
 	if err != nil {
-		// Should never happen, but this matches the behavior of pborman/uuid.NewRandom
+		// Should never happen, but this matches the behavior of google/uuid.NewRandom
 		return nil
 	}
 	return u[:]
@@ -118,7 +118,7 @@ func stringPtr(v string) *string {
 
 // Scan implements sql.Scanner interface to allow this type to be
 // parsed transparently by database drivers
-func (u *UUID) Scan(src interface{}) error {
+func (u *UUID) Scan(src any) error {
 	if src == nil {
 		return nil
 	}

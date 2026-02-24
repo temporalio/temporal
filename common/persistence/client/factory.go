@@ -239,7 +239,7 @@ func (f *factoryImpl) NewHistoryTaskQueueManager() (persistence.HistoryTaskQueue
 	if err != nil {
 		return nil, err
 	}
-	return persistence.NewHistoryTaskQueueManager(q, serialization.NewSerializer()), nil
+	return persistence.NewHistoryTaskQueueManager(q, f.serializer), nil
 }
 
 func (f *factoryImpl) NewNexusEndpointManager() (persistence.NexusEndpointManager, error) {

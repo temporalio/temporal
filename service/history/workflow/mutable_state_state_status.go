@@ -29,7 +29,7 @@ func setStateStatus(
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
@@ -41,7 +41,7 @@ func setStateStatus(
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
@@ -54,17 +54,17 @@ func setStateStatus(
 			return invalidStateTransitionErr(e.GetState(), state, status)
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
@@ -98,17 +98,17 @@ func setStateStatus(
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING || status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 

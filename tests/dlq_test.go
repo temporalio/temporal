@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -51,7 +51,7 @@ type (
 		writer           bytes.Buffer
 		sdkClientFactory sdk.ClientFactory
 		tdbgApp          *cli.App
-		deleteBlockCh    chan interface{}
+		deleteBlockCh    chan any
 
 		failingWorkflowIDPrefix atomic.Pointer[string]
 	}
@@ -144,7 +144,7 @@ func (s *DLQSuite) SetupTest() {
 
 	s.Worker().RegisterWorkflow(myWorkflow)
 
-	s.deleteBlockCh = make(chan interface{})
+	s.deleteBlockCh = make(chan any)
 	close(s.deleteBlockCh)
 }
 
@@ -172,7 +172,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 		QueueKey: queueKey,
 	})
 	s.NoError(err)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		task := &tasks.WorkflowTask{
 			WorkflowKey: workflowKey,
 			TaskID:      int64(42 + i),
@@ -308,7 +308,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 	numWorkflows := 3
 	var dlqMessageID int64
 	var runs []sdkclient.WorkflowRun
-	for i := 0; i < numWorkflows; i++ {
+	for range numWorkflows {
 		run, dlqMessageID = s.executeDoomedWorkflow(ctx)
 		runs = append(runs, run)
 	}
@@ -323,7 +323,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 	s.Empty(dlqTasks)
 
 	// Verify that the workflows now eventually complete successfully.
-	for i := 0; i < numWorkflows; i++ {
+	for i := range numWorkflows {
 		s.validateWorkflowRun(ctx, runs[i])
 	}
 
@@ -341,7 +341,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
-	s.deleteBlockCh = make(chan interface{})
+	s.deleteBlockCh = make(chan any)
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, dlqTestTimeout)
 	defer cancel()
@@ -433,7 +433,7 @@ func (s *DLQSuite) validateWorkflowRun(ctx context.Context, run sdkclient.Workfl
 func (s *DLQSuite) executeDoomedWorkflow(ctx context.Context) (sdkclient.WorkflowRun, int64) {
 	// Execute a workflow.
 	// Use a random workflow ID to ensure that we don't have any collisions with other runs.
-	run := s.executeWorkflow(ctx, *s.failingWorkflowIDPrefix.Load()+uuid.New())
+	run := s.executeWorkflow(ctx, *s.failingWorkflowIDPrefix.Load()+uuid.NewString())
 
 	// Wait for the workflow task to be added to the DLQ.
 	select {

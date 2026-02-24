@@ -53,6 +53,7 @@ type Updater struct {
 	normalTaskQueueName    string
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
+	workflowTaskStamp      int32
 }
 
 func NewUpdater(
@@ -123,6 +124,11 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowCompleted
 	}
 
+	// We don't accept the request to update the workflow if the workflow is paused.
+	if ms.IsWorkflowExecutionStatusPaused() {
+		return nil, serviceerror.NewFailedPrecondition("Workflow is paused. Cannot update the workflow.")
+	}
+
 	if ms.GetExecutionInfo().WorkflowTaskAttempt >= failUpdateWorkflowTaskAttemptCount {
 		// If workflow task is constantly failing, the update to that workflow will also fail.
 		// Additionally, workflow update can't "fix" workflow state because updates (delivered with messages)
@@ -182,6 +188,7 @@ func (u *Updater) ApplyRequest(
 	}
 
 	u.scheduledEventID = newWorkflowTask.ScheduledEventID
+	u.workflowTaskStamp = newWorkflowTask.Stamp
 	if _, scheduleToStartTimeoutPtr := ms.TaskQueueScheduleToStartTimeout(ms.CurrentTaskQueue().Name); scheduleToStartTimeoutPtr != nil {
 		u.scheduleToStartTimeout = scheduleToStartTimeoutPtr.AsDuration()
 	}
@@ -196,6 +203,7 @@ func (u *Updater) ApplyRequest(
 		ms.HasCompletedAnyWorkflowTask(),
 		ms.GetEffectiveVersioningBehavior(),
 		ms.GetEffectiveDeployment(),
+		ms.GetVersioningRevisionNumber(),
 	)
 
 	return &api.UpdateWorkflowAction{
@@ -276,6 +284,7 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		Clock:                  clock,
 		VersionDirective:       u.directive,
 		Priority:               u.priority,
+		Stamp:                  u.workflowTaskStamp,
 	})
 	if err != nil {
 		return err

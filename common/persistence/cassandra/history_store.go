@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -44,13 +45,17 @@ const (
 type (
 	HistoryStore struct {
 		Session gocql.Session
-		p.HistoryBranchUtilImpl
+		p.HistoryBranchUtil
 	}
 )
 
-func NewHistoryStore(session gocql.Session) *HistoryStore {
+func NewHistoryStore(
+	session gocql.Session,
+	serializer serialization.Serializer,
+) *HistoryStore {
 	return &HistoryStore{
-		Session: session,
+		Session:           session,
+		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
 	}
 }
 
@@ -137,7 +142,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := h.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -170,10 +175,10 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	for iter.MapScan(message) {
 		nodes = append(nodes, convertHistoryNode(message))
-		message = make(map[string]interface{})
+		message = make(map[string]any)
 	}
 
 	if err := iter.Close(); err != nil {
@@ -346,7 +351,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	request *p.InternalGetHistoryTreeContainingBranchRequest,
 ) (*p.InternalGetHistoryTreeContainingBranchResponse, error) {
 
-	branch, err := h.GetHistoryBranchUtil().ParseHistoryBranchInfo(request.BranchToken)
+	branch, err := h.ParseHistoryBranchInfo(request.BranchToken)
 	if err != nil {
 		return nil, err
 	}
@@ -391,8 +396,12 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	}, nil
 }
 
+func (h *HistoryStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
+	return h.HistoryBranchUtil
+}
+
 func convertHistoryNode(
-	message map[string]interface{},
+	message map[string]any,
 ) p.InternalHistoryNode {
 	nodeID := message["node_id"].(int64)
 	prevTxnID := message["prev_txn_id"].(int64)

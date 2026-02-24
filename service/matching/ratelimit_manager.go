@@ -82,6 +82,10 @@ func newRateLimitManager(userDataManager userDataManager,
 		r.dynamicRateBurst,
 		config.RateLimiterRefreshInterval,
 	)
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partitons.
 	var cancel func()
 	r.adminNsRate, cancel = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
@@ -90,7 +94,8 @@ func newRateLimitManager(userDataManager userDataManager,
 	r.cancels = append(r.cancels, cancel)
 	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
-	r.computeEffectiveRPSAndSource()
+	r.computeEffectiveRPSAndSourceLocked()
+
 	return r
 }
 
@@ -365,7 +370,10 @@ func (r *rateLimitManager) GetFairnessWeightOverrides() fairnessWeightOverrides 
 }
 
 func (r *rateLimitManager) Stop() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	for _, cancel := range r.cancels {
 		cancel()
 	}
+	r.cancels = nil
 }

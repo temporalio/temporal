@@ -129,7 +129,8 @@ func (s *executableWorkflowStateTaskSuite) TearDownTest() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -159,7 +160,8 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -169,8 +171,9 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Skip_Namespace() {
 
 func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -178,8 +181,10 @@ func (s *executableWorkflowStateTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -205,7 +210,8 @@ func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableWorkflowStateTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(

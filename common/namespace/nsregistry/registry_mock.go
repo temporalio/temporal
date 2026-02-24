@@ -124,3 +124,18 @@ func (mr *MockPersistenceMockRecorder) ListNamespaces(arg0, arg1 any) *gomock.Ca
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockPersistence)(nil).ListNamespaces), arg0, arg1)
 }
+
+// WatchNamespaces mocks base method.
+func (m *MockPersistence) WatchNamespaces(ctx context.Context) (<-chan *persistence.NamespaceWatchEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WatchNamespaces", ctx)
+	ret0, _ := ret[0].(<-chan *persistence.NamespaceWatchEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WatchNamespaces indicates an expected call of WatchNamespaces.
+func (mr *MockPersistenceMockRecorder) WatchNamespaces(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatchNamespaces", reflect.TypeOf((*MockPersistence)(nil).WatchNamespaces), ctx)
+}

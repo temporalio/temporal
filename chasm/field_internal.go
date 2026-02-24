@@ -8,6 +8,10 @@ type fieldInternal struct {
 
 	// Pointer to the corresponding tree node. Can be nil for the just created fields.
 	node *Node
+
+	// Detached field option. When true, the node created from this field
+	// will be detached regardless of the component type's registration.
+	detached bool
 }
 
 func newFieldInternalWithValue(ft fieldType, v any) fieldInternal {

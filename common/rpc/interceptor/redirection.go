@@ -85,6 +85,8 @@ var (
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
+		"PauseWorkflowExecution":             func() any { return &workflowservice.PauseWorkflowExecutionResponse{} },
+		"UnpauseWorkflowExecution":           func() any { return &workflowservice.UnpauseWorkflowExecutionResponse{} },
 
 		"CreateSchedule":                   func() any { return &workflowservice.CreateScheduleResponse{} },
 		"DescribeSchedule":                 func() any { return &workflowservice.DescribeScheduleResponse{} },
@@ -92,6 +94,7 @@ var (
 		"PatchSchedule":                    func() any { return &workflowservice.PatchScheduleResponse{} },
 		"DeleteSchedule":                   func() any { return &workflowservice.DeleteScheduleResponse{} },
 		"ListSchedules":                    func() any { return &workflowservice.ListSchedulesResponse{} },
+		"CountSchedules":                   func() any { return &workflowservice.CountSchedulesResponse{} },
 		"ListScheduleMatchingTimes":        func() any { return &workflowservice.ListScheduleMatchingTimesResponse{} },
 		"UpdateWorkerBuildIdCompatibility": func() any { return &workflowservice.UpdateWorkerBuildIdCompatibilityResponse{} },
 		"GetWorkerBuildIdCompatibility":    func() any { return &workflowservice.GetWorkerBuildIdCompatibilityResponse{} },
@@ -135,6 +138,15 @@ var (
 		"UpdateTaskQueueConfig": func() any { return &workflowservice.UpdateTaskQueueConfigResponse{} },
 		"FetchWorkerConfig":     func() any { return &workflowservice.FetchWorkerConfigResponse{} },
 		"UpdateWorkerConfig":    func() any { return &workflowservice.UpdateWorkerConfigResponse{} },
+
+		"StartActivityExecution":         func() any { return &workflowservice.StartActivityExecutionResponse{} },
+		"CountActivityExecutions":        func() any { return &workflowservice.CountActivityExecutionsResponse{} },
+		"ListActivityExecutions":         func() any { return &workflowservice.ListActivityExecutionsResponse{} },
+		"DescribeActivityExecution":      func() any { return &workflowservice.DescribeActivityExecutionResponse{} },
+		"PollActivityExecution":          func() any { return &workflowservice.PollActivityExecutionResponse{} },
+		"RequestCancelActivityExecution": func() any { return &workflowservice.RequestCancelActivityExecutionResponse{} },
+		"TerminateActivityExecution":     func() any { return &workflowservice.TerminateActivityExecutionResponse{} },
+		"DeleteActivityExecution":        func() any { return &workflowservice.DeleteActivityExecutionResponse{} },
 	}
 )
 
@@ -156,6 +168,7 @@ type (
 // NewRedirection creates DC redirection interceptor
 func NewRedirection(
 	enabledForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	namespaceCache namespace.Registry,
 	policy config.DCRedirectionPolicy,
 	logger log.Logger,
@@ -167,6 +180,7 @@ func NewRedirection(
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
 		clusterMetadata,
 		enabledForNS,
+		selectedAPIsOnlyForNS,
 		namespaceCache,
 		policy,
 	)
@@ -240,20 +254,20 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	namespaceName namespace.Name,
 ) (_ any, retError error) {
 	var resp any
-	var clusterName string
+	var targetClusterName = i.currentClusterName
 	var err error
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
 	defer func() {
-		i.AfterCall(scope, startTime, clusterName, namespaceName.String(), retError)
+		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, func(targetDC string) error {
-		clusterName = targetDC
-		if targetDC == i.currentClusterName {
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
+		targetClusterName = targetDC
+		if targetClusterName == i.currentClusterName {
 			resp, err = handler(ctx, req)
 		} else {
-			remoteClient, _, err := i.clientBean.GetRemoteFrontendClient(targetDC)
+			remoteClient, _, err := i.clientBean.GetRemoteFrontendClient(targetClusterName)
 			if err != nil {
 				return err
 			}
@@ -278,17 +292,20 @@ func (i *Redirection) BeforeCall(
 func (i *Redirection) AfterCall(
 	metricsHandler metrics.Handler,
 	startTime time.Time,
-	clusterName string,
+	targetClusterName string,
 	namespaceName string,
 	retError error,
 ) {
-	metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(clusterName))
-	metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
-	metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
-	metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
-	if retError != nil {
-		metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
-			metrics.ServiceErrorTypeTag(retError))
+	// Only emit redirection metrics when actual cross-cluster redirection occurred
+	if targetClusterName != i.currentClusterName {
+		metricsHandler = metricsHandler.WithTags(metrics.TargetClusterTag(targetClusterName))
+		metrics.ClientRedirectionLatency.With(metricsHandler).Record(i.timeSource.Now().Sub(startTime))
+		metricsHandler = metricsHandler.WithTags(metrics.NamespaceTag(namespaceName))
+		metrics.ClientRedirectionRequests.With(metricsHandler).Record(1)
+		if retError != nil {
+			metrics.ClientRedirectionFailures.With(metricsHandler).Record(1,
+				metrics.ServiceErrorTypeTag(retError))
+		}
 	}
 }
 

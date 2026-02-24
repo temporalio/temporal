@@ -56,7 +56,16 @@ type BufferedStart struct {
 	BackoffTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=backoff_time,json=backoffTime,proto3" json:"backoff_time,omitempty"`
 	// The precomputed workflow ID that should be used (as-is) when executing
 	// this start. Only used by the CHASM scheduler (otherwise ignored).
-	WorkflowId    string `protobuf:"bytes,9,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	WorkflowId string `protobuf:"bytes,9,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	// The run ID of the started workflow. Populated when the workflow is
+	// successfully started. Only used by the CHASM scheduler.
+	RunId string `protobuf:"bytes,10,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	// The actual time the workflow was started. Populated when the workflow is
+	// successfully started. Only used by the CHASM scheduler.
+	StartTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
+	// Populated when the workflow execution completes. Presence indicates the
+	// action is complete and retained for history. Only used by the CHASM scheduler.
+	Completed     *CompletedResult `protobuf:"bytes,12,opt,name=completed,proto3" json:"completed,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -154,6 +163,83 @@ func (x *BufferedStart) GetWorkflowId() string {
 	return ""
 }
 
+func (x *BufferedStart) GetRunId() string {
+	if x != nil {
+		return x.RunId
+	}
+	return ""
+}
+
+func (x *BufferedStart) GetStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartTime
+	}
+	return nil
+}
+
+func (x *BufferedStart) GetCompleted() *CompletedResult {
+	if x != nil {
+		return x.Completed
+	}
+	return nil
+}
+
+// Result when a workflow execution has completed.
+// Only used by the CHASM scheduler.
+type CompletedResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The final status of the workflow execution.
+	Status v1.WorkflowExecutionStatus `protobuf:"varint,1,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
+	// The time the workflow closed.
+	CloseTime     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=close_time,json=closeTime,proto3" json:"close_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CompletedResult) Reset() {
+	*x = CompletedResult{}
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CompletedResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CompletedResult) ProtoMessage() {}
+
+func (x *CompletedResult) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CompletedResult.ProtoReflect.Descriptor instead.
+func (*CompletedResult) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CompletedResult) GetStatus() v1.WorkflowExecutionStatus {
+	if x != nil {
+		return x.Status
+	}
+	return v1.WorkflowExecutionStatus(0)
+}
+
+func (x *CompletedResult) GetCloseTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CloseTime
+	}
+	return nil
+}
+
 type InternalState struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Namespace         string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
@@ -174,7 +260,7 @@ type InternalState struct {
 
 func (x *InternalState) Reset() {
 	*x = InternalState{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -186,7 +272,7 @@ func (x *InternalState) String() string {
 func (*InternalState) ProtoMessage() {}
 
 func (x *InternalState) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[1]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -199,7 +285,7 @@ func (x *InternalState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InternalState.ProtoReflect.Descriptor instead.
 func (*InternalState) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{1}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *InternalState) GetNamespace() string {
@@ -284,7 +370,7 @@ type StartScheduleArgs struct {
 
 func (x *StartScheduleArgs) Reset() {
 	*x = StartScheduleArgs{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -296,7 +382,7 @@ func (x *StartScheduleArgs) String() string {
 func (*StartScheduleArgs) ProtoMessage() {}
 
 func (x *StartScheduleArgs) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[2]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -309,7 +395,7 @@ func (x *StartScheduleArgs) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartScheduleArgs.ProtoReflect.Descriptor instead.
 func (*StartScheduleArgs) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StartScheduleArgs) GetSchedule() *v11.Schedule {
@@ -351,7 +437,7 @@ type FullUpdateRequest struct {
 
 func (x *FullUpdateRequest) Reset() {
 	*x = FullUpdateRequest{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -363,7 +449,7 @@ func (x *FullUpdateRequest) String() string {
 func (*FullUpdateRequest) ProtoMessage() {}
 
 func (x *FullUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[3]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -376,7 +462,7 @@ func (x *FullUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FullUpdateRequest.ProtoReflect.Descriptor instead.
 func (*FullUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *FullUpdateRequest) GetSchedule() *v11.Schedule {
@@ -411,7 +497,7 @@ type DescribeResponse struct {
 
 func (x *DescribeResponse) Reset() {
 	*x = DescribeResponse{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -423,7 +509,7 @@ func (x *DescribeResponse) String() string {
 func (*DescribeResponse) ProtoMessage() {}
 
 func (x *DescribeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[4]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -436,7 +522,7 @@ func (x *DescribeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeResponse.ProtoReflect.Descriptor instead.
 func (*DescribeResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{4}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DescribeResponse) GetSchedule() *v11.Schedule {
@@ -473,7 +559,7 @@ type WatchWorkflowRequest struct {
 
 func (x *WatchWorkflowRequest) Reset() {
 	*x = WatchWorkflowRequest{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +571,7 @@ func (x *WatchWorkflowRequest) String() string {
 func (*WatchWorkflowRequest) ProtoMessage() {}
 
 func (x *WatchWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[5]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +584,7 @@ func (x *WatchWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*WatchWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{5}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *WatchWorkflowRequest) GetExecution() *v12.WorkflowExecution {
@@ -538,7 +624,7 @@ type WatchWorkflowResponse struct {
 
 func (x *WatchWorkflowResponse) Reset() {
 	*x = WatchWorkflowResponse{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -550,7 +636,7 @@ func (x *WatchWorkflowResponse) String() string {
 func (*WatchWorkflowResponse) ProtoMessage() {}
 
 func (x *WatchWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[6]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -563,7 +649,7 @@ func (x *WatchWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*WatchWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{6}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *WatchWorkflowResponse) GetStatus() v1.WorkflowExecutionStatus {
@@ -631,7 +717,7 @@ type StartWorkflowRequest struct {
 
 func (x *StartWorkflowRequest) Reset() {
 	*x = StartWorkflowRequest{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -643,7 +729,7 @@ func (x *StartWorkflowRequest) String() string {
 func (*StartWorkflowRequest) ProtoMessage() {}
 
 func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[7]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -656,7 +742,7 @@ func (x *StartWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*StartWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{7}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *StartWorkflowRequest) GetRequest() *v14.StartWorkflowExecutionRequest {
@@ -683,7 +769,7 @@ type StartWorkflowResponse struct {
 
 func (x *StartWorkflowResponse) Reset() {
 	*x = StartWorkflowResponse{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -695,7 +781,7 @@ func (x *StartWorkflowResponse) String() string {
 func (*StartWorkflowResponse) ProtoMessage() {}
 
 func (x *StartWorkflowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[8]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -708,7 +794,7 @@ func (x *StartWorkflowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartWorkflowResponse.ProtoReflect.Descriptor instead.
 func (*StartWorkflowResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{8}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *StartWorkflowResponse) GetRunId() string {
@@ -738,7 +824,7 @@ type CancelWorkflowRequest struct {
 
 func (x *CancelWorkflowRequest) Reset() {
 	*x = CancelWorkflowRequest{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -750,7 +836,7 @@ func (x *CancelWorkflowRequest) String() string {
 func (*CancelWorkflowRequest) ProtoMessage() {}
 
 func (x *CancelWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[9]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -763,7 +849,7 @@ func (x *CancelWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*CancelWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{9}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CancelWorkflowRequest) GetRequestId() string {
@@ -807,7 +893,7 @@ type TerminateWorkflowRequest struct {
 
 func (x *TerminateWorkflowRequest) Reset() {
 	*x = TerminateWorkflowRequest{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +905,7 @@ func (x *TerminateWorkflowRequest) String() string {
 func (*TerminateWorkflowRequest) ProtoMessage() {}
 
 func (x *TerminateWorkflowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[10]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +918,7 @@ func (x *TerminateWorkflowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TerminateWorkflowRequest.ProtoReflect.Descriptor instead.
 func (*TerminateWorkflowRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{10}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *TerminateWorkflowRequest) GetRequestId() string {
@@ -882,7 +968,7 @@ type NextTimeCache struct {
 
 func (x *NextTimeCache) Reset() {
 	*x = NextTimeCache{}
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -894,7 +980,7 @@ func (x *NextTimeCache) String() string {
 func (*NextTimeCache) ProtoMessage() {}
 
 func (x *NextTimeCache) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[11]
+	mi := &file_temporal_server_api_schedule_v1_message_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -907,7 +993,7 @@ func (x *NextTimeCache) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NextTimeCache.ProtoReflect.Descriptor instead.
 func (*NextTimeCache) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{11}
+	return file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *NextTimeCache) GetVersion() int64 {
@@ -949,7 +1035,7 @@ var File_temporal_server_api_schedule_v1_message_proto protoreflect.FileDescript
 
 const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd0\x03\n" +
+	"-temporal/server/api/schedule/v1/message.proto\x12\x1ftemporal.server.api.schedule.v1\x1a$temporal/api/common/v1/message.proto\x1a$temporal/api/enums/v1/schedule.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf2\x04\n" +
 	"\rBufferedStart\x12=\n" +
 	"\fnominal_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vnominalTime\x12;\n" +
 	"\vactual_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
@@ -962,7 +1048,16 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\aattempt\x18\a \x01(\x03R\aattempt\x12=\n" +
 	"\fbackoff_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vbackoffTime\x12\x1f\n" +
 	"\vworkflow_id\x18\t \x01(\tR\n" +
-	"workflowId\"\xdf\x04\n" +
+	"workflowId\x12\x15\n" +
+	"\x06run_id\x18\n" +
+	" \x01(\tR\x05runId\x129\n" +
+	"\n" +
+	"start_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x12N\n" +
+	"\tcompleted\x18\f \x01(\v20.temporal.server.api.schedule.v1.CompletedResultR\tcompleted\"\x94\x01\n" +
+	"\x0fCompletedResult\x12F\n" +
+	"\x06status\x18\x01 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x129\n" +
+	"\n" +
+	"close_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\"\xdf\x04\n" +
 	"\rInternalState\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
@@ -1039,67 +1134,72 @@ func file_temporal_server_api_schedule_v1_message_proto_rawDescGZIP() []byte {
 	return file_temporal_server_api_schedule_v1_message_proto_rawDescData
 }
 
-var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_temporal_server_api_schedule_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_temporal_server_api_schedule_v1_message_proto_goTypes = []any{
 	(*BufferedStart)(nil),                     // 0: temporal.server.api.schedule.v1.BufferedStart
-	(*InternalState)(nil),                     // 1: temporal.server.api.schedule.v1.InternalState
-	(*StartScheduleArgs)(nil),                 // 2: temporal.server.api.schedule.v1.StartScheduleArgs
-	(*FullUpdateRequest)(nil),                 // 3: temporal.server.api.schedule.v1.FullUpdateRequest
-	(*DescribeResponse)(nil),                  // 4: temporal.server.api.schedule.v1.DescribeResponse
-	(*WatchWorkflowRequest)(nil),              // 5: temporal.server.api.schedule.v1.WatchWorkflowRequest
-	(*WatchWorkflowResponse)(nil),             // 6: temporal.server.api.schedule.v1.WatchWorkflowResponse
-	(*StartWorkflowRequest)(nil),              // 7: temporal.server.api.schedule.v1.StartWorkflowRequest
-	(*StartWorkflowResponse)(nil),             // 8: temporal.server.api.schedule.v1.StartWorkflowResponse
-	(*CancelWorkflowRequest)(nil),             // 9: temporal.server.api.schedule.v1.CancelWorkflowRequest
-	(*TerminateWorkflowRequest)(nil),          // 10: temporal.server.api.schedule.v1.TerminateWorkflowRequest
-	(*NextTimeCache)(nil),                     // 11: temporal.server.api.schedule.v1.NextTimeCache
-	(*timestamppb.Timestamp)(nil),             // 12: google.protobuf.Timestamp
-	(v1.ScheduleOverlapPolicy)(0),             // 13: temporal.api.enums.v1.ScheduleOverlapPolicy
-	(*v11.BackfillRequest)(nil),               // 14: temporal.api.schedule.v1.BackfillRequest
-	(*v12.Payloads)(nil),                      // 15: temporal.api.common.v1.Payloads
-	(*v13.Failure)(nil),                       // 16: temporal.api.failure.v1.Failure
-	(*v11.Schedule)(nil),                      // 17: temporal.api.schedule.v1.Schedule
-	(*v11.ScheduleInfo)(nil),                  // 18: temporal.api.schedule.v1.ScheduleInfo
-	(*v11.SchedulePatch)(nil),                 // 19: temporal.api.schedule.v1.SchedulePatch
-	(*v12.SearchAttributes)(nil),              // 20: temporal.api.common.v1.SearchAttributes
-	(*v12.WorkflowExecution)(nil),             // 21: temporal.api.common.v1.WorkflowExecution
-	(v1.WorkflowExecutionStatus)(0),           // 22: temporal.api.enums.v1.WorkflowExecutionStatus
-	(*v14.StartWorkflowExecutionRequest)(nil), // 23: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	(*CompletedResult)(nil),                   // 1: temporal.server.api.schedule.v1.CompletedResult
+	(*InternalState)(nil),                     // 2: temporal.server.api.schedule.v1.InternalState
+	(*StartScheduleArgs)(nil),                 // 3: temporal.server.api.schedule.v1.StartScheduleArgs
+	(*FullUpdateRequest)(nil),                 // 4: temporal.server.api.schedule.v1.FullUpdateRequest
+	(*DescribeResponse)(nil),                  // 5: temporal.server.api.schedule.v1.DescribeResponse
+	(*WatchWorkflowRequest)(nil),              // 6: temporal.server.api.schedule.v1.WatchWorkflowRequest
+	(*WatchWorkflowResponse)(nil),             // 7: temporal.server.api.schedule.v1.WatchWorkflowResponse
+	(*StartWorkflowRequest)(nil),              // 8: temporal.server.api.schedule.v1.StartWorkflowRequest
+	(*StartWorkflowResponse)(nil),             // 9: temporal.server.api.schedule.v1.StartWorkflowResponse
+	(*CancelWorkflowRequest)(nil),             // 10: temporal.server.api.schedule.v1.CancelWorkflowRequest
+	(*TerminateWorkflowRequest)(nil),          // 11: temporal.server.api.schedule.v1.TerminateWorkflowRequest
+	(*NextTimeCache)(nil),                     // 12: temporal.server.api.schedule.v1.NextTimeCache
+	(*timestamppb.Timestamp)(nil),             // 13: google.protobuf.Timestamp
+	(v1.ScheduleOverlapPolicy)(0),             // 14: temporal.api.enums.v1.ScheduleOverlapPolicy
+	(v1.WorkflowExecutionStatus)(0),           // 15: temporal.api.enums.v1.WorkflowExecutionStatus
+	(*v11.BackfillRequest)(nil),               // 16: temporal.api.schedule.v1.BackfillRequest
+	(*v12.Payloads)(nil),                      // 17: temporal.api.common.v1.Payloads
+	(*v13.Failure)(nil),                       // 18: temporal.api.failure.v1.Failure
+	(*v11.Schedule)(nil),                      // 19: temporal.api.schedule.v1.Schedule
+	(*v11.ScheduleInfo)(nil),                  // 20: temporal.api.schedule.v1.ScheduleInfo
+	(*v11.SchedulePatch)(nil),                 // 21: temporal.api.schedule.v1.SchedulePatch
+	(*v12.SearchAttributes)(nil),              // 22: temporal.api.common.v1.SearchAttributes
+	(*v12.WorkflowExecution)(nil),             // 23: temporal.api.common.v1.WorkflowExecution
+	(*v14.StartWorkflowExecutionRequest)(nil), // 24: temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
 }
 var file_temporal_server_api_schedule_v1_message_proto_depIdxs = []int32{
-	12, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
-	12, // 1: temporal.server.api.schedule.v1.BufferedStart.actual_time:type_name -> google.protobuf.Timestamp
-	12, // 2: temporal.server.api.schedule.v1.BufferedStart.desired_time:type_name -> google.protobuf.Timestamp
-	13, // 3: temporal.server.api.schedule.v1.BufferedStart.overlap_policy:type_name -> temporal.api.enums.v1.ScheduleOverlapPolicy
-	12, // 4: temporal.server.api.schedule.v1.BufferedStart.backoff_time:type_name -> google.protobuf.Timestamp
-	12, // 5: temporal.server.api.schedule.v1.InternalState.last_processed_time:type_name -> google.protobuf.Timestamp
-	0,  // 6: temporal.server.api.schedule.v1.InternalState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
-	14, // 7: temporal.server.api.schedule.v1.InternalState.ongoing_backfills:type_name -> temporal.api.schedule.v1.BackfillRequest
-	15, // 8: temporal.server.api.schedule.v1.InternalState.last_completion_result:type_name -> temporal.api.common.v1.Payloads
-	16, // 9: temporal.server.api.schedule.v1.InternalState.continued_failure:type_name -> temporal.api.failure.v1.Failure
-	17, // 10: temporal.server.api.schedule.v1.StartScheduleArgs.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	18, // 11: temporal.server.api.schedule.v1.StartScheduleArgs.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	19, // 12: temporal.server.api.schedule.v1.StartScheduleArgs.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
-	1,  // 13: temporal.server.api.schedule.v1.StartScheduleArgs.state:type_name -> temporal.server.api.schedule.v1.InternalState
-	17, // 14: temporal.server.api.schedule.v1.FullUpdateRequest.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	20, // 15: temporal.server.api.schedule.v1.FullUpdateRequest.search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
-	17, // 16: temporal.server.api.schedule.v1.DescribeResponse.schedule:type_name -> temporal.api.schedule.v1.Schedule
-	18, // 17: temporal.server.api.schedule.v1.DescribeResponse.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
-	21, // 18: temporal.server.api.schedule.v1.WatchWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	22, // 19: temporal.server.api.schedule.v1.WatchWorkflowResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	15, // 20: temporal.server.api.schedule.v1.WatchWorkflowResponse.result:type_name -> temporal.api.common.v1.Payloads
-	16, // 21: temporal.server.api.schedule.v1.WatchWorkflowResponse.failure:type_name -> temporal.api.failure.v1.Failure
-	12, // 22: temporal.server.api.schedule.v1.WatchWorkflowResponse.close_time:type_name -> google.protobuf.Timestamp
-	23, // 23: temporal.server.api.schedule.v1.StartWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
-	12, // 24: temporal.server.api.schedule.v1.StartWorkflowResponse.real_start_time:type_name -> google.protobuf.Timestamp
-	21, // 25: temporal.server.api.schedule.v1.CancelWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	21, // 26: temporal.server.api.schedule.v1.TerminateWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	12, // 27: temporal.server.api.schedule.v1.NextTimeCache.start_time:type_name -> google.protobuf.Timestamp
-	28, // [28:28] is the sub-list for method output_type
-	28, // [28:28] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	13, // 0: temporal.server.api.schedule.v1.BufferedStart.nominal_time:type_name -> google.protobuf.Timestamp
+	13, // 1: temporal.server.api.schedule.v1.BufferedStart.actual_time:type_name -> google.protobuf.Timestamp
+	13, // 2: temporal.server.api.schedule.v1.BufferedStart.desired_time:type_name -> google.protobuf.Timestamp
+	14, // 3: temporal.server.api.schedule.v1.BufferedStart.overlap_policy:type_name -> temporal.api.enums.v1.ScheduleOverlapPolicy
+	13, // 4: temporal.server.api.schedule.v1.BufferedStart.backoff_time:type_name -> google.protobuf.Timestamp
+	13, // 5: temporal.server.api.schedule.v1.BufferedStart.start_time:type_name -> google.protobuf.Timestamp
+	1,  // 6: temporal.server.api.schedule.v1.BufferedStart.completed:type_name -> temporal.server.api.schedule.v1.CompletedResult
+	15, // 7: temporal.server.api.schedule.v1.CompletedResult.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	13, // 8: temporal.server.api.schedule.v1.CompletedResult.close_time:type_name -> google.protobuf.Timestamp
+	13, // 9: temporal.server.api.schedule.v1.InternalState.last_processed_time:type_name -> google.protobuf.Timestamp
+	0,  // 10: temporal.server.api.schedule.v1.InternalState.buffered_starts:type_name -> temporal.server.api.schedule.v1.BufferedStart
+	16, // 11: temporal.server.api.schedule.v1.InternalState.ongoing_backfills:type_name -> temporal.api.schedule.v1.BackfillRequest
+	17, // 12: temporal.server.api.schedule.v1.InternalState.last_completion_result:type_name -> temporal.api.common.v1.Payloads
+	18, // 13: temporal.server.api.schedule.v1.InternalState.continued_failure:type_name -> temporal.api.failure.v1.Failure
+	19, // 14: temporal.server.api.schedule.v1.StartScheduleArgs.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	20, // 15: temporal.server.api.schedule.v1.StartScheduleArgs.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	21, // 16: temporal.server.api.schedule.v1.StartScheduleArgs.initial_patch:type_name -> temporal.api.schedule.v1.SchedulePatch
+	2,  // 17: temporal.server.api.schedule.v1.StartScheduleArgs.state:type_name -> temporal.server.api.schedule.v1.InternalState
+	19, // 18: temporal.server.api.schedule.v1.FullUpdateRequest.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	22, // 19: temporal.server.api.schedule.v1.FullUpdateRequest.search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
+	19, // 20: temporal.server.api.schedule.v1.DescribeResponse.schedule:type_name -> temporal.api.schedule.v1.Schedule
+	20, // 21: temporal.server.api.schedule.v1.DescribeResponse.info:type_name -> temporal.api.schedule.v1.ScheduleInfo
+	23, // 22: temporal.server.api.schedule.v1.WatchWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	15, // 23: temporal.server.api.schedule.v1.WatchWorkflowResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	17, // 24: temporal.server.api.schedule.v1.WatchWorkflowResponse.result:type_name -> temporal.api.common.v1.Payloads
+	18, // 25: temporal.server.api.schedule.v1.WatchWorkflowResponse.failure:type_name -> temporal.api.failure.v1.Failure
+	13, // 26: temporal.server.api.schedule.v1.WatchWorkflowResponse.close_time:type_name -> google.protobuf.Timestamp
+	24, // 27: temporal.server.api.schedule.v1.StartWorkflowRequest.request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
+	13, // 28: temporal.server.api.schedule.v1.StartWorkflowResponse.real_start_time:type_name -> google.protobuf.Timestamp
+	23, // 29: temporal.server.api.schedule.v1.CancelWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	23, // 30: temporal.server.api.schedule.v1.TerminateWorkflowRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	13, // 31: temporal.server.api.schedule.v1.NextTimeCache.start_time:type_name -> google.protobuf.Timestamp
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_schedule_v1_message_proto_init() }
@@ -1107,7 +1207,7 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 	if File_temporal_server_api_schedule_v1_message_proto != nil {
 		return
 	}
-	file_temporal_server_api_schedule_v1_message_proto_msgTypes[6].OneofWrappers = []any{
+	file_temporal_server_api_schedule_v1_message_proto_msgTypes[7].OneofWrappers = []any{
 		(*WatchWorkflowResponse_Result)(nil),
 		(*WatchWorkflowResponse_Failure)(nil),
 	}
@@ -1117,7 +1217,7 @@ func file_temporal_server_api_schedule_v1_message_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_api_schedule_v1_message_proto_rawDesc), len(file_temporal_server_api_schedule_v1_message_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

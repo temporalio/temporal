@@ -508,6 +508,103 @@ func (x *DescribeScheduleResponse) GetFrontendResponse() *v1.DescribeScheduleRes
 	return nil
 }
 
+type ListScheduleMatchingTimesRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Internal namespace ID (UUID).
+	NamespaceId     string                               `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FrontendRequest *v1.ListScheduleMatchingTimesRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ListScheduleMatchingTimesRequest) Reset() {
+	*x = ListScheduleMatchingTimesRequest{}
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListScheduleMatchingTimesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListScheduleMatchingTimesRequest) ProtoMessage() {}
+
+func (x *ListScheduleMatchingTimesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListScheduleMatchingTimesRequest.ProtoReflect.Descriptor instead.
+func (*ListScheduleMatchingTimesRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ListScheduleMatchingTimesRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *ListScheduleMatchingTimesRequest) GetFrontendRequest() *v1.ListScheduleMatchingTimesRequest {
+	if x != nil {
+		return x.FrontendRequest
+	}
+	return nil
+}
+
+type ListScheduleMatchingTimesResponse struct {
+	state            protoimpl.MessageState                `protogen:"open.v1"`
+	FrontendResponse *v1.ListScheduleMatchingTimesResponse `protobuf:"bytes,1,opt,name=frontend_response,json=frontendResponse,proto3" json:"frontend_response,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ListScheduleMatchingTimesResponse) Reset() {
+	*x = ListScheduleMatchingTimesResponse{}
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListScheduleMatchingTimesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListScheduleMatchingTimesResponse) ProtoMessage() {}
+
+func (x *ListScheduleMatchingTimesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListScheduleMatchingTimesResponse.ProtoReflect.Descriptor instead.
+func (*ListScheduleMatchingTimesResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListScheduleMatchingTimesResponse) GetFrontendResponse() *v1.ListScheduleMatchingTimesResponse {
+	if x != nil {
+		return x.FrontendResponse
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc = "" +
@@ -537,7 +634,12 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_r
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
 	"\x10frontend_request\x18\x02 \x01(\v28.temporal.api.workflowservice.v1.DescribeScheduleRequestR\x0ffrontendRequest\"\x82\x01\n" +
 	"\x18DescribeScheduleResponse\x12f\n" +
-	"\x11frontend_response\x18\x01 \x01(\v29.temporal.api.workflowservice.v1.DescribeScheduleResponseR\x10frontendResponseBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x11frontend_response\x18\x01 \x01(\v29.temporal.api.workflowservice.v1.DescribeScheduleResponseR\x10frontendResponse\"\xb3\x01\n" +
+	" ListScheduleMatchingTimesRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12l\n" +
+	"\x10frontend_request\x18\x02 \x01(\v2A.temporal.api.workflowservice.v1.ListScheduleMatchingTimesRequestR\x0ffrontendRequest\"\x94\x01\n" +
+	"!ListScheduleMatchingTimesResponse\x12o\n" +
+	"\x11frontend_response\x18\x01 \x01(\v2B.temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponseR\x10frontendResponseBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -551,45 +653,51 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_ra
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_goTypes = []any{
-	(*CreateScheduleRequest)(nil),       // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest
-	(*CreateScheduleResponse)(nil),      // 1: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse
-	(*UpdateScheduleRequest)(nil),       // 2: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest
-	(*UpdateScheduleResponse)(nil),      // 3: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse
-	(*PatchScheduleRequest)(nil),        // 4: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest
-	(*PatchScheduleResponse)(nil),       // 5: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse
-	(*DeleteScheduleRequest)(nil),       // 6: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest
-	(*DeleteScheduleResponse)(nil),      // 7: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse
-	(*DescribeScheduleRequest)(nil),     // 8: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest
-	(*DescribeScheduleResponse)(nil),    // 9: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse
-	(*v1.CreateScheduleRequest)(nil),    // 10: temporal.api.workflowservice.v1.CreateScheduleRequest
-	(*v1.CreateScheduleResponse)(nil),   // 11: temporal.api.workflowservice.v1.CreateScheduleResponse
-	(*v1.UpdateScheduleRequest)(nil),    // 12: temporal.api.workflowservice.v1.UpdateScheduleRequest
-	(*v1.UpdateScheduleResponse)(nil),   // 13: temporal.api.workflowservice.v1.UpdateScheduleResponse
-	(*v1.PatchScheduleRequest)(nil),     // 14: temporal.api.workflowservice.v1.PatchScheduleRequest
-	(*v1.PatchScheduleResponse)(nil),    // 15: temporal.api.workflowservice.v1.PatchScheduleResponse
-	(*v1.DeleteScheduleRequest)(nil),    // 16: temporal.api.workflowservice.v1.DeleteScheduleRequest
-	(*v1.DeleteScheduleResponse)(nil),   // 17: temporal.api.workflowservice.v1.DeleteScheduleResponse
-	(*v1.DescribeScheduleRequest)(nil),  // 18: temporal.api.workflowservice.v1.DescribeScheduleRequest
-	(*v1.DescribeScheduleResponse)(nil), // 19: temporal.api.workflowservice.v1.DescribeScheduleResponse
+	(*CreateScheduleRequest)(nil),                // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest
+	(*CreateScheduleResponse)(nil),               // 1: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse
+	(*UpdateScheduleRequest)(nil),                // 2: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest
+	(*UpdateScheduleResponse)(nil),               // 3: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse
+	(*PatchScheduleRequest)(nil),                 // 4: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest
+	(*PatchScheduleResponse)(nil),                // 5: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse
+	(*DeleteScheduleRequest)(nil),                // 6: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest
+	(*DeleteScheduleResponse)(nil),               // 7: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse
+	(*DescribeScheduleRequest)(nil),              // 8: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest
+	(*DescribeScheduleResponse)(nil),             // 9: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse
+	(*ListScheduleMatchingTimesRequest)(nil),     // 10: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest
+	(*ListScheduleMatchingTimesResponse)(nil),    // 11: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse
+	(*v1.CreateScheduleRequest)(nil),             // 12: temporal.api.workflowservice.v1.CreateScheduleRequest
+	(*v1.CreateScheduleResponse)(nil),            // 13: temporal.api.workflowservice.v1.CreateScheduleResponse
+	(*v1.UpdateScheduleRequest)(nil),             // 14: temporal.api.workflowservice.v1.UpdateScheduleRequest
+	(*v1.UpdateScheduleResponse)(nil),            // 15: temporal.api.workflowservice.v1.UpdateScheduleResponse
+	(*v1.PatchScheduleRequest)(nil),              // 16: temporal.api.workflowservice.v1.PatchScheduleRequest
+	(*v1.PatchScheduleResponse)(nil),             // 17: temporal.api.workflowservice.v1.PatchScheduleResponse
+	(*v1.DeleteScheduleRequest)(nil),             // 18: temporal.api.workflowservice.v1.DeleteScheduleRequest
+	(*v1.DeleteScheduleResponse)(nil),            // 19: temporal.api.workflowservice.v1.DeleteScheduleResponse
+	(*v1.DescribeScheduleRequest)(nil),           // 20: temporal.api.workflowservice.v1.DescribeScheduleRequest
+	(*v1.DescribeScheduleResponse)(nil),          // 21: temporal.api.workflowservice.v1.DescribeScheduleResponse
+	(*v1.ListScheduleMatchingTimesRequest)(nil),  // 22: temporal.api.workflowservice.v1.ListScheduleMatchingTimesRequest
+	(*v1.ListScheduleMatchingTimesResponse)(nil), // 23: temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponse
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_depIdxs = []int32{
-	10, // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.CreateScheduleRequest
-	11, // 1: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.CreateScheduleResponse
-	12, // 2: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UpdateScheduleRequest
-	13, // 3: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.UpdateScheduleResponse
-	14, // 4: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PatchScheduleRequest
-	15, // 5: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.PatchScheduleResponse
-	16, // 6: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DeleteScheduleRequest
-	17, // 7: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DeleteScheduleResponse
-	18, // 8: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeScheduleRequest
-	19, // 9: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeScheduleResponse
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	12, // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.CreateScheduleRequest
+	13, // 1: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.CreateScheduleResponse
+	14, // 2: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.UpdateScheduleRequest
+	15, // 3: temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.UpdateScheduleResponse
+	16, // 4: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.PatchScheduleRequest
+	17, // 5: temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.PatchScheduleResponse
+	18, // 6: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DeleteScheduleRequest
+	19, // 7: temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DeleteScheduleResponse
+	20, // 8: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.DescribeScheduleRequest
+	21, // 9: temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.DescribeScheduleResponse
+	22, // 10: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest.frontend_request:type_name -> temporal.api.workflowservice.v1.ListScheduleMatchingTimesRequest
+	23, // 11: temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse.frontend_response:type_name -> temporal.api.workflowservice.v1.ListScheduleMatchingTimesResponse
+	12, // [12:12] is the sub-list for method output_type
+	12, // [12:12] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_init() }
@@ -603,7 +711,7 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_in
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

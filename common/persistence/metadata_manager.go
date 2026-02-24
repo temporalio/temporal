@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"errors"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -13,6 +14,8 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+var ErrWatchNotSupported = errors.New("watch not supported")
 
 type (
 
@@ -71,7 +74,7 @@ func (m *metadataManagerImpl) GetNamespace(
 	if err != nil {
 		return nil, err
 	}
-	return m.ConvertInternalGetResponse(resp)
+	return ConvertInternalGetNamespaceResponse(m.serializer, m.clusterName, resp)
 }
 
 func (m *metadataManagerImpl) UpdateNamespace(
@@ -144,8 +147,8 @@ func (m *metadataManagerImpl) DeleteNamespaceByName(
 	return m.persistence.DeleteNamespaceByName(ctx, request)
 }
 
-func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
-	ns, err := m.serializer.NamespaceDetailFromBlob(d.Namespace)
+func ConvertInternalGetNamespaceResponse(serializer serialization.Serializer, currentClusterName string, d *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
+	ns, err := serializer.NamespaceDetailFromBlob(d.Namespace)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +161,8 @@ func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespace
 		ns.Config.BadBinaries = &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 	}
 
-	ns.ReplicationConfig.ActiveClusterName = GetOrUseDefaultActiveCluster(m.clusterName, ns.ReplicationConfig.ActiveClusterName)
-	ns.ReplicationConfig.Clusters = GetOrUseDefaultClusters(m.clusterName, ns.ReplicationConfig.Clusters)
+	ns.ReplicationConfig.ActiveClusterName = GetOrUseDefaultActiveCluster(currentClusterName, ns.ReplicationConfig.ActiveClusterName)
+	ns.ReplicationConfig.Clusters = GetOrUseDefaultClusters(currentClusterName, ns.ReplicationConfig.Clusters)
 	return &GetNamespaceResponse{
 		Namespace:           ns,
 		IsGlobalNamespace:   d.IsGlobal,
@@ -185,7 +188,7 @@ func (m *metadataManagerImpl) ListNamespaces(
 		}
 		deletedNamespacesCount := 0
 		for _, d := range resp.Namespaces {
-			ret, err := m.ConvertInternalGetResponse(d)
+			ret, err := ConvertInternalGetNamespaceResponse(m.serializer, m.clusterName, d)
 			if err != nil {
 				return nil, err
 			}
@@ -257,4 +260,8 @@ func (m *metadataManagerImpl) GetMetadata(
 
 func (m *metadataManagerImpl) Close() {
 	m.persistence.Close()
+}
+
+func (m *metadataManagerImpl) WatchNamespaces(context.Context) (<-chan *NamespaceWatchEvent, error) {
+	return nil, ErrWatchNotSupported
 }

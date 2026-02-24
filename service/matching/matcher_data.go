@@ -15,8 +15,26 @@ import (
 )
 
 const (
-	invalidHeapIndex      = -13     // use unusual value to stand out in panics
-	pollForwarderPriority = 1000000 // lower than any other priority. must be > maxPriorityLevels.
+	invalidHeapIndex        = -13     // use unusual value to stand out in panics
+	maxPriorityLevels       = 60      // maximum value for priority levels (fits in a bitfield with a few bits reserved)
+	effectivePriorityFactor = 10      // multiply priority level by this to leave room for intermediate levels
+	pollForwarderPriority   = 1000000 // lower than any other priority. must be > maxPriorityLevels*effectivePriorityFactor.
+)
+
+type pollForwarderType int32
+
+const (
+	notPollForwarder pollForwarderType = iota
+	parentPollForwarder
+	priorityBacklogPollForwarder
+)
+
+type taskForwarderType int32
+
+const (
+	notTaskForwarder       taskForwarderType = iota
+	parentTaskForwarder                      // forwards tasks to parent partition
+	validatorTaskForwarder                   // validates tasks on root partition
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
@@ -39,9 +57,12 @@ func (p *pollerPQ) Len() int {
 // implements heap.Interface, do not call directly
 func (p *pollerPQ) Less(i int, j int) bool {
 	a, b := p.heap[i], p.heap[j]
-	if !(a.isTaskForwarder || a.isTaskValidator) && (b.isTaskForwarder || b.isTaskValidator) {
+	// task forwarders/validators have lower priority than local polls
+	aIsForwarder := a.taskForwarderType != notTaskForwarder
+	bIsForwarder := b.taskForwarderType != notTaskForwarder
+	if !aIsForwarder && bIsForwarder {
 		return true
-	} else if (a.isTaskForwarder || a.isTaskValidator) && !(b.isTaskForwarder || b.isTaskValidator) {
+	} else if aIsForwarder && !bIsForwarder {
 		return false
 	}
 	return a.startTime.Before(b.startTime)
@@ -212,6 +233,8 @@ type matcherData struct {
 	tasks   taskPQ
 
 	lastPoller time.Time // most recent poll start time
+
+	stopped bool // if true, reject new tasks
 }
 
 func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock.TimeSource, canForward bool, rateLimitManager *rateLimitManager) matcherData {
@@ -227,13 +250,25 @@ func newMatcherData(config *taskQueueConfig, logger log.Logger, timeSource clock
 	}
 }
 
-func (d *matcherData) EnqueueTaskNoWait(task *internalTask) {
+func (d *matcherData) Stop() {
 	d.lock.Lock()
 	defer d.lock.Unlock()
+
+	d.stopped = true
+}
+
+func (d *matcherData) EnqueueTaskNoWait(task *internalTask) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if d.stopped {
+		return errMatcherStopped
+	}
 
 	task.initMatch(d)
 	d.tasks.Add(task)
 	d.findAndWakeMatches()
+	return nil
 }
 
 func (d *matcherData) RemoveTask(task *internalTask) {
@@ -348,6 +383,21 @@ func (d *matcherData) MatchTaskImmediately(task *internalTask) (canSyncMatch, go
 	return true, false
 }
 
+func (d *matcherData) MatchPollerImmediately(poller *waitingPoller) *matchResult {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	poller.initMatch(d)
+	d.pollers.Add(poller)
+	d.findAndWakeMatches()
+	// don't wait, check if match() picked this one already
+	if poller.matchResult != nil {
+		return poller.matchResult
+	}
+	d.pollers.Remove(poller)
+	return nil
+}
+
 func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalTask {
 	d.lock.Lock()
 	defer d.lock.Unlock()
@@ -373,19 +423,30 @@ func (d *matcherData) findMatch(allowForwarding bool) (*internalTask, *waitingPo
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// TODO(pri): this iterates over heap as slice, which isn't quite correct, but okay for now
 	for _, task := range d.tasks.heap {
-		if !allowForwarding && task.isPollForwarder() {
+		// disallow normal poll forwarding when allowForwarding is false, but allow the
+		// "priority backlog poll forwarders".
+		if !allowForwarding && task.pollForwarderType == parentPollForwarder {
 			continue
 		}
 
 		for _, poller := range d.pollers.heap {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
+				// query-only poll only matches with query (but can match poll forwarder)
 				continue
 			} else if task.isPollForwarder() && poller.forwardCtx == nil {
+				// poll forwarder only matches polls that have a forwardCtx
 				continue
-			} else if poller.isTaskForwarder && !allowForwarding {
+			} else if poller.taskForwarderType == parentTaskForwarder && !allowForwarding {
+				// task forwarder only matches when forwarding is allowed
 				continue
-			} else if poller.isTaskValidator && task.forwardCtx != nil {
+			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
+				// validator (root only) only matches local backlog tasks
+				continue
+			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
+				// Note the ">" above: "min" priority is a numeric max.
+				// Also note: this condition will be false for draining tasks since we artifically boost
+				// their priority above "1". that's inaccurate but it's just a temporary situation.
 				continue
 			}
 

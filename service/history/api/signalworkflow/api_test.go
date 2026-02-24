@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
@@ -83,7 +83,7 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil).AnyTimes()
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasmworkflow.Archetype, locks.PriorityHigh).
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetypeID, locks.PriorityHigh).
 		Return(s.currentContext, wcache.NoopReleaseFn, nil).AnyTimes()
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(

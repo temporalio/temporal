@@ -3,7 +3,7 @@ package ndc
 import (
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -126,8 +126,8 @@ func (s *replicationTaskSuite) TestValidateEvents() {
 
 func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
 		{
@@ -168,8 +168,8 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ValidInput_SkipEvents() 
 
 func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
 		{
@@ -206,8 +206,8 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_InvalidInput_ErrorOut() 
 
 func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
 		{
@@ -247,8 +247,8 @@ func (s *replicationTaskSuite) TestSkipDuplicatedEvents_ZeroInput_DoNothing() {
 
 func (s *replicationTaskSuite) TestResetInfo() {
 	workflowKey := definition.WorkflowKey{
-		WorkflowID: uuid.New(),
-		RunID:      uuid.New(),
+		WorkflowID: uuid.NewString(),
+		RunID:      uuid.NewString(),
 	}
 	slice1 := []*historypb.HistoryEvent{
 		{

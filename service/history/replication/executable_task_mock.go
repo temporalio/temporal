@@ -126,9 +126,9 @@ func (mr *MockExecutableTaskMockRecorder) DeleteWorkflow(ctx, workflowKey any) *
 }
 
 // GetNamespaceInfo mocks base method.
-func (m *MockExecutableTask) GetNamespaceInfo(ctx context.Context, namespaceID string) (string, bool, error) {
+func (m *MockExecutableTask) GetNamespaceInfo(ctx context.Context, namespaceID, businessID string) (string, bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceInfo", ctx, namespaceID)
+	ret := m.ctrl.Call(m, "GetNamespaceInfo", ctx, namespaceID, businessID)
 	ret0, _ := ret[0].(string)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
@@ -136,9 +136,9 @@ func (m *MockExecutableTask) GetNamespaceInfo(ctx context.Context, namespaceID s
 }
 
 // GetNamespaceInfo indicates an expected call of GetNamespaceInfo.
-func (mr *MockExecutableTaskMockRecorder) GetNamespaceInfo(ctx, namespaceID any) *gomock.Call {
+func (mr *MockExecutableTaskMockRecorder) GetNamespaceInfo(ctx, namespaceID, businessID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceInfo", reflect.TypeOf((*MockExecutableTask)(nil).GetNamespaceInfo), ctx, namespaceID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceInfo", reflect.TypeOf((*MockExecutableTask)(nil).GetNamespaceInfo), ctx, namespaceID, businessID)
 }
 
 // GetPriority mocks base method.
@@ -167,6 +167,18 @@ func (m *MockExecutableTask) IsRetryableError(err error) bool {
 func (mr *MockExecutableTaskMockRecorder) IsRetryableError(err any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockExecutableTask)(nil).IsRetryableError), err)
+}
+
+// MarkExecutionStart mocks base method.
+func (m *MockExecutableTask) MarkExecutionStart() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkExecutionStart")
+}
+
+// MarkExecutionStart indicates an expected call of MarkExecutionStart.
+func (mr *MockExecutableTaskMockRecorder) MarkExecutionStart() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkExecutionStart", reflect.TypeOf((*MockExecutableTask)(nil).MarkExecutionStart))
 }
 
 // MarkPoisonPill mocks base method.
@@ -205,6 +217,20 @@ func (m *MockExecutableTask) Nack(err error) {
 func (mr *MockExecutableTaskMockRecorder) Nack(err any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockExecutableTask)(nil).Nack), err)
+}
+
+// NamespaceName mocks base method.
+func (m *MockExecutableTask) NamespaceName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NamespaceName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// NamespaceName indicates an expected call of NamespaceName.
+func (mr *MockExecutableTaskMockRecorder) NamespaceName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NamespaceName", reflect.TypeOf((*MockExecutableTask)(nil).NamespaceName))
 }
 
 // ReplicationTask mocks base method.

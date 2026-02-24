@@ -197,6 +197,8 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 	historySizeBytes int64,
 	versioningStamp *commonpb.WorkerVersionStamp,
 	buildIdRedirectCounter int64,
+	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
+	targetWorkerDeploymentVersionChanged bool,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowTaskStartedEvent(
 		scheduledEventID,
@@ -207,6 +209,8 @@ func (b *HistoryBuilder) AddWorkflowTaskStartedEvent(
 		historySizeBytes,
 		versioningStamp,
 		buildIdRedirectCounter,
+		suggestContinueAsNewReasons,
+		targetWorkerDeploymentVersionChanged,
 	)
 	event, _ = b.EventStore.add(event)
 	return event
@@ -273,6 +277,30 @@ func (b *HistoryBuilder) AddWorkflowTaskFailedEvent(
 		checksum,
 	)
 	event, _ = b.EventStore.add(event)
+	return event
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionPausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.CreateWorkflowExecutionPausedEvent(identity, reason, requestID)
+	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
+	event.WorkerMayIgnore = true
+	event, _ = b.add(event)
+	return event
+}
+
+func (b *HistoryBuilder) AddWorkflowExecutionUnpausedEvent(
+	identity string,
+	reason string,
+	requestID string,
+) *historypb.HistoryEvent {
+	event := b.CreateWorkflowExecutionUnpausedEvent(identity, reason, requestID)
+	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
+	event.WorkerMayIgnore = true
+	event, _ = b.add(event)
 	return event
 }
 
@@ -428,6 +456,8 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 	attachRequestID string,
 	attachCompletionCallbacks []*commonpb.Callback,
 	links []*commonpb.Link,
+	identity string,
+	priority *commonpb.Priority,
 ) *historypb.HistoryEvent {
 	event := b.EventFactory.CreateWorkflowExecutionOptionsUpdatedEvent(
 		worker_versioning.ConvertOverrideToV32(versioningOverride),
@@ -435,6 +465,8 @@ func (b *HistoryBuilder) AddWorkflowExecutionOptionsUpdatedEvent(
 		attachRequestID,
 		attachCompletionCallbacks,
 		links,
+		identity,
+		priority,
 	)
 	event, _ = b.EventStore.add(event)
 	return event

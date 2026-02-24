@@ -39,12 +39,16 @@ func NewLibrary(
 }
 
 func (l *Library) Name() string {
-	return "scheduler"
+	return chasm.SchedulerLibraryName
 }
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Scheduler]("scheduler"),
+		chasm.NewRegistrableComponent[*Scheduler](
+			chasm.SchedulerComponentName,
+			chasm.WithBusinessIDAlias("ScheduleId"),
+			chasm.WithSearchAttributes(executionStatusSearchAttribute),
+		),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
 		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),

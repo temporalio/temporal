@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -224,12 +225,15 @@ func (t *task) handleFailures(
 				return err
 			}
 
+			// TODO: consider using history force delete api directly and extract correct archetypeID from mutableState.
+			// Currently, checks on chasm executions are bypassed and we don't reach here for chasm executions.
 			_, err = t.adminClient.DeleteWorkflowExecution(t.ctx, &adminservice.DeleteWorkflowExecutionRequest{
 				Namespace: ns.Name().String(),
 				Execution: &commonpb.WorkflowExecution{
 					WorkflowId: executionInfo.GetWorkflowId(),
 					RunId:      runID,
 				},
+				Archetype: chasm.WorkflowArchetype,
 			})
 			switch err.(type) {
 			case *serviceerror.NotFound,

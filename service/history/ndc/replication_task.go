@@ -4,7 +4,7 @@ import (
 	"cmp"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -464,7 +464,7 @@ func validateReplicateEventsRequest(
 }
 
 func validateUUID(input string) bool {
-	return uuid.Parse(input) != nil
+	return uuid.Validate(input) == nil
 }
 
 func validateEventsSlice(eventsSlice ...[]*historypb.HistoryEvent) (int64, error) {

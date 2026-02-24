@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -18,7 +18,7 @@ func TestHandoverWorkflow(t *testing.T) {
 	env := testSuite.NewTestWorkflowEnvironment()
 	var a *activities
 
-	namespaceID := uuid.New()
+	namespaceID := uuid.NewString()
 
 	env.OnActivity(a.GetMetadata, mock.Anything, metadataRequest{Namespace: "test-ns"}).Return(&metadataResponse{ShardCount: 4, NamespaceID: namespaceID}, nil)
 

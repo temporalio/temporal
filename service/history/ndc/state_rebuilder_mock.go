@@ -45,11 +45,11 @@ func (m *MockStateRebuilder) EXPECT() *MockStateRebuilderMockRecorder {
 }
 
 // Rebuild mocks base method.
-func (m *MockStateRebuilder) Rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string) (interfaces.MutableState, int64, error) {
+func (m *MockStateRebuilder) Rebuild(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string) (interfaces.MutableState, RebuildStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Rebuild", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID)
 	ret0, _ := ret[0].(interfaces.MutableState)
-	ret1, _ := ret[1].(int64)
+	ret1, _ := ret[1].(RebuildStats)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -61,11 +61,11 @@ func (mr *MockStateRebuilderMockRecorder) Rebuild(ctx, now, baseWorkflowIdentifi
 }
 
 // RebuildWithCurrentMutableState mocks base method.
-func (m *MockStateRebuilder) RebuildWithCurrentMutableState(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string, currentMutableState *persistence.WorkflowMutableState) (interfaces.MutableState, int64, error) {
+func (m *MockStateRebuilder) RebuildWithCurrentMutableState(ctx context.Context, now time.Time, baseWorkflowIdentifier definition.WorkflowKey, baseBranchToken []byte, baseLastEventID int64, baseLastEventVersion *int64, targetWorkflowIdentifier definition.WorkflowKey, targetBranchToken []byte, requestID string, currentMutableState *persistence.WorkflowMutableState) (interfaces.MutableState, RebuildStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RebuildWithCurrentMutableState", ctx, now, baseWorkflowIdentifier, baseBranchToken, baseLastEventID, baseLastEventVersion, targetWorkflowIdentifier, targetBranchToken, requestID, currentMutableState)
 	ret0, _ := ret[0].(interfaces.MutableState)
-	ret1, _ := ret[1].(int64)
+	ret1, _ := ret[1].(RebuildStats)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }

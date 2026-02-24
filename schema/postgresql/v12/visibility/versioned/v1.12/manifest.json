@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.12",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add TemporalLowCardinalityKeyword01 to chasm_search_attributes",
+  "SchemaUpdateCqlFiles": [
+    "add_low_cardinality_keyword.sql"
+  ]
+}

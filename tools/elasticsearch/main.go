@@ -82,6 +82,40 @@ func BuildCLIOptions() *cli.App {
 			Name:  commonschema.CLIOptQuiet,
 			Usage: "don't log errors to stderr",
 		},
+		cli.BoolFlag{
+			Name:   commonschema.CLIFlagEnableTLS,
+			Usage:  "enable TLS for elasticsearch connection",
+			EnvVar: "ES_TLS",
+		},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagTLSCertFile,
+			Value:  "",
+			Usage:  "path to TLS certificate file (tls must be enabled)",
+			EnvVar: "ES_TLS_CERT_FILE",
+		},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagTLSKeyFile,
+			Value:  "",
+			Usage:  "path to TLS key file (tls must be enabled)",
+			EnvVar: "ES_TLS_KEY_FILE",
+		},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagTLSCaFile,
+			Value:  "",
+			Usage:  "path to TLS CA certificate file (tls must be enabled)",
+			EnvVar: "ES_TLS_CA_FILE",
+		},
+		cli.BoolFlag{
+			Name:   commonschema.CLIFlagTLSDisableHostVerification,
+			Usage:  "disable TLS host name verification (tls must be enabled)",
+			EnvVar: "ES_TLS_DISABLE_HOST_VERIFICATION",
+		},
+		cli.StringFlag{
+			Name:   commonschema.CLIFlagTLSHostName,
+			Value:  "",
+			Usage:  "TLS server name for host name verification (tls must be enabled)",
+			EnvVar: "ES_TLS_SERVER_NAME",
+		},
 	}
 
 	app.Commands = []cli.Command{

@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -226,8 +226,11 @@ func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.St
 		ctx:               ctx,
 		a:                 nil,
 		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
-		metrics:           workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.State.Namespace}),
-		specBuilder:       specBuilder,
+		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
+			"namespace":                args.State.Namespace,
+			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
+		}),
+		specBuilder: specBuilder,
 	}
 	return scheduler.run()
 }
@@ -474,7 +477,7 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 	s.nextTimeCacheV1 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		results := make(map[time.Time]GetNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
 			next := s.cspec.GetNextTime(s.jitterSeed(), t)
@@ -546,7 +549,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	s.nextTimeCacheV2 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		cache := &schedulespb.NextTimeCache{
 			Version:      int64(s.tweakables.Version),
 			StartTime:    timestamppb.New(start),
@@ -604,7 +607,7 @@ func (s *scheduler) getNextTime(after time.Time) GetNextTimeResult {
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	var next GetNextTimeResult
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		return s.cspec.GetNextTime(s.jitterSeed(), after)
 	}).Get(&next))
 	return next
@@ -1040,7 +1043,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(req.StartTime)
-	for i := 0; i < maxListMatchingTimesCount; i++ {
+	for range maxListMatchingTimesCount {
 		// don't need to call GetNextTime in SideEffect because this is just a query
 		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
@@ -1109,7 +1112,7 @@ func (s *scheduler) updateCustomSearchAttributes(searchAttributes *commonpb.Sear
 		// and the user already had a custom search attribute with same name. This is
 		// a general issue in the system, and it will be fixed when we introduce
 		// a system prefix to fix those conflicts.
-		if searchattribute.IsReserved(key) {
+		if sadefs.IsReserved(key) {
 			continue
 		}
 		if newValuePayload, exists := searchAttributes.GetIndexedFields()[key]; !exists {
@@ -1146,7 +1149,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		// marshal manually to get proto encoding (default dataconverter will use json)
 		newInfoBytes, err := newInfo.Marshal()
 		if err == nil {
-			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
+			err = workflow.UpsertMemo(s.ctx, map[string]any{
 				MemoFieldInfo: newInfoBytes,
 			})
 		}
@@ -1155,13 +1158,14 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		}
 	}
 
-	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[searchattribute.TemporalSchedulePaused]
+	//nolint:staticcheck // SA1019: workflowInfo.SearchAttributes is not typed.
+	currentPausedPayload := workflowInfo.SearchAttributes.GetIndexedFields()[sadefs.TemporalSchedulePaused]
 	var currentPaused bool
 	if currentPausedPayload == nil ||
 		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
 		currentPaused != s.Schedule.State.Paused {
-		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
-			searchattribute.TemporalSchedulePaused: s.Schedule.State.Paused,
+		err := workflow.UpsertSearchAttributes(s.ctx, map[string]any{ //nolint:staticcheck // SA1019: untyped search attributes required here
+			sadefs.TemporalSchedulePaused: s.Schedule.State.Paused,
 		})
 		if err != nil {
 			s.logger.Error("error updating search attributes", "error", err)
@@ -1178,8 +1182,8 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	get := func(ctx workflow.Context) interface{} { return CurrentTweakablePolicies }
-	eq := func(a, b interface{}) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
+	get := func(ctx workflow.Context) any { return CurrentTweakablePolicies }
+	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
 	if err := workflow.MutableSideEffect(s.ctx, "tweakables", get, eq).Get(&s.tweakables); err != nil {
 		panic("can't decode TweakablePolicies:" + err.Error())
 	}
@@ -1437,10 +1441,10 @@ func (s *scheduler) addSearchAttributes(
 ) *commonpb.SearchAttributes {
 	fields := util.CloneMapNonNil(attributes.GetIndexedFields())
 	if p, err := payload.Encode(nominal); err == nil {
-		fields[searchattribute.TemporalScheduledStartTime] = p
+		fields[sadefs.TemporalScheduledStartTime] = p
 	}
 	if p, err := payload.Encode(s.State.ScheduleId); err == nil {
-		fields[searchattribute.TemporalScheduledById] = p
+		fields[sadefs.TemporalScheduledById] = p
 	}
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
@@ -1554,7 +1558,7 @@ func (s *scheduler) getLastEvent() time.Time {
 
 func (s *scheduler) newUUIDString() string {
 	if len(s.uuidBatch) == 0 {
-		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 			out := make([]string, 10)
 			for i := range out {
 				out[i] = uuid.NewString()

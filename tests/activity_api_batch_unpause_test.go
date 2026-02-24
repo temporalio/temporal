@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -20,7 +20,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -146,7 +146,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 	var listResp *workflowservice.ListWorkflowExecutionsResponse
 	searchValue := fmt.Sprintf("property:activityType=%s", activityTypeName)
 	escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-	unpauseCause := fmt.Sprintf("%s = %s", searchattribute.TemporalPauseInfo, escapedSearchValue)
+	unpauseCause := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
 	query := fmt.Sprintf("(WorkflowType='%s' AND %s)", workflowTypeName, unpauseCause)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -169,7 +169,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", workflowTypeName),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.NoError(err)
@@ -205,7 +205,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 			UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.Error(err)
@@ -221,7 +221,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Failed
 			},
 		},
 		VisibilityQuery: fmt.Sprintf("WorkflowType='%s'", "WorkflowFunc"),
-		JobId:           uuid.New(),
+		JobId:           uuid.NewString(),
 		Reason:          "test",
 	})
 	s.Error(err)

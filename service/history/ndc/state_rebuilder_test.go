@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -74,7 +74,8 @@ func (s *stateRebuilderSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskRefresher = workflow.NewMockTaskRefresher(s.controller)
 	config := tests.NewDynamicConfig()
-	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFn(true)
+	config.EnableTransitionHistory = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	config.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -100,7 +101,7 @@ func (s *stateRebuilderSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.workflowID = "some random workflow ID"
-	s.runID = uuid.New()
+	s.runID = uuid.NewString()
 	s.now = time.Now().UTC()
 	s.nDCStateRebuilder = NewStateRebuilder(
 		s.mockShard, s.logger,
@@ -122,7 +123,7 @@ func (s *stateRebuilderSuite) TestInitializeBuilders() {
 
 func (s *stateRebuilderSuite) TestApplyEvents() {
 
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	events := []*historypb.HistoryEvent{
 		{
 			EventId:    1,
@@ -222,7 +223,7 @@ func (s *stateRebuilderSuite) TestPagination() {
 		Size:           67890,
 	}, nil)
 
-	paginationFn := s.nDCStateRebuilder.getPaginationFn(context.Background(), firstEventID, nextEventID, branchToken)
+	paginationFn := s.nDCStateRebuilder.getPaginationFn(context.Background(), firstEventID, nextEventID, branchToken, tests.Namespace.String())
 	iter := collection.NewPagingIterator(paginationFn)
 
 	var result []HistoryBlobsPaginationItem
@@ -243,19 +244,25 @@ func (s *stateRebuilderSuite) TestPagination() {
 }
 
 func (s *stateRebuilderSuite) TestRebuild() {
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
 
-	targetNamespaceID := namespace.ID(uuid.New())
+	targetNamespaceID := namespace.ID(uuid.NewString())
 	targetNamespace := namespace.Name("other random namespace name")
 	targetWorkflowID := "other random workflow ID"
-	targetRunID := uuid.New()
+	targetRunID := uuid.NewString()
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
+	payloadsWithExternalReference1 := payloads.EncodeString("some random input")
+	payloadsWithExternalReference1.Payloads[0].ExternalPayloads = []*commonpb.Payload_ExternalPayloadDetails{
+		{
+			SizeBytes: 1024,
+		},
+	}
 	events1 := []*historypb.HistoryEvent{{
 		EventId:   1,
 		Version:   version,
@@ -263,20 +270,26 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
 			WorkflowType:             &commonpb.WorkflowType{Name: "some random workflow type"},
 			TaskQueue:                &taskqueuepb.TaskQueue{Name: "some random workflow type"},
-			Input:                    payloads.EncodeString("some random input"),
+			Input:                    payloadsWithExternalReference1,
 			WorkflowExecutionTimeout: durationpb.New(123 * time.Second),
 			WorkflowRunTimeout:       durationpb.New(233 * time.Second),
 			WorkflowTaskTimeout:      durationpb.New(45 * time.Second),
 			Identity:                 "some random identity",
 		}},
 	}}
+	payloadsWithExternalReference2 := payloads.EncodeString("some random input")
+	payloadsWithExternalReference2.Payloads[0].ExternalPayloads = []*commonpb.Payload_ExternalPayloadDetails{
+		{
+			SizeBytes: 2048,
+		},
+	}
 	events2 := []*historypb.HistoryEvent{{
 		EventId:   2,
 		Version:   version,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
 			SignalName: "some random signal name",
-			Input:      payloads.EncodeString("some random signal input"),
+			Input:      payloadsWithExternalReference2,
 			Identity:   "some random identity",
 		}},
 	}}
@@ -329,7 +342,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	), nil).AnyTimes()
 	s.mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
-	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.Rebuild(
+	rebuildMutableState, rebuildStats, err := s.nDCStateRebuilder.Rebuild(
 		context.Background(),
 		s.now,
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
@@ -346,7 +359,9 @@ func (s *stateRebuilderSuite) TestRebuild() {
 	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.NamespaceId))
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
-	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
+	s.Equal(int64(historySize1+historySize2), rebuildStats.HistorySize)
+	s.Equal(int64(1024+2048), rebuildStats.ExternalPayloadSize)
+	s.Equal(int64(2), rebuildStats.ExternalPayloadCount)
 	s.ProtoEqual(versionhistory.NewVersionHistories(
 		versionhistory.NewVersionHistory(
 			targetBranchToken,
@@ -358,16 +373,16 @@ func (s *stateRebuilderSuite) TestRebuild() {
 }
 
 func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
-	requestID := uuid.New()
+	requestID := uuid.NewString()
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
 	targetBranchToken := []byte("some other random branch token")
 
-	targetNamespaceID := namespace.ID(uuid.New())
+	targetNamespaceID := namespace.ID(uuid.NewString())
 	targetNamespace := namespace.Name("other random namespace name")
 	targetWorkflowID := "other random workflow ID"
-	targetRunID := uuid.New()
+	targetRunID := uuid.NewString()
 
 	firstEventID := common.FirstEventID
 	nextEventID := lastEventID + 1
@@ -455,7 +470,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		},
 	}
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(12)).Return(cluster.TestCurrentClusterName).AnyTimes()
-	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.RebuildWithCurrentMutableState(
+	rebuildMutableState, rebuildStats, err := s.nDCStateRebuilder.RebuildWithCurrentMutableState(
 		context.Background(),
 		s.now,
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
@@ -473,7 +488,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 	s.Equal(targetNamespaceID, namespace.ID(rebuildExecutionInfo.NamespaceId))
 	s.Equal(targetWorkflowID, rebuildExecutionInfo.WorkflowId)
 	s.Equal(targetRunID, rebuildMutableState.GetExecutionState().RunId)
-	s.Equal(int64(historySize1+historySize2), rebuiltHistorySize)
+	s.Equal(int64(historySize1+historySize2), rebuildStats.HistorySize)
 	s.ProtoEqual(versionhistory.NewVersionHistories(
 		versionhistory.NewVersionHistory(
 			targetBranchToken,

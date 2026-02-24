@@ -25,7 +25,7 @@ var (
 	// ErrDependencyTaskNotCompleted is the error returned when a task this task depends on is not completed yet
 	ErrDependencyTaskNotCompleted = errors.New("a task which this task depends on has not been completed yet")
 	// ErrDuplicate is exported temporarily for integration test
-	ErrDuplicate = errors.New("duplicate task, completing it")
+	ErrDuplicate = serviceerror.NewAlreadyExists("duplicate task, completing it")
 	// ErrLocateCurrentWorkflowExecution is the error returned when current workflow execution can't be located
 	ErrLocateCurrentWorkflowExecution = serviceerror.NewUnavailable("unable to locate current workflow execution")
 	// ErrStaleReference is an indicator that a task or an API request cannot be executed because it contains a stale reference.
@@ -91,6 +91,8 @@ var (
 	ErrChildExecutionNotFound = serviceerror.NewNotFound("Pending child execution not found.")
 	// ErrWorkflowNotReady is error indicating workflow mutable state is missing necessary information for handling the request
 	ErrWorkflowNotReady = serviceerror.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
+	// ErrWorkflowTaskNotFound is error indicating workflow task is not found, either due to it has already completed or attempt/stamp mismatch
+	ErrWorkflowTaskNotFound = serviceerror.NewNotFound("workflow task not found.")
 	// ErrWorkflowTaskNotScheduled is error indicating workflow task is not scheduled yet.
 	ErrWorkflowTaskNotScheduled = serviceerror.NewWorkflowNotReady("Workflow task is not scheduled yet.")
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.

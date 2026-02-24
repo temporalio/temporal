@@ -2,6 +2,7 @@ package elasticsearch
 
 import (
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -19,11 +20,12 @@ var allowedComparisonOperators = map[string]struct{}{
 	sqlparser.NotStartsWithStr: {},
 }
 
-func NewQueryConverter(
+func NewQueryConverterLegacy(
 	fnInterceptor query.FieldNameInterceptor,
 	fvInterceptor query.FieldValuesInterceptor,
 	saNameType searchattribute.NameTypeMap,
-) *query.Converter {
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
+) *query.ConverterLegacy {
 	if fnInterceptor == nil {
 		fnInterceptor = &query.NopFieldNameInterceptor{}
 	}
@@ -33,7 +35,7 @@ func NewQueryConverter(
 	}
 
 	rangeCond := query.NewRangeCondConverter(fnInterceptor, fvInterceptor, true)
-	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType)
+	comparisonExpr := query.NewComparisonExprConverter(fnInterceptor, fvInterceptor, allowedComparisonOperators, saNameType, chasmMapper)
 	is := query.NewIsConverter(fnInterceptor)
 
 	whereConverter := &query.WhereConverter{
@@ -44,5 +46,5 @@ func NewQueryConverter(
 	whereConverter.And = query.NewAndConverter(whereConverter)
 	whereConverter.Or = query.NewOrConverter(whereConverter)
 
-	return query.NewConverter(fnInterceptor, whereConverter)
+	return query.NewConverterLegacy(fnInterceptor, whereConverter)
 }

@@ -14,9 +14,10 @@ import (
 
 type (
 	instrumentation struct {
-		log     log.Logger
-		metrics metrics.Handler
-		tracer  trace.Tracer
+		log       log.Logger
+		metrics   metrics.Handler
+		tracer    trace.Tracer
+		namespace string
 	}
 )
 
@@ -50,23 +51,25 @@ func (i *instrumentation) countRateLimited() {
 
 func (i *instrumentation) countRegistrySizeLimited(updateCount, registrySize, payloadSize int) {
 	i.oneOf(metrics.WorkflowExecutionUpdateRegistrySizeLimited.Name())
-	// TODO: remove log once limit is enforced everywhere
 	i.log.Warn("update registry size limit reached",
-		tag.NewInt("registry-size", registrySize),
-		tag.NewInt("payload-size", payloadSize),
-		tag.NewInt("update-count", updateCount))
+		tag.Int("registry-size", registrySize),
+		tag.Int("payload-size", payloadSize),
+		tag.Int("update-count", updateCount),
+		tag.String("namespace", i.namespace),
+	)
 }
 
 func (i *instrumentation) countTooMany() {
 	i.oneOf(metrics.WorkflowExecutionUpdateTooMany.Name())
 }
 
-func (i *instrumentation) countAborted() {
-	i.oneOf(metrics.WorkflowExecutionUpdateAborted.Name())
-}
-
-func (i *instrumentation) countContinueAsNewSuggestions() {
-	i.oneOf(metrics.WorkflowExecutionUpdateContinueAsNewSuggestions.Name())
+func (i *instrumentation) countAborted(updateID string, reason AbortReason) {
+	i.metrics.Counter(metrics.WorkflowExecutionUpdateAborted.Name()).
+		Record(1, metrics.ReasonTag(metrics.ReasonString(reason.String())))
+	i.log.Debug("update aborted",
+		tag.String("reason", reason.String()),
+		tag.String("update-id", updateID),
+	)
 }
 
 func (i *instrumentation) countSent() {
@@ -78,14 +81,14 @@ func (i *instrumentation) countSentAgain() {
 }
 
 func (i *instrumentation) invalidStateTransition(updateID string, msg proto.Message, state state) {
-	i.oneOf(metrics.InvalidStateTransitionWorkflowExecutionUpdateCounter.Name())
 	softassert.Fail(
 		i.log,
 		"invalid state transition attempted",
 		tag.ComponentWorkflowUpdate,
-		tag.NewStringTag("update-id", updateID),
-		tag.NewStringTag("message", fmt.Sprintf("%T", msg)),
-		tag.NewStringerTag("state", state),
+		tag.String("update-id", updateID),
+		tag.String("message", fmt.Sprintf("%T", msg)),
+		tag.Stringer("state", state),
+		tag.String("namespace", i.namespace),
 	)
 }
 
@@ -98,12 +101,11 @@ func (i *instrumentation) oneOf(counterName string) {
 }
 
 func (i *instrumentation) stateChange(updateID string, from, to state) {
-	softassert.Sometimes(
-		i.log,
+	i.log.Debug(
 		"update state change",
 		tag.ComponentWorkflowUpdate,
-		tag.NewStringTag("update-id", updateID),
-		tag.NewStringerTag("from-state", from),
-		tag.NewStringerTag("to-state", to),
+		tag.String("update-id", updateID),
+		tag.Stringer("from-state", from),
+		tag.Stringer("to-state", to),
 	)
 }

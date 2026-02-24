@@ -52,17 +52,24 @@ func NewExecutableUnknownTask(
 	}
 }
 
-func (e *ExecutableUnknownTask) QueueID() interface{} {
+func (e *ExecutableUnknownTask) QueueID() any {
 	return unknownTaskID
 }
 
 func (e *ExecutableUnknownTask) Execute() error {
+	e.MarkExecutionStart()
 	return serviceerror.NewInvalidArgument(
 		fmt.Sprintf("unknown task, ID: %v, task: %v", e.TaskID(), e.task),
 	)
 }
 
 func (e *ExecutableUnknownTask) HandleErr(err error) error {
+	metrics.ReplicationTasksErrorByType.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(metrics.UnknownTaskScope),
+		metrics.NamespaceUnknownTag(),
+		metrics.ServiceErrorTypeTag(err),
+	)
 	return err
 }
 

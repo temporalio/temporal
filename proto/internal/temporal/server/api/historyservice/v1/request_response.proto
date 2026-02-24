@@ -58,6 +58,8 @@ message RoutingOptions {
     string task_token = 6;
     // Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
     string task_infos = 7;
+    // Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
+    string chasm_component_ref = 8;
 }
 
 message StartWorkflowExecutionRequest {
@@ -91,6 +93,12 @@ message StartWorkflowExecutionRequest {
     bool child_workflow_only = 14;
     // If present, the new workflow should start on this version with pinned base behavior.
     temporal.api.deployment.v1.WorkerDeploymentVersion inherited_pinned_version = 15;
+    // Passes deployment version and revision number from a parent/previous workflow with AutoUpgrade behavior
+    // to its child/continued-as-new workflow. The first workflow task of the child/CAN workflow is dispatched to
+    // either this deployment version or the current version of the task queue, depending on which is the more recent version.
+    // After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
+    // subsequent workflow tasks.
+    temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
 }
 
 message StartWorkflowExecutionResponse {
@@ -146,6 +154,9 @@ message GetMutableStateResponse {
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
+    // Transient or speculative workflow task events which are not yet persisted in the history.
+    // These events should be appended to the history when it is returned to the worker.
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
 }
 
 message PollMutableStateRequest {
@@ -234,6 +245,15 @@ message RecordWorkflowTaskStartedRequest {
     temporal.api.deployment.v1.Deployment scheduled_deployment = 9;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 10;
+    // Stamp value from when the workflow task was scheduled. Used to validate the task is still relevant.
+    int32 stamp = 11;
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
+    // that may arise due to stale routing configs in task queue partitions.
+    int64 task_dispatch_revision_number = 12;
+    // Target worker deployment version according to matching when starting the task.
+    // Computed after matching with a poller, right before calling RecordWorkflowTaskStarted.
+    // Sent only if the target version is different from the poller's version.
+    temporal.api.deployment.v1.WorkerDeploymentVersion target_deployment_version = 13;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -256,13 +276,41 @@ message RecordWorkflowTaskStartedResponse {
     int64 version = 17;
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
-    temporal.api.history.v1.History raw_history = 20;
+    // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+    // instead of a proto-decoded History. This avoids matching service having to decode history.
+    // TODO: PRATHYUSH
+    // DEPRECATION PLAN:
+    // Two dynamic config flags control the raw history optimization:
+    // - history.sendRawHistoryBetweenInternalServices: enables raw history (uses field 18 when OFF, field 20/21 when ON)
+    // - history.sendRawHistoryBytesToMatchingService: selects field 20 (OFF) vs field 21 (ON)
+    //
+    // Version timeline (current version: v1.29):
+    // - v1.31: This change is released. Both flags default to false for backward compatibility.
+    // - v1.32: Both flags will be enabled by default in code.
+    // - v1.33: raw_history (field 20) and history (field 18) will be deprecated and removed,
+    //          as raw_history_bytes (field 21) will be the only field used.
+    temporal.api.history.v1.History raw_history = 20 [deprecated = true];
+    repeated bytes raw_history_bytes = 21;
 }
 
-// RecordWorkflowTaskStartedResponseWithRawHistory should be wire compatible with RecordWorkflowTaskStartedResponse.
-// The only difference is that RecordWorkflowTaskStartedResponseWithRawHistory has a `history` field that contains the
-// raw history batches. RecordWorkflowTaskStartedResponseWithRawHistory will be returned by history service.
-// History client will deserialize this message to RecordWorkflowTaskStartedResponse.
+// RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
+//
+// WIRE COMPATIBILITY PATTERN:
+// This message uses the same field numbers as RecordWorkflowTaskStartedResponse (1-19 are identical),
+// but fields 20 and 21 differ in type:
+// - Field 20: `repeated bytes raw_history` (deprecated) vs `History raw_history` (deprecated)
+// - Field 21: `repeated bytes raw_history_bytes` (same in both)
+//
+// This enables the following optimization when SendRawHistoryBetweenInternalServices is enabled:
+// 1. History service serializes raw_history_bytes as [][]byte (raw proto-encoded history batches)
+// 2. History client receives raw bytes and deserializes as RecordWorkflowTaskStartedResponse
+// 3. Matching service passes these raw bytes through to frontend without deserializing
+// 4. Frontend client deserializes the final response with History field populated
+//
+// This pattern avoids deserialization in matching service, reducing CPU usage.
+//
+// IMPORTANT: Field numbers and all other fields must remain identical between these two messages.
+// Any change to RecordWorkflowTaskStartedResponse must be mirrored here.
 message RecordWorkflowTaskStartedResponseWithRawHistory {
     temporal.api.common.v1.WorkflowType workflow_type = 1;
     int64 previous_started_event_id = 2;
@@ -283,11 +331,14 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
     int64 version = 17;
     temporal.api.history.v1.History history = 18;
     bytes next_page_token = 19;
-    repeated bytes raw_history = 20;
+    // Deprecated: This field is being replaced by raw_history_bytes which sends raw bytes
+    // instead of a proto-decoded History. This avoids matching service having to decode history.
+    repeated bytes raw_history = 20 [deprecated = true];
+    repeated bytes raw_history_bytes = 21;
 }
 
 message RecordActivityTaskStartedRequest {
-    option (routing).workflow_id = "workflow_execution.workflow_id";
+    option (routing).custom = true;
 
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
@@ -307,6 +358,13 @@ message RecordActivityTaskStartedRequest {
     reserved 11;
     // Versioning directive that was sent by history when scheduling the task.
     temporal.server.api.taskqueue.v1.TaskVersionDirective version_directive = 12;
+    // Revision number that was sent by matching when the task was dispatched. Used to resolve eventual consistency issues
+    // that may arise due to stale routing configs in task queue partitions.
+    int64 task_dispatch_revision_number = 13;
+    // Reference to the Chasm component for activity execution (if applicable). For standalone activities, all necessary
+    // start information is carried within this component, obviating the need to use the fields that apply to embedded
+    // activities with the exception of version_directive.
+    bytes component_ref = 14;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -322,6 +380,8 @@ message RecordActivityTaskStartedResponse {
     temporal.api.common.v1.Priority priority = 10;
     temporal.api.common.v1.RetryPolicy retry_policy = 11;
     int64 start_version = 12;
+    // ID of the activity run (applicable for standalone activities only)
+    string activity_run_id = 13;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -355,6 +415,7 @@ message IsWorkflowTaskValidRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.server.api.clock.v1.VectorClock clock = 3;
     int64 scheduled_event_id = 4;
+    int32 stamp = 5;
 }
 
 message IsWorkflowTaskValidResponse {
@@ -412,6 +473,8 @@ message IsActivityTaskValidRequest {
     temporal.api.common.v1.WorkflowExecution execution = 2;
     temporal.server.api.clock.v1.VectorClock clock = 3;
     int64 scheduled_event_id = 4;
+    // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
+    int32 stamp = 5;
 }
 
 message IsActivityTaskValidResponse {
@@ -606,6 +669,8 @@ message ReplicateWorkflowStateRequest {
     temporal.server.api.persistence.v1.WorkflowMutableState workflow_state = 1;
     string remote_cluster = 2;
     string namespace_id= 3;
+    bool is_force_replication = 4;
+    bool is_close_transfer_task_acked = 5;
 }
 
 message ReplicateWorkflowStateResponse {
@@ -714,12 +779,14 @@ message DescribeMutableStateRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     bool skip_force_reload = 3;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 4;
 }
 
 message DescribeMutableStateResponse {
     // CacheMutableState is only available when mutable state is in cache.
     temporal.server.api.persistence.v1.WorkflowMutableState cache_mutable_state = 1;
-    // DatabaseMutableState is always available, 
+    // DatabaseMutableState is always available,
     // but only loaded from database when mutable state is NOT in cache or skip_force_reload is false.
     temporal.server.api.persistence.v1.WorkflowMutableState database_mutable_state = 2;
 }
@@ -867,6 +934,8 @@ message RefreshWorkflowTasksRequest {
     option (routing).workflow_id = "request.execution.workflow_id";
 
     string namespace_id = 1;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 3;
     temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest request = 2;
 }
 
@@ -879,6 +948,8 @@ message GenerateLastHistoryReplicationTasksRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     repeated string target_clusters = 3;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 4;
 }
 
 message GenerateLastHistoryReplicationTasksResponse {
@@ -1055,6 +1126,8 @@ message ForceDeleteWorkflowExecutionRequest {
     option (routing).workflow_id = "request.execution.workflow_id";
 
     string namespace_id = 1;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 3;
     temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest request = 2;
 }
 
@@ -1143,12 +1216,8 @@ message ListTasksResponse {
 }
 
 message CompleteNexusOperationChasmRequest {
-    option (routing) = {
-        namespace_id: "completion.component_ref.namespace_id"
-        // TODO - fix after merge
-        // business_id: "completion.component_ref.business_id"
-        workflow_id: "completion.component_ref.business_id"
-    };
+    option (routing).chasm_component_ref = "completion.component_ref";
+
     // Completion token - holds information for locating an entity and the corresponding component.
     temporal.server.api.token.v1.NexusOperationCompletion completion = 1;
     oneof outcome {
@@ -1237,6 +1306,8 @@ message SyncWorkflowStateRequest {
     temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 3;
     temporal.server.api.history.v1.VersionHistories version_histories = 4;
     int32 target_cluster_id = 5;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 6;
 }
 
 message SyncWorkflowStateResponse {
@@ -1310,4 +1381,50 @@ message UpdateWorkflowExecutionOptionsRequest {
 message UpdateWorkflowExecutionOptionsResponse {
     // Workflow Execution options after update.
     temporal.api.workflow.v1.WorkflowExecutionOptions workflow_execution_options = 1;
+}
+
+message PauseWorkflowExecutionRequest {
+    option (routing).workflow_id = "pause_request.workflow_id";
+
+    // Namespace ID of the workflow which is being paused
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.PauseWorkflowExecutionRequest pause_request = 2;
+}
+
+message PauseWorkflowExecutionResponse { }
+
+message UnpauseWorkflowExecutionRequest {
+    option (routing).workflow_id = "unpause_request.workflow_id";
+
+    // Namespace ID of the workflow which is being unpaused
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.UnpauseWorkflowExecutionRequest unpause_request = 2;
+}
+
+message UnpauseWorkflowExecutionResponse { }
+
+message StartNexusOperationRequest {
+    option (routing).shard_id = "shard_id";
+
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    temporal.api.nexus.v1.StartOperationRequest request = 3;
+}
+
+message StartNexusOperationResponse {
+    temporal.api.nexus.v1.StartOperationResponse response = 1;
+}
+
+message CancelNexusOperationRequest {
+    option (routing).shard_id = "shard_id";
+
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    temporal.api.nexus.v1.CancelOperationRequest request = 3;
+}
+
+message CancelNexusOperationResponse {
+    temporal.api.nexus.v1.CancelOperationResponse response = 1;
 }

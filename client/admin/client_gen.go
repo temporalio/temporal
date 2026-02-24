@@ -329,6 +329,16 @@ func (c *clientImpl) MergeDLQTasks(
 	return c.client.MergeDLQTasks(ctx, request, opts...)
 }
 
+func (c *clientImpl) MigrateSchedule(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MigrateScheduleResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.MigrateSchedule(ctx, request, opts...)
+}
+
 func (c *clientImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,
@@ -417,6 +427,16 @@ func (c *clientImpl) ResendReplicationTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.ResendReplicationTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) StartAdminBatchOperation(
+	ctx context.Context,
+	request *adminservice.StartAdminBatchOperationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.StartAdminBatchOperationResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.StartAdminBatchOperation(ctx, request, opts...)
 }
 
 func (c *clientImpl) SyncWorkflowState(

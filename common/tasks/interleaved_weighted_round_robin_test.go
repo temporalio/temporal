@@ -280,9 +280,9 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 		testWaitGroup.Done()
 	}).AnyTimes()
 
-	for i := 0; i < numSubmitter; i++ {
+	for range numSubmitter {
 		channel := make(chan *testTask, numTasks)
-		for j := 0; j < numTasks; j++ {
+		for range numTasks {
 			channel <- newTestTask(s.controller, rand.Intn(4))
 		}
 		close(channel)
@@ -550,7 +550,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestInactiveChannelDeletio
 	mockTask2 := newTestTask(s.controller, 2)
 	mockTask3 := newTestTask(s.controller, 3)
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		taskWG.Add(1)
 		s.scheduler.Submit(mockTask0)
 		taskWG.Wait()

@@ -3,7 +3,7 @@ package pauseactivity
 import (
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -81,7 +81,7 @@ func (s *pauseActivitySuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
 		VersionHistories:                 versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
-		FirstExecutionRunId:              uuid.New(),
+		FirstExecutionRunId:              uuid.NewString(),
 		WorkflowExecutionTimerTaskStatus: workflow.TimerTaskStatusCreated,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()

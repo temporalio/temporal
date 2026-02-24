@@ -3,7 +3,7 @@ package batcher
 import (
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
@@ -37,13 +37,6 @@ func (s *batcherSuite) TearDownTest() {
 	s.env.AssertExpectations(s.T())
 }
 
-func (s *batcherSuite) TestBatchWorkflow_MissingParams_Protobuf() {
-	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{})
-	err := s.env.GetWorkflowError()
-	s.Require().Error(err)
-	s.Contains(err.Error(), "must provide required parameters")
-}
-
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	var ac *activities
 	s.env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).Return(HeartBeatDetails{
@@ -51,9 +44,9 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 		ErrorCount:   27,
 	}, nil)
 	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
-		memo, ok := args.Get(0).(map[string]interface{})
+		memo, ok := args.Get(0).(map[string]any)
 		s.Require().True(ok)
-		s.Equal(map[string]interface{}{
+		s.Equal(map[string]any{
 			"batch_operation_stats": BatchOperationStats{
 				NumSuccess: 42,
 				NumFailure: 27,
@@ -62,7 +55,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
-			JobId: uuid.New(),
+			JobId: uuid.NewString(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
@@ -83,9 +76,9 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 		ErrorCount:   27,
 	}, nil)
 	s.env.OnUpsertMemo(mock.Anything).Run(func(args mock.Arguments) {
-		memo, ok := args.Get(0).(map[string]interface{})
+		memo, ok := args.Get(0).(map[string]any)
 		s.Require().True(ok)
-		s.Equal(map[string]interface{}{
+		s.Equal(map[string]any{
 			"batch_operation_stats": BatchOperationStats{
 				NumSuccess: 42,
 				NumFailure: 27,
@@ -94,14 +87,14 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	}).Once()
 	s.env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
 		Request: &workflowservice.StartBatchOperationRequest{
-			JobId: uuid.New(),
+			JobId: uuid.NewString(),
 			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
 				TerminationOperation: &batchpb.BatchOperationTermination{},
 			},
 			Executions: []*commonpb.WorkflowExecution{
 				{
-					WorkflowId: uuid.New(),
-					RunId:      uuid.New(),
+					WorkflowId: uuid.NewString(),
+					RunId:      uuid.NewString(),
 				},
 			},
 			Reason:    "test-reason",

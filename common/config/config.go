@@ -590,7 +590,7 @@ type (
 		// namespace.
 		// If any type is not specified, it will pre-allocate the default number of custom search
 		// attributes for the type defined in the map defaultNumDbCustomSearchAttributes in
-		// common/searchattribute/defs.go.
+		// common/searchattribute/sadefs.go.
 		// Modifying the number of pre-allocated custom search attributes:
 		// - if you increase a number, it will pre-allocate additional custom search attributes to match
 		//   the desired number;

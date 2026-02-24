@@ -56,6 +56,7 @@ type (
 		Serializer           serialization.Serializer
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
+		ChasmRegistry        *chasm.Registry
 	}
 
 	QueueFactoryBase struct {

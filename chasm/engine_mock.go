@@ -40,32 +40,23 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
 }
 
-// NewEntity mocks base method.
-func (m *MockEngine) NewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 ...TransitionOption) (EntityKey, []byte, error) {
+// NotifyExecution mocks base method.
+func (m *MockEngine) NotifyExecution(arg0 ExecutionKey) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1, arg2}
-	for _, a := range arg3 {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "NewEntity", varargs...)
-	ret0, _ := ret[0].(EntityKey)
-	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	m.ctrl.Call(m, "NotifyExecution", arg0)
 }
 
-// NewEntity indicates an expected call of NewEntity.
-func (mr *MockEngineMockRecorder) NewEntity(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
+// NotifyExecution indicates an expected call of NotifyExecution.
+func (mr *MockEngineMockRecorder) NotifyExecution(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1, arg2}, arg3...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewEntity", reflect.TypeOf((*MockEngine)(nil).NewEntity), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyExecution", reflect.TypeOf((*MockEngine)(nil).NotifyExecution), arg0)
 }
 
 // PollComponent mocks base method.
-func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) (any, bool, error), arg3 func(MutableContext, Component, any) error, arg4 ...TransitionOption) ([]byte, error) {
+func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component, *Registry) (bool, error), arg3 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()
-	varargs := []any{arg0, arg1, arg2, arg3}
-	for _, a := range arg4 {
+	varargs := []any{arg0, arg1, arg2}
+	for _, a := range arg3 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PollComponent", varargs...)
@@ -75,14 +66,14 @@ func (m *MockEngine) PollComponent(arg0 context.Context, arg1 ComponentRef, arg2
 }
 
 // PollComponent indicates an expected call of PollComponent.
-func (mr *MockEngineMockRecorder) PollComponent(arg0, arg1, arg2, arg3 any, arg4 ...any) *gomock.Call {
+func (mr *MockEngineMockRecorder) PollComponent(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{arg0, arg1, arg2, arg3}, arg4...)
+	varargs := append([]any{arg0, arg1, arg2}, arg3...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollComponent", reflect.TypeOf((*MockEngine)(nil).PollComponent), varargs...)
 }
 
 // ReadComponent mocks base method.
-func (m *MockEngine) ReadComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component) error, arg3 ...TransitionOption) error {
+func (m *MockEngine) ReadComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(Context, Component, *Registry) error, arg3 ...TransitionOption) error {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -100,8 +91,28 @@ func (mr *MockEngineMockRecorder) ReadComponent(arg0, arg1, arg2 any, arg3 ...an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadComponent", reflect.TypeOf((*MockEngine)(nil).ReadComponent), varargs...)
 }
 
+// StartExecution mocks base method.
+func (m *MockEngine) StartExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, ArchetypeID, *Registry) (RootComponent, error), arg3 ...TransitionOption) (StartExecutionResult, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{arg0, arg1, arg2}
+	for _, a := range arg3 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StartExecution", varargs...)
+	ret0, _ := ret[0].(StartExecutionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StartExecution indicates an expected call of StartExecution.
+func (mr *MockEngineMockRecorder) StartExecution(arg0, arg1, arg2 any, arg3 ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{arg0, arg1, arg2}, arg3...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartExecution", reflect.TypeOf((*MockEngine)(nil).StartExecution), varargs...)
+}
+
 // UpdateComponent mocks base method.
-func (m *MockEngine) UpdateComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, Component) error, arg3 ...TransitionOption) ([]byte, error) {
+func (m *MockEngine) UpdateComponent(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, Component, *Registry) error, arg3 ...TransitionOption) ([]byte, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2}
 	for _, a := range arg3 {
@@ -120,23 +131,22 @@ func (mr *MockEngineMockRecorder) UpdateComponent(arg0, arg1, arg2 any, arg3 ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateComponent", reflect.TypeOf((*MockEngine)(nil).UpdateComponent), varargs...)
 }
 
-// UpdateWithNewEntity mocks base method.
-func (m *MockEngine) UpdateWithNewEntity(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext) (Component, error), arg3 func(MutableContext, Component) error, arg4 ...TransitionOption) (EntityKey, []byte, error) {
+// UpdateWithStartExecution mocks base method.
+func (m *MockEngine) UpdateWithStartExecution(arg0 context.Context, arg1 ComponentRef, arg2 func(MutableContext, ArchetypeID, *Registry) (RootComponent, error), arg3 func(MutableContext, Component, *Registry) error, arg4 ...TransitionOption) (EngineUpdateWithStartExecutionResult, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{arg0, arg1, arg2, arg3}
 	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "UpdateWithNewEntity", varargs...)
-	ret0, _ := ret[0].(EntityKey)
-	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret := m.ctrl.Call(m, "UpdateWithStartExecution", varargs...)
+	ret0, _ := ret[0].(EngineUpdateWithStartExecutionResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
-// UpdateWithNewEntity indicates an expected call of UpdateWithNewEntity.
-func (mr *MockEngineMockRecorder) UpdateWithNewEntity(arg0, arg1, arg2, arg3 any, arg4 ...any) *gomock.Call {
+// UpdateWithStartExecution indicates an expected call of UpdateWithStartExecution.
+func (mr *MockEngineMockRecorder) UpdateWithStartExecution(arg0, arg1, arg2, arg3 any, arg4 ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{arg0, arg1, arg2, arg3}, arg4...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithNewEntity", reflect.TypeOf((*MockEngine)(nil).UpdateWithNewEntity), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithStartExecution", reflect.TypeOf((*MockEngine)(nil).UpdateWithStartExecution), varargs...)
 }

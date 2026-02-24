@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -16,12 +16,14 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protomock"
@@ -50,17 +52,17 @@ type (
 )
 
 var (
-	treeID1 = primitives.MustValidateUUID(uuid.New())
-	treeID2 = primitives.MustValidateUUID(uuid.New())
-	treeID3 = primitives.MustValidateUUID(uuid.New())
-	treeID4 = primitives.MustValidateUUID(uuid.New())
-	treeID5 = primitives.MustValidateUUID(uuid.New())
+	treeID1 = primitives.MustValidateUUID(uuid.NewString())
+	treeID2 = primitives.MustValidateUUID(uuid.NewString())
+	treeID3 = primitives.MustValidateUUID(uuid.NewString())
+	treeID4 = primitives.MustValidateUUID(uuid.NewString())
+	treeID5 = primitives.MustValidateUUID(uuid.NewString())
 
-	branchID1 = primitives.MustValidateUUID(uuid.New())
-	branchID2 = primitives.MustValidateUUID(uuid.New())
-	branchID3 = primitives.MustValidateUUID(uuid.New())
-	branchID4 = primitives.MustValidateUUID(uuid.New())
-	branchID5 = primitives.MustValidateUUID(uuid.New())
+	branchID1 = primitives.MustValidateUUID(uuid.NewString())
+	branchID2 = primitives.MustValidateUUID(uuid.NewString())
+	branchID3 = primitives.MustValidateUUID(uuid.NewString())
+	branchID4 = primitives.MustValidateUUID(uuid.NewString())
+	branchID5 = primitives.MustValidateUUID(uuid.NewString())
 )
 
 func TestScavengerTestSuite(t *testing.T) {
@@ -102,8 +104,10 @@ func (s *ScavengerTestSuite) createTestScavenger(
 		enableRetentionVerification,
 		s.metricHandler,
 		s.logger,
+		serialization.NewSerializer(),
 	)
 	s.scavenger.isInTest = true
+	s.historyBranchUtil = *persistence.NewHistoryBranchUtil(serialization.NewSerializer())
 }
 
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
@@ -291,6 +295,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(ms, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
@@ -298,6 +303,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(ms, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
@@ -305,6 +311,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(ms, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
@@ -312,6 +319,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(ms, nil)
 
 	hbd, err := s.scavenger.Run(context.Background())
@@ -377,6 +385,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(nil, serviceerror.NewNotFound(""))
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
@@ -384,6 +393,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(nil, serviceerror.NewNotFound(""))
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
@@ -391,6 +401,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(nil, serviceerror.NewNotFound(""))
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
@@ -398,26 +409,27 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(nil, serviceerror.NewNotFound(""))
-	branchToken1, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID1, &branchID1, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
+	branchToken1, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID1, &branchID1, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	})).Return(nil)
-	branchToken2, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID2, &branchID2, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
+	branchToken2, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID2, &branchID2, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	})).Return(nil)
-	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID3, &branchID3, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
+	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID3, &branchID3, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	})).Return(nil)
-	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID4, &branchID4, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
+	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID4, &branchID4, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -515,6 +527,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(nil, serviceerror.NewNotFound(""))
 
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
@@ -523,6 +536,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(nil, serviceerror.NewNotFound(""))
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID5",
@@ -530,16 +544,17 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 			WorkflowId: "workflowID5",
 			RunId:      "runID5",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(ms, nil)
 
-	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID3, &branchID3, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
+	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID3, &branchID3, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	})).Return(nil)
 
-	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.New(), uuid.New(), uuid.New(), treeID4, &branchID4, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
+	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID4, &branchID4, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
@@ -672,6 +687,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID1",
 			RunId:      "runID1",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(workflowInRetention, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID2",
@@ -679,6 +695,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(workflowPastRetention2, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID3",
@@ -686,6 +703,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID3",
 			RunId:      "runID3",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(workflowInRetention, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID4",
@@ -693,6 +711,7 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(workflowPastRetention4, nil)
 	s.mockHistoryClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&historyservice.DescribeMutableStateRequest{
 		NamespaceId: "namespaceID5",
@@ -700,18 +719,21 @@ func (s *ScavengerTestSuite) TestDeleteWorkflowAfterRetention() {
 			WorkflowId: "workflowID5",
 			RunId:      "runID5",
 		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
 	})).Return(runningWorkflow5, nil)
 	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), protomock.Eq(&adminservice.DeleteWorkflowExecutionRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID2",
 			RunId:      "runID2",
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})).Return(nil, nil).Times(1)
 	s.mockAdminClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), protomock.Eq(&adminservice.DeleteWorkflowExecutionRequest{
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: "workflowID4",
 			RunId:      "runID4",
 		},
+		Archetype: chasm.WorkflowArchetype,
 	})).Return(nil, nil).Times(1)
 
 	hbd, err := s.scavenger.Run(context.Background())

@@ -184,11 +184,6 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
 			return NewStreamError("StreamSender detected tiered stack change, restart the stream", nil)
 		}
-		select {
-		case s.recvSignalChan <- struct{}{}:
-		default:
-			// signal channel is full. Continue
-		}
 
 		req, err := s.server.Recv()
 		if err != nil {
@@ -207,6 +202,12 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 			)
 		default:
 			return fmt.Errorf("streamSender unable to handle request: %w, taskAttr: %v", err, attr)
+		}
+
+		select {
+		case s.recvSignalChan <- struct{}{}:
+		default:
+			// signal channel is full. Continue
 		}
 	}
 	return nil
@@ -691,7 +692,7 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 
 	if namespaceEntry != nil {
 	FilterLoop:
-		for _, targetCluster := range namespaceEntry.ClusterNames() {
+		for _, targetCluster := range namespaceEntry.ClusterNames(item.GetWorkflowID()) {
 			if s.clientClusterName == targetCluster {
 				shouldProcessTask = true
 				break FilterLoop

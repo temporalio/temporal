@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -341,6 +342,8 @@ type (
 		PreviousRunID            string
 		PreviousLastWriteVersion int64
 
+		ArchetypeID chasm.ArchetypeID
+
 		NewWorkflowSnapshot  InternalWorkflowSnapshot
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 	}
@@ -356,6 +359,8 @@ type (
 
 		Mode UpdateWorkflowMode
 
+		ArchetypeID chasm.ArchetypeID
+
 		UpdateWorkflowMutation  InternalWorkflowMutation
 		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
 		NewWorkflowSnapshot     *InternalWorkflowSnapshot
@@ -368,6 +373,8 @@ type (
 		RangeID int64
 
 		Mode ConflictResolveWorkflowMode
+
+		ArchetypeID chasm.ArchetypeID
 
 		// workflow to be resetted
 		ResetWorkflowSnapshot        InternalWorkflowSnapshot
@@ -383,6 +390,8 @@ type (
 	InternalSetWorkflowExecutionRequest struct {
 		ShardID int32
 		RangeID int64
+
+		ArchetypeID chasm.ArchetypeID
 
 		SetWorkflowSnapshot InternalWorkflowSnapshot
 	}
@@ -416,6 +425,7 @@ type (
 
 		NamespaceID string
 		WorkflowID  string
+		ArchetypeID chasm.ArchetypeID
 
 		Tasks map[tasks.Category][]InternalHistoryTask `json:",omitempty"`
 	}

@@ -17,6 +17,7 @@ type (
 	transactionMgrForNewWorkflow interface {
 		dispatchForNewWorkflow(
 			ctx context.Context,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 		) error
 	}
@@ -45,6 +46,7 @@ func newTransactionMgrForNewWorkflow(
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 ) error {
 
@@ -62,6 +64,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
+		archetypeID,
 	)
 	if err != nil {
 		// error out or workflow already created
@@ -87,7 +90,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 		namespaceID,
 		workflowID,
 		currentRunID,
-		chasm.ArchetypeAny,
+		archetypeID,
 	)
 	if err != nil {
 		return err
@@ -136,6 +139,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 ) error {
 
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := targetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
+		ctx,
 		historyi.TransactionPolicyPassive,
 	)
 	if err != nil {
@@ -204,6 +208,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	eventReapplyCandidates := ms.GetReapplyCandidateEvents()
 	targetWorkflowSnapshot, targetWorkflowEventsSeq, err := ms.CloseTransactionAsSnapshot(
+		ctx,
 		targetWorkflowPolicy,
 	)
 	if err != nil {

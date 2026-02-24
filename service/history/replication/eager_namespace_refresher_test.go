@@ -113,7 +113,9 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 	}).Return(nsResponse, nil)
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, serviceerror.NewNamespaceNotFound("namespace not found")).Times(1)
-	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(fromAdminClientApiResponse(nsResponse), nil).Times(1)
+	nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
+	s.NoError(err)
+	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(nsFromResponse, nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())
@@ -154,7 +156,9 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Update
 	}
 	s.mockReplicationTaskExecutor.EXPECT().Execute(gomock.Any(), task).Return(nil).Times(1)
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespaceId).Return(nil, nil).Times(1)
-	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(fromAdminClientApiResponse(nsResponse), nil).Times(1)
+	nsFromResponse, err := fromAdminClientAPIResponse(nsResponse)
+	s.NoError(err)
+	s.mockNamespaceRegistry.EXPECT().RefreshNamespaceById(namespaceId).Return(nsFromResponse, nil).Times(1)
 	ns, err := s.eagerNamespaceRefresher.SyncNamespaceFromSourceCluster(context.Background(), namespaceId, "currentCluster")
 	s.Nil(err)
 	s.Equal(namespaceId, ns.ID())
@@ -243,7 +247,7 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Namesp
 	s.IsType(&serviceerror.FailedPrecondition{}, err)
 }
 
-func fromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *namespace.Namespace {
+func fromAdminClientAPIResponse(response *adminservice.GetNamespaceResponse) (*namespace.Namespace, error) {
 	info := &persistencespb.NamespaceInfo{
 		Id:          response.GetInfo().GetId(),
 		Name:        response.GetInfo().GetName(),
@@ -267,13 +271,17 @@ func fromAdminClientApiResponse(response *adminservice.GetNamespaceResponse) *na
 		FailoverHistory:   nsreplication.ConvertFailoverHistoryToPersistenceProto(response.GetFailoverHistory()),
 	}
 
-	return namespace.FromPersistentState(
-		&persistencespb.NamespaceDetail{
-			Info:              info,
-			Config:            config,
-			ReplicationConfig: replicationConfig,
-			ConfigVersion:     response.ConfigVersion,
-			FailoverVersion:   response.GetFailoverVersion(),
-		},
+	factory := namespace.NewDefaultReplicationResolverFactory()
+	detail := &persistencespb.NamespaceDetail{
+		Info:              info,
+		Config:            config,
+		ReplicationConfig: replicationConfig,
+		ConfigVersion:     response.ConfigVersion,
+		FailoverVersion:   response.GetFailoverVersion(),
+	}
+	ns, err := namespace.FromPersistentState(
+		detail,
+		factory(detail),
 		namespace.WithGlobalFlag(response.IsGlobalNamespace))
+	return ns, err
 }

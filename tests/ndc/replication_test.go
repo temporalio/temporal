@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
@@ -17,8 +17,8 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 	s.T().SkipNow()
 
 	var shardID int32 = 1
-	workflowID := "replication-message-dlq-test" + uuid.New()
-	runID := uuid.New()
+	workflowID := "replication-message-dlq-test" + uuid.NewString()
+	runID := uuid.NewString()
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 
@@ -56,7 +56,7 @@ func (s *NDCFunctionalTestSuite) TestReplicationMessageDLQ() {
 	// Applying replication messages through fetcher is Async.
 	// So we need to retry a couple of times.
 Loop:
-	for i := 0; i < 60; i++ {
+	for range 60 {
 		time.Sleep(time.Second)
 
 		actualDLQMsgs := map[int64]bool{}

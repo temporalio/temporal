@@ -2,6 +2,7 @@ package metricstest
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -45,6 +46,7 @@ type CaptureHandler struct {
 	tags         []metrics.Tag
 	captures     map[*Capture]struct{}
 	capturesLock *sync.RWMutex
+	captureCount *atomic.Int32
 }
 
 var _ metrics.Handler = (*CaptureHandler)(nil)
@@ -54,6 +56,7 @@ func NewCaptureHandler() *CaptureHandler {
 	return &CaptureHandler{
 		captures:     map[*Capture]struct{}{},
 		capturesLock: &sync.RWMutex{},
+		captureCount: &atomic.Int32{},
 	}
 }
 
@@ -63,7 +66,9 @@ func (c *CaptureHandler) StartCapture() *Capture {
 	capture := &Capture{recordings: map[string][]*CapturedRecording{}}
 	c.capturesLock.Lock()
 	defer c.capturesLock.Unlock()
+
 	c.captures[capture] = struct{}{}
+	c.captureCount.Add(1)
 	return capture
 }
 
@@ -71,7 +76,9 @@ func (c *CaptureHandler) StartCapture() *Capture {
 func (c *CaptureHandler) StopCapture(capture *Capture) {
 	c.capturesLock.Lock()
 	defer c.capturesLock.Unlock()
+
 	delete(c.captures, capture)
+	c.captureCount.Add(-1)
 }
 
 // WithTags implements [metrics.Handler.WithTags].
@@ -80,10 +87,16 @@ func (c *CaptureHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
 		tags:         append(append(make([]metrics.Tag, 0, len(c.tags)+len(tags)), c.tags...), tags...),
 		captures:     c.captures,
 		capturesLock: c.capturesLock,
+		captureCount: c.captureCount,
 	}
 }
 
 func (c *CaptureHandler) record(name string, v any, unit metrics.MetricUnit, tags ...metrics.Tag) {
+	// If no captures are active, discard the metric to save memory.
+	if c.captureCount.Load() == 0 {
+		return
+	}
+
 	rec := &CapturedRecording{Value: v, Tags: make(map[string]string, len(c.tags)+len(tags)), Unit: unit}
 	for _, tag := range c.tags {
 		rec.Tags[tag.Key] = tag.Value
@@ -93,8 +106,8 @@ func (c *CaptureHandler) record(name string, v any, unit metrics.MetricUnit, tag
 	}
 	c.capturesLock.RLock()
 	defer c.capturesLock.RUnlock()
-	for c := range c.captures {
-		c.record(name, rec)
+	for cap := range c.captures {
+		cap.record(name, rec)
 	}
 }
 

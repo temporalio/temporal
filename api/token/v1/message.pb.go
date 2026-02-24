@@ -27,18 +27,17 @@ const (
 )
 
 type HistoryContinuation struct {
-	state                 protoimpl.MessageState        `protogen:"open.v1"`
-	RunId                 string                        `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	FirstEventId          int64                         `protobuf:"varint,2,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
-	NextEventId           int64                         `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	IsWorkflowRunning     bool                          `protobuf:"varint,5,opt,name=is_workflow_running,json=isWorkflowRunning,proto3" json:"is_workflow_running,omitempty"`
-	PersistenceToken      []byte                        `protobuf:"bytes,6,opt,name=persistence_token,json=persistenceToken,proto3" json:"persistence_token,omitempty"`
-	TransientWorkflowTask *v1.TransientWorkflowTaskInfo `protobuf:"bytes,7,opt,name=transient_workflow_task,json=transientWorkflowTask,proto3" json:"transient_workflow_task,omitempty"`
-	BranchToken           []byte                        `protobuf:"bytes,8,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
-	VersionHistoryItem    *v1.VersionHistoryItem        `protobuf:"bytes,10,opt,name=version_history_item,json=versionHistoryItem,proto3" json:"version_history_item,omitempty"`
-	VersionedTransition   *v11.VersionedTransition      `protobuf:"bytes,11,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	state               protoimpl.MessageState   `protogen:"open.v1"`
+	RunId               string                   `protobuf:"bytes,1,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	FirstEventId        int64                    `protobuf:"varint,2,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
+	NextEventId         int64                    `protobuf:"varint,3,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
+	IsWorkflowRunning   bool                     `protobuf:"varint,5,opt,name=is_workflow_running,json=isWorkflowRunning,proto3" json:"is_workflow_running,omitempty"`
+	PersistenceToken    []byte                   `protobuf:"bytes,6,opt,name=persistence_token,json=persistenceToken,proto3" json:"persistence_token,omitempty"`
+	BranchToken         []byte                   `protobuf:"bytes,8,opt,name=branch_token,json=branchToken,proto3" json:"branch_token,omitempty"`
+	VersionHistoryItem  *v1.VersionHistoryItem   `protobuf:"bytes,10,opt,name=version_history_item,json=versionHistoryItem,proto3" json:"version_history_item,omitempty"`
+	VersionedTransition *v11.VersionedTransition `protobuf:"bytes,11,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *HistoryContinuation) Reset() {
@@ -102,13 +101,6 @@ func (x *HistoryContinuation) GetIsWorkflowRunning() bool {
 func (x *HistoryContinuation) GetPersistenceToken() []byte {
 	if x != nil {
 		return x.PersistenceToken
-	}
-	return nil
-}
-
-func (x *HistoryContinuation) GetTransientWorkflowTask() *v1.TransientWorkflowTaskInfo {
-	if x != nil {
-		return x.TransientWorkflowTask
 	}
 	return nil
 }
@@ -257,8 +249,10 @@ type Task struct {
 	Version          int64                  `protobuf:"varint,11,opt,name=version,proto3" json:"version,omitempty"`
 	StartedTime      *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
 	StartVersion     int64                  `protobuf:"varint,13,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Reference to the associated Chasm component, if provided.
+	ComponentRef  []byte `protobuf:"bytes,14,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Task) Reset() {
@@ -380,6 +374,13 @@ func (x *Task) GetStartVersion() int64 {
 		return x.StartVersion
 	}
 	return 0
+}
+
+func (x *Task) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type QueryTask struct {
@@ -573,7 +574,7 @@ type NexusOperationCompletion struct {
 	// Allows completing a started operation after a workflow has been reset.
 	RequestId string `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Reference to the CHASM component to be informed of the completion.
-	ComponentRef  *v11.ChasmComponentRef `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	ComponentRef  []byte `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -643,7 +644,7 @@ func (x *NexusOperationCompletion) GetRequestId() string {
 	return ""
 }
 
-func (x *NexusOperationCompletion) GetComponentRef() *v11.ChasmComponentRef {
+func (x *NexusOperationCompletion) GetComponentRef() []byte {
 	if x != nil {
 		return x.ComponentRef
 	}
@@ -654,18 +655,17 @@ var File_temporal_server_api_token_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"*temporal/server/api/token/v1/message.proto\x12\x1ctemporal.server.api.token.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/persistence/v1/chasm.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xc1\x04\n" +
+	"*temporal/server/api/token/v1/message.proto\x12\x1ctemporal.server.api.token.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xd4\x03\n" +
 	"\x13HistoryContinuation\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12$\n" +
 	"\x0efirst_event_id\x18\x02 \x01(\x03R\ffirstEventId\x12\"\n" +
 	"\rnext_event_id\x18\x03 \x01(\x03R\vnextEventId\x12.\n" +
 	"\x13is_workflow_running\x18\x05 \x01(\bR\x11isWorkflowRunning\x12+\n" +
-	"\x11persistence_token\x18\x06 \x01(\fR\x10persistenceToken\x12q\n" +
-	"\x17transient_workflow_task\x18\a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x15transientWorkflowTask\x12!\n" +
+	"\x11persistence_token\x18\x06 \x01(\fR\x10persistenceToken\x12!\n" +
 	"\fbranch_token\x18\b \x01(\fR\vbranchToken\x12d\n" +
 	"\x14version_history_item\x18\n" +
 	" \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x12versionHistoryItem\x12j\n" +
-	"\x14versioned_transition\x18\v \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransitionJ\x04\b\t\x10\n" +
+	"\x14versioned_transition\x18\v \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransitionJ\x04\b\a\x10\bJ\x04\b\t\x10\n" +
 	"\"\xa9\x03\n" +
 	"\x16RawHistoryContinuation\x12!\n" +
 	"\fnamespace_id\x18\n" +
@@ -679,7 +679,7 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"endEventId\x12*\n" +
 	"\x11end_event_version\x18\a \x01(\x03R\x0fendEventVersion\x12+\n" +
 	"\x11persistence_token\x18\b \x01(\fR\x10persistenceToken\x12]\n" +
-	"\x11version_histories\x18\t \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesJ\x04\b\x01\x10\x02\"\xfd\x03\n" +
+	"\x11version_histories\x18\t \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistoriesJ\x04\b\x01\x10\x02\"\xa2\x04\n" +
 	"\x04Task\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -696,7 +696,8 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	" \x01(\x03R\x0estartedEventId\x12\x18\n" +
 	"\aversion\x18\v \x01(\x03R\aversion\x12=\n" +
 	"\fstarted_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12#\n" +
-	"\rstart_version\x18\r \x01(\x03R\fstartVersion\"f\n" +
+	"\rstart_version\x18\r \x01(\x03R\fstartVersion\x12#\n" +
+	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef\"f\n" +
 	"\tQueryTask\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
@@ -709,7 +710,7 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\atask_id\x18\x03 \x01(\tR\x06taskId\"R\n" +
 	"\x0fHistoryEventRef\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
-	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xb7\x02\n" +
+	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\x80\x02\n" +
 	"\x18NexusOperationCompletion\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -717,8 +718,8 @@ const file_temporal_server_api_token_v1_message_proto_rawDesc = "" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12E\n" +
 	"\x03ref\x18\x04 \x01(\v23.temporal.server.api.persistence.v1.StateMachineRefR\x03ref\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x05 \x01(\tR\trequestId\x12Z\n" +
-	"\rcomponent_ref\x18\x06 \x01(\v25.temporal.server.api.persistence.v1.ChasmComponentRefR\fcomponentRefB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
+	"request_id\x18\x05 \x01(\tR\trequestId\x12#\n" +
+	"\rcomponent_ref\x18\x06 \x01(\fR\fcomponentRefB*Z(go.temporal.io/server/api/token/v1;tokenb\x06proto3"
 
 var (
 	file_temporal_server_api_token_v1_message_proto_rawDescOnce sync.Once
@@ -734,36 +735,32 @@ func file_temporal_server_api_token_v1_message_proto_rawDescGZIP() []byte {
 
 var file_temporal_server_api_token_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_temporal_server_api_token_v1_message_proto_goTypes = []any{
-	(*HistoryContinuation)(nil),          // 0: temporal.server.api.token.v1.HistoryContinuation
-	(*RawHistoryContinuation)(nil),       // 1: temporal.server.api.token.v1.RawHistoryContinuation
-	(*Task)(nil),                         // 2: temporal.server.api.token.v1.Task
-	(*QueryTask)(nil),                    // 3: temporal.server.api.token.v1.QueryTask
-	(*NexusTask)(nil),                    // 4: temporal.server.api.token.v1.NexusTask
-	(*HistoryEventRef)(nil),              // 5: temporal.server.api.token.v1.HistoryEventRef
-	(*NexusOperationCompletion)(nil),     // 6: temporal.server.api.token.v1.NexusOperationCompletion
-	(*v1.TransientWorkflowTaskInfo)(nil), // 7: temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	(*v1.VersionHistoryItem)(nil),        // 8: temporal.server.api.history.v1.VersionHistoryItem
-	(*v11.VersionedTransition)(nil),      // 9: temporal.server.api.persistence.v1.VersionedTransition
-	(*v1.VersionHistories)(nil),          // 10: temporal.server.api.history.v1.VersionHistories
-	(*v12.VectorClock)(nil),              // 11: temporal.server.api.clock.v1.VectorClock
-	(*timestamppb.Timestamp)(nil),        // 12: google.protobuf.Timestamp
-	(*v11.StateMachineRef)(nil),          // 13: temporal.server.api.persistence.v1.StateMachineRef
-	(*v11.ChasmComponentRef)(nil),        // 14: temporal.server.api.persistence.v1.ChasmComponentRef
+	(*HistoryContinuation)(nil),      // 0: temporal.server.api.token.v1.HistoryContinuation
+	(*RawHistoryContinuation)(nil),   // 1: temporal.server.api.token.v1.RawHistoryContinuation
+	(*Task)(nil),                     // 2: temporal.server.api.token.v1.Task
+	(*QueryTask)(nil),                // 3: temporal.server.api.token.v1.QueryTask
+	(*NexusTask)(nil),                // 4: temporal.server.api.token.v1.NexusTask
+	(*HistoryEventRef)(nil),          // 5: temporal.server.api.token.v1.HistoryEventRef
+	(*NexusOperationCompletion)(nil), // 6: temporal.server.api.token.v1.NexusOperationCompletion
+	(*v1.VersionHistoryItem)(nil),    // 7: temporal.server.api.history.v1.VersionHistoryItem
+	(*v11.VersionedTransition)(nil),  // 8: temporal.server.api.persistence.v1.VersionedTransition
+	(*v1.VersionHistories)(nil),      // 9: temporal.server.api.history.v1.VersionHistories
+	(*v12.VectorClock)(nil),          // 10: temporal.server.api.clock.v1.VectorClock
+	(*timestamppb.Timestamp)(nil),    // 11: google.protobuf.Timestamp
+	(*v11.StateMachineRef)(nil),      // 12: temporal.server.api.persistence.v1.StateMachineRef
 }
 var file_temporal_server_api_token_v1_message_proto_depIdxs = []int32{
-	7,  // 0: temporal.server.api.token.v1.HistoryContinuation.transient_workflow_task:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	8,  // 1: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	9,  // 2: temporal.server.api.token.v1.HistoryContinuation.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	10, // 3: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	11, // 4: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	12, // 5: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
-	13, // 6: temporal.server.api.token.v1.NexusOperationCompletion.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
-	14, // 7: temporal.server.api.token.v1.NexusOperationCompletion.component_ref:type_name -> temporal.server.api.persistence.v1.ChasmComponentRef
-	8,  // [8:8] is the sub-list for method output_type
-	8,  // [8:8] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	7,  // 0: temporal.server.api.token.v1.HistoryContinuation.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	8,  // 1: temporal.server.api.token.v1.HistoryContinuation.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	9,  // 2: temporal.server.api.token.v1.RawHistoryContinuation.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	10, // 3: temporal.server.api.token.v1.Task.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	11, // 4: temporal.server.api.token.v1.Task.started_time:type_name -> google.protobuf.Timestamp
+	12, // 5: temporal.server.api.token.v1.NexusOperationCompletion.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	6,  // [6:6] is the sub-list for method output_type
+	6,  // [6:6] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_token_v1_message_proto_init() }

@@ -3,7 +3,9 @@
 package queues
 
 import (
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -24,6 +26,15 @@ const (
 )
 
 type (
+	// BusyWorkflowHandler is an interface for schedulers that can handle busy workflow errors
+	// by routing tasks to an ExecutionQueueScheduler.
+	BusyWorkflowHandler interface {
+		// HandleBusyWorkflow is called when a task encounters a busy workflow error.
+		// It routes the task to the ExecutionQueueScheduler for sequential processing.
+		// Returns true if the task was handled, false if the caller should handle it.
+		HandleBusyWorkflow(Executable) bool
+	}
+
 	// Scheduler is the component for scheduling and processing
 	// task executables, it's based on the common/tasks.Scheduler
 	// interface and provide the additional information of how
@@ -50,9 +61,13 @@ type (
 		ActiveNamespaceWeights         dynamicconfig.MapPropertyFnWithNamespaceFilter
 		StandbyNamespaceWeights        dynamicconfig.MapPropertyFnWithNamespaceFilter
 		InactiveNamespaceDeletionDelay dynamicconfig.DurationPropertyFn
+
+		// ExecutionAwareSchedulerOptions contains options for sequential per-workflow scheduling
+		tasks.ExecutionAwareSchedulerOptions
 	}
 
 	RateLimitedSchedulerOptions struct {
+		Enabled          dynamicconfig.BoolPropertyFn
 		EnableShadowMode dynamicconfig.BoolPropertyFn
 		StartupDelay     dynamicconfig.DurationPropertyFn
 	}
@@ -64,6 +79,10 @@ type (
 		taskChannelKeyFn      TaskChannelKeyFn
 		channelWeightFn       ChannelWeightFn
 		channelWeightUpdateCh chan struct{}
+
+		// executionAwareScheduler holds a reference to the workflow-aware scheduler
+		// for handling busy workflow errors
+		executionAwareScheduler *tasks.ExecutionAwareScheduler[Executable]
 	}
 
 	rateLimitedSchedulerImpl struct {
@@ -78,6 +97,8 @@ func NewScheduler(
 	options SchedulerOptions,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
+	timeSource clock.TimeSource,
 ) Scheduler {
 	var scheduler tasks.Scheduler[Executable]
 
@@ -113,8 +134,8 @@ func NewScheduler(
 		if !ok || weight <= 0 {
 			logger.Warn("Task priority weight not specified or is invalid, using default weight",
 				tag.TaskPriority(key.Priority.String()),
-				tag.NewInt("priority-weight", weight),
-				tag.NewInt("default-weight", configs.DefaultPriorityWeight),
+				tag.Int("priority-weight", weight),
+				tag.Int("default-weight", configs.DefaultPriorityWeight),
 			)
 			weight = configs.DefaultPriorityWeight
 		}
@@ -126,6 +147,21 @@ func NewScheduler(
 		WorkerCount: options.WorkerCount,
 	}
 
+	fifoScheduler := tasks.NewFIFOScheduler[Executable](
+		fifoSchedulerOptions,
+		logger,
+	)
+
+	// Wrap the FIFO scheduler with ExecutionAwareScheduler for sequential per-execution processing
+	executionAwareScheduler := tasks.NewExecutionAwareScheduler[Executable](
+		fifoScheduler,
+		options.ExecutionAwareSchedulerOptions,
+		executableQueueKeyFn,
+		logger,
+		metricsHandler,
+		timeSource,
+	)
+
 	scheduler = tasks.NewInterleavedWeightedRoundRobinScheduler(
 		tasks.InterleavedWeightedRoundRobinSchedulerOptions[Executable, TaskChannelKey]{
 			TaskChannelKeyFn:             taskChannelKeyFn,
@@ -133,19 +169,17 @@ func NewScheduler(
 			ChannelWeightUpdateCh:        channelWeightUpdateCh,
 			InactiveChannelDeletionDelay: options.InactiveNamespaceDeletionDelay,
 		},
-		tasks.Scheduler[Executable](tasks.NewFIFOScheduler[Executable](
-			fifoSchedulerOptions,
-			logger,
-		)),
+		executionAwareScheduler,
 		logger,
 	)
 
 	return &schedulerImpl{
-		Scheduler:             scheduler,
-		namespaceRegistry:     namespaceRegistry,
-		taskChannelKeyFn:      taskChannelKeyFn,
-		channelWeightFn:       channelWeightFn,
-		channelWeightUpdateCh: channelWeightUpdateCh,
+		Scheduler:               scheduler,
+		namespaceRegistry:       namespaceRegistry,
+		taskChannelKeyFn:        taskChannelKeyFn,
+		channelWeightFn:         channelWeightFn,
+		channelWeightUpdateCh:   channelWeightUpdateCh,
+		executionAwareScheduler: executionAwareScheduler,
 	}
 }
 
@@ -180,6 +214,13 @@ func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
 }
 
+// HandleBusyWorkflow implements BusyWorkflowHandler by delegating to the
+// underlying ExecutionAwareScheduler. This is called when a task encounters
+// a busy workflow error and needs to be routed to the sequential scheduler.
+func (s *schedulerImpl) HandleBusyWorkflow(executable Executable) bool {
+	return s.executionAwareScheduler.HandleBusyWorkflow(executable)
+}
+
 // CommonSchedulerWrapper is an adapter that converts a common [task.Scheduler] to a [Scheduler] with an injectable
 // TaskChannelKeyFn.
 type CommonSchedulerWrapper struct {
@@ -198,6 +239,7 @@ func NewRateLimitedScheduler(
 	namespaceRegistry namespace.Registry,
 	rateLimiter SchedulerRateLimiter,
 	timeSource clock.TimeSource,
+	chasmRegistry *chasm.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) Scheduler {
@@ -220,11 +262,13 @@ func NewRateLimitedScheduler(
 		if err != nil {
 			namespaceName = namespace.EmptyName
 		}
-
 		return quotas.NewRequest(e.GetType().String(), taskSchedulerToken, namespaceName.String(), e.GetPriority().CallerType(), 0, "")
 	}
 	taskMetricsTagsFn := func(e Executable) []metrics.Tag {
-		return append(estimateTaskMetricTag(e.GetTask(), namespaceRegistry, currentClusterName), metrics.TaskPriorityTag(e.GetPriority().String()))
+		return append(
+			estimateTaskMetricTags(e.GetTask(), namespaceRegistry, currentClusterName, chasmRegistry, GetTaskTypeTagValue),
+			metrics.TaskPriorityTag(e.GetPriority().String()),
+		)
 	}
 
 	rateLimitedScheduler := tasks.NewRateLimitedScheduler[Executable](
@@ -234,7 +278,8 @@ func NewRateLimitedScheduler(
 		taskQuotaRequestFn,
 		taskMetricsTagsFn,
 		tasks.RateLimitedSchedulerOptions{
-			EnableShadowMode: options.EnableShadowMode(),
+			Enabled:          options.Enabled,
+			EnableShadowMode: options.EnableShadowMode,
 		},
 		logger,
 		metricsHandler,
@@ -256,4 +301,23 @@ func (s *rateLimitedSchedulerImpl) Stop() {
 
 func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.baseScheduler.TaskChannelKeyFn()
+}
+
+// HandleBusyWorkflow implements BusyWorkflowHandler by delegating to the
+// underlying baseScheduler. This is called when a task encounters a busy
+// workflow error and needs to be routed to the sequential scheduler.
+func (s *rateLimitedSchedulerImpl) HandleBusyWorkflow(executable Executable) bool {
+	if handler, ok := s.baseScheduler.(BusyWorkflowHandler); ok {
+		return handler.HandleBusyWorkflow(executable)
+	}
+	return false
+}
+
+// executableQueueKeyFn extracts the workflow key from an Executable for queue routing.
+func executableQueueKeyFn(e Executable) any {
+	return definition.NewWorkflowKey(
+		e.GetNamespaceID(),
+		e.GetWorkflowID(),
+		e.GetRunID(),
+	)
 }

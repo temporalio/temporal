@@ -14,7 +14,6 @@ import (
 	reflect "reflect"
 
 	persistence "go.temporal.io/server/api/persistence/v1"
-	chasm "go.temporal.io/server/chasm"
 	definition "go.temporal.io/server/common/definition"
 	locks "go.temporal.io/server/common/locks"
 	persistence0 "go.temporal.io/server/common/persistence"
@@ -204,18 +203,6 @@ func (m *MockWorkflowContext) RefreshTasks(ctx context.Context, shardContext Sha
 func (mr *MockWorkflowContextMockRecorder) RefreshTasks(ctx, shardContext any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockWorkflowContext)(nil).RefreshTasks), ctx, shardContext)
-}
-
-// SetArchetype mocks base method.
-func (m *MockWorkflowContext) SetArchetype(archetype chasm.Archetype) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetArchetype", archetype)
-}
-
-// SetArchetype indicates an expected call of SetArchetype.
-func (mr *MockWorkflowContextMockRecorder) SetArchetype(archetype any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetArchetype", reflect.TypeOf((*MockWorkflowContext)(nil).SetArchetype), archetype)
 }
 
 // SetWorkflowExecution mocks base method.

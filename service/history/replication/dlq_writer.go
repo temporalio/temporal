@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
 
@@ -39,16 +38,11 @@ type (
 	executionManagerDLQWriter struct {
 		executionManager ExecutionManager
 	}
-	// TaskParser is a trimmed version of [go.temporal.io/server/common/persistence/serialization.Serializer]
-	// that only provides the methods we need.
-	TaskParser interface {
-		ParseReplicationTask(replicationTask *persistencespb.ReplicationTaskInfo) (tasks.Task, error)
-	}
 	// DLQWriterAdapter is a [DLQWriter] that uses the QueueV2 [queues.DLQWriter] object.
 	DLQWriterAdapter struct {
-		dlqWriter          *queues.DLQWriter
-		taskParser         TaskParser
-		currentClusterName string
+		dlqWriter                 *queues.DLQWriter
+		replicationTaskSerializer TaskSerializer
+		currentClusterName        string
 	}
 	dlqWriterToggleParams struct {
 		fx.In
@@ -71,13 +65,13 @@ func NewExecutionManagerDLQWriter(executionManager ExecutionManager) *executionM
 // NewDLQWriterAdapter creates a new DLQWriter from a QueueV2 [queues.DLQWriter].
 func NewDLQWriterAdapter(
 	dlqWriter *queues.DLQWriter,
-	taskParser TaskParser,
+	replicationTaskSerializer TaskSerializer,
 	currentClusterName string,
 ) *DLQWriterAdapter {
 	return &DLQWriterAdapter{
-		dlqWriter:          dlqWriter,
-		taskParser:         taskParser,
-		currentClusterName: currentClusterName,
+		dlqWriter:                 dlqWriter,
+		replicationTaskSerializer: replicationTaskSerializer,
+		currentClusterName:        currentClusterName,
 	}
 }
 
@@ -120,7 +114,7 @@ func (d *DLQWriterAdapter) WriteTaskToDLQ(
 	ctx context.Context,
 	request DLQWriteRequest,
 ) error {
-	task, err := d.taskParser.ParseReplicationTask(request.ReplicationTaskInfo)
+	task, err := d.replicationTaskSerializer.DeserializeReplicationTask(request.ReplicationTaskInfo)
 	if err != nil {
 		return err
 	}

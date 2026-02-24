@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/temporalproto"
@@ -48,8 +48,8 @@ func (s *convertSuite) TestConvertPredicate_And() {
 		),
 		predicates.And(
 			predicates.Or[tasks.Task](
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			),
 			predicates.Or[tasks.Task](
 				tasks.NewTypePredicate([]enumsspb.TaskType{
@@ -63,14 +63,14 @@ func (s *convertSuite) TestConvertPredicate_And() {
 		predicates.And(
 			predicates.Not(predicates.Empty[tasks.Task]()),
 			predicates.And[tasks.Task](
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			),
 		),
 		predicates.And(
 			predicates.Not(predicates.Empty[tasks.Task]()),
 			predicates.And[tasks.Task](
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 				tasks.NewTypePredicate([]enumsspb.TaskType{
 					enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 				}),
@@ -91,8 +91,8 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 		),
 		predicates.Or(
 			predicates.And[tasks.Task](
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			),
 			predicates.And[tasks.Task](
 				tasks.NewTypePredicate([]enumsspb.TaskType{
@@ -106,14 +106,14 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 		predicates.Or(
 			predicates.Not(predicates.Empty[tasks.Task]()),
 			predicates.And[tasks.Task](
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			),
 		),
 		predicates.Or(
 			predicates.Not(predicates.Empty[tasks.Task]()),
 			predicates.And[tasks.Task](
-				tasks.NewNamespacePredicate([]string{uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 				tasks.NewTypePredicate([]enumsspb.TaskType{
 					enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
 				}),
@@ -131,15 +131,15 @@ func (s *convertSuite) TestConvertPredicate_Not() {
 		predicates.Not(predicates.Universal[tasks.Task]()),
 		predicates.Not(predicates.Empty[tasks.Task]()),
 		predicates.Not(predicates.And[tasks.Task](
-			tasks.NewNamespacePredicate([]string{uuid.New()}),
+			tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			tasks.NewTypePredicate([]enumsspb.TaskType{}),
 		)),
 		predicates.Not(predicates.Or[tasks.Task](
-			tasks.NewNamespacePredicate([]string{uuid.New()}),
+			tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 			tasks.NewTypePredicate([]enumsspb.TaskType{}),
 		)),
 		predicates.Not(predicates.Not(predicates.Empty[tasks.Task]())),
-		predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{uuid.New()})),
+		predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{uuid.NewString()})),
 		predicates.Not[tasks.Task](tasks.NewTypePredicate([]enumsspb.TaskType{
 			enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER,
 		})),
@@ -154,7 +154,7 @@ func (s *convertSuite) TestConvertPredicate_NamespaceID() {
 	testCases := []tasks.Predicate{
 		tasks.NewNamespacePredicate(nil),
 		tasks.NewNamespacePredicate([]string{}),
-		tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New(), uuid.New()}),
+		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString(), uuid.NewString()}),
 	}
 
 	for _, predicate := range testCases {
@@ -195,7 +195,7 @@ func (s *convertSuite) TestConvertTaskRange() {
 func (s *convertSuite) TestConvertScope() {
 	scope := NewScope(
 		NewRandomRange(),
-		tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New()}),
+		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 	)
 
 	s.True(temporalproto.DeepEqual(scope, FromPersistenceScope(
@@ -209,13 +209,13 @@ func (s *convertSuite) TestConvertQueueState() {
 		1: {
 			NewScope(
 				NewRandomRange(),
-				tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 			),
 		},
 		123: {
 			NewScope(
 				NewRandomRange(),
-				tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New()}),
+				tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()}),
 			),
 			NewScope(
 				NewRandomRange(),

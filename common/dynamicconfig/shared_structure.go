@@ -16,7 +16,7 @@ var (
 	logSharedStructureWarningsOnce sync.Once
 )
 
-func warnDefaultSharedStructure(key Key, def any) {
+func warnDefaultSharedStructure(key string, def any) {
 	if path := hasSharedStructure(reflect.ValueOf(def), "root"); path != "" {
 		sharedStructureWarnings.Store(key, path)
 	}

@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -104,8 +104,8 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	requestID := uuid.New()
-	rebuildMutableState, rebuiltHistorySize, err := r.stateRebuilder.Rebuild(
+	requestID := uuid.NewString()
+	rebuildMutableState, rebuildStats, err := r.stateRebuilder.Rebuild(
 		ctx,
 		now,
 		definition.NewWorkflowKey(
@@ -127,7 +127,9 @@ func (r *resetterImpl) resetWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	rebuildMutableState.AddHistorySize(rebuiltHistorySize)
+	rebuildMutableState.AddHistorySize(rebuildStats.HistorySize)
+	rebuildMutableState.AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
+	rebuildMutableState.AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
 
 	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
 		return nil, err
@@ -150,7 +152,7 @@ func (r *resetterImpl) getBaseBranchToken(
 		r.namespaceID,
 		r.workflowID,
 		r.baseRunID,
-		chasmworkflow.Archetype,
+		chasm.WorkflowArchetypeID,
 	)
 	switch err.(type) {
 	case nil:

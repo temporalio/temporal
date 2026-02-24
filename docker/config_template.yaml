@@ -1,3 +1,4 @@
+# TODO: Remove this file after temporalio/docker-builds repository is archived
 log:
     stdout: true
     level: {{ default .Env.LOG_LEVEL "info" }}

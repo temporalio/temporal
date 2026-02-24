@@ -7,9 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -87,7 +88,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 
 	var request *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
@@ -116,14 +117,14 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 
 	var request *matchingservice.AddWorkflowTaskRequest
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...any) {
 			request = arg1
 			t.Equal(bld, request.GetForwardInfo().GetDispatchBuildId())
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
 	taskInfo := randomTaskInfo()
-	task := newInternalTaskForSyncMatch(taskInfo.Data, nil)
+	task := newInternalTaskForSyncMatch(taskInfo.Data, nil, 0, nil)
 	t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	t.NotNil(request)
 	t.Equal(mustParent(t.partition, 20).RpcName(), request.TaskQueue.GetName())
@@ -145,7 +146,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 
 	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
@@ -172,7 +173,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 
 	var request *matchingservice.AddActivityTaskRequest
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.AddActivityTaskRequest, arg2 ...any) {
 			request = arg1
 			t.Equal(bld, request.ForwardInfo.GetDispatchBuildId())
 		},
@@ -201,7 +202,7 @@ func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
 	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
 	taskInfo := randomTaskInfo()
 	task := newInternalTaskFromBacklog(taskInfo, nil)
-	for i := 0; i < rps; i++ {
+	for range rps {
 		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
 	}
 	t.Equal(errForwarderSlowDown, t.fwdr.ForwardTask(context.Background(), task))
@@ -219,7 +220,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTask() {
 	resp := &matchingservice.QueryWorkflowResponse{}
 	var request *matchingservice.QueryWorkflowRequest
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.QueryWorkflowRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(resp, nil)
@@ -239,7 +240,7 @@ func (t *ForwarderTestSuite) TestForwardQueryTaskRateNotEnforced() {
 	resp := &matchingservice.QueryWorkflowResponse{}
 	rps := 2
 	t.client.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(resp, nil).Times(rps + 1)
-	for i := 0; i < rps; i++ {
+	for range rps {
 		_, err := t.fwdr.ForwardQueryTask(context.Background(), task)
 		t.NoError(err)
 	}
@@ -255,14 +256,16 @@ func (t *ForwarderTestSuite) TestForwardPollError() {
 func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollWorkflowTaskQueueResponse{}
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
 
 	var request *matchingservice.PollWorkflowTaskQueueRequest
 	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(resp, nil)
@@ -280,23 +283,53 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueue() {
 	t.Nil(task.pollActivityTaskQueueResponse())
 }
 
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollWorkflowTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollWorkflowTaskQueueRequest
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollWorkflowTaskQueueRequest, arg2 ...any) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding workflow poll")
+}
+
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	pollerID := uuid.New()
+	pollerID := uuid.NewString()
 	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
 	ctx = context.WithValue(ctx, identityKey, "id1")
-	resp := &matchingservice.PollActivityTaskQueueResponse{}
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
 
 	var request *matchingservice.PollActivityTaskQueueRequest
 	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
-		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...interface{}) {
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...any) {
 			request = arg1
 		},
 	).Return(resp, nil)
 
 	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{})
-	t.NoError(err)
+	t.Require().NoError(err)
 	t.NotNil(task)
 	t.NotNil(request)
 	t.Equal(pollerID, request.GetPollerId())
@@ -306,6 +339,64 @@ func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.Equal(t.partition.Kind(), request.GetPollRequest().GetTaskQueue().GetKind())
 	t.Equal(resp, task.pollActivityTaskQueueResponse())
 	t.Nil(task.pollWorkflowTaskQueueResponse())
+}
+
+func (t *ForwarderTestSuite) TestForwardPollForActivityPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollActivityTaskQueueResponse{
+		TaskToken: []byte("token1"),
+	}
+
+	var request *matchingservice.PollActivityTaskQueueRequest
+	t.client.EXPECT().PollActivityTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollActivityTaskQueueRequest, arg2 ...any) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetPollRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding activity poll")
+}
+
+func (t *ForwarderTestSuite) TestForwardPollForNexusPreservesWorkerInstanceKey() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_NEXUS)
+
+	pollerID := uuid.NewString()
+	workerInstanceKey := "test-worker-instance-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), pollerIDKey, pollerID)
+	ctx = context.WithValue(ctx, identityKey, "id1")
+	resp := &matchingservice.PollNexusTaskQueueResponse{
+		Response: &workflowservice.PollNexusTaskQueueResponse{
+			TaskToken: []byte("token1"),
+		},
+	}
+
+	var request *matchingservice.PollNexusTaskQueueRequest
+	t.client.EXPECT().PollNexusTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(arg0 context.Context, arg1 *matchingservice.PollNexusTaskQueueRequest, arg2 ...any) {
+			request = arg1
+		},
+	).Return(resp, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{
+		workerInstanceKey: workerInstanceKey,
+	})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.NotNil(request)
+	t.Equal(workerInstanceKey, request.GetRequest().GetWorkerInstanceKey(),
+		"WorkerInstanceKey should be preserved when forwarding Nexus poll")
 }
 
 // TODO(pri): old matcher cleanup
@@ -333,7 +424,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 		adds = 0
 		polls = 0
 		t.Run(tc.name, func() {
-			for i := 0; i < concurrency; i++ {
+			for range concurrency {
 				wg.Add(1)
 				go func() {
 					timer := time.NewTimer(time.Millisecond * 200)
@@ -381,7 +472,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 
 	startC := make(chan struct{})
 	doneWG := sync.WaitGroup{}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		doneWG.Add(1)
 		go func() {
 			<-startC

@@ -50,7 +50,7 @@ func (s *apiSuite) TeardownTest() {
 func (s *apiSuite) TestWorkflowCompleted() {
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := isWorkflowTaskValid(s.workflowLease, rand.Int63())
+	_, err := isWorkflowTaskValid(s.workflowLease, rand.Int63(), 0)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 }
@@ -63,7 +63,7 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskNotStarted() {
 		StartedEventID:   common.EmptyEventID,
 	})
 
-	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID)
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID, 0)
 	s.NoError(err)
 	s.True(valid)
 }
@@ -76,7 +76,7 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskStarted() {
 		StartedEventID:   workflowTaskScheduleEventID + 10,
 	})
 
-	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID)
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID, 0)
 	s.NoError(err)
 	s.False(valid)
 }
@@ -86,7 +86,21 @@ func (s *apiSuite) TestWorkflowRunning_WorkflowTaskMissing() {
 	workflowTaskScheduleEventID := rand.Int63()
 	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(nil)
 
-	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID)
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID, 0)
+	s.NoError(err)
+	s.False(valid)
+}
+
+func (s *apiSuite) TestWorkflowRunning_WorkflowTask_StampInvalid() {
+	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	workflowTaskScheduleEventID := rand.Int63()
+	s.mutableState.EXPECT().GetWorkflowTaskByID(workflowTaskScheduleEventID).Return(&historyi.WorkflowTaskInfo{
+		ScheduledEventID: workflowTaskScheduleEventID,
+		StartedEventID:   common.EmptyEventID,
+		Stamp:            1,
+	})
+
+	valid, err := isWorkflowTaskValid(s.workflowLease, workflowTaskScheduleEventID, 0)
 	s.NoError(err)
 	s.False(valid)
 }

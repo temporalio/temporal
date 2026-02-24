@@ -257,7 +257,7 @@ func (a *archiver) recordArchiveTargetResult(logger log.Logger, startTime time.T
 	if *err != nil {
 		status = "err"
 
-		logger.Error("failed to archive target", tag.NewStringTag("target", string(target)), tag.Error(*err))
+		logger.Error("failed to archive target", tag.String("target", string(target)), tag.Error(*err))
 	}
 
 	tags := []metrics.Tag{

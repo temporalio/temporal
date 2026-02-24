@@ -290,3 +290,41 @@ func (mr *MockHasDestinationMockRecorder) GetDestination() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDestination", reflect.TypeOf((*MockHasDestination)(nil).GetDestination))
 }
+
+// MockHasArchetypeID is a mock of HasArchetypeID interface.
+type MockHasArchetypeID struct {
+	ctrl     *gomock.Controller
+	recorder *MockHasArchetypeIDMockRecorder
+	isgomock struct{}
+}
+
+// MockHasArchetypeIDMockRecorder is the mock recorder for MockHasArchetypeID.
+type MockHasArchetypeIDMockRecorder struct {
+	mock *MockHasArchetypeID
+}
+
+// NewMockHasArchetypeID creates a new mock instance.
+func NewMockHasArchetypeID(ctrl *gomock.Controller) *MockHasArchetypeID {
+	mock := &MockHasArchetypeID{ctrl: ctrl}
+	mock.recorder = &MockHasArchetypeIDMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHasArchetypeID) EXPECT() *MockHasArchetypeIDMockRecorder {
+	return m.recorder
+}
+
+// GetArchetypeID mocks base method.
+func (m *MockHasArchetypeID) GetArchetypeID() uint32 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArchetypeID")
+	ret0, _ := ret[0].(uint32)
+	return ret0
+}
+
+// GetArchetypeID indicates an expected call of GetArchetypeID.
+func (mr *MockHasArchetypeIDMockRecorder) GetArchetypeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchetypeID", reflect.TypeOf((*MockHasArchetypeID)(nil).GetArchetypeID))
+}

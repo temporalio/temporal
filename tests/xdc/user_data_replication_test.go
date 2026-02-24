@@ -385,7 +385,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.NoError(err)
 
 	expectedReplicatedTaskQueues := make(map[string]struct{}, numTaskQueues)
-	for i := 0; i < numTaskQueues; i++ {
+	for i := range numTaskQueues {
 		taskQueue := fmt.Sprintf("v1q%v", i)
 		res, err := activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,
@@ -476,7 +476,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
 	activeFrontendClient = s.clusters[1].FrontendClient()
-	for i := 0; i < numTaskQueues; i++ {
+	for i := range numTaskQueues {
 		taskQueue := fmt.Sprintf("v1q%v", i)
 
 		get, err := activeFrontendClient.GetWorkerBuildIdCompatibility(ctx, &workflowservice.GetWorkerBuildIdCompatibilityRequest{
@@ -527,7 +527,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	description, err := activeFrontendClient.DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{Namespace: namespace})
 	s.NoError(err)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		buildId := fmt.Sprintf("v%d", i)
 		_, err = activeFrontendClient.UpdateWorkerBuildIdCompatibility(ctx, &workflowservice.UpdateWorkerBuildIdCompatibilityRequest{
 			Namespace: namespace,

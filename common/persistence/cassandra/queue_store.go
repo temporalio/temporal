@@ -30,9 +30,10 @@ const (
 
 type (
 	QueueStore struct {
-		queueType persistence.QueueType
-		session   gocql.Session
-		logger    log.Logger
+		queueType  persistence.QueueType
+		session    gocql.Session
+		logger     log.Logger
+		serializer serialization.Serializer
 	}
 )
 
@@ -42,9 +43,10 @@ func NewQueueStore(
 	logger log.Logger,
 ) (persistence.Queue, error) {
 	return &QueueStore{
-		queueType: queueType,
-		session:   session,
-		logger:    logger,
+		queueType:  queueType,
+		session:    session,
+		logger:     logger,
+		serializer: serialization.NewSerializer(),
 	}, nil
 }
 
@@ -92,7 +94,7 @@ func (q *QueueStore) tryEnqueue(
 	blob *commonpb.DataBlob,
 ) (int64, error) {
 	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
@@ -111,7 +113,7 @@ func (q *QueueStore) getLastMessageID(
 ) (int64, error) {
 
 	query := q.session.Query(templateGetLastMessageIDQuery, queueType).WithContext(ctx)
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	err := query.MapScan(result)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -137,11 +139,11 @@ func (q *QueueStore) ReadMessages(
 	iter := query.Iter()
 
 	var result []*persistence.QueueMessage
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	for iter.MapScan(message) {
 		queueMessage := convertQueueMessage(message)
 		result = append(result, queueMessage)
-		message = make(map[string]interface{})
+		message = make(map[string]any)
 	}
 
 	if err := iter.Close(); err != nil {
@@ -168,11 +170,11 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 	iter := query.PageSize(pageSize).PageState(pageToken).Iter()
 
 	var result []*persistence.QueueMessage
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	for iter.MapScan(message) {
 		queueMessage := convertQueueMessage(message)
 		result = append(result, queueMessage)
-		message = make(map[string]interface{})
+		message = make(map[string]any)
 	}
 
 	var nextPageToken []byte
@@ -280,7 +282,7 @@ func (q *QueueStore) insertInitialQueueMetadataRecord(
 		blob.EncodingType.String(),
 		version,
 	).WithContext(ctx)
-	_, err := query.MapScanCAS(make(map[string]interface{}))
+	_, err := query.MapScanCAS(make(map[string]any))
 	if err != nil {
 		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
 	}
@@ -294,13 +296,13 @@ func (q *QueueStore) getQueueMetadata(
 ) (*persistence.InternalQueueMetadata, error) {
 
 	query := q.session.Query(templateGetQueueMetadataQuery, queueType).WithContext(ctx)
-	message := make(map[string]interface{})
+	message := make(map[string]any)
 	err := query.MapScan(message)
 	if err != nil {
 		return nil, err
 	}
 
-	return convertQueueMetadata(message)
+	return convertQueueMetadata(message, q.serializer)
 }
 
 func (q *QueueStore) updateAckLevel(
@@ -310,7 +312,7 @@ func (q *QueueStore) updateAckLevel(
 ) error {
 
 	// TODO: remove this once cluster_ack_level is removed from DB
-	metadataStruct, err := serialization.QueueMetadataFromBlob(metadata.Blob)
+	metadataStruct, err := q.serializer.QueueMetadataFromBlob(metadata.Blob)
 	if err != nil {
 		return gocql.ConvertError("updateAckLevel", err)
 	}
@@ -323,7 +325,7 @@ func (q *QueueStore) updateAckLevel(
 		queueType,
 		metadata.Version, // condition update
 	).WithContext(ctx)
-	applied, err := query.MapScanCAS(make(map[string]interface{}))
+	applied, err := query.MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("updateAckLevel", err)
 	}
@@ -367,7 +369,7 @@ func (q *QueueStore) initializeDLQMetadata(
 }
 
 func convertQueueMessage(
-	message map[string]interface{},
+	message map[string]any,
 ) *persistence.QueueMessage {
 
 	id := message["message_id"].(int64)
@@ -384,7 +386,8 @@ func convertQueueMessage(
 }
 
 func convertQueueMetadata(
-	message map[string]interface{},
+	message map[string]any,
+	serializer serialization.Serializer,
 ) (*persistence.InternalQueueMetadata, error) {
 
 	metadata := &persistence.InternalQueueMetadata{
@@ -394,7 +397,7 @@ func convertQueueMetadata(
 	if ok {
 		clusterAckLevel := message["cluster_ack_level"].(map[string]int64)
 		// TODO: remove this once we remove cluster_ack_level from DB.
-		blob, err := serialization.QueueMetadataToBlob(&persistencespb.QueueMetadata{ClusterAckLevels: clusterAckLevel})
+		blob, err := serializer.QueueMetadataToBlob(&persistencespb.QueueMetadata{ClusterAckLevels: clusterAckLevel})
 		if err != nil {
 			return nil, err
 		}

@@ -16,6 +16,7 @@ import (
 	common "go.temporal.io/api/common/v1"
 	history "go.temporal.io/server/api/history/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
+	chasm "go.temporal.io/server/chasm"
 	interfaces "go.temporal.io/server/service/history/interfaces"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -45,18 +46,18 @@ func (m *MockSyncStateRetriever) EXPECT() *MockSyncStateRetrieverMockRecorder {
 }
 
 // GetSyncWorkflowStateArtifact mocks base method.
-func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifact(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, targetVersionedTransition *persistence.VersionedTransition, targetVersionHistories *history.VersionHistories) (*SyncStateResult, error) {
+func (m *MockSyncStateRetriever) GetSyncWorkflowStateArtifact(ctx context.Context, namespaceID string, execution *common.WorkflowExecution, archetypeID chasm.ArchetypeID, targetVersionedTransition *persistence.VersionedTransition, targetVersionHistories *history.VersionHistories) (*SyncStateResult, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifact", ctx, namespaceID, execution, targetVersionedTransition, targetVersionHistories)
+	ret := m.ctrl.Call(m, "GetSyncWorkflowStateArtifact", ctx, namespaceID, execution, archetypeID, targetVersionedTransition, targetVersionHistories)
 	ret0, _ := ret[0].(*SyncStateResult)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSyncWorkflowStateArtifact indicates an expected call of GetSyncWorkflowStateArtifact.
-func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifact(ctx, namespaceID, execution, targetVersionedTransition, targetVersionHistories any) *gomock.Call {
+func (mr *MockSyncStateRetrieverMockRecorder) GetSyncWorkflowStateArtifact(ctx, namespaceID, execution, archetypeID, targetVersionedTransition, targetVersionHistories any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifact", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifact), ctx, namespaceID, execution, targetVersionedTransition, targetVersionHistories)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSyncWorkflowStateArtifact", reflect.TypeOf((*MockSyncStateRetriever)(nil).GetSyncWorkflowStateArtifact), ctx, namespaceID, execution, archetypeID, targetVersionedTransition, targetVersionHistories)
 }
 
 // GetSyncWorkflowStateArtifactFromMutableState mocks base method.

@@ -6,7 +6,6 @@ package workflow_test
 import (
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"testing"
 	"time"
@@ -29,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -105,7 +105,7 @@ func (c *mutationTestCase) Run(t *testing.T) {
 		addWorkflowExecutionSignaled(t, i, ms)
 	}
 
-	_, workflowEvents, err := ms.CloseTransactionAsMutation(c.transactionPolicy)
+	_, workflowEvents, err := ms.CloseTransactionAsMutation(context.Background(), c.transactionPolicy)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,6 +137,7 @@ func (c *mutationTestCase) startWFT(
 		nil,
 		nil,
 		false,
+		nil,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -206,12 +207,12 @@ func createMutableState(t *testing.T, nsEntry *namespace.Namespace, cfg *configs
 
 	clusterMetadata := shardContext.Resource.ClusterMetadata
 	clusterMetadata.EXPECT().ClusterNameForFailoverVersion(nsEntry.IsGlobalNamespace(),
-		nsEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+		nsEntry.FailoverVersion(tests.WorkflowID)).Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	clusterMetadata.EXPECT().GetClusterID().Return(int64(1)).AnyTimes()
 
 	executionManager := shardContext.Resource.ExecutionMgr
-	executionManager.EXPECT().GetHistoryBranchUtil().Return(&persistence.HistoryBranchUtilImpl{}).AnyTimes()
+	executionManager.EXPECT().GetHistoryBranchUtil().Return(persistence.NewHistoryBranchUtil(serialization.NewSerializer())).AnyTimes()
 
 	startTime := time.Time{}
 	logger := log.NewNoopLogger()
@@ -361,7 +362,7 @@ func TestGetNexusCompletion(t *testing.T) {
 	cases := []struct {
 		name             string
 		mutateState      func(historyi.MutableState) (*historypb.HistoryEvent, error)
-		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.OperationCompletion)
+		verifyCompletion func(*testing.T, *historypb.HistoryEvent, nexusrpc.CompleteOperationOptions)
 	}{
 		{
 			name: "success",
@@ -377,15 +378,13 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				success, ok := completion.(*nexusrpc.OperationCompletionSuccessful)
-				require.True(t, ok)
-				require.Equal(t, "application/json", success.Reader.Header.Get("type"))
-				require.Equal(t, "1", success.Reader.Header.Get("length"))
-				buf, err := io.ReadAll(success.Reader)
-				require.NoError(t, err)
-				require.Equal(t, []byte("3"), buf)
-				require.Equal(t, event.GetEventTime().AsTime(), success.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.Nil(t, completion.Error)
+				require.Equal(t, &commonpb.Payload{
+					Metadata: map[string][]byte{"encoding": []byte("json/plain")},
+					Data:     []byte("3"),
+				}, completion.Result)
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -397,12 +396,11 @@ func TestGetNexusCompletion(t *testing.T) {
 					},
 				}, "")
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.State)
-				require.Equal(t, "workflow failed", failure.Failure.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
+				require.Equal(t, "workflow failed", completion.Error.Cause.Error())
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -410,12 +408,11 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionTerminatedEvent(mutableState.GetNextEventID(), "dont care", nil, "identity", false, nil)
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateFailed, failure.State)
-				require.Equal(t, "operation terminated", failure.Failure.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateFailed, completion.Error.State)
+				require.Equal(t, "operation terminated", completion.Error.Cause.Error())
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 		{
@@ -423,12 +420,11 @@ func TestGetNexusCompletion(t *testing.T) {
 			mutateState: func(mutableState historyi.MutableState) (*historypb.HistoryEvent, error) {
 				return mutableState.AddWorkflowExecutionCanceledEvent(mutableState.GetNextEventID(), &commandpb.CancelWorkflowExecutionCommandAttributes{})
 			},
-			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.OperationCompletion) {
-				failure, ok := completion.(*nexusrpc.OperationCompletionUnsuccessful)
-				require.True(t, ok)
-				require.Equal(t, nexus.OperationStateCanceled, failure.State)
-				require.Equal(t, "operation canceled", failure.Failure.Message)
-				require.Equal(t, event.GetEventTime().AsTime(), failure.CloseTime)
+			verifyCompletion: func(t *testing.T, event *historypb.HistoryEvent, completion nexusrpc.CompleteOperationOptions) {
+				require.NotNil(t, completion.Error)
+				require.Equal(t, nexus.OperationStateCanceled, completion.Error.State)
+				require.Equal(t, "operation canceled", completion.Error.Cause.Error())
+				require.Equal(t, event.GetEventTime().AsTime(), completion.CloseTime)
 			},
 		},
 	}
@@ -449,6 +445,7 @@ func TestGetNexusCompletion(t *testing.T) {
 				nil,
 				nil,
 				false,
+				nil,
 			)
 			require.NoError(t, err)
 			_, err = ms.AddWorkflowTaskCompletedEvent(workflowTask, &workflowservice.RespondWorkflowTaskCompletedRequest{

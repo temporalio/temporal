@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,7 +44,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -64,7 +64,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTimeout() {
 
 	var historyEvents []*historypb.HistoryEvent
 GetHistoryLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.RunId,
@@ -91,7 +91,7 @@ GetHistoryLoop:
 
 	closedCount := 0
 ListClosedLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -121,7 +121,7 @@ func (s *WorkflowFailuresTestSuite) TestWorkflowTaskFailed() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -326,7 +326,7 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
 	identity := "worker1"
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.New(),
+		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         id,
 		WorkflowType:       &commonpb.WorkflowType{Name: wt},
@@ -378,5 +378,6 @@ func (s *WorkflowFailuresTestSuite) TestRespondWorkflowTaskCompleted_ReturnsErro
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, historyEvents)
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, historyEvents)
 }

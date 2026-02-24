@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,6 +13,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -72,6 +73,7 @@ func (s *contextSuite) SetupTest() {
 	s.workflowContext = NewContext(
 		configs,
 		tests.WorkflowKey,
+		chasm.WorkflowArchetypeID,
 		log.NewNoopLogger(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
@@ -143,7 +145,7 @@ func (s *contextSuite) TestMergeReplicationTasks_SingleReplicationTask() {
 		},
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -209,7 +211,7 @@ func (s *contextSuite) TestMergeReplicationTasks_SyncVersionedTransitionTask_Sho
 		},
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -273,7 +275,7 @@ func (s *contextSuite) TestMergeReplicationTasks_MultipleReplicationTasks() {
 		},
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	newWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,

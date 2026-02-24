@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -28,9 +29,9 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
-	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -70,18 +71,19 @@ type (
 		tqCtx       context.Context
 		tqCtxCancel context.CancelFunc
 
-		backlogMgr        backlogManager
-		drainBacklogMgr   atomic.Value // backlogManager
-		liveness          *liveness
-		oldMatcher        *TaskMatcher // TODO(pri): old matcher cleanup
-		priMatcher        *priTaskMatcher
-		matcher           matcherInterface // TODO(pri): old matcher cleanup
-		namespaceRegistry namespace.Registry
-		logger            log.Logger
-		throttledLogger   log.ThrottledLogger
-		matchingClient    matchingservice.MatchingServiceClient
-		clusterMeta       cluster.Metadata
-		metricsHandler    metrics.Handler // namespace/taskqueue tagged metric scope
+		backlogMgr          backlogManager
+		drainBacklogMgrLock sync.Mutex
+		drainBacklogMgr     backlogManager // protected by drainBacklogMgrLock
+		liveness            *liveness
+		oldMatcher          *TaskMatcher // TODO(pri): old matcher cleanup
+		priMatcher          *priTaskMatcher
+		matcher             matcherInterface // TODO(pri): old matcher cleanup
+		namespaceRegistry   namespace.Registry
+		logger              log.Logger
+		throttledLogger     log.ThrottledLogger
+		matchingClient      matchingservice.MatchingServiceClient
+		clusterMeta         cluster.Metadata
+		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory               *pollerHistory
 		currentPolls                atomic.Int64
@@ -115,11 +117,11 @@ var (
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
 
-	backlogTagClassic       = tag.NewStringTag("backlog", "classic")
-	backlogTagPriority      = tag.NewStringTag("backlog", "priority")
-	backlogTagFairness      = tag.NewStringTag("backlog", "fairness")
-	backlogTagPriorityDrain = tag.NewStringTag("backlog", "priority-drain")
-	backlogTagFairnessDrain = tag.NewStringTag("backlog", "fairness-drain")
+	backlogTagClassic       = tag.String("backlog", "classic")
+	backlogTagPriority      = tag.String("backlog", "priority")
+	backlogTagFairness      = tag.String("backlog", "fairness")
+	backlogTagPriorityDrain = tag.String("backlog", "priority-drain")
+	backlogTagFairnessDrain = tag.String("backlog", "fairness-drain")
 )
 
 func newPhysicalTaskQueueManager(
@@ -128,11 +130,11 @@ func newPhysicalTaskQueueManager(
 ) (*physicalTaskQueueManagerImpl, error) {
 	e := partitionMgr.engine
 	config := partitionMgr.config
-	buildIdTagValue := queue.Version().MetricsTagValue()
-	buildIdTag := tag.WorkerBuildId(buildIdTagValue)
+	versionTagValue := queue.Version().MetricsTagValue()
+	buildIDTag := tag.WorkerVersion(versionTagValue)
 	taggedMetricsHandler := partitionMgr.metricsHandler.WithTags(
 		metrics.OperationTag(metrics.MatchingTaskQueueMgrScope),
-		metrics.WorkerBuildIdTag(buildIdTagValue, config.BreakdownMetricsByBuildID()))
+		metrics.WorkerVersionTag(versionTagValue, config.BreakdownMetricsByBuildID()))
 
 	tqCtx, tqCancel := context.WithCancel(partitionMgr.callerInfoContext(context.Background()))
 
@@ -176,8 +178,8 @@ func newPhysicalTaskQueueManager(
 
 	switch {
 	case config.EnableFairness:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagFairness)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagFairness)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagFairness)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagFairness)
 
 		pqMgr.backlogMgr = newFairBacklogManager(
 			tqCtx,
@@ -205,6 +207,7 @@ func newPhysicalTaskQueueManager(
 			config,
 			queue.partition,
 			fwdr,
+			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newFairMetricsHandler(taggedMetricsHandler),
@@ -215,8 +218,8 @@ func newPhysicalTaskQueueManager(
 		return pqMgr, nil
 
 	case config.NewMatcher:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagPriority)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagPriority)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagPriority)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagPriority)
 
 		pqMgr.backlogMgr = newPriBacklogManager(
 			tqCtx,
@@ -243,6 +246,7 @@ func newPhysicalTaskQueueManager(
 			config,
 			queue.partition,
 			fwdr,
+			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
 			newPriMetricsHandler(taggedMetricsHandler),
@@ -252,8 +256,8 @@ func newPhysicalTaskQueueManager(
 		pqMgr.matcher = pqMgr.priMatcher
 		return pqMgr, nil
 	default:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIdTag, backlogTagClassic)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIdTag, backlogTagClassic)
+		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagClassic)
+		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagClassic)
 
 		pqMgr.backlogMgr = newBacklogManager(
 			tqCtx,
@@ -308,8 +312,8 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
 	c.backlogMgr.Stop()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		m.(backlogManager).Stop()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		m.Stop()
 	}
 	c.matcher.Stop()
 	c.liveness.Stop()
@@ -319,10 +323,17 @@ func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
 	// The call is placed here instead of backlogMgr.Stop() since there could be a race condition where a task is
 	// added to the backlog after we have emitted the zero values inside of the backlogMgr.Stop() call. This happens
 	// since task reader's and writer's contexts are cancelled after the backlogMgr.Stop() call.
-	c.backlogMgr.getDB().emitZeroBacklogGauges()
+	c.backlogMgr.getDB().emitZeroPhysicalBacklogGauges()
 	c.logger.Info("Stopped physicalTaskQueueManager", tag.LifeCycleStopped, tag.Cause(unloadCause.String()))
 	c.metricsHandler.Counter(metrics.TaskQueueStoppedCounter.Name()).Record(1)
 	c.partitionMgr.engine.updatePhysicalTaskQueueGauge(c.partitionMgr.ns, c.partitionMgr.partition, c.queue.version, -1)
+}
+
+// getDrainBacklogMgr returns the draining backlog manager, or nil if none.
+func (c *physicalTaskQueueManagerImpl) getDrainBacklogMgr() backlogManager {
+	c.drainBacklogMgrLock.Lock()
+	defer c.drainBacklogMgrLock.Unlock()
+	return c.drainBacklogMgr
 }
 
 func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context) error {
@@ -331,8 +342,8 @@ func (c *physicalTaskQueueManagerImpl) WaitUntilInitialized(ctx context.Context)
 		// If we're also draining another, then we need to wait for that also to write.
 		// TODO: we could try to optimize this so we can _dispatch_ before loading the other
 		// but still block on writing.
-		if m := c.drainBacklogMgr.Load(); m != nil {
-			err = m.(backlogManager).WaitUntilInitialized(ctx)
+		if m := c.getDrainBacklogMgr(); m != nil {
+			err = m.WaitUntilInitialized(ctx)
 		}
 	}
 	return err
@@ -351,26 +362,29 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	}
 
 	var drainBacklogMgr backlogManager
+	var logger log.Logger
 	switch c.backlogMgr.(type) {
 	case *fairBacklogManagerImpl:
+		logger = log.With(c.logger, backlogTagPriorityDrain)
 		drainBacklogMgr = newPriBacklogManager(
 			c.tqCtx,
 			c,
 			c.config,
 			c.partitionMgr.engine.taskManager,
-			log.With(c.logger, backlogTagPriorityDrain),
+			logger,
 			log.With(c.throttledLogger, backlogTagPriorityDrain),
 			c.partitionMgr.engine.matchingRawClient,
 			newPriMetricsHandler(c.metricsHandler),
 			true,
 		)
 	case *priBacklogManagerImpl:
+		logger = log.With(c.logger, backlogTagFairnessDrain)
 		drainBacklogMgr = newFairBacklogManager(
 			c.tqCtx,
 			c,
 			c.config,
 			c.partitionMgr.engine.fairTaskManager,
-			log.With(c.logger, backlogTagFairnessDrain),
+			logger,
 			log.With(c.throttledLogger, backlogTagFairnessDrain),
 			c.partitionMgr.engine.matchingRawClient,
 			newFairMetricsHandler(c.metricsHandler),
@@ -382,11 +396,51 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 		return
 	}
 
-	prev := c.drainBacklogMgr.Swap(drainBacklogMgr)
+	c.drainBacklogMgrLock.Lock()
+	prev := c.drainBacklogMgr
+	c.drainBacklogMgr = drainBacklogMgr
+	c.drainBacklogMgrLock.Unlock()
 	if !softassert.That(c.logger, prev == nil, "SetupDraining called twice") {
 		return
 	}
+	logger.Info("Starting draining")
 	drainBacklogMgr.Start()
+}
+
+// FinishedDraining is called by a draining backlog manager when it has fully drained.
+// This updates the active backlog manager's metadata and unloads the draining manager.
+func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
+	if !softassert.That(c.logger, c.priMatcher != nil, "FinishedDraining called with old matcher") {
+		return
+	}
+
+	c.drainBacklogMgrLock.Lock()
+	drainMgr := c.drainBacklogMgr
+	c.drainBacklogMgr = nil
+	c.drainBacklogMgrLock.Unlock()
+
+	// Update active manager's OtherHasTasks field and persist
+	ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
+	err := c.backlogMgr.getDB().SetOtherHasTasks(ctx, false)
+	cancel()
+	if err != nil {
+		c.logger.Warn("Failed to sync state after drain completion", tag.Error(err))
+		// Note: we've already cleared drainBacklogMgr, so we won't retry.
+		// The active manager's otherHasTasks is already false in memory,
+		// it will be persisted on the next periodic sync.
+	}
+
+	// Do final gc before stopping since this is the last chance to clean up
+	drainMgr.FinalGC()
+	drainMgr.Stop()
+	c.logger.Info("Drain completed, unloaded draining backlog manager")
+}
+
+func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
+	if c.priMatcher == nil {
+		return
+	}
+	c.priMatcher.ReprocessRedirectedTasksAfterStop()
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
@@ -445,8 +499,7 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.namespace = c.partitionMgr.ns.Name()
 		task.backlogCountHint = c.backlogCountHint
 
-		if pollMetadata.forwardedFrom == "" && // only track the original polls, not forwarded ones.
-			(!task.isStarted() || !task.started.hasEmptyResponse()) { // Need to filter out the empty "started" ones
+		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
 			c.getOrCreateTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
 		}
 		return task, nil
@@ -455,8 +508,8 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 
 func (c *physicalTaskQueueManagerImpl) backlogCountHint() int64 {
 	n := c.backlogMgr.BacklogCountHint()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		n += m.(backlogManager).BacklogCountHint()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		n += m.BacklogCountHint()
 	}
 	return n
 }
@@ -504,12 +557,12 @@ func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error 
 	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
-func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) {
+func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) error {
 	if c.priMatcher == nil {
 		softassert.Fail(c.logger, "AddSpooledTaskToMatcher called on old matcher")
-		return
+		return errInternalMatchError
 	}
-	c.priMatcher.AddTask(task)
+	return c.priMatcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
@@ -561,6 +614,12 @@ func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollM
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
 }
 
+func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
+	if c.pollerHistory != nil {
+		c.pollerHistory.removePoller(id)
+	}
+}
+
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (c *physicalTaskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
 	if c.pollerHistory == nil {
@@ -601,35 +660,34 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats {
+func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		drainStats := m.(backlogManager).BacklogStatsByPriority()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		drainStats := m.BacklogStatsByPriority()
 		for pri, tqs := range drainStats {
-			ensureStats(stats, pri)
-			mergeStats(stats[pri], tqs)
+			mergeStats(util.GetOrSetNew(stats, pri), tqs)
 		}
 	}
 
-	c.taskTrackerLock.RLock()
-	defer c.taskTrackerLock.RUnlock()
+	if includeRates {
+		c.taskTrackerLock.RLock()
+		for pri, tt := range c.tasksAdded {
+			util.GetOrSetNew(stats, int32(pri)).TasksAddRate = tt.rate()
+		}
+		for pri, tt := range c.tasksDispatched {
+			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
+		}
+		c.taskTrackerLock.RUnlock()
+	}
 
-	for pri, tt := range c.tasksAdded {
-		ensureStats(stats, pri)
-		stats[int32(pri)].TasksAddRate = tt.rate()
-	}
-	for pri, tt := range c.tasksDispatched {
-		ensureStats(stats, pri)
-		stats[int32(pri)].TasksDispatchRate = tt.rate()
-	}
 	return stats
 }
 
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	status := c.backlogMgr.InternalStatus()
-	if m := c.drainBacklogMgr.Load(); m != nil {
-		drainStatus := m.(backlogManager).InternalStatus()
+	if m := c.getDrainBacklogMgr(); m != nil {
+		drainStatus := m.InternalStatus()
 		for _, st := range drainStatus {
 			st.Draining = true
 		}
@@ -702,15 +760,30 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	}
 
 	deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-	if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) != -1 {
+	if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 		// already registered in user data, we can assume the workflow is running.
 		// TODO: consider replication scenarios where user data is replicated before
 		// the deployment workflow.
 		return nil
 	}
 
-	// we need to update the deployment workflow to tell it about this task queue
-	// TODO: add some backoff here if we got an error last time
+	backoff := deploymentRegisterErrorBackoff
+	if testBackoff, ok := testhooks.Get[time.Duration](c.partitionMgr.engine.testHooks, testhooks.MatchingDeploymentRegisterErrorBackoff); ok {
+		backoff = testBackoff
+	}
+
+	limit := c.config.MaxVersionsInTaskQueue()
+	// Using > instead of >= to give the Deployment a chance to delete some old versions if MatchingMaxVersionsInDeployment is also reached.
+	if worker_versioning.CountDeploymentVersions(deploymentData) > limit {
+		// Before retrying the error, hold the poller for some time so it does not retry immediately
+		// Parallel polls are already serialized using the lock.
+		time.Sleep(backoff)
+		return &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: fmt.Sprintf("exceeding maximum number of Deployment Versions in this task queue (limit = %d)", limit),
+		}
+	}
 
 	err = c.partitionMgr.engine.workerDeploymentClient.RegisterTaskQueueWorker(
 		ctx, namespaceEntry, workerDeployment.SeriesName, workerDeployment.BuildId, c.queue.TaskQueueFamily().Name(), c.queue.TaskType(),
@@ -720,23 +793,16 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			// error is not from registration, just return it without waiting
 			return err
 		}
-		var errMaxTaskQueuesInVersion workerdeployment.ErrMaxTaskQueuesInVersion
-		var errMaxVersionsInDeployment workerdeployment.ErrMaxVersionsInDeployment
-		var errMaxDeploymentsInNamespace workerdeployment.ErrMaxDeploymentsInNamespace
-		if errors.As(err, &errMaxTaskQueuesInVersion) {
-			err = errMaxTaskQueuesInVersion
-		} else if errors.As(err, &errMaxVersionsInDeployment) {
-			err = errMaxVersionsInDeployment
-		} else if errors.As(err, &errMaxDeploymentsInNamespace) {
-			err = errMaxDeploymentsInNamespace
-		} else {
+		var errResourceExhausted *serviceerror.ResourceExhausted
+		if !errors.As(err, &errResourceExhausted) || errResourceExhausted.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
 			// Do not surface low level error to user
+			// Also, we don't surface resource exhausted errors that are not about deployment limits as they are caused by our workflow-based implementation.
 			c.logger.Error("error while registering version", tag.Error(err))
 			err = errDeploymentVersionNotReady
 		}
 		// Before retrying the error, hold the poller for some time so it does not retry immediately
 		// Parallel polls are already serialized using the lock.
-		time.Sleep(deploymentRegisterErrorBackoff)
+		time.Sleep(backoff)
 		return err
 	}
 
@@ -748,7 +814,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 			return err
 		}
 		deploymentData := userData.GetData().GetPerType()[int32(c.queue.TaskType())].GetDeploymentData()
-		if worker_versioning.FindDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) >= 0 {
+		if worker_versioning.HasDeploymentVersion(deploymentData, worker_versioning.DeploymentVersionFromDeployment(workerDeployment)) {
 			break
 		}
 		select {
@@ -776,15 +842,16 @@ func (c *physicalTaskQueueManagerImpl) counterFactory() counter.Counter {
 	return counter.NewHybridCounter(c.config.FairnessCounter(), src)
 }
 
-func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
-	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
-		return aggregateStats(c.GetStatsByPriority())
-	})
-}
-
 func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeightOverrides {
 	return c.partitionMgr.GetRateLimitManager().GetFairnessWeightOverrides()
+}
+
+func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
+	ctx context.Context,
+	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
+	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
+		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
+	})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
@@ -812,18 +879,20 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 
 	delta := int32(0)
 	stats := statsFn()
-	if stats.ApproximateBacklogCount > 0 &&
-		stats.ApproximateBacklogAge.AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
+	if stats.GetApproximateBacklogCount() > 0 &&
+		stats.GetApproximateBacklogAge().AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
 		// sticky queues.
 		delta = 1
 	} else if !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		return nil
-	} else if (stats.TasksAddRate / stats.TasksDispatchRate) > 1.2 {
-		// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-		// since those (currently) don't get backlogged.
-		delta = 1
+	} else {
+		if (stats.GetTasksAddRate() / stats.GetTasksDispatchRate()) > 1.2 {
+			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
+			// since those (currently) don't get backlogged.
+			delta = 1
+		}
 	}
 
 	if delta == 0 {
@@ -831,6 +900,12 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	}
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
+	}
+}
+
+func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
+	if c.priMatcher != nil {
+		c.priMatcher.UpdateRemotePriorityBacklogs(backlogs)
 	}
 }
 
@@ -886,14 +961,16 @@ func mergeStats(into, from *taskqueuepb.TaskQueueStats) {
 }
 
 func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {
+	// Treat nil as zero to keep stats aggregation defensive. It is okay here to reassign the pointer values when
+	// they are nil since a nil Duration proto is equivalent to a zero duration.
+	if left == nil {
+		left = durationpb.New(0)
+	}
+	if right == nil {
+		right = durationpb.New(0)
+	}
 	if left.AsDuration() > right.AsDuration() {
 		return left
 	}
 	return right
-}
-
-func ensureStats[T ~int32](stats map[int32]*taskqueuepb.TaskQueueStats, pri T) {
-	if _, ok := stats[int32(pri)]; !ok {
-		stats[int32(pri)] = &taskqueuepb.TaskQueueStats{}
-	}
 }

@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"context"
+
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -9,6 +11,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -52,6 +55,10 @@ func ScheduleWorkflowTask(
 
 	if mutableState.HasPendingWorkflowTask() {
 		return nil
+	}
+
+	if mutableState.IsWorkflowExecutionStatusPaused() {
+		return nil // workflow is paused, do not schedule a workflow task.
 	}
 
 	_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
@@ -273,7 +280,7 @@ func shouldReapplyEvent(stateMachineRegistry *hsm.Registry, event *historypb.His
 	return false
 }
 
-func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.Callback, error) {
+func getCompletionCallbacksAsProtoSlice(ctx context.Context, ms historyi.MutableState) ([]*commonpb.Callback, error) {
 	coll := callbacks.MachineCollection(ms.HSM())
 	result := make([]*commonpb.Callback, 0, coll.Size())
 	for _, node := range coll.List() {
@@ -290,6 +297,30 @@ func getCompletionCallbacksAsProtoSlice(ms historyi.MutableState) ([]*commonpb.C
 		}
 		result = append(result, cbSpec)
 	}
+
+	// Collect CHASM callbacks
+	if ms.ChasmEnabled() {
+		wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, field := range wf.Callbacks {
+			cb := field.Get(ctx)
+			// Only include callbacks in STANDBY state (not already triggered)
+			if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+				continue
+			}
+			// Convert CHASM callback to API callback
+			cbSpec, err := cb.ToAPICallback()
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, cbSpec)
+		}
+	}
+	// }
+
 	return result, nil
 }
 

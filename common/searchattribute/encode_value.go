@@ -9,18 +9,19 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 var ErrInvalidString = errors.New("SearchAttribute value is not a valid UTF-8 string")
 
 // EncodeValue encodes search attribute value and IndexedValueType to Payload.
-func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
+func EncodeValue(val any, t enumspb.IndexedValueType) (*commonpb.Payload, error) {
 	valPayload, err := payload.Encode(val)
 	if err != nil {
 		return nil, err
 	}
 
-	setMetadataType(valPayload, t)
+	sadefs.SetMetadataType(valPayload, t)
 	return valPayload, nil
 }
 

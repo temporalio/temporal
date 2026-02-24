@@ -2,51 +2,51 @@
 
 package testhooks
 
-import "testing"
+import (
+	"testing"
 
-// Ensure that testhook functionality that operates on contexts functions as
-// expected.
-func TestTestHooks_Context(t *testing.T) {
-	t.Run("Values can be set and get on the context directly", func(t *testing.T) {
-		ctx, _ := NewInjectedTestHooksImpl(t.Context())
-		cleanup := SetCtx(ctx, UpdateWithStartInBetweenLockAndStart, 33)
-		defer cleanup()
+	"github.com/stretchr/testify/require"
+)
 
-		v, ok := GetCtx[int](ctx, UpdateWithStartInBetweenLockAndStart)
-		if !ok {
-			t.Fatal("Expected TestHooksImpl to contain value")
-		}
-		if v != 33 {
-			t.Fatal("Expected value to be 33")
-		}
+func TestGet(t *testing.T) {
+	th := NewTestHooks()
+
+	t.Run("returns false for unset key", func(t *testing.T) {
+		_, ok := Get[int](th, MatchingDisableSyncMatch)
+		require.False(t, ok)
 	})
 
-	t.Run("Values set directly on the registry are visible through the context", func(t *testing.T) {
-		ctx, reg := NewInjectedTestHooksImpl(t.Context())
-		cleanup := Set(reg, UpdateWithStartInBetweenLockAndStart, 44)
+	t.Run("returns set value", func(t *testing.T) {
+		cleanup := Set(th, MatchingDisableSyncMatch, 42)
 		defer cleanup()
 
-		v, ok := GetCtx[int](ctx, UpdateWithStartInBetweenLockAndStart)
-		if !ok {
-			t.Fatal("Expected TestHooksImpl to contain value")
-		}
-		if v != 44 {
-			t.Fatal("Expected value to be 44")
-		}
+		v, ok := Get[int](th, MatchingDisableSyncMatch)
+		require.True(t, ok)
+		require.Equal(t, 42, v)
 	})
 
-	t.Run("CallCtx uses the registry injected into the context", func(t *testing.T) {
-		ctx, reg := NewInjectedTestHooksImpl(t.Context())
-		var value int
-		callback := func() {
-			value = 55
-		}
-		cleanup := Set(reg, UpdateWithStartInBetweenLockAndStart, callback)
+	t.Run("cleanup removes value", func(t *testing.T) {
+		cleanup := Set(th, MatchingDisableSyncMatch, 42)
+		cleanup()
+
+		_, ok := Get[int](th, MatchingDisableSyncMatch)
+		require.False(t, ok)
+	})
+}
+
+func TestCall(t *testing.T) {
+	th := NewTestHooks()
+
+	t.Run("does nothing for unset key", func(t *testing.T) {
+		Call(th, MatchingDisableSyncMatch) // should not panic
+	})
+
+	t.Run("calls set function", func(t *testing.T) {
+		called := false
+		cleanup := Set(th, MatchingDisableSyncMatch, func() { called = true })
 		defer cleanup()
 
-		CallCtx(ctx, UpdateWithStartInBetweenLockAndStart)
-		if value != 55 {
-			t.Fatal("Expected value to be 55")
-		}
+		Call(th, MatchingDisableSyncMatch)
+		require.True(t, called)
 	})
 }

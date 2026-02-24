@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -14,7 +15,6 @@ import (
 	"weak"
 
 	"github.com/mitchellh/mapstructure"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -35,16 +35,19 @@ type (
 
 		cancelClientSubscription func()
 
-		subscriptionLock sync.Mutex          // protects subscriptions, subscriptionIdx, and callbackPool
+		subscriptionLock sync.Mutex          // protects subscriptions and subscriptionIdx
 		subscriptions    map[Key]map[int]any // final "any" is *subscription[T]
 		subscriptionIdx  int
-		callbackPool     *goro.AdaptivePool
 
 		poller goro.Group
 
 		// cache converted values. use weak pointers to avoid holding on to values in the cache
-		// that are no longer in use.
-		convertCache sync.Map // map[weak.Pointer[ConstrainedValue]]any
+		// that are no longer in use. this must be a pointer since the cleanup closures need to
+		// reference this without referencing Collection.
+		convertCache *sync.Map // map[weak.Pointer[ConstrainedValue]]any
+
+		// index by constraints
+		indexCache *sync.Map // map[weak.Pointer[ConstrainedValue]]map[Constraints]int32
 	}
 
 	subscription[T any] struct {
@@ -87,16 +90,20 @@ type (
 
 const (
 	errCountLogThreshold = 1000
+	// After this many constraints, switch to a cached lookup. This value was determined
+	// empirically on my machine using BenchmarkCollectionIndexed.
+	constraintsCacheThreshold = 32
 )
 
 var (
 	errKeyNotPresent        = errors.New("key not present")
 	errNoMatchingConstraint = errors.New("no matching constraint in key")
 
-	protoEnumType = reflect.TypeOf((*protoreflect.Enum)(nil)).Elem()
-	errorType     = reflect.TypeOf((*error)(nil)).Elem()
-	durationType  = reflect.TypeOf(time.Duration(0))
-	stringType    = reflect.TypeOf("")
+	protoEnumType = reflect.TypeFor[protoreflect.Enum]()
+	errorType     = reflect.TypeFor[error]()
+	durationType  = reflect.TypeFor[time.Duration]()
+	timeType      = reflect.TypeFor[time.Time]()
+	stringType    = reflect.TypeFor[string]()
 
 	usingDefaultValue any = defaultValue{}
 )
@@ -112,14 +119,14 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		logger:        logger,
 		errCount:      -1,
 		subscriptions: make(map[Key]map[int]any),
+		convertCache:  new(sync.Map),
+		indexCache:    new(sync.Map),
 	}
 }
 
 func (c *Collection) Start() {
-	s := DynamicConfigSubscriptionCallback.Get(c)()
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	c.callbackPool = goro.NewAdaptivePool(clock.NewRealTimeSource(), s.MinWorkers, s.MaxWorkers, s.TargetDelay, s.ShrinkFactor)
 	if notifyingClient, ok := c.client.(NotifyingClient); ok {
 		c.cancelClientSubscription = notifyingClient.Subscribe(c.keysChanged)
 	} else {
@@ -133,10 +140,6 @@ func (c *Collection) Stop() {
 	if c.cancelClientSubscription != nil {
 		c.cancelClientSubscription()
 	}
-	c.subscriptionLock.Lock()
-	defer c.subscriptionLock.Unlock()
-	c.callbackPool.Stop()
-	c.callbackPool = nil
 }
 
 // Implement pingable.Pingable
@@ -147,14 +150,8 @@ func (c *Collection) GetPingChecks() []pingable.Check {
 			Timeout: 5 * time.Second,
 			Ping: func() []pingable.Pingable {
 				c.subscriptionLock.Lock()
-				defer c.subscriptionLock.Unlock()
-				if c.callbackPool == nil {
-					return nil
-				}
-				var wg sync.WaitGroup
-				wg.Add(1)
-				c.callbackPool.Do(wg.Done)
-				wg.Wait()
+				//nolint:staticcheck // SA2001 just checking if we can acquire the lock
+				c.subscriptionLock.Unlock()
 				return nil
 			},
 		},
@@ -173,9 +170,6 @@ func (c *Collection) pollForChanges(ctx context.Context) error {
 func (c *Collection) pollOnce() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	if c.callbackPool == nil {
-		return
-	}
 
 	for key, subs := range c.subscriptions {
 		setting := queryRegistry(key)
@@ -192,9 +186,6 @@ func (c *Collection) pollOnce() {
 func (c *Collection) keysChanged(changed map[Key][]ConstrainedValue) {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
-	if c.callbackPool == nil {
-		return
-	}
 
 	for key, cvs := range changed {
 		setting := queryRegistry(key)
@@ -216,10 +207,17 @@ func (c *Collection) throttleLog() bool {
 	return errCount < errCountLogThreshold || errCount%errCountLogThreshold == 0
 }
 
-func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedValue, error) {
+func findMatch(
+	cache *sync.Map,
+	cvs []ConstrainedValue,
+	precedence []Constraints,
+) (*ConstrainedValue, error) {
 	if len(cvs) == 0 {
 		return nil, errKeyNotPresent
+	} else if len(cvs) > constraintsCacheThreshold && len(cvs) <= math.MaxInt32 {
+		return findMatchWithCache(cache, cvs, precedence)
 	}
+
 	for _, m := range precedence {
 		for idx, cv := range cvs {
 			if m == cv.Constraints {
@@ -229,6 +227,43 @@ func findMatch(cvs []ConstrainedValue, precedence []Constraints) (*ConstrainedVa
 				// Client.GetValue.
 				return &cvs[idx], nil
 			}
+		}
+	}
+	// key is present but no constraint section matches
+	return nil, errNoMatchingConstraint
+}
+
+func findMatchWithCache(
+	cache *sync.Map,
+	cvs []ConstrainedValue,
+	precedence []Constraints,
+) (*ConstrainedValue, error) {
+	var cached map[Constraints]int32
+	weakcvp := weak.Make(&cvs[0])
+	if v, ok := cache.Load(weakcvp); ok {
+		cached = v.(map[Constraints]int32) // nolint:revive // unchecked-type-assertion
+	} else {
+		cached = make(map[Constraints]int32, len(cvs))
+		for i := range cvs {
+			// pick first one to match behavior if multiple match
+			if _, ok := cached[cvs[i].Constraints]; !ok {
+				cached[cvs[i].Constraints] = int32(i)
+			}
+		}
+		if _, loaded := cache.LoadOrStore(weakcvp, cached); !loaded {
+			runtime.AddCleanup(&cvs[0], func(w weak.Pointer[ConstrainedValue]) {
+				cache.Delete(w)
+			}, weakcvp)
+		}
+	}
+
+	for _, m := range precedence {
+		if i, ok := cached[m]; ok {
+			// Note: cvs here is the slice returned by Client.GetValue. We want to return a
+			// pointer into that slice so that the converted value is cached as long as the
+			// Client keeps the []ConstrainedValue alive. See the comment on
+			// Client.GetValue.
+			return &cvs[i], nil
 		}
 	}
 	// key is present but no constraint section matches
@@ -257,7 +292,7 @@ func matchAndConvertCvs[T any](
 	precedence []Constraints,
 	cvs []ConstrainedValue,
 ) (T, any) {
-	cvp, err := findMatch(cvs, precedence)
+	cvp, err := findMatch(c.indexCache, cvs, precedence)
 	if err != nil {
 		// couldn't find a constrained match, use default
 		return def, usingDefaultValue
@@ -449,7 +484,7 @@ func dispatchUpdate[T any](
 	cvs []ConstrainedValue,
 ) {
 	var raw any
-	cvp, err := findMatch(cvs, sub.prec)
+	cvp, err := findMatch(c.indexCache, cvs, sub.prec)
 	if err != nil {
 		raw = usingDefaultValue
 	} else {
@@ -481,7 +516,7 @@ func dispatchUpdate[T any](
 	}
 
 	sub.raw = raw
-	c.callbackPool.Do(func() { sub.f(newVal) })
+	go sub.f(newVal)
 }
 
 // called with subscriptionLock
@@ -508,7 +543,7 @@ func dispatchUpdateWithConstrainedDefault[T any](
 	}
 
 	sub.raw = raw
-	c.callbackPool.Do(func() { sub.f(newVal) })
+	go sub.f(newVal)
 }
 
 func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error), cvp *ConstrainedValue) (T, error) {
@@ -529,11 +564,12 @@ func convertWithCache[T any](c *Collection, key Key, convert func(any) (T, error
 		return zero, err
 	}
 
-	c.convertCache.Store(weakcvp, t)
-
-	runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
-		c.convertCache.Delete(w)
-	}, weakcvp)
+	if _, loaded := c.convertCache.LoadOrStore(weakcvp, t); !loaded {
+		cc := c.convertCache // capture only this pointer, not the whole Collection
+		runtime.AddCleanup(cvp, func(w weak.Pointer[ConstrainedValue]) {
+			cc.Delete(w)
+		}, weakcvp)
+	}
 
 	return t, nil
 }
@@ -654,6 +690,7 @@ func ConvertStructure[T any](def T) func(v any) (T, error) {
 			Result: &out,
 			DecodeHook: mapstructure.ComposeDecodeHookFunc(
 				mapstructureHookDuration,
+				mapstructureHookTimestamp,
 				mapstructureHookProtoEnum,
 				mapstructureHookGeneric,
 			),
@@ -673,6 +710,31 @@ func mapstructureHookDuration(f, t reflect.Type, data any) (any, error) {
 		return data, nil
 	}
 	return convertDuration(data)
+}
+
+// Parses string or int into time.Time.
+func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
+	if t != timeType {
+		return data, nil
+	}
+	switch v := data.(type) {
+	case time.Time:
+		return v, nil
+	case string:
+		ts, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return time.Time{}, fmt.Errorf("failed to parse time: %v", err)
+		}
+		return ts, nil
+	}
+	// treat numeric values as seconds
+	if ival, err := convertInt(data); err == nil {
+		return time.Unix(int64(ival), 0), nil
+	} else if fval, err := convertFloat(data); err == nil {
+		ipart, fpart := math.Modf(fval)
+		return time.Unix(int64(ipart), int64(fpart*float64(time.Second))), nil
+	}
+	return time.Time{}, errors.New("value not convertible to Time")
 }
 
 // Parses proto enum values from strings.

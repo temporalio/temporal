@@ -24,15 +24,21 @@ COMMANDS:
    help, h         Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:
-   --endpoint value           hostname or ip address of elasticsearch server (default: "http://127.0.0.1:9200") [$ES_SERVER]
-   --user value               username for elasticsearch or aws_access_key_id if using static aws credentials [$ES_USER]
-   --password value           password for elasticsearch or aws_secret_access_key if using static aws credentials [$ES_PWD]
-   --aws-credentials value    AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$AWS_CREDENTIALS]
-   --aws-session-token value  AWS sessiontoken for use with 'static' AWS credentials provider [$AWS_SESSION_TOKEN]
-   --index value              name of the visibility index [$ES_VISIBILITY_INDEX]
-   --quiet                    don't log errors to stderr (default: false)
-   --help, -h                 show help
-   --version, -v              print the version
+   --endpoint value                    hostname or ip address of elasticsearch server (default: "http://127.0.0.1:9200") [$ES_SERVER]
+   --user value                        username for elasticsearch or aws_access_key_id if using static aws credentials [$ES_USER]
+   --password value                    password for elasticsearch or aws_secret_access_key if using static aws credentials [$ES_PWD]
+   --aws-credentials value             AWS credentials provider (supported ['static', 'environment', 'aws-sdk-default']) [$AWS_CREDENTIALS]
+   --aws-session-token value           AWS sessiontoken for use with 'static' AWS credentials provider [$AWS_SESSION_TOKEN]
+   --tls                               enable TLS for elasticsearch connection [$ES_TLS]
+   --tls-cert-file value               path to TLS certificate file (tls must be enabled) [$ES_TLS_CERT_FILE]
+   --tls-key-file value                path to TLS key file (tls must be enabled) [$ES_TLS_KEY_FILE]
+   --tls-ca-file value                 path to TLS CA certificate file (tls must be enabled) [$ES_TLS_CA_FILE]
+   --tls-server-name value             TLS server name for host name verification (tls must be enabled) [$ES_TLS_SERVER_NAME]
+   --tls-disable-host-verification     disable TLS host name verification (tls must be enabled) [$ES_TLS_DISABLE_HOST_VERIFICATION]
+   --index value                       name of the visibility index [$ES_VISIBILITY_INDEX]
+   --quiet                             don't log errors to stderr (default: false)
+   --help, -h                          show help
+   --version, -v                       print the version
 ```
 
 ## For localhost development
@@ -148,6 +154,74 @@ export ES_VISIBILITY_INDEX=temporal_visibility_v1
 
 temporal-elasticsearch-tool --aws static setup-schema
 temporal-elasticsearch-tool --aws static create-index
+```
+
+### TLS Configuration
+The tool supports TLS for secure connections to Elasticsearch.
+
+#### Basic TLS with CA certificate
+```bash
+export ES_SERVER=https://elasticsearch.example.com:9200
+export ES_TLS=true
+export ES_TLS_CA_FILE=/path/to/ca.crt
+export ES_USER=elastic
+export ES_PWD=password
+
+temporal-elasticsearch-tool setup-schema
+temporal-elasticsearch-tool create-index
+```
+
+#### TLS with client certificate authentication
+```bash
+export ES_SERVER=https://elasticsearch.example.com:9200
+export ES_TLS=true
+export ES_TLS_CA_FILE=/path/to/ca.crt
+export ES_TLS_CERT_FILE=/path/to/client.crt
+export ES_TLS_KEY_FILE=/path/to/client.key
+export ES_USER=elastic
+export ES_PWD=password
+
+temporal-elasticsearch-tool setup-schema
+temporal-elasticsearch-tool create-index
+```
+
+#### TLS with custom server name
+```bash
+export ES_SERVER=https://elasticsearch.example.com:9200
+export ES_TLS=true
+export ES_TLS_CA_FILE=/path/to/ca.crt
+export ES_TLS_SERVER_NAME=elasticsearch.internal
+export ES_USER=elastic
+export ES_PWD=password
+
+temporal-elasticsearch-tool setup-schema
+```
+
+#### TLS with disabled host verification (not recommended for production)
+```bash
+export ES_SERVER=https://elasticsearch.example.com:9200
+export ES_TLS=true
+export ES_TLS_DISABLE_HOST_VERIFICATION=true
+export ES_USER=elastic
+export ES_PWD=password
+
+temporal-elasticsearch-tool setup-schema
+```
+
+#### Using command line flags
+All TLS options can also be specified as command line flags:
+
+```bash
+temporal-elasticsearch-tool \
+  --endpoint https://elasticsearch.example.com:9200 \
+  --tls \
+  --tls-ca-file /path/to/ca.crt \
+  --tls-cert-file /path/to/client.crt \
+  --tls-key-file /path/to/client.key \
+  --tls-server-name elasticsearch.internal \
+  --user elastic \
+  --password password \
+  setup-schema
 ```
 
 ### Additional Commands

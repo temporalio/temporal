@@ -5,11 +5,21 @@
 # To use it, run a local server (any backend) and ensure the following dynamic configs are enabled 
 # in the dynamic config file (config/dynamicconfig/development-sql.yaml):
 #
+# matching.deploymentWorkflowVersion={WORKFLOW_VERSION}
 # matching.PollerHistoryTTL=1s
 # matching.wv.VersionDrainageStatusVisibilityGracePeriod=5s
 # matching.wv.VersionDrainageStatusRefreshInterval=5s
 #
-# Then run this script.
+# Make sure you set deploymentWorkflowVersion correctly. It should be an integer instead of {WORKFLOW_VERSION} above.
+# If deploymentWorkflowVersion is set to i, run this script with v{i} as the argument. The argument instructs the script
+# where to put the history files under `testdata` folder. The workflow version that server uses and the testdata folder
+# must match in order for the tests to run against correct workflow versions.
+
+# Example: set `matching.deploymentWorkflowVersion=1` and run this script as below:
+# ./generate_history.sh v1
+#
+# With above config and command, the replay histories will be generated using workflow version
+# 1 (AsyncSetCurrentAndRamping) and saved in testdata/v1 folder.
 #
 # Note: this requires temporal cli >= 0.12 and sdk >= v1.33.0
 
@@ -97,7 +107,7 @@ download_workflow_chain() {
 
 # Create timestamped run directory 
 now=$(date +%s)
-run_dir="$(dirname "$0")/testdata/run_$now"
+run_dir="$(dirname "$0")/testdata/$1/run_$now"
 mkdir -p "$run_dir"
 
 echo "📁 Creating run directory: $run_dir"

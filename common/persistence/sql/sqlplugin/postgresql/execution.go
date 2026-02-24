@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/softassert"
 )
 
 const (
@@ -32,22 +34,35 @@ const (
 	createCurrentExecutionQuery = `INSERT INTO current_executions
 (shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
 (:shard_id, :namespace_id, :workflow_id, :run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
+	createCurrentChasmExecutionQuery = `INSERT INTO current_chasm_executions
+(shard_id, namespace_id, business_id, archetype_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding) VALUES
+(:shard_id, :namespace_id, :workflow_id, :archetype_id, :run_id, :create_request_id, :state, :status, :start_time, :last_write_version, :data, :data_encoding)`
 
-	deleteCurrentExecutionQuery = "DELETE FROM current_executions WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4"
+	deleteCurrentExecutionQuery      = "DELETE FROM current_executions WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4"
+	deleteCurrentChasmExecutionQuery = "DELETE FROM current_chasm_executions WHERE shard_id = $1 AND namespace_id = $2 AND business_id = $3 AND archetype_id = $4 AND run_id = $5"
 
 	getCurrentExecutionQuery = `SELECT
 shard_id, namespace_id, workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding
 FROM current_executions WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3`
+	getCurrentChasmExecutionQuery = `SELECT
+shard_id, namespace_id, business_id as workflow_id, run_id, create_request_id, state, status, start_time, last_write_version, data, data_encoding
+FROM current_chasm_executions WHERE shard_id = $1 AND namespace_id = $2 AND business_id = $3 AND archetype_id = $4`
 
 	lockCurrentExecutionJoinExecutionsQuery = `SELECT
 ce.shard_id, ce.namespace_id, ce.workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version, ce.data, ce.data_encoding
 FROM current_executions ce
 INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.workflow_id AND e.run_id = ce.run_id
 WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.workflow_id = $3 FOR UPDATE`
+	lockCurrentChasmExecutionJoinExecutionsQuery = `SELECT
+ce.shard_id, ce.namespace_id, ce.business_id as workflow_id, ce.run_id, ce.create_request_id, ce.state, ce.status, ce.start_time, e.last_write_version, ce.data, ce.data_encoding
+FROM current_chasm_executions ce
+INNER JOIN executions e ON e.shard_id = ce.shard_id AND e.namespace_id = ce.namespace_id AND e.workflow_id = ce.business_id AND e.run_id = ce.run_id
+WHERE ce.shard_id = $1 AND ce.namespace_id = $2 AND ce.business_id = $3 AND ce.archetype_id = $4 FOR UPDATE`
 
-	lockCurrentExecutionQuery = getCurrentExecutionQuery + ` FOR UPDATE`
+	lockCurrentExecutionQuery      = getCurrentExecutionQuery + ` FOR UPDATE`
+	lockCurrentChasmExecutionQuery = getCurrentChasmExecutionQuery + ` FOR UPDATE`
 
-	updateCurrentExecutionsQuery = `UPDATE current_executions SET
+	updateCurrentExecutionsBase = ` SET
 run_id = :run_id,
 create_request_id = :create_request_id,
 state = :state,
@@ -58,9 +73,10 @@ data = :data,
 data_encoding = :data_encoding
 WHERE
 shard_id = :shard_id AND
-namespace_id = :namespace_id AND
-workflow_id = :workflow_id
+namespace_id = :namespace_id
 `
+	updateCurrentExecutionsQuery      = `UPDATE current_executions` + updateCurrentExecutionsBase + ` AND workflow_id = :workflow_id`
+	updateCurrentChasmExecutionsQuery = `UPDATE current_chasm_executions` + updateCurrentExecutionsBase + ` AND business_id = :workflow_id AND archetype_id = :archetype_id`
 
 	createHistoryImmediateTasksQuery = `INSERT INTO history_immediate_tasks(shard_id, category_id, task_id, data, data_encoding) 
  VALUES(:shard_id, :category_id, :task_id, :data, :data_encoding)`
@@ -259,8 +275,19 @@ func (pdb *db) InsertIntoCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
+	if err := pdb.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if row.ArchetypeID == chasm.WorkflowArchetypeID {
+		return pdb.NamedExecContext(ctx,
+			createCurrentExecutionQuery,
+			row,
+		)
+	}
+
 	return pdb.NamedExecContext(ctx,
-		createCurrentExecutionQuery,
+		createCurrentChasmExecutionQuery,
 		row,
 	)
 }
@@ -270,8 +297,19 @@ func (pdb *db) UpdateCurrentExecutions(
 	ctx context.Context,
 	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
+	if err := pdb.assertArchetypeIDSpecified(row.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if row.ArchetypeID == chasm.WorkflowArchetypeID {
+		return pdb.NamedExecContext(ctx,
+			updateCurrentExecutionsQuery,
+			row,
+		)
+	}
+
 	return pdb.NamedExecContext(ctx,
-		updateCurrentExecutionsQuery,
+		updateCurrentChasmExecutionsQuery,
 		row,
 	)
 }
@@ -282,13 +320,32 @@ func (pdb *db) SelectFromCurrentExecutions(
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
-	err := pdb.GetContext(ctx,
-		&row,
-		getCurrentExecutionQuery,
-		filter.ShardID,
-		filter.NamespaceID,
-		filter.WorkflowID,
-	)
+	var err error
+
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
+		err = pdb.GetContext(ctx,
+			&row,
+			getCurrentExecutionQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+		)
+	} else {
+		err = pdb.GetContext(ctx,
+			&row,
+			getCurrentChasmExecutionQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+			filter.ArchetypeID,
+		)
+	}
+
+	row.ArchetypeID = filter.ArchetypeID
 	return &row, err
 }
 
@@ -297,11 +354,26 @@ func (pdb *db) DeleteFromCurrentExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (sql.Result, error) {
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
+		return pdb.ExecContext(ctx,
+			deleteCurrentExecutionQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+			filter.RunID,
+		)
+	}
+
 	return pdb.ExecContext(ctx,
-		deleteCurrentExecutionQuery,
+		deleteCurrentChasmExecutionQuery,
 		filter.ShardID,
 		filter.NamespaceID,
 		filter.WorkflowID,
+		filter.ArchetypeID,
 		filter.RunID,
 	)
 }
@@ -312,13 +384,32 @@ func (pdb *db) LockCurrentExecutions(
 	filter sqlplugin.CurrentExecutionsFilter,
 ) (*sqlplugin.CurrentExecutionsRow, error) {
 	var row sqlplugin.CurrentExecutionsRow
-	err := pdb.GetContext(ctx,
-		&row,
-		lockCurrentExecutionQuery,
-		filter.ShardID,
-		filter.NamespaceID,
-		filter.WorkflowID,
-	)
+	var err error
+
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
+		err = pdb.GetContext(ctx,
+			&row,
+			lockCurrentExecutionQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+		)
+	} else {
+		err = pdb.GetContext(ctx,
+			&row,
+			lockCurrentChasmExecutionQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+			filter.ArchetypeID,
+		)
+	}
+
+	row.ArchetypeID = filter.ArchetypeID
 	return &row, err
 }
 
@@ -327,15 +418,34 @@ func (pdb *db) LockCurrentExecutions(
 func (pdb *db) LockCurrentExecutionsJoinExecutions(
 	ctx context.Context,
 	filter sqlplugin.CurrentExecutionsFilter,
-) ([]sqlplugin.CurrentExecutionsRow, error) {
-	var rows []sqlplugin.CurrentExecutionsRow
-	err := pdb.SelectContext(ctx,
-		&rows,
-		lockCurrentExecutionJoinExecutionsQuery,
-		filter.ShardID,
-		filter.NamespaceID,
-		filter.WorkflowID,
-	)
+) (rows []sqlplugin.CurrentExecutionsRow, err error) {
+
+	if err := pdb.assertArchetypeIDSpecified(filter.ArchetypeID); err != nil {
+		return nil, err
+	}
+
+	if filter.ArchetypeID == chasm.WorkflowArchetypeID {
+		err = pdb.SelectContext(ctx,
+			&rows,
+			lockCurrentExecutionJoinExecutionsQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+		)
+	} else {
+		err = pdb.SelectContext(ctx,
+			&rows,
+			lockCurrentChasmExecutionJoinExecutionsQuery,
+			filter.ShardID,
+			filter.NamespaceID,
+			filter.WorkflowID,
+			filter.ArchetypeID,
+		)
+	}
+
+	for i := range rows {
+		rows[i].ArchetypeID = filter.ArchetypeID
+	}
 	return rows, err
 }
 
@@ -810,4 +920,11 @@ func (pdb *db) RangeDeleteFromVisibilityTasks(
 		filter.InclusiveMinTaskID,
 		filter.ExclusiveMaxTaskID,
 	)
+}
+
+func (pdb *db) assertArchetypeIDSpecified(archetypeID chasm.ArchetypeID) error {
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		return softassert.UnexpectedInternalErr(pdb.logger, "ArchetypeID not specified", nil)
+	}
+	return nil
 }

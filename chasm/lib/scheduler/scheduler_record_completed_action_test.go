@@ -1,210 +1,228 @@
 package scheduler_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	schedulepb "go.temporal.io/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type recordCompletedActionTestCase struct {
 	name           string
-	setupScheduler func(*scheduler.Scheduler)
-	workflowID     string
-	workflowStatus enumspb.WorkflowExecutionStatus
-	scheduleTime   time.Time
-	validate       func(*testing.T, *scheduler.Scheduler)
+	setupScheduler func(*scheduler.Scheduler, chasm.MutableContext)
+	requestID      string
+	completed      *schedulespb.CompletedResult
+	validate       func(*testing.T, *scheduler.Scheduler, chasm.Context)
 }
 
 func executeRecordCompletedAction(t *testing.T, tc recordCompletedActionTestCase) {
 	sched, ctx, node := setupSchedulerForTest(t)
 
 	if tc.setupScheduler != nil {
-		tc.setupScheduler(sched)
+		tc.setupScheduler(sched, ctx)
 	}
 
-	sched.RecordCompletedAction(ctx, tc.scheduleTime, tc.workflowID, tc.workflowStatus)
+	sched.RecordCompletedAction(ctx, tc.completed, tc.requestID)
 
 	_, err := node.CloseTransaction()
 	require.NoError(t, err)
 
+	readCtx := chasm.NewContext(context.Background(), node)
 	if tc.validate != nil {
-		tc.validate(t, sched)
+		tc.validate(t, sched, readCtx)
 	}
 }
 
-// TestRecordCompletedAction_SingleWorkflowInRunningWorkflows verifies that when
-// a workflow exists in both RunningWorkflows and RecentActions, it is removed
-// from RunningWorkflows and its status is updated in RecentActions.
-func TestRecordCompletedAction_SingleWorkflowInRunningWorkflows(t *testing.T) {
+// TestRecordCompletedAction_SingleRunningWorkflow verifies that when
+// a workflow exists in BufferedStarts with a RunId (running), completing it
+// sets the Completed field.
+func TestRecordCompletedAction_SingleRunningWorkflow(t *testing.T) {
+	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
-		name: "single workflow in RunningWorkflows",
-		setupScheduler: func(sched *scheduler.Scheduler) {
-			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
-				{WorkflowId: "wf-1", RunId: "run-1"},
-			}
-			sched.Info.RecentActions = []*schedulepb.ScheduleActionResult{
+		name: "single running workflow",
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+			invoker := sched.Invoker.Get(ctx)
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					StartWorkflowResult: &commonpb.WorkflowExecution{
-						WorkflowId: "wf-1",
-						RunId:      "run-1",
-					},
-					StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
-		workflowID:     "wf-1",
-		workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		scheduleTime:   time.Now(),
-		validate: func(t *testing.T, sched *scheduler.Scheduler) {
-			require.Empty(t, sched.Info.RunningWorkflows)
-			require.Len(t, sched.Info.RecentActions, 1)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, sched.Info.RecentActions[0].StartWorkflowStatus)
+		requestID: "req-1",
+		completed: &schedulespb.CompletedResult{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(closeTime),
+		},
+		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
+			invoker := sched.Invoker.Get(ctx)
+			require.Len(t, invoker.BufferedStarts, 1)
+			require.NotNil(t, invoker.BufferedStarts[0].Completed)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, invoker.BufferedStarts[0].Completed.Status)
 		},
 	}
 
 	executeRecordCompletedAction(t, tc)
 }
 
-// TestRecordCompletedAction_MultipleWorkflowsSameID verifies that when multiple
-// workflows with the same workflowID but different runIDs exist in RunningWorkflows,
-// ALL of them are removed. This handles scenarios where workflows may have retried
-// or continued-as-new, resulting in multiple runs with different runIDs.
-func TestRecordCompletedAction_MultipleWorkflowsSameID(t *testing.T) {
+// TestRecordCompletedAction_MultipleWorkflows verifies that when multiple
+// workflows exist in BufferedStarts, only the one with the matching requestID
+// is marked as completed.
+func TestRecordCompletedAction_MultipleWorkflows(t *testing.T) {
+	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
-		name: "multiple workflows with same workflowID but different runIDs",
-		setupScheduler: func(sched *scheduler.Scheduler) {
-			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
-				{WorkflowId: "wf-1", RunId: "run-1"},
-				{WorkflowId: "wf-1", RunId: "run-2"},
-				{WorkflowId: "wf-1", RunId: "run-3"},
-				{WorkflowId: "other-wf", RunId: "other-run"},
-			}
-			sched.Info.RecentActions = []*schedulepb.ScheduleActionResult{
+		name: "multiple workflows, complete one",
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+			invoker := sched.Invoker.Get(ctx)
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					StartWorkflowResult: &commonpb.WorkflowExecution{
-						WorkflowId: "wf-1",
-						RunId:      "run-1",
-					},
-					StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-2 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-90 * time.Second)),
+				},
+				{
+					RequestId:  "req-2",
+					WorkflowId: "wf-2",
+					RunId:      "run-2",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
-		workflowID:     "wf-1",
-		workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		scheduleTime:   time.Now(),
-		validate: func(t *testing.T, sched *scheduler.Scheduler) {
-			require.Len(t, sched.Info.RunningWorkflows, 1)
-			require.Equal(t, "other-wf", sched.Info.RunningWorkflows[0].WorkflowId)
+		requestID: "req-1",
+		completed: &schedulespb.CompletedResult{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			CloseTime: timestamppb.New(closeTime),
+		},
+		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
+			invoker := sched.Invoker.Get(ctx)
+			require.Len(t, invoker.BufferedStarts, 2)
 
-			for _, wf := range sched.Info.RunningWorkflows {
-				require.NotEqual(t, "wf-1", wf.WorkflowId)
+			// Find workflows by RequestId since applyCompletedRetention reorders
+			// (non-completed first, then completed)
+			var req1Start, req2Start *schedulespb.BufferedStart
+			for _, start := range invoker.BufferedStarts {
+				switch start.RequestId {
+				case "req-1":
+					req1Start = start
+				case "req-2":
+					req2Start = start
+				default:
+				}
 			}
+			require.NotNil(t, req1Start)
+			require.NotNil(t, req2Start)
+
+			// First workflow (req-1) should be completed
+			require.NotNil(t, req1Start.Completed)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, req1Start.Completed.Status)
+
+			// Second workflow (req-2) should still be running
+			require.Nil(t, req2Start.Completed)
 		},
 	}
 
 	executeRecordCompletedAction(t, tc)
 }
 
-// TestRecordCompletedAction_WorkflowNotInRunningWorkflows verifies that when a
-// workflow is not present in RunningWorkflows but exists in RecentActions, the
-// function successfully updates RecentActions without errors. This can happen when
-// a workflow completes after already being removed from RunningWorkflows.
-func TestRecordCompletedAction_WorkflowNotInRunningWorkflows(t *testing.T) {
+// TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending verifies that
+// completing a workflow updates the DesiredTime on the first pending start
+// (Attempt == 0) to the close time of the completed workflow.
+func TestRecordCompletedAction_UpdatesDesiredTimeOnNextPending(t *testing.T) {
+	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
-		name: "workflow not in RunningWorkflows",
-		setupScheduler: func(sched *scheduler.Scheduler) {
-			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
-				{WorkflowId: "other-wf", RunId: "other-run"},
-			}
-			sched.Info.RecentActions = []*schedulepb.ScheduleActionResult{
+		name: "updates DesiredTime on next pending start",
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+			invoker := sched.Invoker.Get(ctx)
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					StartWorkflowResult: &commonpb.WorkflowExecution{
-						WorkflowId: "wf-1",
-						RunId:      "run-1",
-					},
-					StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-2 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-90 * time.Second)),
+				},
+				{
+					RequestId:   "req-2",
+					WorkflowId:  "wf-2",
+					Attempt:     0, // pending
+					ActualTime:  timestamppb.New(time.Now()),
+					DesiredTime: timestamppb.New(time.Now()),
 				},
 			}
 		},
-		workflowID:     "wf-1",
-		workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		scheduleTime:   time.Now(),
-		validate: func(t *testing.T, sched *scheduler.Scheduler) {
-			require.Len(t, sched.Info.RunningWorkflows, 1)
-			require.Len(t, sched.Info.RecentActions, 1)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, sched.Info.RecentActions[0].StartWorkflowStatus)
+		requestID: "req-1",
+		completed: &schedulespb.CompletedResult{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(closeTime),
+		},
+		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
+			invoker := sched.Invoker.Get(ctx)
+			require.Len(t, invoker.BufferedStarts, 2)
+
+			// Find the pending start (req-2) by RequestId since applyCompletedRetention reorders
+			// (non-completed first, then completed)
+			var req2Start *schedulespb.BufferedStart
+			for _, start := range invoker.BufferedStarts {
+				if start.RequestId == "req-2" {
+					req2Start = start
+					break
+				}
+			}
+			require.NotNil(t, req2Start)
+
+			// Pending start (req-2) should have DesiredTime updated to closeTime
+			require.Equal(t, closeTime.Unix(), req2Start.DesiredTime.AsTime().Unix())
 		},
 	}
 
 	executeRecordCompletedAction(t, tc)
 }
 
-// TestRecordCompletedAction_WorkflowInBothLists verifies that when a workflow
-// exists in both RunningWorkflows and RecentActions, it is properly removed from
-// RunningWorkflows while the status in RecentActions is updated to reflect the
-// completion state (e.g., FAILED, COMPLETED).
-func TestRecordCompletedAction_WorkflowInBothLists(t *testing.T) {
+// TestRecordCompletedAction_NoMatchingRequest verifies that when the requestID
+// doesn't match any BufferedStart, no changes are made.
+func TestRecordCompletedAction_NoMatchingRequest(t *testing.T) {
+	closeTime := time.Now()
 	tc := recordCompletedActionTestCase{
-		name: "workflow in both RunningWorkflows and RecentActions",
-		setupScheduler: func(sched *scheduler.Scheduler) {
-			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
-				{WorkflowId: "wf-1", RunId: "run-1"},
-				{WorkflowId: "wf-2", RunId: "run-2"},
-			}
-			sched.Info.RecentActions = []*schedulepb.ScheduleActionResult{
+		name: "no matching request",
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+			invoker := sched.Invoker.Get(ctx)
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
 				{
-					StartWorkflowResult: &commonpb.WorkflowExecution{
-						WorkflowId: "wf-1",
-						RunId:      "run-1",
-					},
-					StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
 				},
 			}
 		},
-		workflowID:     "wf-1",
-		workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		scheduleTime:   time.Now(),
-		validate: func(t *testing.T, sched *scheduler.Scheduler) {
-			require.Len(t, sched.Info.RunningWorkflows, 1)
-			require.NotEqual(t, "wf-1", sched.Info.RunningWorkflows[0].WorkflowId)
-			require.Len(t, sched.Info.RecentActions, 1)
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Info.RecentActions[0].StartWorkflowStatus)
+		requestID: "req-nonexistent",
+		completed: &schedulespb.CompletedResult{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(closeTime),
 		},
-	}
-
-	executeRecordCompletedAction(t, tc)
-}
-
-// TestRecordCompletedAction_NewEntryToRecentActions verifies that when a workflow
-// is in RunningWorkflows but NOT in RecentActions, a new entry is created in
-// RecentActions with the provided scheduleTime. This handles cases where a workflow
-// completes before its start was recorded in RecentActions.
-func TestRecordCompletedAction_NewEntryToRecentActions(t *testing.T) {
-	schedTime := time.Now().Add(-1 * time.Minute)
-	tc := recordCompletedActionTestCase{
-		name: "workflow in RunningWorkflows but not in RecentActions, adds new entry",
-		setupScheduler: func(sched *scheduler.Scheduler) {
-			sched.Info.RunningWorkflows = []*commonpb.WorkflowExecution{
-				{WorkflowId: "wf-1", RunId: "run-1"},
-			}
-			sched.Info.RecentActions = []*schedulepb.ScheduleActionResult{}
-		},
-		workflowID:     "wf-1",
-		workflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		scheduleTime:   schedTime,
-		validate: func(t *testing.T, sched *scheduler.Scheduler) {
-			require.Empty(t, sched.Info.RunningWorkflows)
-			require.Len(t, sched.Info.RecentActions, 1)
-
-			action := sched.Info.RecentActions[0]
-			require.Equal(t, "wf-1", action.StartWorkflowResult.WorkflowId)
-			require.Equal(t, schedTime.Unix(), action.ScheduleTime.AsTime().Unix())
-			require.Equal(t, schedTime.Unix(), action.ActualTime.AsTime().Unix())
+		validate: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
+			invoker := sched.Invoker.Get(ctx)
+			require.Len(t, invoker.BufferedStarts, 1)
+			// Original workflow should still be running (not completed)
+			require.Nil(t, invoker.BufferedStarts[0].Completed)
 		},
 	}
 

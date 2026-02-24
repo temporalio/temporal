@@ -1,0 +1,108 @@
+name: "Trivy Security Scan"
+description: "Run Trivy vulnerability scanner on Docker images"
+
+inputs:
+  image-tags:
+    description: "Image tags (one per line or comma-separated). First tag will be used for scanning."
+    required: true
+  image-name:
+    description: "Image name without tag (e.g., temporaliotest/server)"
+    required: true
+
+outputs:
+  scan-result:
+    description: "Result of the scan (pass or fail)"
+    value: ${{ steps.evaluate.outputs.result }}
+  critical-count:
+    description: "Number of critical vulnerabilities found"
+    value: ${{ steps.evaluate.outputs.critical-count }}
+  high-count:
+    description: "Number of high vulnerabilities found"
+    value: ${{ steps.evaluate.outputs.high-count }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set variables
+      id: vars
+      shell: bash
+      env:
+        IMAGE_NAME: ${{ inputs.image-name }}
+        IMAGE_TAGS: ${{ inputs.image-tags }}
+      run: |
+        # Get first tag
+        tag=$(echo "$IMAGE_TAGS" | head -1)
+
+        # Construct image reference
+        image_ref="${IMAGE_NAME}:${tag}"
+        echo "image-ref=${image_ref}" >> $GITHUB_OUTPUT
+
+        # Create safe name for artifacts
+        name=$(echo "$IMAGE_NAME" | sed 's/.*\///; s/[^a-zA-Z0-9._-]/-/g')
+        echo "safe-name=${name}" >> $GITHUB_OUTPUT
+        echo "artifact-name=trivy-${name}-results" >> $GITHUB_OUTPUT
+
+    - name: Install Trivy
+      uses: aquasecurity/setup-trivy@v0.2.4
+      with:
+        version: v0.65.0
+
+    - name: Scan Container Image
+      id: scan
+      shell: bash
+      env:
+        IMAGE_REF: ${{ steps.vars.outputs.image-ref }}
+        SAFE_NAME: ${{ steps.vars.outputs.safe-name }}
+      run: |
+        echo "Scanning $IMAGE_REF for CRITICAL,HIGH vulnerabilities..."
+
+        # Scan and output table format for logs
+        trivy image \
+          --severity CRITICAL,HIGH \
+          --format table \
+          --no-progress \
+          "$IMAGE_REF" | tee trivy-scan-${SAFE_NAME}.txt
+
+        echo ""
+        echo "Generating detailed JSON report..."
+
+        # Scan and output JSON format for parsing
+        trivy image \
+          --severity CRITICAL,HIGH \
+          --format json \
+          --no-progress \
+          "$IMAGE_REF" > trivy-scan-${SAFE_NAME}.json
+
+    - name: Evaluate scan results
+      id: evaluate
+      shell: bash
+      env:
+        SAFE_NAME: ${{ steps.vars.outputs.safe-name }}
+        FAIL_ON_VULNS: ${{ inputs.fail-on-vulnerabilities }}
+      run: |
+        # Count vulnerabilities by severity
+        CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' trivy-scan-${SAFE_NAME}.json)
+        HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' trivy-scan-${SAFE_NAME}.json)
+        MEDIUM_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length' trivy-scan-${SAFE_NAME}.json)
+        LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length' trivy-scan-${SAFE_NAME}.json)
+
+        echo "critical-count=${CRITICAL_COUNT}" >> $GITHUB_OUTPUT
+        echo "high-count=${HIGH_COUNT}" >> $GITHUB_OUTPUT
+
+        echo ""
+        echo "=== Vulnerability Summary ==="
+        echo "Critical: $CRITICAL_COUNT"
+        echo "High:     $HIGH_COUNT"
+        echo "Medium:   $MEDIUM_COUNT"
+        echo "Low:      $LOW_COUNT"
+        echo "============================"
+        echo ""
+
+        # Set result status without failing
+        if [ "$CRITICAL_COUNT" -gt 0 ] || [ "$HIGH_COUNT" -gt 0 ]; then
+          echo "result=fail" >> $GITHUB_OUTPUT
+          echo "⚠️  Security vulnerabilities found!"
+        else
+          echo "result=pass" >> $GITHUB_OUTPUT
+          echo "✓ No critical or high vulnerabilities found."
+        fi

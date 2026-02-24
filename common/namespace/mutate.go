@@ -2,8 +2,6 @@ package namespace
 
 import (
 	namespacepb "go.temporal.io/api/namespace/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -18,7 +16,7 @@ func (f mutationFunc) apply(ns *Namespace) {
 func WithActiveCluster(name string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.replicationConfig.ActiveClusterName = name
+			ns.replicationResolver.SetActiveCluster(name)
 		})
 }
 
@@ -47,7 +45,7 @@ func WithID(id string) Mutation {
 func WithGlobalFlag(b bool) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.isGlobalNamespace = b
+			ns.replicationResolver.SetGlobalFlag(b)
 		})
 }
 
@@ -82,12 +80,6 @@ func WithData(key, value string) Mutation {
 func WithPretendLocalNamespace(localClusterName string) Mutation {
 	return mutationFunc(
 		func(ns *Namespace) {
-			ns.isGlobalNamespace = false
-			ns.replicationConfig = &persistencespb.NamespaceReplicationConfig{
-				ActiveClusterName: localClusterName,
-				Clusters:          []string{localClusterName},
-			}
-			ns.failoverVersion = common.EmptyVersion
+			ns.replicationResolver.PretendLocalNamespace(localClusterName)
 		})
-
 }

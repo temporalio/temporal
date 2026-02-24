@@ -89,14 +89,40 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 	require.Len(t, suites, 2)
 	require.Equal(t, 4, report.Testsuites.Failures)
 	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
-	require.Equal(t, "go.temporal.io/server/tests (retry 1)", suites[1].Name)
+	require.Equal(t, "go.temporal.io/server/tests (retry 1) (final)", suites[1].Name)
 
 	testNames := collectTestNames(suites)
 	require.Len(t, testNames, 6)
 	require.NotContains(t, testNames, "TestCallbacksSuite")
 	require.NotContains(t, testNames, "TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver")
 	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument")
-	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1)")
+	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1) (final)")
+}
+
+func TestMergeReports_IterationSuffixPreserved(t *testing.T) {
+	// Tests with #XX suffixes (iteration markers) should NOT be discarded as parent tests.
+	// Previously, TestDatanodeSuite/TestLineageFork was incorrectly discarded because
+	// TestDatanodeSuite/TestLineageFork#01 has it as a prefix (without the "/" check).
+	j := &junitReport{path: "testdata/junit-iteration-suffix.xml"}
+	require.NoError(t, j.read())
+
+	report, err := mergeReports([]*junitReport{j})
+	require.NoError(t, err)
+
+	suites := report.Suites
+	require.Len(t, suites, 1)
+
+	testNames := collectTestNames(suites)
+	// All 4 tests should be preserved
+	require.Len(t, testNames, 4)
+	// Critically, TestDatanodeSuite/TestLineageFork should NOT be discarded
+	require.Contains(t, testNames, "TestDatanodeSuite/TestLineageFork")
+	require.Contains(t, testNames, "TestDatanodeSuite/TestLineageFork#01")
+	require.Contains(t, testNames, "TestDatanodeSuite/TestLineageFork#02")
+	require.Contains(t, testNames, "TestDatanodeSuite/TestOtherTest")
+
+	// Verify the failures are preserved
+	require.Equal(t, 2, report.Failures)
 }
 
 func TestMergeReports_MissingRerun(t *testing.T) {

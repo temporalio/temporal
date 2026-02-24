@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -76,7 +76,7 @@ func (s *historyPaginatedFetcherSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
-	s.namespaceID = namespace.ID(uuid.New())
+	s.namespaceID = namespace.ID(uuid.NewString())
 	s.namespace = "some random namespace name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
@@ -107,7 +107,7 @@ func (s *historyPaginatedFetcherSuite) TearDownTest() {
 
 func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	startEventID := int64(123)
 	startEventVersion := int64(100)
 	token := []byte{1}
@@ -204,7 +204,7 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 
 func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 	workflowID := "some random workflow ID"
-	runID := uuid.New()
+	runID := uuid.NewString()
 	startEventID := int64(123)
 	endEventID := int64(345)
 	version := int64(20)

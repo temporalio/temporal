@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/api"
@@ -38,7 +39,7 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if req.NextPageToken == nil {
-		response, err := api.GetOrPollMutableState(
+		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
 			&historyservice.GetMutableStateRequest{
@@ -136,9 +137,16 @@ func Invoke(
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope),
 	)
 
+	// Ensure all raw history is proto3 encoded since data may be stored in other formats during testing.
+	// In production (proto3 encoding), this returns the input unchanged.
+	historyBlobs, err := serialization.ReencodeEventBlobsAsProto3(shardContext.GetPayloadSerializer(), rawHistoryResponse.HistoryEventBlobs)
+	if err != nil {
+		return nil, err
+	}
+
 	result :=
 		&adminservice.GetWorkflowExecutionRawHistoryV2Response{
-			HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
+			HistoryBatches: historyBlobs,
 			VersionHistory: targetVersionHistory,
 			HistoryNodeIds: rawHistoryResponse.NodeIDs,
 		}
@@ -201,7 +209,17 @@ func SetRequestDefaultValueAndGetTargetVersionHistory(
 		endItem := versionhistory.NewVersionHistoryItem(req.GetEndEventId(), req.GetEndEventVersion())
 		idx, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
 		if err != nil {
-			return nil, err
+			// Since the API is exclusive-exclusive, EndEventId is the first event we don't want.
+			// If {EndEventId, EndEventVersion} is not found, it might be because the branch ends
+			// exactly at EndEventId-1. In that case, try to find a branch containing {EndEventId-1, EndEventVersion}.
+			actualLastEventID := req.GetEndEventId() - 1
+			if actualLastEventID >= common.FirstEventID {
+				endItem = versionhistory.NewVersionHistoryItem(actualLastEventID, req.GetEndEventVersion())
+				idx, err = versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(versionHistories, endItem)
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		targetBranch, err = versionhistory.GetVersionHistory(versionHistories, idx)

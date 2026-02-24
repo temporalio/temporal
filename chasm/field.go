@@ -39,8 +39,14 @@ func NewComponentField[C Component](
 	c C,
 	options ...ComponentFieldOption,
 ) Field[C] {
+	opts := &componentFieldOptions{}
+	for _, o := range options {
+		o(opts)
+	}
+	internal := newFieldInternalWithValue(fieldTypeComponent, c)
+	internal.detached = opts.detached
 	return Field[C]{
-		Internal: newFieldInternalWithValue(fieldTypeComponent, c),
+		Internal: internal,
 	}
 }
 
@@ -68,37 +74,44 @@ func DataPointerTo[D proto.Message](
 	}
 }
 
-func (f Field[T]) Get(chasmContext Context) (T, error) {
+// TryGet returns the value of the field and a boolean indicating if the value was found, deserializing if necessary.
+// Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
+// application, even if the error is an application bug.
+func (f Field[T]) TryGet(chasmContext Context) (T, bool) {
 	var nilT T
 
 	// If node is nil, then there is nothing to deserialize from, return value (even if it is also nil).
 	if f.Internal.node == nil {
 		if f.Internal.v == nil {
-			return nilT, nil
+			return nilT, false
 		}
 		vT, isT := f.Internal.v.(T)
 		if !isT {
-			return nilT, serviceerror.NewInternalf("internal value doesn't implement %s", reflect.TypeFor[T]().Name())
+			// nolint:forbidigo // Panic is intended here for framework error handling.
+			panic(serviceerror.NewInternalf("internal value doesn't implement %s", reflect.TypeFor[T]().Name()))
 		}
-		return vT, nil
+		return vT, true
 	}
 
 	var nodeValue any
 	switch f.Internal.fieldType() {
 	case fieldTypeComponent:
 		if err := f.Internal.node.prepareComponentValue(chasmContext); err != nil {
-			return nilT, err
+			// nolint:forbidigo // Panic is intended here for framework error handling.
+			panic(err)
 		}
 		nodeValue = f.Internal.node.value
 	case fieldTypeData:
 		// For data fields, T is always a concrete type.
 		if err := f.Internal.node.prepareDataValue(chasmContext, reflect.TypeFor[T]()); err != nil {
-			return nilT, err
+			// nolint:forbidigo // Panic is intended here for framework error handling.
+			panic(err)
 		}
 		nodeValue = f.Internal.node.value
 	case fieldTypePointer:
 		if err := f.Internal.node.preparePointerValue(); err != nil {
-			return nilT, err
+			// nolint:forbidigo // Panic is intended here for framework error handling.
+			panic(err)
 		}
 		//nolint:revive // value is guaranteed to be of type []string.
 		path := f.Internal.value().([]string)
@@ -113,7 +126,8 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 				err = serviceerror.NewInternalf("pointer field referenced an unhandled value: %v", referencedNode.fieldType())
 			}
 			if err != nil {
-				return nilT, err
+				// nolint:forbidigo // Panic is intended here for framework error handling.
+				panic(err)
 			}
 			nodeValue = referencedNode.value
 		}
@@ -121,17 +135,31 @@ func (f Field[T]) Get(chasmContext Context) (T, error) {
 		// For deferred pointers, return the component directly stored in v
 		nodeValue = f.Internal.v
 	default:
-		return nilT, serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType())
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternalf("unsupported field type: %v", f.Internal.fieldType()))
 	}
 
 	if nodeValue == nil {
-		return nilT, nil
+		return nilT, false
 	}
 	vT, isT := nodeValue.(T)
 	if !isT {
-		return nilT, serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name())
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternalf("node value doesn't implement %s", reflect.TypeFor[T]().Name()))
 	}
-	return vT, nil
+	return vT, true
+}
+
+// Get returns the value of the field, deserializing it if necessary.
+// Panics rather than returning an error, as errors are supposed to be handled by the framework as opposed to the
+// application, even if the error is an application bug.
+func (f Field[T]) Get(chasmContext Context) T {
+	v, ok := f.TryGet(chasmContext)
+	if !ok {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternalf("field value of type %s not found", reflect.TypeFor[T]().Name()))
+	}
+	return v
 }
 
 func NewEmptyField[T any]() Field[T] {

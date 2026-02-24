@@ -3,7 +3,9 @@ package query
 import (
 	"errors"
 	"fmt"
+	"strings"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -19,7 +21,7 @@ var (
 	InvalidExpressionErrMessage = "invalid expression"
 )
 
-func NewConverterError(format string, a ...interface{}) error {
+func NewConverterError(format string, a ...any) error {
 	message := fmt.Sprintf(format, a...)
 	return &ConverterError{message: message}
 }
@@ -30,6 +32,20 @@ func (c *ConverterError) Error() string {
 
 func (c *ConverterError) ToInvalidArgument() error {
 	return serviceerror.NewInvalidArgumentf("invalid query: %v", c)
+}
+
+func NewOperatorNotSupportedError(
+	saName string,
+	saType enumspb.IndexedValueType,
+	operator string,
+) error {
+	return NewConverterError(
+		"%s: operator '%s' not supported for %s type search attribute '%s'",
+		NotSupportedErrMessage,
+		strings.ToUpper(operator),
+		saType.String(),
+		saName,
+	)
 }
 
 func wrapConverterError(message string, err error) error {

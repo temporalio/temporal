@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -21,7 +21,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
-		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
+		Query:       sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 0,
 	}, nil)
@@ -45,7 +45,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
-		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
+		Query:       sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 1,
 	}, nil)
@@ -73,7 +73,7 @@ func Test_EnsureNoExecutionsAdvVisibilityActivity_NotDeletedExecutionsExist(t *t
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
-		Query:       searchattribute.QueryWithAnyNamespaceDivision(""),
+		Query:       sadefs.QueryWithAnyNamespaceDivision(""),
 	}).Return(&manager.CountWorkflowExecutionsResponse{
 		Count: 10,
 	}, nil)

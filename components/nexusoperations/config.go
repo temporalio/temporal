@@ -4,7 +4,9 @@ import (
 	"strings"
 	"time"
 
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -67,7 +69,7 @@ use as the token.`,
 
 var MaxOperationHeaderSize = dynamicconfig.NewNamespaceIntSetting(
 	"component.nexusoperations.limit.header.size",
-	4096,
+	8192,
 	`The maximum allowed header size for a Nexus Operation.
 ScheduleNexusOperation commands with a "nexus_header" field that exceeds this limit will be rejected.
 Uses Go's len() function on header keys and values to determine the total size.`,
@@ -141,7 +143,7 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 
 var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	"component.nexusoperations.metrics.tags",
-	NexusMetricTagConfig{},
+	chasmnexus.NexusMetricTagConfig{},
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
@@ -160,6 +162,7 @@ NexusOperationCancelRequestFailed events. Default true.`,
 )
 
 type Config struct {
+	NumHistoryShards                    int32
 	Enabled                             dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -173,11 +176,12 @@ type Config struct {
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
+	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy
 }
 
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
 		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
@@ -192,6 +196,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:                UseSystemCallbackURL.Get(dc),
+		UseNewFailureWireFormat:             chasmnexus.UseNewFailureWireFormat.Get(dc),
 		RecordCancelRequestCompletionEvents: RecordCancelRequestCompletionEvents.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
@@ -202,5 +207,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		NumHistoryShards: cfg.NumHistoryShards,
 	}
 }

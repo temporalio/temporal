@@ -72,7 +72,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 
 	var failedHostCount float64
 	var hostDeclinedServingCount float64
-	for i := 0; i < len(hosts); i++ {
+	for range hosts {
 		healthState := <-receiveCh
 		switch healthState {
 		case enumsspb.HEALTH_STATE_NOT_SERVING, enumsspb.HEALTH_STATE_UNSPECIFIED:
@@ -90,13 +90,13 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (enumsspb.HealthState, er
 
 	hostDeclinedServingProportion := hostDeclinedServingCount / float64(len(hosts))
 	if hostDeclinedServingProportion > proportionOfDeclinedServiceHosts {
-		h.logger.Warn("health check exceeded host declined serving proportion threshold", tag.NewFloat64("host declined serving proportion threshold", proportionOfDeclinedServiceHosts))
+		h.logger.Warn("health check exceeded host declined serving proportion threshold", tag.Float64("host declined serving proportion threshold", proportionOfDeclinedServiceHosts))
 		return enumsspb.HEALTH_STATE_DECLINED_SERVING, nil
 	}
 
 	failedHostCountProportion := failedHostCount / float64(len(hosts))
 	if failedHostCountProportion+hostDeclinedServingProportion > h.hostFailurePercentage() {
-		h.logger.Warn("health check exceeded host failure percentage threshold", tag.NewFloat64("host failure percentage threshold", h.hostFailurePercentage()), tag.NewFloat64("host failure percentage", failedHostCountProportion), tag.NewFloat64("host declined serving percentage", hostDeclinedServingProportion))
+		h.logger.Warn("health check exceeded host failure percentage threshold", tag.Float64("host failure percentage threshold", h.hostFailurePercentage()), tag.Float64("host failure percentage", failedHostCountProportion), tag.Float64("host declined serving percentage", hostDeclinedServingProportion))
 		return enumsspb.HEALTH_STATE_NOT_SERVING, nil
 	}
 

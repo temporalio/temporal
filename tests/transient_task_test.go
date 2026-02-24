@@ -6,7 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -38,7 +39,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -127,14 +128,14 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Input:               nil,
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
-		WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		Identity:            identity,
 	}
 
@@ -147,13 +148,13 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		RunId:      we.RunId,
 	}
 
-	// start with 2mb limit
-	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 2*1024*1024)
+	// start with 20kb limit
+	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 20*1024)
 
 	// workflow logic
 	stage := 0
 	workflowComplete := false
-	largeValue := make([]byte, 1024*1024)
+	largeValue := make([]byte, 10*1024)
 	// record the values that we see for completed tasks here
 	type fields struct {
 		size    int64
@@ -172,7 +173,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 		stage++
 		switch stage {
 		case 1:
-			s.Less(attrs.HistorySizeBytes, int64(1024*1024))
+			s.Less(attrs.HistorySizeBytes, int64(10*1024))
 			s.False(attrs.SuggestContinueAsNew)
 			// record a large marker
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
@@ -185,7 +186,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 			}}, nil
 
 		case 2:
-			s.Greater(attrs.HistorySizeBytes, int64(1024*1024))
+			s.Greater(attrs.HistorySizeBytes, int64(10*1024))
 			s.False(attrs.SuggestContinueAsNew)
 			// record another large marker
 			sawFields = append(sawFields, fields{size: attrs.HistorySizeBytes, suggest: attrs.SuggestContinueAsNew})
@@ -198,7 +199,7 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 			}}, nil
 
 		case 3:
-			s.Greater(attrs.HistorySizeBytes, int64(2048*1024))
+			s.Greater(attrs.HistorySizeBytes, int64(20*1024))
 			s.True(attrs.SuggestContinueAsNew)
 			failedTaskSawSize = attrs.HistorySizeBytes
 			// fail workflow task and we'll get a transient one
@@ -268,8 +269,9 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	// workflow task should still see true, but the next one will see false.
 	s.OverrideDynamicConfig(dynamicconfig.HistorySizeSuggestContinueAsNew, 8*1024*1024)
 
-	// stage 4
-	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
+	// stage 4: transient task may not be immediately available after stage 3 failure
+	// Increase retries to handle asynchronous task creation timing
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands, testcore.WithRetries(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -277,12 +279,28 @@ func (s *TransientTaskSuite) TestTransientWorkflowTaskHistorySize() {
 	s.NoError(err, "failed to send signal to execution")
 
 	// drop workflow task to cause a workflow task timeout
-	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDropTask, testcore.WithNoDumpCommands)
-	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
+	// Use increased retries to ensure we successfully poll and drop the task
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithDropTask, testcore.WithNoDumpCommands, testcore.WithRetries(3))
+	s.Logger.Info("PollAndProcessWorkflowTask (drop)", tag.Error(err))
 	s.NoError(err)
 
-	// stage 5
-	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands)
+	// Wait for the workflow task timeout to actually fire before polling for stage 5
+	// With 10s timeout, poll for up to 15s to ensure timeout has occurred
+	s.EventuallyWithT(func(c *assert.CollectT) {
+		events := s.GetHistory(s.Namespace().String(), workflowExecution)
+		// Look for WorkflowTaskTimedOut event (should be event 21)
+		timedOutFound := false
+		for _, event := range events {
+			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT {
+				timedOutFound = true
+				break
+			}
+		}
+		assert.True(c, timedOutFound, "Expected WorkflowTaskTimedOut event not found in history")
+	}, 15*time.Second, 500*time.Millisecond)
+
+	// stage 5: process task after timeout and complete workflow
+	_, err = poller.PollAndProcessWorkflowTask(testcore.WithNoDumpCommands, testcore.WithRetries(3))
 	s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err))
 	s.NoError(err)
 
@@ -330,7 +348,7 @@ func (s *TransientTaskSuite) TestNoTransientWorkflowTaskAfterFlushBufferedEvents
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},

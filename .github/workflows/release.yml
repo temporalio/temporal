@@ -1,0 +1,25 @@
+name: Release
+
+on:
+  release:
+    types:
+      - released
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Build binaries
+        uses: ./.github/actions/build-binaries
+        with:
+          snapshot: false
+          release: true

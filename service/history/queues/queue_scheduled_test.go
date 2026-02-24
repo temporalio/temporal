@@ -12,11 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/predicates"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
@@ -82,9 +84,16 @@ func (s *scheduledQueueSuite) SetupTest() {
 			WorkerCount:             s.mockShard.GetConfig().TimerProcessorSchedulerWorkerCount,
 			ActiveNamespaceWeights:  s.mockShard.GetConfig().TimerProcessorSchedulerActiveRoundRobinWeights,
 			StandbyNamespaceWeights: s.mockShard.GetConfig().TimerProcessorSchedulerStandbyRoundRobinWeights,
+			ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+				Enabled:   func() bool { return false },
+				MaxQueues: func() int { return 500 },
+				QueueTTL:  func() time.Duration { return 5 * time.Second },
+			},
 		},
 		s.mockShard.GetNamespaceRegistry(),
 		logger,
+		metrics.NoopMetricsHandler,
+		s.mockShard.GetTimeSource(),
 	)
 	scheduler = NewRateLimitedScheduler(
 		scheduler,
@@ -96,6 +105,7 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetNamespaceRegistry(),
 		rateLimiter,
 		s.mockShard.GetTimeSource(),
+		s.mockShard.ChasmRegistry(),
 		logger,
 		metrics.NoopMetricsHandler,
 	)
@@ -114,6 +124,8 @@ func (s *scheduledQueueSuite) SetupTest() {
 		s.mockShard.GetTimeSource(),
 		s.mockShard.GetNamespaceRegistry(),
 		s.mockShard.GetClusterMetadata(),
+		s.mockShard.ChasmRegistry(),
+		GetTaskTypeTagValue,
 		logger,
 		metrics.NoopMetricsHandler,
 		telemetry.NoopTracer,
@@ -194,7 +206,7 @@ func (s *scheduledQueueSuite) TestPaginationFnProvider_Success() {
 		ShardID:             s.mockShard.GetShardID(),
 		TaskCategory:        tasks.CategoryTimer,
 		InclusiveMinTaskKey: tasks.NewKey(r.InclusiveMin.FireTime, 0),
-		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(r.ExclusiveMax.FireTime.Add(common.ScheduledTaskMinPrecision), 0),
 		BatchSize:           testQueueOptions.BatchSize(),
 		NextPageToken:       currentPageToken,
 	}).Return(&persistence.GetHistoryTasksResponse{

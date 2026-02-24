@@ -8,13 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/locks"
@@ -27,6 +30,39 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
+
+type noopVersionMembershipCache struct{}
+
+func (noopVersionMembershipCache) Get(
+	_ string,
+	_ string,
+	_ enumspb.TaskQueueType,
+	_ string,
+	_ string,
+) (isMember bool, ok bool) {
+	return false, false
+}
+
+func (noopVersionMembershipCache) Put(
+	_ string,
+	_ string,
+	_ enumspb.TaskQueueType,
+	_ string,
+	_ string,
+	_ bool,
+) {
+}
+
+type noopReactivationSignalCache struct{}
+
+func (noopReactivationSignalCache) ShouldSendSignal(_, _, _ string) bool {
+	return false // Always return false to skip sending signals in tests
+}
+
+// noopReactivationSignaler is a no-op signaler function for tests
+func noopReactivationSignaler(_ context.Context, _ *namespace.Namespace, _, _ string) error {
+	return nil
+}
 
 var (
 	emptyOptions            = &workflowpb.WorkflowExecutionOptions{}
@@ -140,6 +176,7 @@ type (
 
 		currentContext      *historyi.MockWorkflowContext
 		currentMutableState *historyi.MockMutableState
+		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
 	}
 )
 
@@ -158,6 +195,7 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.shardContext.EXPECT().GetNamespaceRegistry().Return(s.namespaceRegistry)
 	s.shardContext.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true)))
+	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
 
 	// mock a mutable state with an existing versioning override
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
@@ -178,13 +216,15 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 	s.currentContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.currentMutableState, nil)
 
 	s.workflowCache = wcache.NewMockCache(s.controller)
-	s.workflowCache.EXPECT().GetOrCreateChasmEntity(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasmworkflow.Archetype, locks.PriorityHigh).
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), chasm.WorkflowArchetypeID, locks.PriorityHigh).
 		Return(s.currentContext, wcache.NoopReleaseFn, nil)
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
 		s.shardContext,
 		s.workflowCache,
 	)
+
+	s.mockMatchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 }
 
 func (s *updateWorkflowOptionsSuite) TearDownTest() {
@@ -195,12 +235,25 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 
 	expectedOverrideOptions := &workflowpb.WorkflowExecutionOptions{
 		VersioningOverride: &workflowpb.VersioningOverride{
-			Behavior:      enumspb.VERSIONING_BEHAVIOR_PINNED,
-			PinnedVersion: "X.A",
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version: &deploymentpb.WorkerDeploymentVersion{
+						DeploymentName: "X",
+						BuildId:        "A",
+					},
+				},
+			},
 		},
 	}
 	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil).Return(&historypb.HistoryEvent{}, nil)
+	s.mockMatchingClient.EXPECT().CheckTaskQueueVersionMembership(
+		gomock.Any(),
+		gomock.Any(),
+	).Return(&matchingservice.CheckTaskQueueVersionMembershipResponse{
+		IsMember: true,
+	}, nil)
+	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(expectedOverrideOptions.VersioningOverride, false, "", nil, nil, "", expectedOverrideOptions.Priority).Return(&historypb.HistoryEvent{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
 
 	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{
@@ -221,6 +274,10 @@ func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
 		updateReq,
 		s.shardContext,
 		s.workflowConsistencyChecker,
+		s.mockMatchingClient,
+		noopVersionMembershipCache{},  // cache not meant to be used in this test
+		noopReactivationSignalCache{}, // cache not meant to be used in this test
+		noopReactivationSignaler,      // signaler not meant to be used in this test
 	)
 	s.NoError(err)
 	s.NotNil(resp)

@@ -158,6 +158,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.MergeDLQTasksResponse:
 		return nil
+	case *adminservice.MigrateScheduleRequest:
+		return nil
+	case *adminservice.MigrateScheduleResponse:
+		return nil
 	case *adminservice.PurgeDLQMessagesRequest:
 		return nil
 	case *adminservice.PurgeDLQMessagesResponse:
@@ -205,6 +209,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 			tag.WorkflowRunID(r.GetRunId()),
 		}
 	case *adminservice.ResendReplicationTasksResponse:
+		return nil
+	case *adminservice.StartAdminBatchOperationRequest:
+		return nil
+	case *adminservice.StartAdminBatchOperationResponse:
 		return nil
 	case *adminservice.SyncWorkflowStateRequest:
 		return []tag.Tag{

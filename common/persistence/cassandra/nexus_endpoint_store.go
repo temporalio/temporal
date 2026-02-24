@@ -100,14 +100,14 @@ func (s *NexusEndpointStore) CreateOrUpdateNexusEndpoint(
 			request.LastKnownTableVersion)
 	}
 
-	previousPartitionStatus := make(map[string]interface{})
+	previousPartitionStatus := make(map[string]any)
 	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previousPartitionStatus)
 
 	if err != nil {
 		return gocql.ConvertError("CreateOrUpdateNexusEndpoint", err)
 	}
 
-	previousEndpoint := make(map[string]interface{})
+	previousEndpoint := make(map[string]any)
 	iter.MapScan(previousEndpoint)
 
 	err = iter.Close()
@@ -235,7 +235,7 @@ func (s *NexusEndpointStore) DeleteNexusEndpoint(
 		tableVersionEndpointID,
 		request.LastKnownTableVersion)
 
-	previousPartitionStatus := make(map[string]interface{})
+	previousPartitionStatus := make(map[string]any)
 	applied, iter, err := s.session.MapExecuteBatchCAS(batch, previousPartitionStatus)
 
 	if err != nil {
@@ -274,7 +274,7 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 	query := s.session.Query(templateListEndpointsFirstPageQuery).WithContext(ctx)
 	iter := query.PageSize(request.PageSize + 1).PageState(nil).Iter() // Use PageSize+1 to account for partitionStatus row
 
-	partitionStateRow := make(map[string]interface{})
+	partitionStateRow := make(map[string]any)
 	found := iter.MapScan(partitionStateRow)
 	if !found {
 		cassErr := iter.Close()
@@ -323,9 +323,9 @@ func (s *NexusEndpointStore) getTableVersion(ctx context.Context) (int64, error)
 func (s *NexusEndpointStore) getEndpointList(iter gocql.Iter) ([]p.InternalNexusEndpoint, error) {
 	var endpoints []p.InternalNexusEndpoint
 
-	row := make(map[string]interface{})
+	row := make(map[string]any)
 	for iter.MapScan(row) {
-		id, err := getTypedFieldFromRow[interface{}]("id", row)
+		id, err := getTypedFieldFromRow[any]("id", row)
 		if err != nil {
 			return nil, err
 		}
@@ -348,7 +348,7 @@ func (s *NexusEndpointStore) getEndpointList(iter gocql.Iter) ([]p.InternalNexus
 			Data:    p.NewDataBlob(data, dataEncoding),
 		})
 
-		row = make(map[string]interface{})
+		row = make(map[string]any)
 	}
 
 	return endpoints, nil

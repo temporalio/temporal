@@ -11,6 +11,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
@@ -111,12 +112,12 @@ func Invoke(
 	clusterMetadata := shardContext.GetClusterMetadata()
 	targetClusterInfo := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]
 
-	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(namespaceID))
+	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
 
-	activeClusterName := namespaceEntry.ActiveClusterName()
+	activeClusterName := namespaceEntry.ActiveClusterName(request.ParentExecution.WorkflowId)
 	if activeClusterName == clusterMetadata.GetCurrentClusterName() {
 		return nil, errors.New("namespace becomes active when processing task as standby")
 	}
@@ -132,6 +133,7 @@ func Invoke(
 			WorkflowId: request.ParentExecution.WorkflowId,
 			RunId:      request.ParentExecution.RunId,
 		},
+		ArchetypeId:         chasm.WorkflowArchetypeID,
 		VersionedTransition: versionedTransition,
 		VersionHistories:    versionHistories,
 		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
@@ -156,9 +158,11 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
-	err = engine.ReplicateVersionedTransition(ctx, resp.VersionedTransitionArtifact, activeClusterName)
+	err = engine.ReplicateVersionedTransition(ctx, chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, activeClusterName)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, consts.ErrDuplicate) {
+			return nil, err
+		}
 	}
 
 	// Verify child execution again after resending parent workflow

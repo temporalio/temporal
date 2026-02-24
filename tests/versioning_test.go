@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
@@ -64,6 +65,7 @@ func (s *VersioningIntegSuite) SetupSuite() {
 		dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Key():     true,
 		dynamicconfig.MatchingForwarderMaxChildrenPerNode.Key():        partitionTreeDegree,
 		dynamicconfig.TaskQueuesPerBuildIdLimit.Key():                  3,
+		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key():  true,
 
 		dynamicconfig.AssignmentRuleLimitPerQueue.Key():              10,
 		dynamicconfig.RedirectRuleLimitPerQueue.Key():                10,
@@ -371,7 +373,7 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := testcore.NewContext()
 	tq := "functional-versioning-series"
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		s.addNewDefaultBuildId(ctx, tq, s.prefixed(fmt.Sprintf("foo-%d", i)))
 	}
 	s.addCompatibleBuildId(ctx, tq, s.prefixed("foo-2.1"), s.prefixed("foo-2"), false)
@@ -594,7 +596,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer w2.Stop()
 
 	counter := make(map[string]int)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 		var out string
@@ -773,6 +775,7 @@ func (s *VersioningIntegSuite) unversionedWorkflowStaysUnversioned() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_Spooled() {
+	s.T().Skip("Skipping test since rules based versioning is soon to be deprecated")
 	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSpooled)
 }
 
@@ -885,6 +888,7 @@ func (s *VersioningIntegSuite) firstWorkflowTaskAssignmentSpooled() {
 }
 
 func (s *VersioningIntegSuite) TestFirstWorkflowTaskAssignment_SyncMatch() {
+	s.T().Skip("Skipping test since rules based versioning is soon to be deprecated")
 	s.RunTestWithMatchingBehavior(s.firstWorkflowTaskAssignmentSyncMatch)
 }
 
@@ -1394,7 +1398,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf1 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1441,7 +1445,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf11 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1479,7 +1483,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf12 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1883,7 +1887,7 @@ func (s *VersioningIntegSuite) dispatchActivity(failMode activityFailMode, newVe
 		panic("workflow should not run on v2")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	if newVersioning {
@@ -1973,7 +1977,7 @@ func (s *VersioningIntegSuite) TestDispatchActivityUpgrade() {
 	v11 := s.prefixed("v1.1")
 	v12 := s.prefixed("v1.2")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	startedWf := make(chan struct{}, 1)
@@ -4099,7 +4103,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 
 	workerN := 3
 	workerMap := make(map[string]worker.Worker)
-	for i := 0; i < workerN; i++ {
+	for range workerN {
 		wId := testcore.RandomizeStr("id")
 		w := worker.New(s.SdkClient(), tq, worker.Options{
 			UseBuildIDForVersioning: false,
@@ -4977,6 +4981,7 @@ func (s *VersioningIntegSuite) getStickyQueueName(ctx context.Context, id string
 	ms, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: s.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: id},
+		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
 	return ms.DatabaseMutableState.ExecutionInfo.StickyTaskQueue

@@ -386,7 +386,7 @@ func (s *UpdateWorkflowSdkSuite) updateWorkflowWaitAccepted(ctx context.Context,
 		WorkflowID:   tv.WorkflowID(),
 		RunID:        tv.RunID(),
 		UpdateName:   tv.HandlerName(),
-		Args:         []interface{}{arg},
+		Args:         []any{arg},
 		WaitForStage: sdkclient.WorkflowUpdateStageAccepted,
 	})
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -14,12 +14,16 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -62,7 +66,7 @@ func (s *ChildWorkflowSuite) TestChildWorkflowExecution() {
 	}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
@@ -370,7 +374,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
@@ -486,7 +490,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	s.True(seenChildStarted)
 
 	// Run through three executions of the child workflow
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err = pollerChild.PollAndProcessWorkflowTask()
 		s.Logger.Info("PollAndProcessWorkflowTask", tag.Error(err), tag.Counter(i))
 		s.NoError(err)
@@ -525,7 +529,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 	startFilter.EarliestTime = timestamppb.New(startParentWorkflowTS)
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
@@ -575,7 +579,7 @@ func (s *ChildWorkflowSuite) TestRetryChildWorkflowExecution() {
 	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
@@ -790,7 +794,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	taskQueueChild := &taskqueuepb.TaskQueue{Name: tlChild, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          parentID,
 		WorkflowType:        parentWorkflowType,
@@ -941,4 +945,92 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	s.NotNil(completedEvent)
 	attrs := completedEvent.GetChildWorkflowExecutionFailedEventAttributes()
 	s.Equal(attrs.Failure.Message, "Failed attempt 3")
+}
+
+func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked() {
+	parentID := testcore.RandomizeStr(s.T().Name())
+	childID := testcore.RandomizeStr(s.T().Name())
+	wtParent := "test-child-workflow-start-internal-taskqueue-parent-type"
+	wtChild := "test-child-workflow-start-internal-taskqueue-child-type"
+	tlParent := "test-child-workflow-start-internal-taskqueue-parent-taskqueue"
+	identity := "worker1"
+
+	parentWorkflowType := &commonpb.WorkflowType{Name: wtParent}
+	childWorkflowType := &commonpb.WorkflowType{Name: wtChild}
+	taskQueueParent := &taskqueuepb.TaskQueue{Name: tlParent, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           s.Namespace().String(),
+		WorkflowId:          parentID,
+		WorkflowType:        parentWorkflowType,
+		TaskQueue:           taskQueueParent,
+		Input:               nil,
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            identity,
+	}
+
+	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
+	s.NoError(err)
+	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
+
+	// Parent workflow logic: try to start child workflow on internal task queue
+	tv := testvars.New(s.T()).WithTaskQueue(tlParent)
+	childExecutionStarted := false
+	wtHandlerParent := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		s.Logger.Info("Processing workflow task for Parent", tag.WorkflowID(task.WorkflowExecution.WorkflowId))
+
+		if !childExecutionStarted {
+			s.Logger.Info("Starting child execution on internal task queue")
+			childExecutionStarted = true
+
+			commands := []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
+					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+						WorkflowId:   childID,
+						WorkflowType: childWorkflowType,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: primitives.PerNSWorkerTaskQueue,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
+						Input:               payloads.EncodeString("child-workflow-input"),
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(2 * time.Second),
+					},
+				},
+			}}
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: commands,
+			}, nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+
+	pollerParent := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+
+	// Process parent workflow task - should fail when trying to start child on internal task queue
+	_, err = pollerParent.PollAndHandleWorkflowTask(tv, wtHandlerParent)
+	s.Error(err, "Expected error when starting child workflow on internal task queue")
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+
+	// Verify workflow task failed
+	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: parentID,
+		RunId:      we.RunId,
+	})
+
+	var foundTaskFailed bool
+	for _, event := range historyEvents {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			foundTaskFailed = true
+			attrs := event.GetWorkflowTaskFailedEventAttributes()
+			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, attrs.GetCause())
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per namespace task queue")
+			break
+		}
+	}
+	s.True(foundTaskFailed, "WorkflowTaskFailed event should be recorded")
 }

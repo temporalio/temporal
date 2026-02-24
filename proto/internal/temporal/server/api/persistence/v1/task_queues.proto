@@ -7,6 +7,7 @@ import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/deployment/v1/message.proto";
+import "temporal/server/api/enums/v1/fairness_state.proto";
 
 // BuildId is an identifier with a timestamped status used to identify workers for task queue versioning purposes.
 message BuildId {
@@ -86,12 +87,7 @@ message VersioningData {
 }
 
 message DeploymentData {
-    // Set of deployments that this task queue belongs to.
-    // Current deployment is defined implicitly as the deployment with the most recent
-    // TaskQueueData.last_became_current_time.
-    // Deprecated.
-    repeated DeploymentDataItem deployments = 1 [deprecated = true];
-
+    reserved 1;
     // Set of worker deployment versions that this task queue belongs to.
     // Current Version is defined implicitly as the version with `current_since_time!=nil` and the most
     // recent `routing_update_time`.
@@ -101,16 +97,25 @@ message DeploymentData {
     // `ramp_percentage`. If there is no Ramping Version, all the unversioned/unpinned tasks are
     // routed to the Current Version. If there is no Current Version, any poller with UNVERSIONED
     // (or unspecified) WorkflowVersioningMode will receive the tasks.
-    repeated temporal.server.api.deployment.v1.DeploymentVersionData versions = 2;
+    // Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
+    repeated temporal.server.api.deployment.v1.DeploymentVersionData versions = 2 [deprecated = true];
 
     // Present if the task queue's ramping version is unversioned.
-    temporal.server.api.deployment.v1.DeploymentVersionData unversioned_ramp_data = 3;
+    // Remove after `AsyncSetCurrentAndRamping` workflow version is irreversibly enabled.
+    temporal.server.api.deployment.v1.DeploymentVersionData unversioned_ramp_data = 3 [deprecated = true];
 
-    // Deprecated.
-    message DeploymentDataItem {
-        temporal.api.deployment.v1.Deployment deployment = 1;
-        temporal.server.api.deployment.v1.TaskQueueData data = 2;
-    }
+    // Routing and version membership data for all worker deployments that this task queue belongs to.
+    // Key is the deployment name.
+    map<string, WorkerDeploymentData> deployments_data = 4;
+}
+
+// Routing config and version membership data for a given worker deployment that a TQ should know.
+message WorkerDeploymentData {
+    temporal.api.deployment.v1.RoutingConfig routing_config = 1;
+    // This map tracks the membership of the task queue in the deployment versions. A version is
+    // present here iff the task queue has ever been polled from the version.
+    // Key is the build id.
+    map<string, temporal.server.api.deployment.v1.WorkerDeploymentVersionData> versions = 2;
 }
 
 // Container for all persistent user data that varies per task queue type within a family.
@@ -118,6 +123,8 @@ message TaskQueueTypeUserData {
     DeploymentData deployment_data = 1;
 
     temporal.api.taskqueue.v1.TaskQueueConfig config = 2;
+
+    temporal.server.api.enums.v1.FairnessState fairness_state = 3;
 }
 
 // Container for all persistent user provided data for a task queue family.

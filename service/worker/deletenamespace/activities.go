@@ -190,9 +190,9 @@ func (a *localActivities) GenerateDeletedNamespaceNameActivity(ctx context.Conte
 		})
 		switch err.(type) {
 		case nil:
-			logger.Warn("Regenerate namespace name due to collision.", tag.NewStringTag("wf-new-namespace", newName))
+			logger.Warn("Regenerate namespace name due to collision.", tag.String("wf-new-namespace", newName))
 		case *serviceerror.NamespaceNotFound:
-			logger.Info("Generated new name for deleted namespace.", tag.NewStringTag("wf-new-namespace", newName))
+			logger.Info("Generated new name for deleted namespace.", tag.String("wf-new-namespace", newName))
 			return namespace.Name(newName), nil
 		default:
 			logger.Error("Unable to get namespace details.", tag.Error(err))

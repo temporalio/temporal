@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,7 +33,7 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 
 	// Start workflow execution
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
@@ -95,9 +95,9 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
 	//nolint:forbidigo
 	time.Sleep(time.Second * 2) // wait 2s for relay workflow task to timeout
 	workflowTaskTimeout := false
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		events := s.GetHistory(s.Namespace().String(), workflowExecution)
-		if len(events) == 8 {
+		if len(events) >= 8 {
 			s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -106,7 +106,8 @@ func (s *RelayTaskTestSuite) TestRelayWorkflowTaskTimeout() {
   5 MarkerRecorded
   6 WorkflowTaskScheduled
   7 WorkflowTaskStarted
-  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE`, events)
+  8 WorkflowTaskTimedOut {"ScheduledEventId":6,"StartedEventId":7,"TimeoutType":1} // TIMEOUT_TYPE_START_TO_CLOSE
+  9 WorkflowTaskScheduled`, events)
 			workflowTaskTimeout = true
 			break
 		}

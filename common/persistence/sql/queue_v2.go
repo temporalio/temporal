@@ -35,9 +35,10 @@ type (
 // NewQueueV2 returns an implementation of persistence.QueueV2.
 func NewQueueV2(db sqlplugin.DB,
 	logger log.Logger,
+	serializer serialization.Serializer,
 ) persistence.QueueV2 {
 	return &queueV2{
-		SqlStore: NewSqlStore(db, logger),
+		SqlStore: NewSQLStore(db, logger, serializer),
 	}
 }
 

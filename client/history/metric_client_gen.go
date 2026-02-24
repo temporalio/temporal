@@ -471,6 +471,20 @@ func (c *metricClient) PauseActivity(
 	return c.client.PauseActivity(ctx, request, opts...)
 }
 
+func (c *metricClient) PauseWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.PauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.PauseWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientPauseWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PauseWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) PollMutableState(
 	ctx context.Context,
 	request *historyservice.PollMutableStateRequest,
@@ -931,6 +945,20 @@ func (c *metricClient) UnpauseActivity(
 	}()
 
 	return c.client.UnpauseActivity(ctx, request, opts...)
+}
+
+func (c *metricClient) UnpauseWorkflowExecution(
+	ctx context.Context,
+	request *historyservice.UnpauseWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.UnpauseWorkflowExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientUnpauseWorkflowExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UnpauseWorkflowExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) UpdateActivityOptions(

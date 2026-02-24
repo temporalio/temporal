@@ -41,6 +41,7 @@ func NewActivityTaskToken(
 	clock *clockspb.VectorClock,
 	version int64,
 	startVersion int64,
+	componentRef []byte,
 ) *tokenspb.Task {
 	return &tokenspb.Task{
 		NamespaceId:      namespaceID,
@@ -53,5 +54,6 @@ func NewActivityTaskToken(
 		Clock:            clock,
 		Version:          version,
 		StartVersion:     startVersion,
+		ComponentRef:     componentRef,
 	}
 }

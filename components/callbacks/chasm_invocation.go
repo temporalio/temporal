@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"io"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -16,23 +16,19 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/queues"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type chasmInvocation struct {
 	nexus      *persistencespb.Callback_Nexus
 	attempt    int32
-	completion nexusrpc.OperationCompletion
+	completion nexusrpc.CompleteOperationOptions
 	requestID  string
 }
 
 func (c chasmInvocation) WrapError(result invocationResult, err error) error {
-	if failure, ok := result.(invocationResultFail); ok {
-		return queues.NewUnprocessableTaskError(failure.err.Error())
-	}
-
 	return result.error()
 }
 
@@ -41,14 +37,19 @@ func (c chasmInvocation) WrapError(result invocationResult, err error) error {
 // returned. Intended to be used to hide internal errors from end users.
 func logInternalError(logger log.Logger, internalMsg string, internalErr error) error {
 	referenceID := uuid.NewString()
-	logger.Error(internalMsg, tag.Error(internalErr), tag.NewStringTag("reference-id", referenceID))
+	logger.Error(internalMsg, tag.Error(internalErr), tag.String("reference-id", referenceID))
 	return fmt.Errorf("internal error, reference-id: %v", referenceID)
 }
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	// Get back the base64-encoded ComponentRef from the header.
-	encodedRef, ok := c.nexus.GetHeader()[commonnexus.CallbackTokenHeader]
-	if !ok {
+	header := nexus.Header(c.nexus.GetHeader())
+	if header == nil {
+		header = nexus.Header{}
+	}
+
+	encodedRef := header.Get(commonnexus.CallbackTokenHeader)
+	if encodedRef == "" {
 		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}
 
@@ -57,13 +58,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM ComponentRef", err)}
 	}
 
-	ref := &persistencespb.ChasmComponentRef{}
-	err = proto.Unmarshal(decodedRef, ref)
-	if err != nil {
-		return invocationResultFail{logInternalError(e.Logger, "failed to unmarshal CHASM ComponentRef: %v", err)}
-	}
-
-	request, err := c.getHistoryRequest(ref)
+	request, err := c.getHistoryRequest(decodedRef)
 	if err != nil {
 		return invocationResultFail{logInternalError(e.Logger, "failed to build history request: %v", err)}
 	}
@@ -71,18 +66,18 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		msg := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
-		if isRetryableRpcResponse(err) {
-			return invocationResultRetry{msg}
+		redactedErr := logInternalError(e.Logger, "failed to complete Nexus operation: %v", err)
+		if isRetryableRPCResponse(err) {
+			return invocationResultRetry{redactedErr}
 		}
-		return invocationResultFail{msg}
+		return invocationResultFail{redactedErr}
 	}
 
 	return invocationResultOK{}
 }
 
 func (c chasmInvocation) getHistoryRequest(
-	ref *persistencespb.ChasmComponentRef,
+	ref []byte,
 ) (*historyservice.CompleteNexusOperationChasmRequest, error) {
 	var req *historyservice.CompleteNexusOperationChasmRequest
 
@@ -91,32 +86,35 @@ func (c chasmInvocation) getHistoryRequest(
 		RequestId:    c.requestID,
 	}
 
-	switch op := c.completion.(type) {
-	case *nexusrpc.OperationCompletionSuccessful:
-		payloadBody, err := io.ReadAll(op.Reader)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read payload: %v", err)
-		}
-
-		var payload commonpb.Payload
-		if payloadBody != nil {
-			err := proto.Unmarshal(payloadBody, &payload)
-			if err != nil {
-				return nil, fmt.Errorf("failed to unmarshal payload body: %v", err)
+	if c.completion.Error == nil {
+		var payload *commonpb.Payload
+		if c.completion.Result != nil {
+			var ok bool
+			payload, ok = c.completion.Result.(*commonpb.Payload)
+			if !ok {
+				return nil, fmt.Errorf("invalid result, expected a payload, got: %T", c.completion.Result)
 			}
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Success{
-				Success: &payload,
+				Success: payload,
 			},
-			CloseTime:  timestamppb.New(op.CloseTime),
+			CloseTime:  timestamppb.New(c.completion.CloseTime),
 			Completion: completion,
 		}
-	case *nexusrpc.OperationCompletionUnsuccessful:
-		apiFailure, err := commonnexus.NexusFailureToAPIFailure(op.Failure, true)
+	} else {
+		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %v", err)
+			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
+		}
+		// Unwrap the operation error since it's not meant to be sent for Temporal->Temporal completions.
+		if failure.Cause != nil {
+			failure = *failure.Cause
+		}
+		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert failure type: %w", err)
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
@@ -124,11 +122,36 @@ func (c chasmInvocation) getHistoryRequest(
 			Outcome: &historyservice.CompleteNexusOperationChasmRequest_Failure{
 				Failure: apiFailure,
 			},
-			CloseTime: timestamppb.New(op.CloseTime),
+			CloseTime: timestamppb.New(c.completion.CloseTime),
 		}
-	default:
-		return nil, fmt.Errorf("unexpected nexus.OperationCompletion: %v", completion)
 	}
 
 	return req, nil
+}
+
+func isRetryableRPCResponse(err error) bool {
+	var st *status.Status
+	stGetter, ok := err.(interface{ Status() *status.Status })
+	if ok {
+		st = stGetter.Status()
+	} else {
+		st, ok = status.FromError(err)
+		if !ok {
+			// Not a gRPC induced error
+			return false
+		}
+	}
+	// nolint:exhaustive
+	switch st.Code() {
+	case codes.Canceled,
+		codes.Unknown,
+		codes.Unavailable,
+		codes.DeadlineExceeded,
+		codes.ResourceExhausted,
+		codes.Aborted,
+		codes.Internal:
+		return true
+	default:
+		return false
+	}
 }

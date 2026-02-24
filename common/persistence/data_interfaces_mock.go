@@ -1044,6 +1044,21 @@ func (mr *MockMetadataManagerMockRecorder) UpdateNamespace(ctx, request any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockMetadataManager)(nil).UpdateNamespace), ctx, request)
 }
 
+// WatchNamespaces mocks base method.
+func (m *MockMetadataManager) WatchNamespaces(ctx context.Context) (<-chan *NamespaceWatchEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WatchNamespaces", ctx)
+	ret0, _ := ret[0].(<-chan *NamespaceWatchEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// WatchNamespaces indicates an expected call of WatchNamespaces.
+func (mr *MockMetadataManagerMockRecorder) WatchNamespaces(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WatchNamespaces", reflect.TypeOf((*MockMetadataManager)(nil).WatchNamespaces), ctx)
+}
+
 // MockClusterMetadataManager is a mock of ClusterMetadataManager interface.
 type MockClusterMetadataManager struct {
 	ctrl     *gomock.Controller

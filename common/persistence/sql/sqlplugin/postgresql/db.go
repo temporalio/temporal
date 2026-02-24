@@ -7,6 +7,7 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/schema"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/driver"
@@ -32,6 +33,7 @@ type db struct {
 	cfg       *config.SQL
 	resolver  resolver.ServiceResolver
 	converter DataConverter
+	logger    log.Logger
 
 	handle *sqlplugin.DatabaseHandle
 	tx     *sqlx.Tx
@@ -47,6 +49,7 @@ func newDB(
 	dbDriver driver.Driver,
 	handle *sqlplugin.DatabaseHandle,
 	tx *sqlx.Tx,
+	logger log.Logger,
 ) *db {
 	mdb := &db{
 		dbKind:   dbKind,
@@ -54,6 +57,7 @@ func newDB(
 		dbDriver: dbDriver,
 		handle:   handle,
 		tx:       tx,
+		logger:   logger,
 	}
 	mdb.converter = &converter{}
 	return mdb
@@ -77,7 +81,7 @@ func (pdb *db) BeginTx(ctx context.Context) (sqlplugin.Tx, error) {
 	if err != nil {
 		return nil, pdb.handle.ConvertError(err)
 	}
-	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, tx), nil
+	return newDB(pdb.dbKind, pdb.dbName, pdb.dbDriver, pdb.handle, tx, pdb.logger), nil
 }
 
 // Close closes the connection to the mysql db

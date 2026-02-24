@@ -123,7 +123,7 @@ func (s *executableHistoryTaskSuite) SetupTest() {
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
-		EventSerializer:         s.eventSerializer,
+		Serializer:              s.eventSerializer,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Config:                  tests.NewDynamicConfig(),
 		HistoryEventsHandler:    s.mockEventHandler,
@@ -195,7 +195,8 @@ func (s *executableHistoryTaskSuite) TearDownTest() {
 
 func (s *executableHistoryTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -230,7 +231,8 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableHistoryTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -240,8 +242,9 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip_Namespace() {
 
 func (s *executableHistoryTaskSuite) TestExecute_Err() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
 	err := errors.New("OwO")
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -249,8 +252,10 @@ func (s *executableHistoryTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -287,7 +292,8 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(
@@ -306,6 +312,7 @@ func (s *executableHistoryTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableHistoryTaskSuite) TestHandleErr_Other() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 

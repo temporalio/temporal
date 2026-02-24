@@ -162,13 +162,15 @@ const (
 
 type (
 	MutableStateTaskStore struct {
-		Session gocql.Session
+		Session    gocql.Session
+		serializer serialization.Serializer
 	}
 )
 
-func NewMutableStateTaskStore(session gocql.Session) *MutableStateTaskStore {
+func NewMutableStateTaskStore(session gocql.Session, serializer serialization.Serializer) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
-		Session: session,
+		Session:    session,
+		serializer: serializer,
 	}
 }
 
@@ -198,7 +200,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 		request.RangeID,
 	)
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return gocql.ConvertError("AddTasks", err)
@@ -507,7 +509,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
-	datablob, err := serialization.ReplicationTaskInfoToBlob(task)
+	datablob, err := d.serializer.ReplicationTaskInfoToBlob(task)
 	if err != nil {
 		return gocql.ConvertError("PutReplicationTaskToDLQ", err)
 	}

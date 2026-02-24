@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
@@ -14,19 +15,19 @@ import (
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
-	"chasm.callback.request.timeout",
+	"callback.request.timeout",
 	time.Second*10,
 	`RequestTimeout is the timeout for executing a single callback request.`,
 )
 
 var RetryPolicyInitialInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callback.retryPolicy.initialInterval",
+	"callback.retryPolicy.initialInterval",
 	time.Second,
 	`The initial backoff interval between every callback request attempt for a given callback.`,
 )
 
 var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
-	"chasm.callback.retryPolicy.maxInterval",
+	"callback.retryPolicy.maxInterval",
 	time.Hour,
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
@@ -36,7 +37,7 @@ type Config struct {
 	RetryPolicy    func() backoff.RetryPolicy
 }
 
-func ConfigProvider(dc *dynamicconfig.Collection) *Config {
+func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
 		RequestTimeout: RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
@@ -69,7 +70,7 @@ type AddressMatchRules struct {
 
 func (a AddressMatchRules) Validate(rawURL string) error {
 	// Exact match only; no path, query, or fragment allowed for system URL
-	if rawURL == nexus.SystemCallbackURL {
+	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
 		return nil
 	}
 	u, err := url.Parse(rawURL)

@@ -6,11 +6,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -20,8 +22,12 @@ func Invoke(
 	signalWithStartRequest *historyservice.SignalWithStartWorkflowExecutionRequest,
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(signalWithStartRequest.GetNamespaceId()), signalWithStartRequest.SignalWithStartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +76,12 @@ func Invoke(
 		return nil, err
 	}
 
+	// Validation for versioning override, if any.
+	err = worker_versioning.ValidateVersioningOverride(ctx, request.GetVersioningOverride(), matchingClient, versionMembershipCache, request.GetTaskQueue().GetName(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, namespaceID.String())
+	if err != nil {
+		return nil, err
+	}
+
 	runID, started, err := SignalWithStartWorkflow(
 		ctx,
 		shard,
@@ -81,6 +93,12 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
+	if started {
+		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignalCache, reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals())
+	}
+
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
 		RunId:   runID,
 		Started: started,

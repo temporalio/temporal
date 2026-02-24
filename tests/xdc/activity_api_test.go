@@ -40,7 +40,7 @@ func TestActivityApiStateReplicationSuite(t *testing.T) {
 
 func (s *ActivityApiStateReplicationSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
-		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 	s.setupSuite()
 }

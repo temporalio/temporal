@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
@@ -21,6 +21,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -36,6 +39,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -45,6 +49,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
@@ -90,7 +95,7 @@ type (
 	serverOptionsProvider struct {
 		fx.Out
 		ServerOptions              *serverOptions
-		StopChan                   chan interface{}
+		StopChan                   chan any
 		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
@@ -140,8 +145,16 @@ var (
 		pprof.Module,
 		TraceExportModule,
 		chasm.Module,
+		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
+	)
+
+	ChasmLibraryOptions = fx.Options(
+		chasm.Module,
+		chasmworkflow.Module,
+		chasmscheduler.Module,
+		chasmcallback.Module,
 	)
 )
 
@@ -179,7 +192,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	stopChan := make(chan interface{})
+	stopChan := make(chan any)
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider
@@ -355,7 +368,6 @@ type (
 		InstanceID                 resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts         map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry       tasks.TaskCategoryRegistry
-		ChasmRegistry              *chasm.Registry
 	}
 )
 
@@ -428,14 +440,12 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() tasks.TaskCategoryRegistry {
 				return params.TaskCategoryRegistry
 			},
-			func() *chasm.Registry {
-				return params.ChasmRegistry
-			},
 		),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
+		ChasmLibraryOptions,
 	)
 }
 
@@ -542,7 +552,7 @@ func genericFrontendServiceProvider(
 			// extra tag to differentiate.
 			tags := []tag.Tag{tag.Service(primitives.FrontendService)}
 			if serviceName == primitives.InternalFrontendService {
-				tags = append(tags, tag.NewBoolTag("internal-frontend", true))
+				tags = append(tags, tag.Bool("internal-frontend", true))
 			}
 			return log.With(params.Logger, tags...)
 		}),
@@ -582,6 +592,7 @@ func ApplyClusterMetadataConfigProvider(
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
 	metricsHandler metrics.Handler,
+	serializer serialization.Serializer,
 ) (*cluster.Config, config.Persistence, error) {
 	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
@@ -595,6 +606,7 @@ func ApplyClusterMetadataConfigProvider(
 		logger,
 		metricsHandler,
 		telemetry.NoopTracerProvider,
+		serializer,
 	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
 		DataStoreFactory:           dataStoreFactory,
@@ -604,6 +616,7 @@ func ApplyClusterMetadataConfigProvider(
 		ClusterName:                persistenceClient.ClusterName(svc.ClusterMetadata.CurrentClusterName),
 		MetricsHandler:             metricsHandler,
 		Logger:                     logger,
+		Serializer:                 serializer,
 	})
 	defer factory.Close()
 
@@ -639,7 +652,7 @@ func ApplyClusterMetadataConfigProvider(
 	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
 	for _, ds := range visDataStores {
 		if ds.SQL != nil || ds.CustomDataStoreConfig != nil {
-			indexSearchAttributes[ds.GetIndexName()] = searchattribute.GetDBIndexSearchAttributes(visCSAOverride)
+			indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
 		}
 	}
 
@@ -711,11 +724,11 @@ func initCurrentClusterMetadataRecord(
 	var clusterId string
 	currentClusterName := svc.ClusterMetadata.CurrentClusterName
 	currentClusterInfo := svc.ClusterMetadata.ClusterInformation[currentClusterName]
-	if uuid.Parse(currentClusterInfo.ClusterID) == nil {
+	if uuid.Validate(currentClusterInfo.ClusterID) != nil {
 		if currentClusterInfo.ClusterID != "" {
 			logger.Warn("Cluster Id in Cluster Metadata config is not a valid uuid. Generating a new Cluster Id")
 		}
-		clusterId = uuid.New()
+		clusterId = uuid.NewString()
 	} else {
 		clusterId = currentClusterInfo.ClusterID
 	}
@@ -1083,83 +1096,83 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	case *fxevent.OnStartExecuting:
 		l.logger.Debug("OnStart hook executing",
 			tag.ComponentFX,
-			tag.NewStringTag("callee", e.FunctionName),
-			tag.NewStringTag("caller", e.CallerName),
+			tag.String("callee", e.FunctionName),
+			tag.String("caller", e.CallerName),
 		)
 	case *fxevent.OnStartExecuted:
 		if e.Err != nil {
 			l.logger.Error("OnStart hook failed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
 				tag.Error(e.Err),
 			)
 		} else {
 			l.logger.Debug("OnStart hook executed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringerTag("runtime", e.Runtime),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
+				tag.Stringer("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.OnStopExecuting:
 		l.logger.Debug("OnStop hook executing",
 			tag.ComponentFX,
-			tag.NewStringTag("callee", e.FunctionName),
-			tag.NewStringTag("caller", e.CallerName),
+			tag.String("callee", e.FunctionName),
+			tag.String("caller", e.CallerName),
 		)
 	case *fxevent.OnStopExecuted:
 		if e.Err != nil {
 			l.logger.Error("OnStop hook failed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
 				tag.Error(e.Err),
 			)
 		} else {
 			l.logger.Debug("OnStop hook executed",
 				tag.ComponentFX,
-				tag.NewStringTag("callee", e.FunctionName),
-				tag.NewStringTag("caller", e.CallerName),
-				tag.NewStringerTag("runtime", e.Runtime),
+				tag.String("callee", e.FunctionName),
+				tag.String("caller", e.CallerName),
+				tag.Stringer("runtime", e.Runtime),
 			)
 		}
 	case *fxevent.Supplied:
 		if e.Err != nil {
 			l.logger.Error("supplied",
 				tag.ComponentFX,
-				tag.NewStringTag("type", e.TypeName),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("type", e.TypeName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Provided:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Replaced:
 		if e.Err != nil {
 			l.logger.Error("error encountered while replacing",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Decorated:
 		if e.Err != nil {
 			l.logger.Error("error encountered while applying options",
 				tag.ComponentFX,
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err))
 		}
 	case *fxevent.Run:
 		if e.Err != nil {
 			l.logger.Error("error returned",
 				tag.ComponentFX,
-				tag.NewStringTag("name", e.Name),
-				tag.NewStringTag("kind", e.Kind),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("name", e.Name),
+				tag.String("kind", e.Kind),
+				tag.String("module", e.ModuleName),
 				tag.Error(e.Err),
 			)
 		}
@@ -1167,23 +1180,23 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 		// Do not log stack as it will make logs hard to read.
 		l.logger.Debug("invoking",
 			tag.ComponentFX,
-			tag.NewStringTag("function", e.FunctionName),
-			tag.NewStringTag("module", e.ModuleName),
+			tag.String("function", e.FunctionName),
+			tag.String("module", e.ModuleName),
 		)
 	case *fxevent.Invoked:
 		if e.Err != nil {
 			l.logger.Error("invoke failed",
 				tag.ComponentFX,
 				tag.Error(e.Err),
-				tag.NewStringTag("stack", e.Trace),
-				tag.NewStringTag("function", e.FunctionName),
-				tag.NewStringTag("module", e.ModuleName),
+				tag.String("stack", e.Trace),
+				tag.String("function", e.FunctionName),
+				tag.String("module", e.ModuleName),
 			)
 		}
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
 			tag.ComponentFX,
-			tag.NewStringerTag("signal", e.Signal))
+			tag.Stringer("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
 			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))
@@ -1206,14 +1219,14 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 		} else {
 			l.logger.Debug("initialized custom fxevent.Logger",
 				tag.ComponentFX,
-				tag.NewStringTag("function", e.ConstructorName))
+				tag.String("function", e.ConstructorName))
 		}
 	case *fxevent.BeforeRun:
 		l.logger.Debug("before run",
 			tag.ComponentFX,
-			tag.NewStringTag("name", e.Name),
-			tag.NewStringTag("kind", e.Kind),
-			tag.NewStringTag("module", e.ModuleName),
+			tag.String("name", e.Name),
+			tag.String("kind", e.Kind),
+			tag.String("module", e.ModuleName),
 		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",

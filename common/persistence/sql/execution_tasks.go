@@ -10,7 +10,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -590,7 +589,7 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	replicationTask := request.TaskInfo
-	blob, err := serialization.ReplicationTaskInfoToBlob(replicationTask)
+	blob, err := m.serializer.ReplicationTaskInfoToBlob(replicationTask)
 
 	if err != nil {
 		return err

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/history/replication"
@@ -16,7 +17,18 @@ func SyncWorkflowState(
 	syncStateRetriever replication.SyncStateRetriever,
 	logger log.Logger,
 ) (_ *historyservice.SyncWorkflowStateResponse, retError error) {
-	result, err := syncStateRetriever.GetSyncWorkflowStateArtifact(ctx, request.GetNamespaceId(), request.Execution, request.VersionedTransition, request.VersionHistories)
+	archetypeID := request.GetArchetypeId()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+	result, err := syncStateRetriever.GetSyncWorkflowStateArtifact(
+		ctx,
+		request.GetNamespaceId(),
+		request.Execution,
+		archetypeID,
+		request.VersionedTransition,
+		request.VersionHistories,
+	)
 	if err != nil {
 		logger.Error("SyncWorkflowState failed to retrieve sync state artifact", tag.WorkflowNamespaceID(request.NamespaceId),
 			tag.WorkflowID(request.Execution.WorkflowId),

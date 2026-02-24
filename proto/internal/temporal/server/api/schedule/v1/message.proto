@@ -41,6 +41,24 @@ message BufferedStart {
     // The precomputed workflow ID that should be used (as-is) when executing
     // this start. Only used by the CHASM scheduler (otherwise ignored).
     string workflow_id = 9;
+    // The run ID of the started workflow. Populated when the workflow is
+    // successfully started. Only used by the CHASM scheduler.
+    string run_id = 10;
+    // The actual time the workflow was started. Populated when the workflow is
+    // successfully started. Only used by the CHASM scheduler.
+    google.protobuf.Timestamp start_time = 11;
+    // Populated when the workflow execution completes. Presence indicates the
+    // action is complete and retained for history. Only used by the CHASM scheduler.
+    CompletedResult completed = 12;
+}
+
+// Result when a workflow execution has completed.
+// Only used by the CHASM scheduler.
+message CompletedResult {
+    // The final status of the workflow execution.
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 1;
+    // The time the workflow closed.
+    google.protobuf.Timestamp close_time = 2;
 }
 
 message InternalState {

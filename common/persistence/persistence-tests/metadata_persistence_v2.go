@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -108,7 +108,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 	default:
 		return
 	}
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "create-partial-namespace-test-name"
 	m.createPartialNamespace(id, name)
 
@@ -187,8 +187,8 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 		return
 	}
 
-	id := uuid.New()
-	partialID := uuid.New()
+	id := uuid.NewString()
+	partialID := uuid.NewString()
 	name := "create-partial-namespace-test-name"
 	m.createPartialNamespace(partialID, name)
 	state := enumspb.NAMESPACE_STATE_REGISTERED
@@ -265,7 +265,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 	default:
 		return
 	}
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "create-namespace-test-name-for-partial-test"
 	partialName := "create-partial-namespace-test-name"
 	m.createPartialNamespace(id, partialName)
@@ -313,7 +313,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentName
 
 // TestCreateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "create-namespace-test-name-for-partial-test"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "create-namespace-test-description"
@@ -382,7 +382,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 
 	resp2, err2 := m.CreateNamespace(
 		&persistencespb.NamespaceInfo{
-			Id:          uuid.New(),
+			Id:          uuid.NewString(),
 			Name:        name,
 			State:       state,
 			Description: "fail",
@@ -408,7 +408,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespace() {
 
 // TestGetNamespace test
 func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "get-namespace-test-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "get-namespace-test-description"
@@ -531,7 +531,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetNamespace() {
 
 // TestConcurrentCreateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 
 	name := "concurrent-create-namespace-test-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
@@ -632,7 +632,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentCreateNamespace() {
 
 // TestConcurrentUpdateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "concurrent-update-namespace-test-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "update-namespace-test-description"
@@ -775,7 +775,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 
 // TestUpdateNamespace test
 func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "update-namespace-test-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "update-namespace-test-description"
@@ -999,7 +999,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 }
 
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "rename-namespace-test-name"
 	newName := "rename-namespace-test-new-name"
 	newNewName := "rename-namespace-test-new-new-name"
@@ -1086,7 +1086,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 
 // TestDeleteNamespace test
 func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "delete-namespace-test-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "delete-namespace-test-description"
@@ -1158,7 +1158,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	m.IsType(&serviceerror.NamespaceNotFound{}, err5)
 	m.Nil(resp5)
 
-	id = uuid.New()
+	id = uuid.NewString()
 	resp6, err6 := m.CreateNamespace(
 		&persistencespb.NamespaceInfo{
 			Id:          id,
@@ -1233,7 +1233,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
-					Id:          uuid.New(),
+					Id:          uuid.NewString(),
 					Name:        "list-namespace-test-name-1",
 					State:       enumspb.NAMESPACE_STATE_REGISTERED,
 					Description: "list-namespace-test-description-1",
@@ -1261,7 +1261,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 		{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
-					Id:          uuid.New(),
+					Id:          uuid.NewString(),
 					Name:        "list-namespace-test-name-2",
 					State:       enumspb.NAMESPACE_STATE_REGISTERED,
 					Description: "list-namespace-test-description-2",
@@ -1334,7 +1334,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New(),
+					Id:    uuid.NewString(),
 					Name:  "list-namespace-test-name-1",
 					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
@@ -1345,7 +1345,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New(),
+					Id:    uuid.NewString(),
 					Name:  "list-namespace-test-name-2",
 					State: enumspb.NAMESPACE_STATE_DELETED,
 				},
@@ -1356,7 +1356,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New(),
+					Id:    uuid.NewString(),
 					Name:  "list-namespace-test-name-3",
 					State: enumspb.NAMESPACE_STATE_REGISTERED,
 				},
@@ -1367,7 +1367,7 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
 		{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info: &persistencespb.NamespaceInfo{
-					Id:    uuid.New(),
+					Id:    uuid.NewString(),
 					Name:  "list-namespace-test-name-4",
 					State: enumspb.NAMESPACE_STATE_DELETED,
 				},
@@ -1504,7 +1504,7 @@ func (m *MetadataPersistenceSuiteV2) ListNamespaces(pageSize int, pageToken []by
 
 // TestCASFailureUpdateNamespace tests CAS failure when trying to update a namespace
 func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "cas-update-namespace-test-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "cas-update-namespace-test-description"
@@ -1599,9 +1599,9 @@ func (m *MetadataPersistenceSuiteV2) TestCASFailureUpdateNamespace() {
 
 // TestRenameNamespaceWithNameConflict tests name conflict when trying to rename a namespace
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceWithNameConflict() {
-	id1 := uuid.New()
+	id1 := uuid.NewString()
 	name1 := "rename-conflict-namespace-1"
-	id2 := uuid.New()
+	id2 := uuid.NewString()
 	name2 := "rename-conflict-namespace-2"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "rename-conflict-test-description"
@@ -1705,7 +1705,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetMetadataVersionIncrement() {
 	initialVersion := metadata1.NotificationVersion
 
 	// Create a namespace
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "metadata-version-test-namespace"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "metadata-version-test-description"
@@ -1762,7 +1762,7 @@ func (m *MetadataPersistenceSuiteV2) TestGetMetadataVersionIncrement() {
 
 // TestCreateNamespaceWithDuplicateName tests creating a namespace with a name that already exists
 func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateName() {
-	id1 := uuid.New()
+	id1 := uuid.NewString()
 	name := "duplicate-name-test-namespace"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "duplicate-name-test-description"
@@ -1816,7 +1816,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateName() {
 	m.Equal(name, getResp1.Namespace.Info.Name)
 
 	// Try to create another namespace with the same name but different ID
-	id2 := uuid.New()
+	id2 := uuid.NewString()
 	_, err3 := m.CreateNamespace(
 		&persistencespb.NamespaceInfo{
 			Id:          id2,
@@ -1858,7 +1858,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateName() {
 
 // TestCreateNamespaceWithDuplicateID tests creating a namespace with an ID that already exists
 func (m *MetadataPersistenceSuiteV2) TestCreateNamespaceWithDuplicateID() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name1 := "duplicate-id-test-namespace-1"
 	name2 := "duplicate-id-test-namespace-2"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
@@ -1982,7 +1982,7 @@ func (m *MetadataPersistenceSuiteV2) TestInitializeSystemNamespaces() {
 
 // TestDeleteNamespaceIdempotency tests that delete operations are idempotent
 func (m *MetadataPersistenceSuiteV2) TestDeleteNamespaceIdempotency() {
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "delete-idempotent-test-namespace"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "delete-idempotent-test-description"
@@ -2052,7 +2052,7 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespaceIdempotency() {
 
 // TestUpdateNamespaceNotFound tests updating a non-existent namespace
 func (m *MetadataPersistenceSuiteV2) TestUpdateNamespaceNotFound() {
-	nonExistentID := uuid.New()
+	nonExistentID := uuid.NewString()
 	name := "non-existent-namespace"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
 	description := "test-description"
@@ -2104,7 +2104,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespaceNotFound() {
 
 // TestRenameNamespaceNotFound tests renaming a non-existent namespace
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceNotFound() {
-	nonExistentName := "non-existent-namespace-" + uuid.New()
+	nonExistentName := "non-existent-namespace-" + uuid.NewString()
 	newName := "new-name-for-non-existent"
 
 	err := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
@@ -2124,7 +2124,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 	default:
 	}
 
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "cassandra-rename-test-name"
 	newName := "cassandra-rename-test-new-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED
@@ -2248,7 +2248,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
 		m.T().Skip()
 	}
 
-	id := uuid.New()
+	id := uuid.NewString()
 	name := "sql-rename-test-name"
 	newName := "sql-rename-test-new-name"
 	state := enumspb.NAMESPACE_STATE_REGISTERED

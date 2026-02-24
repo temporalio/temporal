@@ -1,10 +1,15 @@
 package history
 
 import (
+	"context"
+	"time"
+
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
-	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
+	commoncache "go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -14,6 +19,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -24,6 +30,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	nexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
@@ -38,6 +45,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -60,11 +68,14 @@ var Module = fx.Options(
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(HealthSignalAggregatorProvider),
 	fx.Provide(HealthCheckInterceptorProvider),
-	fx.Provide(chasm.ChasmRequestInterceptorProvider),
+	fx.Provide(MetadataContextInterceptorProvider),
+	fx.Provide(chasm.ChasmEngineInterceptorProvider),
+	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 	fx.Provide(HistoryAdditionalInterceptorsProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	fx.Provide(ESProcessorConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
+	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -75,12 +86,16 @@ var Module = fx.Options(
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(ReplicationProgressCacheProvider),
+	fx.Provide(VersionMembershipCacheProvider),
+	fx.Provide(ReactivationSignalCacheProvider),
+	fx.Provide(workerdeployment.ClientProvider),
+	fx.Provide(RoutingInfoCacheProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 
 	callbacks.Module,
 	nexusoperations.Module,
 	fx.Invoke(nexusworkflow.RegisterCommandHandlers),
-	chasmscheduler.Module,
+	activity.HistoryModule,
 )
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
@@ -93,7 +108,13 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
-func HandlerProvider(args NewHandlerArgs) *Handler {
+func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
+	// Build and store the Nexus handler
+	nexusHandler, err := buildNexusHandler(args.ChasmRegistry)
+	if err != nil {
+		return nil, err
+	}
+
 	handler := &Handler{
 		status:                       common.DaemonStatusInitialized,
 		config:                       args.Config,
@@ -122,14 +143,30 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		taskCategoryRegistry:         args.TaskCategoryRegistry,
 		dlqMetricsEmitter:            args.DLQMetricsEmitter,
 		chasmEngine:                  args.ChasmEngine,
+		chasmRegistry:                args.ChasmRegistry,
 
 		replicationTaskFetcherFactory:    args.ReplicationTaskFetcherFactory,
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
+		nexusHandler:                     nexusHandler,
 	}
 
-	return handler
+	return handler, nil
+}
+
+func buildNexusHandler(chasmRegistry *chasm.Registry) (nexus.Handler, error) {
+	nexusServices := chasmRegistry.NexusServices()
+	if len(nexusServices) == 0 {
+		return nil, nil
+	}
+	serviceRegistry := nexus.NewServiceRegistry()
+	for _, svc := range nexusServices {
+		// No chance of collision here since the registry would have errored out earlier.
+		serviceRegistry.MustRegister(svc)
+	}
+
+	return serviceRegistry.NewHandler()
 }
 
 func HistoryEngineFactoryProvider(
@@ -207,10 +244,22 @@ func HealthCheckInterceptorProvider(
 	)
 }
 
+func MetadataContextInterceptorProvider() *interceptor.MetadataContextInterceptor {
+	return interceptor.NewMetadataContextInterceptor()
+}
+
 func HistoryAdditionalInterceptorsProvider(
-	healthCheckInterceptor *interceptor.HealthCheckInterceptor, chasmRequestInterceptor *chasm.ChasmRequestInterceptor,
+	healthCheckInterceptor *interceptor.HealthCheckInterceptor,
+	metadataContextInterceptor *interceptor.MetadataContextInterceptor,
+	chasmRequestEngineInterceptor *chasm.ChasmEngineInterceptor,
+	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
 ) []grpc.UnaryServerInterceptor {
-	return []grpc.UnaryServerInterceptor{healthCheckInterceptor.UnaryIntercept, chasmRequestInterceptor.Intercept}
+	return []grpc.UnaryServerInterceptor{
+		metadataContextInterceptor.Intercept,
+		healthCheckInterceptor.UnaryIntercept,
+		chasmRequestEngineInterceptor.Intercept,
+		chasmRequestVisibilityInterceptor.Intercept,
+	}
 }
 
 func RateLimitInterceptorProvider(
@@ -287,6 +336,8 @@ func VisibilityManagerProvider(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	saProvider searchattribute.Provider,
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
+	serializer serialization.Serializer,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		*persistenceConfig,
@@ -296,6 +347,7 @@ func VisibilityManagerProvider(
 		saProvider,
 		searchAttributesMapperProvider,
 		namespaceRegistry,
+		chasmRegistry,
 		serviceConfig.VisibilityPersistenceMaxReadQPS,
 		serviceConfig.VisibilityPersistenceMaxWriteQPS,
 		serviceConfig.OperatorRPSRatio,
@@ -305,8 +357,20 @@ func VisibilityManagerProvider(
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
+		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
+		serializer,
+	)
+}
+
+func ChasmVisibilityManagerProvider(
+	chasmRegistry *chasm.Registry,
+	visibilityManager manager.VisibilityManager,
+) chasm.VisibilityManager {
+	return visibility.NewChasmVisibilityManager(
+		chasmRegistry,
+		visibilityManager,
 	)
 }
 
@@ -332,4 +396,55 @@ func ReplicationProgressCacheProvider(
 	handler metrics.Handler,
 ) replication.ProgressCache {
 	return replication.NewProgressCache(serviceConfig, logger, handler)
+}
+
+func VersionMembershipCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.VersionMembershipCache {
+	c := commoncache.New(serviceConfig.VersionMembershipCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.VersionMembershipCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewVersionMembershipCache(c, metricsHandler)
+}
+
+func ReactivationSignalCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.ReactivationSignalCache {
+	c := commoncache.New(serviceConfig.VersionReactivationSignalCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.VersionReactivationSignalCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewReactivationSignalCache(c, metricsHandler)
+}
+
+func RoutingInfoCacheProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+) worker_versioning.RoutingInfoCache {
+	c := commoncache.New(serviceConfig.RoutingInfoCacheMaxSize(), &commoncache.Options{
+		TTL: max(1*time.Second, serviceConfig.RoutingInfoCacheTTL()),
+	})
+	lc.Append(fx.Hook{
+		OnStop: func(context.Context) error {
+			c.Stop()
+			return nil
+		},
+	})
+	return worker_versioning.NewRoutingInfoCache(c, metricsHandler)
 }

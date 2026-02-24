@@ -139,7 +139,8 @@ func (s *executableActivityStateTaskSuite) TearDownTest() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Process() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 
@@ -182,7 +183,8 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip_TerminalState() {
 
 func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), false, nil,
 	).AnyTimes()
 
@@ -193,7 +195,8 @@ func (s *executableActivityStateTaskSuite) TestExecute_Skip_Namespace() {
 func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 	err := errors.New("OwO")
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		"", false, err,
 	).AnyTimes()
 
@@ -201,8 +204,10 @@ func (s *executableActivityStateTaskSuite) TestExecute_Err() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := historyi.NewMockShardContext(s.controller)
@@ -247,7 +252,8 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Success() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID).Return(
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	err := serviceerrors.NewRetryReplication(
@@ -266,6 +272,7 @@ func (s *executableActivityStateTaskSuite) TestHandleErr_Resend_Error() {
 }
 
 func (s *executableActivityStateTaskSuite) TestHandleErr_Other() {
+	s.executableTask.EXPECT().NamespaceName().Return("test-namespace").AnyTimes()
 	err := errors.New("OwO")
 	s.Equal(err, s.task.HandleErr(err))
 
@@ -364,7 +371,8 @@ func (s *executableActivityStateTaskSuite) TestBatchedTask_ShouldBatchTogether_A
 	s.assertAttributeEqual(replicationAttribute2, activityTask.activityInfos[1])
 
 	s.executableTask.EXPECT().TerminalState().Return(false)
-	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), namespaceId).Return(
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), namespaceId, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
 	shardContext := historyi.NewMockShardContext(s.controller)

@@ -1,7 +1,7 @@
 package api
 
 import (
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/namespace"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -10,6 +10,7 @@ import (
 func GetActiveNamespace(
 	shard historyi.ShardContext,
 	namespaceUUID namespace.ID,
+	businessID string,
 ) (*namespace.Namespace, error) {
 
 	err := ValidateNamespaceUUID(namespaceUUID)
@@ -21,11 +22,11 @@ func GetActiveNamespace(
 	if err != nil {
 		return nil, err
 	}
-	if !namespaceEntry.ActiveInCluster(shard.GetClusterMetadata().GetCurrentClusterName()) {
+	if namespaceEntry.ActiveClusterName(businessID) != shard.GetClusterMetadata().GetCurrentClusterName() {
 		return nil, serviceerror.NewNamespaceNotActive(
 			namespaceEntry.Name().String(),
 			shard.GetClusterMetadata().GetCurrentClusterName(),
-			namespaceEntry.ActiveClusterName())
+			namespaceEntry.ActiveClusterName(businessID))
 	}
 	return namespaceEntry, nil
 }
@@ -53,7 +54,7 @@ func ValidateNamespaceUUID(
 ) error {
 	if namespaceUUID == "" {
 		return serviceerror.NewInvalidArgument("Missing namespace UUID.")
-	} else if uuid.Parse(namespaceUUID.String()) == nil {
+	} else if uuid.Validate(namespaceUUID.String()) != nil {
 		return serviceerror.NewInvalidArgument("Invalid namespace UUID.")
 	}
 	return nil

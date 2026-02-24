@@ -17,6 +17,7 @@ type (
 		dispatchForExistingWorkflow(
 			ctx context.Context,
 			isWorkflowRebuilt bool,
+			archetypeID chasm.ArchetypeID,
 			targetWorkflow Workflow,
 			newWorkflow Workflow,
 		) error
@@ -47,16 +48,19 @@ func newNDCTransactionMgrForExistingWorkflow(
 func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 	ctx context.Context,
 	isWorkflowRebuilt bool,
+	archetypeID chasm.ArchetypeID,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
 ) error {
+
+	mutableState := targetWorkflow.GetMutableState()
 
 	// NOTE: this function does NOT mutate current workflow, target workflow or new workflow,
 	//  workflow mutation is done in methods within executeTransaction function
 
 	// this is a performance optimization so most update does not need to
 	// check whether target workflow is current workflow by calling DB API
-	if !isWorkflowRebuilt && targetWorkflow.GetMutableState().IsCurrentWorkflowGuaranteed() {
+	if !isWorkflowRebuilt && mutableState.IsCurrentWorkflowGuaranteed() {
 		// NOTE: if target workflow is rebuilt, then IsCurrentWorkflowGuaranteed is not trustworthy
 
 		// update to current record, since target workflow is pointed by current record
@@ -65,10 +69,10 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 			isWorkflowRebuilt,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 	}
 
-	mutableState := targetWorkflow.GetMutableState()
 	targetExecutionInfo := mutableState.GetExecutionInfo()
 	targetExecutionState := mutableState.GetExecutionState()
 	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
@@ -81,6 +85,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,
+		archetypeID,
 	)
 	if err != nil {
 		return err
@@ -97,6 +102,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 			isWorkflowRebuilt,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 	}
 
@@ -106,7 +112,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		namespaceID,
 		workflowID,
 		currentRunID,
-		chasm.ArchetypeAny,
+		archetypeID,
 	)
 	if err != nil {
 		return err
@@ -125,6 +131,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 	}
 
@@ -136,6 +143,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		currentWorkflow,
 		targetWorkflow,
 		newWorkflow,
+		archetypeID,
 	)
 }
 
@@ -144,6 +152,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 	isWorkflowRebuilt bool,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
+	archetypeID chasm.ArchetypeID,
 ) error {
 
 	if !isWorkflowRebuilt {
@@ -153,6 +162,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 			nil,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 	}
 
@@ -162,6 +172,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsCurre
 		nil,
 		targetWorkflow,
 		newWorkflow,
+		archetypeID,
 	)
 }
 
@@ -171,6 +182,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
+	archetypeID chasm.ArchetypeID,
 ) error {
 
 	if !isWorkflowRebuilt {
@@ -180,6 +192,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 	}
 
@@ -189,6 +202,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 		currentWorkflow,
 		targetWorkflow,
 		newWorkflow,
+		archetypeID,
 	)
 }
 
@@ -215,6 +229,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
+	archetypeID chasm.ArchetypeID,
 ) error {
 
 	targetPolicy, err := targetWorkflow.SuppressBy(
@@ -250,6 +265,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			namespace.ID(newExecutionInfo.NamespaceId),
 			newExecutionInfo.WorkflowId,
 			newExecutionState.RunId,
+			archetypeID,
 		)
 		if err != nil {
 			return err
@@ -369,6 +385,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
+	archetypeID chasm.ArchetypeID,
 ) error {
 
 	var err error
@@ -406,6 +423,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 			namespace.ID(newExecutionInfo.NamespaceId),
 			newExecutionInfo.WorkflowId,
 			newExecutionState.RunId,
+			archetypeID,
 		)
 		if err != nil {
 			return err
@@ -447,6 +465,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 	currentWorkflow Workflow,
 	targetWorkflow Workflow,
 	newWorkflow Workflow,
+	archetypeID chasm.ArchetypeID,
 ) (retError error) {
 
 	defer func() {
@@ -472,6 +491,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 
 	case nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent:
@@ -495,6 +515,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 			currentWorkflow,
 			targetWorkflow,
 			newWorkflow,
+			archetypeID,
 		)
 
 	default:

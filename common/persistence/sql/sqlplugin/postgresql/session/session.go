@@ -1,6 +1,7 @@
 package session
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -54,7 +55,11 @@ func createConnection(
 	d driver.Driver,
 	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
-	db, err := d.CreateConnection(buildDSN(cfg, resolver))
+	dsn, err := buildDSN(cfg, resolver)
+	if err != nil {
+		return nil, err
+	}
+	db, err := d.CreateConnection(dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -76,40 +81,25 @@ func createConnection(
 func buildDSN(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
-) string {
-	tlsAttrs := buildDSNAttr(cfg).Encode()
+) (string, error) {
+	tlsAttrs, err := buildDSNAttr(cfg)
+	if err != nil {
+		return "", err
+	}
 	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
-	dsn := fmt.Sprintf(
+	return fmt.Sprintf(
 		dsnFmt,
 		cfg.User,
 		url.QueryEscape(cfg.Password),
 		resolvedAddr,
 		cfg.DatabaseName,
-		tlsAttrs,
-	)
-	return dsn
+		tlsAttrs.Encode(),
+	), nil
 }
 
-func buildDSNAttr(cfg *config.SQL) url.Values {
-	parameters := url.Values{}
-	if cfg.TLS != nil && cfg.TLS.Enabled {
-		if !cfg.TLS.EnableHostVerification {
-			parameters.Set(sslMode, sslModeRequire)
-		} else {
-			parameters.Set(sslMode, sslModeFull)
-		}
-
-		if cfg.TLS.CaFile != "" {
-			parameters.Set(sslCA, cfg.TLS.CaFile)
-		}
-		if cfg.TLS.KeyFile != "" && cfg.TLS.CertFile != "" {
-			parameters.Set(sslKey, cfg.TLS.KeyFile)
-			parameters.Set(sslCert, cfg.TLS.CertFile)
-		}
-	} else {
-		parameters.Set(sslMode, sslModeNoop)
-	}
-
+// nolint: revive
+func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
+	parameters := make(url.Values, len(cfg.ConnectAttributes))
 	for k, v := range cfg.ConnectAttributes {
 		key := strings.TrimSpace(k)
 		value := strings.TrimSpace(v)
@@ -122,5 +112,39 @@ func buildDSNAttr(cfg *config.SQL) url.Values {
 		}
 		parameters.Set(key, value)
 	}
-	return parameters
+
+	if cfg.TLS != nil && cfg.TLS.Enabled {
+		if parameters.Get(sslMode) == "" {
+			if cfg.TLS.EnableHostVerification {
+				parameters.Set(sslMode, sslModeFull)
+			} else {
+				parameters.Set(sslMode, sslModeRequire)
+			}
+		}
+
+		if parameters.Get(sslCA) == "" && cfg.TLS.CaFile != "" {
+			parameters.Set(sslCA, cfg.TLS.CaFile)
+		}
+
+		if parameters.Get(sslKey) == "" {
+			if parameters.Get(sslCert) != "" {
+				return nil, errors.New("failed to build postgresql DSN: sslcert connectAttribute is set but sslkey is not set")
+			}
+			if cfg.TLS.KeyFile != "" {
+				if cfg.TLS.CertFile == "" {
+					return nil, errors.New("failed to build postgresql DSN: TLS keyFile is set but TLS certFile is not set")
+				}
+				parameters.Set(sslKey, cfg.TLS.KeyFile)
+				parameters.Set(sslCert, cfg.TLS.CertFile)
+			} else if cfg.TLS.CertFile != "" {
+				return nil, errors.New("failed to build postgresql DSN: TLS certFile is set but TLS keyFile is not set")
+			}
+		} else if parameters.Get(sslCert) == "" {
+			return nil, errors.New("failed to build postgresql DSN: sslkey connectAttribute is set but sslcert is not set")
+		}
+	} else if parameters.Get(sslMode) == "" {
+		parameters.Set(sslMode, sslModeNoop)
+	}
+
+	return parameters, nil
 }

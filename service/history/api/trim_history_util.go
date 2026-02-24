@@ -21,7 +21,7 @@ func TrimHistoryNode(
 	workflowID string,
 	runID string,
 ) {
-	response, err := GetOrPollMutableState(
+	response, err := GetOrPollWorkflowMutableState(
 		ctx,
 		shardContext,
 		&historyservice.GetMutableStateRequest{

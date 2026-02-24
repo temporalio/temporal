@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -145,7 +144,7 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 		).WithContext(ctx)
 	}
 
-	previous := make(map[string]interface{})
+	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
 		return false, gocql.ConvertError("SaveClusterMetadata", err)
@@ -172,13 +171,13 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	request *p.GetClusterMembersRequest,
 ) (*p.GetClusterMembersResponse, error) {
 	var queryString strings.Builder
-	var operands []interface{}
+	var operands []any
 	queryString.WriteString(templateGetClusterMembership)
 	operands = append(operands, constMembershipPartition)
 
-	if request.HostIDEquals != nil {
+	if len(request.HostIDEquals) != 0 {
 		queryString.WriteString(templateWithHostIDSuffix)
-		operands = append(operands, []byte(request.HostIDEquals))
+		operands = append(operands, request.HostIDEquals)
 	}
 
 	if request.RPCAddressEquals != nil {
@@ -220,7 +219,7 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 
 	for iter.Scan(&cqlHostID, &rpcAddress, &rpcPort, &role, &sessionStart, &lastHeartbeat, &cassNow, &ttl) {
 		member := p.ClusterMember{
-			HostID:        uuid.UUID(cqlHostID),
+			HostID:        cqlHostID,
 			RPCAddress:    rpcAddress,
 			RPCPort:       rpcPort,
 			Role:          role,
@@ -251,7 +250,7 @@ func (m *ClusterMetadataStore) UpsertClusterMembership(
 	query := m.session.Query(
 		templateUpsertActiveClusterMembership,
 		constMembershipPartition,
-		[]byte(request.HostID),
+		request.HostID,
 		request.RPCAddress,
 		request.RPCPort,
 		request.Role,

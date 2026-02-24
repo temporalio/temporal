@@ -130,6 +130,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
 			},
 		)
@@ -146,9 +147,10 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 				Clock:                  task.event.Data.GetClock(),
 				ScheduleToStartTimeout: expirationDuration,
 				ForwardInfo:            fwdr.getForwardInfo(task),
-				Stamp:                  task.event.Data.GetStamp(),
 				VersionDirective:       task.event.Data.GetVersionDirective(),
+				Stamp:                  task.event.Data.GetStamp(),
 				Priority:               task.event.Data.GetPriority(),
+				ComponentRef:           task.event.Data.GetComponentRef(),
 			},
 		)
 	default:
@@ -246,11 +248,15 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
+		} else if resp.TaskToken == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
@@ -266,11 +272,15 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				TaskQueueMetadata:         pollMetadata.taskQueueMetadata,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
+		} else if resp.TaskToken == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{activityTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_NEXUS:
@@ -285,12 +295,16 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				Identity:                  identity,
 				WorkerVersionCapabilities: pollMetadata.workerVersionCapabilities,
 				DeploymentOptions:         pollMetadata.deploymentOptions,
+				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				// Namespace is ignored here.
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
+			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
+		} else if resp.Response == nil {
+			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{nexusTaskInfo: resp}), nil
 	default:
@@ -332,7 +346,7 @@ func (fwdr *Forwarder) handleErr(err error) error {
 
 func newForwarderReqToken(maxOutstanding int) *ForwarderReqToken {
 	reqToken := &ForwarderReqToken{ch: make(chan *ForwarderReqToken, maxOutstanding)}
-	for i := 0; i < maxOutstanding; i++ {
+	for range maxOutstanding {
 		reqToken.ch <- reqToken
 	}
 	return reqToken

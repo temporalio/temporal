@@ -3,10 +3,10 @@ package scheduler
 import (
 	"time"
 
-	"github.com/pborman/uuid"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulescommon "go.temporal.io/server/common/schedules"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -17,7 +17,7 @@ type Backfiller struct {
 
 	*schedulerpb.BackfillerState
 
-	Scheduler chasm.Field[*Scheduler]
+	Scheduler chasm.ParentPtr[*Scheduler]
 }
 
 type BackfillRequestType int
@@ -27,21 +27,34 @@ const (
 	RequestTypeBackfill
 )
 
-// newBackfiller returns an initialized backfiller without a request set or tasks
-// created.
-func newBackfiller(
+// addBackfiller returns an initialized backfiller, adding it to the scheduler's
+// Backfillers.
+func addBackfiller(
 	ctx chasm.MutableContext,
 	scheduler *Scheduler,
 ) *Backfiller {
-	id := uuid.New()
+	id := schedulescommon.GenerateBackfillerID()
 	backfiller := &Backfiller{
 		BackfillerState: &schedulerpb.BackfillerState{
 			BackfillId:        id,
 			LastProcessedTime: timestamppb.New(ctx.Now(scheduler)),
 		},
-		Scheduler: chasm.ComponentPointerTo(ctx, scheduler),
 	}
+
+	if scheduler.Backfillers == nil {
+		scheduler.Backfillers = make(chasm.Map[string, *Backfiller])
+	}
+	scheduler.Backfillers[id] = chasm.NewComponentField(ctx, backfiller)
+
+	backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
 	return backfiller
+}
+
+// scheduleTask schedules a BackfillerTask at the given time.
+func (b *Backfiller) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	ctx.AddTask(b, chasm.TaskAttributes{
+		ScheduledTime: scheduledTime,
+	}, &schedulerpb.BackfillerTask{})
 }
 
 func (b *Backfiller) LifecycleState(ctx chasm.Context) chasm.LifecycleState {

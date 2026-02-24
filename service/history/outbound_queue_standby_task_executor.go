@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
+	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -57,7 +58,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 	executable queues.Executable,
 ) queues.ExecuteResponse {
 	task := executable.GetTask()
-	taskType := queues.GetOutboundTaskTypeTagValue(task, false)
+	taskType := queues.GetOutboundTaskTypeTagValue(task, false, e.shardContext.ChasmRegistry())
 	namespaceTag, _ := getNamespaceTagAndReplicationStateByID(
 		e.shardContext.GetNamespaceRegistry(),
 		task.GetNamespaceID(),
@@ -100,7 +101,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	}
 
-	return respond(queues.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
+	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))
 }
 
 func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
@@ -152,7 +153,7 @@ func (e *outboundQueueStandbyTaskExecutor) executeStateMachineTask(
 		// Assuming the dynamic config OutboundStandbyTaskMissingEventsDiscardDelay is long enough,
 		// it should give enough time for the active side to execute the task successfully, and the
 		// standby side to process it as well without discarding the task.
-		err = queues.NewDestinationDownError(
+		err = queueserrors.NewDestinationDownError(
 			"standby task executor returned retryable error",
 			err,
 		)

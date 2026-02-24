@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
@@ -42,7 +41,7 @@ type (
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 wcache.Cache
-		resender                      eventhandler.ResendHandler
+		removeHistoryFetcher          eventhandler.HistoryPaginatedFetcher
 		taskExecutorProvider          TaskExecutorProvider
 		taskPollerManager             pollerManager
 		metricsHandler                metrics.Handler
@@ -70,9 +69,6 @@ func NewTaskProcessorManager(
 	dlqWriter DLQWriter,
 ) *taskProcessorManagerImpl {
 	historyFetcher := eventhandler.NewHistoryPaginatedFetcher(shardContext.GetNamespaceRegistry(), clientBean, eventSerializer, shardContext.GetLogger())
-	engineProvider := func(ctx context.Context, namespaceId namespace.ID, workflowId string) (historyi.Engine, error) {
-		return engine, nil
-	}
 	return &taskProcessorManagerImpl{
 		config:                        config,
 		deleteMgr:                     workflowDeleteManager,
@@ -82,20 +78,10 @@ func NewTaskProcessorManager(
 		status:                        common.DaemonStatusInitialized,
 		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
 		workflowCache:                 workflowCache,
-		resender: eventhandler.NewResendHandler(
-			shardContext.GetNamespaceRegistry(),
-			clientBean,
-			eventSerializer,
-			shardContext.GetClusterMetadata(),
-			engineProvider,
-			historyFetcher,
-			eventhandler.NewEventImporter(historyFetcher, engineProvider, eventSerializer, shardContext.GetLogger()),
-			shardContext.GetLogger(),
-			config,
-		),
-		logger:         shardContext.GetLogger(),
-		metricsHandler: shardContext.GetMetricsHandler(),
-		dlqWriter:      dlqWriter,
+		removeHistoryFetcher:          historyFetcher,
+		logger:                        shardContext.GetLogger(),
+		metricsHandler:                shardContext.GetMetricsHandler(),
+		dlqWriter:                     dlqWriter,
 
 		enableFetcher:        !config.EnableReplicationStream(),
 		taskProcessors:       make(map[string][]TaskProcessor),
@@ -200,11 +186,11 @@ func (r *taskProcessorManagerImpl) handleClusterMetadataUpdate(
 				r.shard.GetMetricsHandler(),
 				fetcher,
 				r.taskExecutorProvider(TaskExecutorParams{
-					RemoteCluster:   clusterName,
-					Shard:           r.shard,
-					HistoryResender: r.resender,
-					DeleteManager:   r.deleteMgr,
-					WorkflowCache:   r.workflowCache,
+					RemoteCluster:        clusterName,
+					Shard:                r.shard,
+					RemoteHistoryFetcher: r.removeHistoryFetcher,
+					DeleteManager:        r.deleteMgr,
+					WorkflowCache:        r.workflowCache,
 				}),
 				r.eventSerializer,
 				r.dlqWriter,

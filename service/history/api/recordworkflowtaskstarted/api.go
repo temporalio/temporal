@@ -41,7 +41,7 @@ func Invoke(
 	persistenceVisibilityMgr manager.VisibilityManager,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(req.GetNamespaceId()), req.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,6 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (res *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
-			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -73,6 +72,10 @@ func Invoke(
 				//  - WFT is already completed as a result of another call (safe to drop this WFT),
 				//  - Speculative WFT is lost (ScheduleToStart timeout for speculative WFT will recreate it).
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
+			}
+			if req.GetStamp() != mutableState.GetExecutionInfo().GetWorkflowTaskStamp() {
+				// This happens when the workflow task was rescheduled.
+				return nil, serviceerrors.NewObsoleteMatchingTask("Workflow task stamp mismatch")
 			}
 
 			metricsScope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryRecordWorkflowTaskStartedScope))
@@ -90,6 +93,7 @@ func Invoke(
 
 			workflowKey = mutableState.GetWorkflowKey()
 			updateAction := &api.UpdateWorkflowAction{}
+			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
 
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
@@ -165,6 +169,7 @@ func Invoke(
 				req.GetBuildIdRedirectInfo(),
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
+				req.TargetDeploymentVersion,
 			)
 			if err != nil {
 				// Unable to add WorkflowTaskStarted event to history
@@ -186,7 +191,7 @@ func Invoke(
 					// Dispatching to a different deployment. Try starting a transition. Starting the
 					// transition AFTER applying the start event because we don't want this pending
 					// wft to be rescheduled by StartDeploymentTransition.
-					if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+					if err := mutableState.StartDeploymentTransition(pollerDeployment, req.TaskDispatchRevisionNumber); err != nil {
 						if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 							// This must be a task from a time that the workflow was unpinned, but it's
 							// now pinned so can't transition. Matching can drop the task safely.
@@ -331,12 +336,11 @@ func setHistoryForRecordWfTaskStartedResp(
 	var continuation []byte
 	if len(persistenceToken) != 0 {
 		continuation, err = api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
-			RunId:                 workflowKey.GetRunID(),
-			FirstEventId:          firstEventID,
-			NextEventId:           nextEventID,
-			PersistenceToken:      persistenceToken,
-			TransientWorkflowTask: response.GetTransientWorkflowTask(),
-			BranchToken:           response.GetBranchToken(),
+			RunId:            workflowKey.GetRunID(),
+			FirstEventId:     firstEventID,
+			NextEventId:      nextEventID,
+			PersistenceToken: persistenceToken,
+			BranchToken:      response.GetBranchToken(),
 		})
 		if err != nil {
 			return err
@@ -347,7 +351,11 @@ func setHistoryForRecordWfTaskStartedResp(
 		for i, blob := range rawHistory {
 			historyBlobs[i] = blob.Data
 		}
-		response.RawHistory = historyBlobs
+		if shardContext.GetConfig().SendRawHistoryBytesToMatchingService() {
+			response.RawHistoryBytes = historyBlobs
+		} else {
+			response.RawHistory = historyBlobs //nolint:staticcheck // SA1019: Using deprecated field for backwards compatibility during rollout
+		}
 	} else {
 		response.History = history
 	}
@@ -367,7 +375,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 	if err != nil {
 		return nil, err
 	}
-	resp := &historyservice.RecordWorkflowTaskStartedResponse{
+	return &historyservice.RecordWorkflowTaskStartedResponse{
 		WorkflowType:               rawResp.WorkflowType,
 		PreviousStartedEventId:     rawResp.PreviousStartedEventId,
 		ScheduledEventId:           rawResp.ScheduledEventId,
@@ -385,8 +393,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Messages:                   rawResp.Messages,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
-	}
-	return resp, nil
+	}, nil
 }
 
 func CreateRecordWorkflowTaskStartedResponseWithRawHistory(

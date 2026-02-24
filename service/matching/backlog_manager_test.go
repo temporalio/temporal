@@ -94,7 +94,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			s.logger,
 			nil,
 			metrics.NoopMetricsHandler,
-			func() counter.Counter { return counter.NewMapCounter() },
+			func() counter.Counter { return counter.NewMapCounter(1000) },
 			false,
 		)
 	} else if s.newMatcher {
@@ -291,7 +291,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
-	for i := 0; i < taskCount; i++ {
+	for range taskCount {
 		s.NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),
@@ -318,7 +318,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpool
 
 	taskCount := 10
 	s.ptqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
-	for i := 0; i < taskCount; i++ {
+	for range taskCount {
 		s.Error(s.blm.SpoolTask(&persistencespb.TaskInfo{
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 			CreateTime: timestamp.TimeNowPtrUtc(),

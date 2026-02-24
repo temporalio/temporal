@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -89,7 +89,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 	client1 := s.clusters[1].FrontendClient() // standby
 
 	// start a workflow
-	id := "xdc-search-attr-test-" + uuid.New()
+	id := "xdc-search-attr-test-" + uuid.NewString()
 	wt := "xdc-search-attr-test-type"
 	tl := "xdc-search-attr-test-taskqueue"
 	identity := "worker1"
@@ -101,7 +101,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		},
 	}
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns,
 		WorkflowId:          id,
 		WorkflowType:        workflowType,
@@ -206,7 +206,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 			payload.Decode(searchValBytes2, &searchVal2)
 			s.Equal(123, searchVal2)
 
-			buildIdsBytes := fields[searchattribute.BuildIds]
+			buildIdsBytes := fields[sadefs.BuildIds]
 			var buildIds []string
 			err = payload.Decode(buildIdsBytes, &buildIds)
 			s.NoError(err)

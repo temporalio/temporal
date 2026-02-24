@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -79,6 +79,7 @@ type (
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
 		matchingClient         matchingservice.MatchingServiceClient
+		versionMembershipCache worker_versioning.VersionMembershipCache
 	}
 
 	workflowTaskFailedCause struct {
@@ -118,6 +119,7 @@ func newWorkflowTaskCompletedHandler(
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
 	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
@@ -150,6 +152,7 @@ func newWorkflowTaskCompletedHandler(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
 		matchingClient:         matchingClient,
+		versionMembershipCache: versionMembershipCache,
 	}
 }
 
@@ -245,8 +248,9 @@ func (handler *workflowTaskCompletedHandler) rejectUnprocessedUpdates(
 			tag.WorkflowID(wfKey.WorkflowID),
 			tag.WorkflowRunID(wfKey.RunID),
 			tag.WorkflowEventID(workflowTaskScheduledEventID),
-			tag.NewStringTag("worker-identity", workerIdentity),
-			tag.NewStringsTag("update-ids", rejectedUpdateIDs),
+			tag.String("worker-identity", workerIdentity),
+			tag.Strings("update-ids", rejectedUpdateIDs),
+			tag.Int("rejected-count", len(rejectedUpdateIDs)),
 		)
 	}
 
@@ -462,6 +466,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		}
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("ScheduleActivityTaskCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK.String()),
 		attr.GetInput().Size(),
@@ -494,10 +500,17 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	eagerStartActivity := attr.RequestEagerExecution && handler.config.EnableActivityEagerExecution(namespace) &&
 		(!versioningUsed || attr.UseWorkflowBuildId)
 
+	// if the workflow is paused, we bypass activity task generation and also prevent eager activity execution.
+	bypassActivityTaskGeneration := eagerStartActivity
+	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		bypassActivityTaskGeneration = true
+		eagerStartActivity = false
+	}
+
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
 		handler.workflowTaskCompletedID,
 		attr,
-		eagerStartActivity,
+		bypassActivityTaskGeneration,
 	)
 	if err != nil {
 		return nil, nil, handler.failWorkflowTaskOnInvalidArgument(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
@@ -541,7 +554,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
-		uuid.New(),
+		uuid.NewString(),
 		handler.identity,
 		stamp,
 		nil,
@@ -570,6 +583,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		shardClock,
 		ai.Version,
 		ai.StartVersion,
+		nil,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -708,7 +722,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandCompleteWorkflow(
 	cronBackoff := handler.mutableState.GetCronBackoffDuration()
 	var newExecutionRunID string
 	if cronBackoff != backoff.NoBackoff {
-		newExecutionRunID = uuid.New()
+		newExecutionRunID = uuid.NewString()
 	}
 
 	// Always add workflow completed event to this one
@@ -770,7 +784,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandFailWorkflow(
 
 	var newExecutionRunID string
 	if retryBackoff != backoff.NoBackoff || cronBackoff != backoff.NoBackoff {
-		newExecutionRunID = uuid.New()
+		newExecutionRunID = uuid.NewString()
 	}
 
 	// Always add workflow failed event
@@ -870,6 +884,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				handler.initiatedChildExecutionsInBatch,
 				attr,
@@ -882,7 +897,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelExternalW
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_REQUEST_CANCEL_LIMIT_EXCEEDED, err)
 	}
 
-	cancelRequestID := uuid.New()
+	cancelRequestID := uuid.NewString()
 	event, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, cancelRequestID, attr, targetNamespaceID,
 	)
@@ -902,6 +917,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandRecordMarker(
 		return nil, err
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("RecordMarkerCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_RECORD_MARKER.String()),
 		common.GetPayloadsMapSize(attr.GetDetails()),
@@ -959,6 +976,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		}
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("ContinueAsNewWorkflowExecutionCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
@@ -1011,7 +1030,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
-		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient),
+		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionMembershipCache),
 	)
 	if err != nil {
 		return nil, err
@@ -1080,6 +1099,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		}
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("StartChildWorkflowExecutionCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
@@ -1148,6 +1169,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.ValidateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
+				executionInfo.WorkflowId,
 				targetNamespaceID,
 				attr,
 			)
@@ -1159,6 +1181,8 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_SIGNALS_LIMIT_EXCEEDED, err)
 	}
 
+	metricsHandler := handler.metricsHandler.WithTags(metrics.HeaderCallsiteTag("SignalExternalWorkflowExecutionCommand"))
+	metrics.HeaderSize.With(metricsHandler).Record(int64(attr.GetHeader().Size()))
 	if err := handler.sizeLimitChecker.checkIfPayloadSizeExceedsLimit(
 		metrics.CommandTypeTag(enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION.String()),
 		attr.GetInput().Size(),
@@ -1167,7 +1191,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandSignalExternalWorkflow
 		return nil, handler.terminateWorkflow(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, err)
 	}
 
-	signalRequestID := uuid.New() // for deduplicate
+	signalRequestID := uuid.NewString() // for deduplicate
 	event, _, err := handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		handler.workflowTaskCompletedID, signalRequestID, attr, targetNamespaceID,
 	)
@@ -1425,13 +1449,11 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-
-	switch err.(type) {
-	case *serviceerror.InvalidArgument:
+	var invalidArgument *serviceerror.InvalidArgument
+	if errors.As(err, &invalidArgument) {
 		return handler.failWorkflowTask(wtFailedCause, err)
-	default:
-		return err
 	}
+	return err
 }
 
 func (handler *workflowTaskCompletedHandler) failWorkflowTask(

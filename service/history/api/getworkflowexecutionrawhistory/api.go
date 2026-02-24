@@ -3,7 +3,7 @@ package getworkflowexecutionrawhistory
 import (
 	"context"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/api"
@@ -42,7 +43,7 @@ func Invoke(
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if req.NextPageToken == nil {
-		response, err := api.GetOrPollMutableState(
+		response, err := api.GetOrPollWorkflowMutableState(
 			ctx,
 			shardContext,
 			&historyservice.GetMutableStateRequest{
@@ -130,9 +131,16 @@ func Invoke(
 		metrics.OperationTag(metrics.AdminGetWorkflowExecutionRawHistoryScope),
 	)
 
+	// Ensure all raw history is proto3 encoded since data may be stored in other formats during testing.
+	// In production (proto3 encoding), this returns the input unchanged.
+	historyBlobs, err := serialization.ReencodeEventBlobsAsProto3(shardContext.GetPayloadSerializer(), rawHistoryResponse.HistoryEventBlobs)
+	if err != nil {
+		return nil, err
+	}
+
 	result :=
 		&adminservice.GetWorkflowExecutionRawHistoryResponse{
-			HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
+			HistoryBatches: historyBlobs,
 			VersionHistory: targetVersionHistory,
 			HistoryNodeIds: rawHistoryResponse.NodeIDs,
 		}
@@ -160,7 +168,7 @@ func validateGetWorkflowExecutionRawHistoryRequest(
 		return consts.ErrWorkflowIDNotSet
 	}
 
-	if execution.GetRunId() == "" || uuid.Parse(execution.GetRunId()) == nil {
+	if execution.GetRunId() == "" || uuid.Validate(execution.GetRunId()) != nil {
 		return consts.ErrInvalidRunID
 	}
 

@@ -9,10 +9,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
 )
 
@@ -28,6 +30,7 @@ type fieldSuite struct {
 	timeSource      *clock.EventTimeSource
 	nodePathEncoder NodePathEncoder
 	logger          log.Logger
+	metricsHandler  metrics.Handler
 }
 
 func TestFieldSuite(t *testing.T) {
@@ -40,6 +43,7 @@ func (s *fieldSuite) SetupTest() {
 	s.nodeBackend = &MockNodeBackend{}
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(newTestLibrary(s.controller))
 	s.NoError(err)
@@ -101,8 +105,7 @@ func (s *fieldSuite) TestFieldGetSimple() {
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
-			result, err := tt.field.Get(nil)
-			s.NoError(err)
+			result, _ := tt.field.TryGet(nil)
 			s.Equal(tt.expected, result)
 		})
 	}
@@ -122,15 +125,13 @@ func (s *fieldSuite) TestFieldGetComponent() {
 
 	tc := c.(*TestComponent)
 
-	sc1, err := tc.SubComponent1.Get(chasmContext)
-	s.NoError(err)
+	sc1 := tc.SubComponent1.Get(chasmContext)
 	s.NotNil(sc1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-component1-data",
 	}, sc1.SubComponent1Data)
 
-	sd1, err := tc.SubData1.Get(chasmContext)
-	s.NoError(err)
+	sd1 := tc.SubData1.Get(chasmContext)
 	s.NotNil(sd1)
 	s.ProtoEqual(&protoMessageType{
 		CreateRequestId: "sub-data1",
@@ -140,13 +141,24 @@ func (s *fieldSuite) TestFieldGetComponent() {
 func (s *fieldSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
-	return NewTree(
+	if len(serializedNodes) == 0 {
+		return NewEmptyTree(
+			s.registry,
+			s.timeSource,
+			s.nodeBackend,
+			s.nodePathEncoder,
+			s.logger,
+			s.metricsHandler,
+		), nil
+	}
+	return NewTreeFromDB(
 		serializedNodes,
 		s.registry,
 		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
+		s.metricsHandler,
 	)
 }
 
@@ -158,21 +170,28 @@ func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
+		s.metricsHandler,
 	)
-	rootNode.SetRootComponent(rootComponent)
+	if err := rootNode.SetRootComponent(rootComponent); err != nil {
+		return nil, nil, err
+	}
 
 	return rootNode, NewMutableContext(context.Background(), rootNode), nil
 }
 
 func (s *fieldSuite) TestDeferredPointerResolution() {
-	tv := testvars.New(s.T())
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	s.nodeBackend = &MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
-	// Create component structure that will simulate NewEntity scenario.
+	// Create component structure that will simulate StartExecution scenario.
 	sc2 := &TestSubComponent2{
 		SubComponent2Data: &protoMessageType{
 			CreateRequestId: "sub-component2-data",
@@ -194,6 +213,13 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
+
+	// Get components from tree to mark nodes as needing sync.
+
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+	sc1 = rootComponent.SubComponent1.Get(ctx)
 
 	// Create deferred pointers.
 	sc1.SubComponent2Pointer = ComponentPointerTo(ctx, sc2)
@@ -226,8 +252,7 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 	s.Equal([]string{"SubData1"}, dResolvedPath)
 
 	// Verify we can dereference the pointers.
-	resolvedComponent, err := sc1.SubComponent2Pointer.Get(ctx)
-	s.NoError(err)
+	resolvedComponent := sc1.SubComponent2Pointer.Get(ctx)
 	s.Equal(sc2, resolvedComponent)
 
 	// TODO - this doesn't resolve, but I've manually verified the tree structure looks correct
@@ -239,11 +264,15 @@ func (s *fieldSuite) TestDeferredPointerResolution() {
 }
 
 func (s *fieldSuite) TestMixedPointerScenario() {
-	tv := testvars.New(s.T())
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	s.nodeBackend = &MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
 	existingComponent := &TestSubComponent11{
@@ -263,6 +292,11 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
 
+	// Get components from tree to mark nodes as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
+
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, existingComponent)
 
 	// Close the transaction to resolve SubComponent11Pointer's field to existingComponent.
@@ -274,12 +308,11 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	// otherwise those nodes will not be marked as dirty.
 
 	ctx2 := NewMutableContext(context.Background(), rootNode)
-	rootComponentInterface, err := rootNode.Component(ctx2, ComponentRef{})
+	rootComponentInterface, err = rootNode.Component(ctx2, ComponentRef{})
 	s.NoError(err)
 
 	rootComponent = rootComponentInterface.(*TestComponent)
-	sc1, err = rootComponent.SubComponent1.Get(ctx2)
-	s.NoError(err)
+	sc1 = rootComponent.SubComponent1.Get(ctx2)
 
 	// Now, add a new component and deferred pointer for it.
 	newComponent := &TestSubComponent2{
@@ -301,21 +334,23 @@ func (s *fieldSuite) TestMixedPointerScenario() {
 	s.Equal(fieldTypePointer, rootComponent.SubComponent11Pointer.Internal.fieldType())
 	s.Equal(fieldTypePointer, sc1.SubComponent2Pointer.Internal.fieldType())
 
-	resolved1, err := rootComponent.SubComponent11Pointer.Get(ctx2)
-	s.NoError(err)
+	resolved1 := rootComponent.SubComponent11Pointer.Get(ctx2)
 	s.Equal(existingComponent, resolved1)
 
-	resolved2, err := sc1.SubComponent2Pointer.Get(ctx2)
-	s.NoError(err)
+	resolved2 := sc1.SubComponent2Pointer.Get(ctx2)
 	s.Equal(newComponent, resolved2)
 }
 
 func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
-	tv := testvars.New(s.T())
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
 	s.nodeBackend = &MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
-		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
+		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
 	}
 
 	s.logger.(*testlogger.TestLogger).
@@ -335,6 +370,11 @@ func (s *fieldSuite) TestUnresolvableDeferredPointerError() {
 
 	rootNode, ctx, err := s.setupComponentWithTree(rootComponent)
 	s.NoError(err)
+
+	// Get component from tree to mark node as needing sync.
+	rootComponentInterface, err := rootNode.Component(ctx, ComponentRef{})
+	s.NoError(err)
+	rootComponent = rootComponentInterface.(*TestComponent)
 
 	rootComponent.SubComponent11Pointer = ComponentPointerTo(ctx, orphanComponent)
 	s.Equal(fieldTypeDeferredPointer, rootComponent.SubComponent11Pointer.Internal.fieldType())

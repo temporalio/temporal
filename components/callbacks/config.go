@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
@@ -69,7 +70,7 @@ type AddressMatchRules struct {
 
 func (a AddressMatchRules) Validate(rawURL string) error {
 	// Exact match only; no path, query, or fragment allowed for system URL
-	if rawURL == nexus.SystemCallbackURL {
+	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
 		return nil
 	}
 	u, err := url.Parse(rawURL)

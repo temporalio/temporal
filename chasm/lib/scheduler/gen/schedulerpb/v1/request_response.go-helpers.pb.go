@@ -374,3 +374,77 @@ func (this *DescribeScheduleResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type ListScheduleMatchingTimesRequest to the protobuf v3 wire format
+func (val *ListScheduleMatchingTimesRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListScheduleMatchingTimesRequest from the protobuf v3 wire format
+func (val *ListScheduleMatchingTimesRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListScheduleMatchingTimesRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListScheduleMatchingTimesRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListScheduleMatchingTimesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListScheduleMatchingTimesRequest
+	switch t := that.(type) {
+	case *ListScheduleMatchingTimesRequest:
+		that1 = t
+	case ListScheduleMatchingTimesRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ListScheduleMatchingTimesResponse to the protobuf v3 wire format
+func (val *ListScheduleMatchingTimesResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ListScheduleMatchingTimesResponse from the protobuf v3 wire format
+func (val *ListScheduleMatchingTimesResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ListScheduleMatchingTimesResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ListScheduleMatchingTimesResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ListScheduleMatchingTimesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ListScheduleMatchingTimesResponse
+	switch t := that.(type) {
+	case *ListScheduleMatchingTimesResponse:
+		that1 = t
+	case ListScheduleMatchingTimesResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

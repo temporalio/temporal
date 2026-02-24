@@ -1,6 +1,8 @@
 package sqlplugin
 
-import "strings"
+import (
+	"strings"
+)
 
 func appendPrefix(prefix string, fields []string) []string {
 	out := make([]string, len(fields))

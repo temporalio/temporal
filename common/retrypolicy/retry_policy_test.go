@@ -96,6 +96,16 @@ func TestEnsureRetryPolicyDefaults(t *testing.T) {
 				NonRetryableErrorTypes: []string{"testFailureType"},
 			},
 		},
+		{
+			name:  "empty policy has non-zero defaults",
+			input: &commonpb.RetryPolicy{},
+			want: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(1 * time.Second),
+				MaximumInterval:    durationpb.New(100 * time.Second),
+				BackoffCoefficient: 2,
+				MaximumAttempts:    120,
+			},
+		},
 	}
 
 	for _, tt := range testCases {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
@@ -162,22 +161,22 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		}
 	}
 
-	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
-	var listWorkflowsErr error
+	executionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
+	var listExecutions error
 	workflow.Go(ctx, func(ctx workflow.Context) {
-		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
+		listExecutions = listExecutionsForReplication(ctx, executionsCh, &params)
 
 		// enqueueReplicationTasks only returns when workflowExecutionsCh is closed (or if it encounters an error).
 		// Therefore, listWorkflowsErr will be set prior to their use and params will be updated.
-		workflowExecutionsCh.Close()
+		executionsCh.Close()
 	})
 
-	if err := enqueueReplicationTasks(ctx, workflowExecutionsCh, metadataResp.NamespaceID, &params); err != nil {
+	if err := enqueueReplicationTasks(ctx, executionsCh, metadataResp.NamespaceID, &params); err != nil {
 		return err
 	}
 
-	if listWorkflowsErr != nil {
-		return listWorkflowsErr
+	if listExecutions != nil {
+		return listExecutions
 	}
 
 	if params.NextPageToken == nil {
@@ -248,7 +247,7 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 	workflowExecutionsCh := workflow.NewBufferedChannel(ctx, params.PageCountPerExecution)
 	var listWorkflowsErr error
 	workflow.Go(ctx, func(ctx workflow.Context) {
-		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
+		listWorkflowsErr = listExecutionsForReplication(ctx, workflowExecutionsCh, &params)
 
 		// enqueueReplicationTasks only returns when workflowExecutionsCh is closed (or if it encounters an error).
 		// Therefore, listWorkflowsErr will be set prior to their use and params will be updated.
@@ -406,7 +405,7 @@ func getClusterMetadata(ctx workflow.Context, params ForceReplicationParams) (me
 	return metadataResp, err
 }
 
-func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh workflow.Channel, params *ForceReplicationParams) error {
+func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Channel, params *ForceReplicationParams) error {
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
 		HeartbeatTimeout:    time.Second * 30,
@@ -431,7 +430,7 @@ func listWorkflowsForReplication(ctx workflow.Context, workflowExecutionsCh work
 			return err
 		}
 
-		workflowExecutionsCh.Send(ctx, listResp.Executions)
+		executionsCh.Send(ctx, listResp.Executions)
 
 		params.NextPageToken = listResp.NextPageToken
 		params.LastCloseTime = listResp.LastCloseTime
@@ -466,7 +465,7 @@ func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationPa
 	return output.WorkflowCount, nil
 }
 
-func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
+func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
 	selector := workflow.NewSelector(ctx)
 	pendingGenerateTasks := 0
 	pendingVerifyTasks := 0
@@ -478,7 +477,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	}
 
 	actx := workflow.WithActivityOptions(ctx, ao)
-	var workflowExecutions []*commonpb.WorkflowExecution
+	var migrationExecutions []*ExecutionInfo
 	var lastActivityErr error
 	var a *activities
 
@@ -487,13 +486,13 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 		targetClusters = []string{params.TargetClusterName}
 	}
 
-	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
+	for executionsCh.Receive(ctx, &migrationExecutions) {
 		generateTaskFuture := workflow.ExecuteActivity(
 			actx,
 			a.GenerateReplicationTasks,
 			&generateReplicationTasksRequest{
 				NamespaceID:      namespaceID,
-				Executions:       workflowExecutions,
+				Executions:       migrationExecutions,
 				RPS:              params.OverallRps / float64(params.ConcurrentActivityCount),
 				GetParentInfoRPS: params.GetParentInfoRPS / float64(params.ConcurrentActivityCount),
 				TargetClusters:   targetClusters,
@@ -517,7 +516,7 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 					TargetClusterName:     params.TargetClusterName,
 					Namespace:             params.Namespace,
 					NamespaceID:           namespaceID,
-					Executions:            workflowExecutions,
+					Executions:            migrationExecutions,
 					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
 				})
 
@@ -562,7 +561,12 @@ func enqueueReplicationTasks(ctx workflow.Context, workflowExecutionsCh workflow
 	return nil
 }
 
-func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh workflow.Channel, namespaceID string, params *ForceReplicationParams) error {
+func enqueueReplicationTasksLocal(
+	ctx workflow.Context,
+	executionsCh workflow.Channel,
+	namespaceID string,
+	params *ForceReplicationParams,
+) error {
 	selector := workflow.NewSelector(ctx)
 	pendingGenerateTasks := 0
 	pendingVerifyTasks := 0
@@ -573,7 +577,7 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 	}
 
 	lactx := workflow.WithLocalActivityOptions(ctx, lao)
-	var workflowExecutions []*commonpb.WorkflowExecution
+	var migrationExecutions []*ExecutionInfo
 	var lastActivityErr error
 	var a *activities
 
@@ -582,8 +586,8 @@ func enqueueReplicationTasksLocal(ctx workflow.Context, workflowExecutionsCh wor
 		targetClusters = []string{params.TargetClusterName}
 	}
 
-	for workflowExecutionsCh.Receive(ctx, &workflowExecutions) {
-		executions := workflowExecutions
+	for executionsCh.Receive(ctx, &migrationExecutions) {
+		executions := migrationExecutions
 
 		verifyTaskDone := func(f workflow.Future) {
 			var verifyTaskResponse verifyReplicationTasksResponse

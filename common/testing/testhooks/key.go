@@ -9,4 +9,6 @@ const (
 	UpdateWithStartInBetweenLockAndStart
 	UpdateWithStartOnClosingWorkflowRetry
 	TaskQueuesInDeploymentSyncBatchSize
+	MatchingIgnoreRoutingConfigRevisionCheck
+	MatchingDeploymentRegisterErrorBackoff
 )

@@ -3,7 +3,7 @@ package workflow
 import (
 	"sync/atomic"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
@@ -42,7 +42,7 @@ type (
 
 func newQuery(queryInput *querypb.WorkflowQuery) query {
 	return &queryImpl{
-		id:           uuid.New(),
+		id:           uuid.NewString(),
 		queryInput:   queryInput,
 		completionCh: make(chan struct{}),
 	}

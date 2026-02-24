@@ -24,9 +24,8 @@ const (
 
 type InvocationTask struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The base URL for nexus callbacks.
-	// Will have other meanings as more callback use cases are added.
-	Url           string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	// The attempt number for this invocation.
+	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -61,15 +60,17 @@ func (*InvocationTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *InvocationTask) GetUrl() string {
+func (x *InvocationTask) GetAttempt() int32 {
 	if x != nil {
-		return x.Url
+		return x.Attempt
 	}
-	return ""
+	return 0
 }
 
 type BackoffTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The attempt number for this invocation.
+	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -104,14 +105,22 @@ func (*BackoffTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *BackoffTask) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_callback_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/callback/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\"\"\n" +
-	"\x0eInvocationTask\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\"\r\n" +
-	"\vBackoffTaskBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
+	"7temporal/server/chasm/lib/callback/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\"*\n" +
+	"\x0eInvocationTask\x12\x18\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"'\n" +
+	"\vBackoffTask\x12\x18\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattemptBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescOnce sync.Once

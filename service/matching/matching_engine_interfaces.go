@@ -14,11 +14,12 @@ type (
 		Stop()
 		AddWorkflowTask(ctx context.Context, addRequest *matchingservice.AddWorkflowTaskRequest) (buildId string, syncMatch bool, err error)
 		AddActivityTask(ctx context.Context, addRequest *matchingservice.AddActivityTaskRequest) (buildId string, syncMatch bool, err error)
-		PollWorkflowTaskQueue(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollWorkflowTaskQueueResponse, error)
+		PollWorkflowTaskQueue(ctx context.Context, request *matchingservice.PollWorkflowTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, error)
 		PollActivityTaskQueue(ctx context.Context, request *matchingservice.PollActivityTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollActivityTaskQueueResponse, error)
 		QueryWorkflow(ctx context.Context, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		RespondQueryTaskCompleted(ctx context.Context, request *matchingservice.RespondQueryTaskCompletedRequest, opMetrics metrics.Handler) error
 		CancelOutstandingPoll(ctx context.Context, request *matchingservice.CancelOutstandingPollRequest) error
+		CancelOutstandingWorkerPolls(ctx context.Context, request *matchingservice.CancelOutstandingWorkerPollsRequest) (*matchingservice.CancelOutstandingWorkerPollsResponse, error)
 		DescribeTaskQueue(ctx context.Context, request *matchingservice.DescribeTaskQueueRequest) (*matchingservice.DescribeTaskQueueResponse, error)
 		DescribeTaskQueuePartition(ctx context.Context, request *matchingservice.DescribeTaskQueuePartitionRequest) (*matchingservice.DescribeTaskQueuePartitionResponse, error)
 		ListTaskQueuePartitions(ctx context.Context, request *matchingservice.ListTaskQueuePartitionsRequest) (*matchingservice.ListTaskQueuePartitionsResponse, error)
@@ -34,6 +35,7 @@ type (
 		UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error)
 		ReplicateTaskQueueUserData(ctx context.Context, request *matchingservice.ReplicateTaskQueueUserDataRequest) (*matchingservice.ReplicateTaskQueueUserDataResponse, error)
 		CheckTaskQueueUserDataPropagation(ctx context.Context, request *matchingservice.CheckTaskQueueUserDataPropagationRequest) (*matchingservice.CheckTaskQueueUserDataPropagationResponse, error)
+		CheckTaskQueueVersionMembership(ctx context.Context, request *matchingservice.CheckTaskQueueVersionMembershipRequest) (*matchingservice.CheckTaskQueueVersionMembershipResponse, error)
 		DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
 		PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest, opMetrics metrics.Handler) (*matchingservice.PollNexusTaskQueueResponse, error)
 		RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error)
@@ -46,5 +48,6 @@ type (
 		GetWorkerVersioningRules(ctx context.Context, request *matchingservice.GetWorkerVersioningRulesRequest) (*matchingservice.GetWorkerVersioningRulesResponse, error)
 		DescribeVersionedTaskQueues(ctx context.Context, request *matchingservice.DescribeVersionedTaskQueuesRequest) (*matchingservice.DescribeVersionedTaskQueuesResponse, error)
 		UpdateTaskQueueConfig(ctx context.Context, request *matchingservice.UpdateTaskQueueConfigRequest) (*matchingservice.UpdateTaskQueueConfigResponse, error)
+		UpdateFairnessState(ctx context.Context, request *matchingservice.UpdateFairnessStateRequest) (*matchingservice.UpdateFairnessStateResponse, error)
 	}
 )

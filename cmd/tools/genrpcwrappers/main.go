@@ -88,6 +88,10 @@ var (
 		"metricsClient.history.StreamWorkflowReplicationMessages":   true,
 		"retryableClient.history.StreamWorkflowReplicationMessages": true,
 
+		// Nexus metrics are an exception since they use the information from the request.
+		"metricsClient.history.StartNexusOperation":  true,
+		"metricsClient.history.CancelNexusOperation": true,
+
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
@@ -233,7 +237,7 @@ func toGetter(snake string) string {
 func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
 	t := reqType.Elem() // we know it's a pointer
 
-	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" {
+	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" && routingOptions.ChasmComponentRef != "" {
 		log.Fatalf("Found more than one routing directive in %s", t)
 	}
 	if routingOptions.AnyHost {
@@ -264,8 +268,30 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing task token")
 	}
-	shardID := c.shardIDFromWorkflowID(%s, taskToken.GetWorkflowId())
-`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	var namespaceID string
+	var businessID string
+	if len(taskToken.GetComponentRef()) > 0 {
+		ref, err := c.tokenSerializer.DeserializeChasmComponentRef(taskToken.GetComponentRef())
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+	} else {
+		namespaceID = %s
+		businessID = taskToken.GetWorkflowId()
+	}
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
+	`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	}
+	if routingOptions.ChasmComponentRef != "" {
+		verifyFieldExists(t, routingOptions.ChasmComponentRef)
+		return fmt.Sprintf(`ref, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+	}
+	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
+	`, toGetter(routingOptions.ChasmComponentRef))
 	}
 	if routingOptions.TaskInfos != "" {
 		verifyFieldExists(t, routingOptions.TaskInfos)
@@ -312,6 +338,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ApplyTaskQueueUserDataReplicationEventRequest",
 		"GetWorkerVersioningRulesRequest",
 		"UpdateWorkerVersioningRulesRequest",
+		"UpdateFairnessStateRequest",
 		"UpdateTaskQueueConfigRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}

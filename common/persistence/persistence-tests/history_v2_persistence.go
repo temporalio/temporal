@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -74,22 +74,22 @@ func (s *HistoryV2PersistenceSuite) TearDownTest() {
 	s.cancel()
 }
 
-// TestGenUUIDs testing  uuid.New() can generate unique UUID
+// TestGenUUIDs testing  uuid.NewString() can generate unique UUID
 func (s *HistoryV2PersistenceSuite) TestGenUUIDs() {
 	wg := sync.WaitGroup{}
 	m := sync.Map{}
 	concurrency := 1000
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			u := uuid.New()
+			u := uuid.NewString()
 			m.Store(u, true)
 		}()
 	}
 	wg.Wait()
 	cnt := 0
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k, v any) bool {
 		cnt++
 		return true
 	})
@@ -108,8 +108,8 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 	totalTrees := 1002
 	pgSize := 100
 
-	for i := 0; i < totalTrees; i++ {
-		treeID := uuid.NewRandom().String()
+	for range totalTrees {
+		treeID := uuid.NewString()
 		bi, err := s.newHistoryBranch(treeID)
 		s.Nil(err)
 
@@ -150,7 +150,7 @@ func (s *HistoryV2PersistenceSuite) TestScanAllTrees() {
 
 // TestReadBranchByPagination test
 func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
-	treeID := uuid.NewRandom().String()
+	treeID := uuid.NewString()
 	bi, err := s.newHistoryBranch(treeID)
 	s.Nil(err)
 
@@ -339,13 +339,13 @@ func (s *HistoryV2PersistenceSuite) TestReadBranchByPagination() {
 
 // TestConcurrentlyCreateAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
-	treeID := uuid.NewRandom().String()
+	treeID := uuid.NewString()
 	wg := sync.WaitGroup{}
 	concurrency := 1
 	m := &sync.Map{}
 
 	// test create new branch along with appending new nodes
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -390,7 +390,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 	wg = sync.WaitGroup{}
 	// test appending nodes(override and new nodes) on each branch concurrently
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -447,7 +447,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 	wg.Wait()
 	// Finally lets clean up all branches
-	m.Range(func(k, v interface{}) bool {
+	m.Range(func(k, v any) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
@@ -461,7 +461,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 
 // TestConcurrentlyForkAndAppendBranches test
 func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
-	treeID := uuid.NewRandom().String()
+	treeID := uuid.NewString()
 	wg := sync.WaitGroup{}
 	concurrency := 10
 	masterBr, err := s.newHistoryBranch(treeID)
@@ -506,7 +506,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	level1ID := new(sync.Map)
 	level1Br := new(sync.Map)
 	// test forking from master branch and append nodes
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -628,7 +628,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	s.Equal(concurrency, masterCnt)
 
 	// Finally lets clean up all branches
-	level1Br.Range(func(k, v interface{}) bool {
+	level1Br.Range(func(k, v any) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
@@ -636,7 +636,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 
 		return true
 	})
-	level2Br.Range(func(k, v interface{}) bool {
+	level2Br.Range(func(k, v any) bool {
 		br := v.([]byte)
 		// delete old branches along with create new branches
 		err := s.deleteHistoryBranch(br)
@@ -681,9 +681,9 @@ func (s *HistoryV2PersistenceSuite) genRandomEvents(eventIDs []int64, version in
 // persistence helper
 func (s *HistoryV2PersistenceSuite) newHistoryBranch(treeID string) ([]byte, error) {
 	return s.ExecutionManager.GetHistoryBranchUtil().NewHistoryBranch(
-		uuid.New(),
-		uuid.New(),
-		uuid.New(),
+		uuid.NewString(),
+		uuid.NewString(),
+		uuid.NewString(),
 		treeID,
 		nil,
 		[]*persistencespb.HistoryBranchRange{},
@@ -828,8 +828,8 @@ func (s *HistoryV2PersistenceSuite) fork(forkBranch []byte, forkNodeID int64) ([
 			ForkNodeID:      forkNodeID,
 			Info:            testForkRunID,
 			ShardID:         s.ShardInfo.GetShardId(),
-			NamespaceID:     uuid.New(),
-			NewRunID:        uuid.New(),
+			NamespaceID:     uuid.NewString(),
+			NewRunID:        uuid.NewString(),
 		})
 		if resp != nil {
 			bi = resp.NewBranchToken

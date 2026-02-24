@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -61,7 +61,7 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 	for _, tc := range testCases {
 		config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.gracePeriod)
 		workflowKey := definition.WorkflowKey{
-			NamespaceID: uuid.NewUUID().String(),
+			NamespaceID: uuid.New().String(),
 			WorkflowID:  "workflowID",
 			RunID:       "oldRunID",
 		}

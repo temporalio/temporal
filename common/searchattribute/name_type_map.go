@@ -6,6 +6,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -23,6 +24,11 @@ const (
 	customCategory
 )
 
+var (
+	system     = sadefs.System()
+	predefined = sadefs.Predefined()
+)
+
 func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.IndexSearchAttributes) map[string]NameTypeMap {
 	indexNameTypeMap := make(map[string]NameTypeMap, len(indexSearchAttributes))
 	for indexName, customSearchAttributes := range indexSearchAttributes {
@@ -31,6 +37,13 @@ func buildIndexNameTypeMap(indexSearchAttributes map[string]*persistencespb.Inde
 		}
 	}
 	return indexNameTypeMap
+}
+
+// NewNameTypeMap creates a new NameTypeMap with the given custom search attributes.
+func NewNameTypeMap(customSearchAttributes map[string]enumspb.IndexedValueType) NameTypeMap {
+	return NameTypeMap{
+		customSearchAttributes: customSearchAttributes,
+	}
 }
 
 func (m NameTypeMap) System() map[string]enumspb.IndexedValueType {
@@ -65,6 +78,7 @@ func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueTyp
 		}
 	}
 	if cat|predefinedCategory == cat {
+		predefined := sadefs.Predefined()
 		if t, isPredefined := predefined[name]; isPredefined {
 			return t, nil
 		}

@@ -12,8 +12,10 @@ import (
 
 type (
 	NewPayloadStoreRequest struct {
-		NamespaceID namespace.ID
-		StoreID     string
+		NamespaceID      namespace.ID
+		StoreID          string
+		IDReusePolicy    chasm.BusinessIDReusePolicy
+		IDConflictPolicy chasm.BusinessIDConflictPolicy
 	}
 
 	NewPayloadStoreResponse struct {
@@ -73,23 +75,24 @@ func NewPayloadStoreHandler(
 	ctx context.Context,
 	request NewPayloadStoreRequest,
 ) (NewPayloadStoreResponse, error) {
-	_, entityKey, _, err := chasm.NewEntity(
+	result, err := chasm.StartExecution(
 		ctx,
-		chasm.EntityKey{
+		chasm.ExecutionKey{
 			NamespaceID: request.NamespaceID.String(),
 			BusinessID:  request.StoreID,
 		},
-		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, any, error) {
+		func(mutableContext chasm.MutableContext, _ any) (*PayloadStore, error) {
 			store, err := NewPayloadStore(mutableContext)
-			return store, nil, err
+			return store, err
 		},
 		nil,
+		chasm.WithBusinessIDPolicy(request.IDReusePolicy, request.IDConflictPolicy),
 	)
 	if err != nil {
 		return NewPayloadStoreResponse{}, err
 	}
 	return NewPayloadStoreResponse{
-		RunID: entityKey.EntityID,
+		RunID: result.ExecutionKey.RunID,
 	}, nil
 }
 
@@ -100,7 +103,7 @@ func DescribePayloadStoreHandler(
 	state, err := chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: request.NamespaceID.String(),
 				BusinessID:  request.StoreID,
 			},
@@ -123,13 +126,13 @@ func ClosePayloadStoreHandler(
 	resp, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: request.NamespaceID.String(),
 				BusinessID:  request.StoreID,
 			},
 		),
 		(*PayloadStore).Close,
-		request,
+		nil,
 	)
 	return resp, err
 }
@@ -141,7 +144,7 @@ func AddPayloadHandler(
 	state, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: request.NamespaceID.String(),
 				BusinessID:  request.StoreID,
 			},
@@ -164,7 +167,7 @@ func GetPayloadHandler(
 	payload, err := chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: request.NamespaceID.String(),
 				BusinessID:  request.StoreID,
 			},
@@ -187,7 +190,7 @@ func RemovePayloadHandler(
 	state, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*PayloadStore](
-			chasm.EntityKey{
+			chasm.ExecutionKey{
 				NamespaceID: request.NamespaceID.String(),
 				BusinessID:  request.StoreID,
 			},

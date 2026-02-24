@@ -13,6 +13,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -117,19 +119,19 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 			// task timestamp is lower than both scheduled queue max read level and now
 			// should be overwritten to be later than both
 			taskTimestamp:     maxReadLevel.FireTime.Add(-time.Minute),
-			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		},
 		{
 			// task timestamp is lower than now but higher than scheduled queue max read level
 			// should still be overwritten to be later than both
 			taskTimestamp:     now.Add(-time.Minute),
-			expectedTimestamp: now.Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		},
 		{
 			// task timestamp is later than both now and scheduled queue max read level
 			// should not be overwritten
 			taskTimestamp:     now.Add(time.Minute),
-			expectedTimestamp: now.Add(time.Minute).Add(persistence.ScheduledTaskMinPrecision).Truncate(persistence.ScheduledTaskMinPrecision),
+			expectedTimestamp: now.Add(time.Minute).Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
 		},
 	}
 
@@ -141,6 +143,7 @@ func (s *contextSuite) TestOverwriteScheduledTaskTimestamp() {
 				ShardID:     s.mockShard.GetShardID(),
 				NamespaceID: workflowKey.NamespaceID,
 				WorkflowID:  workflowKey.WorkflowID,
+				ArchetypeID: chasm.WorkflowArchetypeID,
 				Tasks:       testTasks,
 			},
 		)
@@ -165,6 +168,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: tests.NamespaceID.String(),
 		WorkflowID:  tests.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 
 		Tasks: testTasks,
 	}
@@ -194,6 +198,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 	err := s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -219,6 +224,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 	err := s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -233,6 +239,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -246,6 +253,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -270,6 +278,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	err := s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -283,6 +292,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -296,6 +306,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -308,6 +319,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -331,6 +343,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 	err := s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},
@@ -346,6 +359,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 	err = s.mockShard.DeleteWorkflowExecution(
 		context.Background(),
 		workflowKey,
+		chasm.WorkflowArchetypeID,
 		branchToken,
 		0,
 		time.Time{},

@@ -3,9 +3,12 @@ package updateworkflowoptions
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
@@ -13,6 +16,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
@@ -22,18 +26,20 @@ func Invoke(
 	request *historyservice.UpdateWorkflowExecutionOptionsRequest,
 	shardCtx historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
+	matchingClient matchingservice.MatchingServiceClient,
+	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	reactivationSignaler api.VersionReactivationSignalerFn,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()))
+	req := request.GetUpdateRequest()
+	ns, err := api.GetActiveNamespace(shardCtx, namespace.ID(request.GetNamespaceId()), req.GetWorkflowExecution().GetWorkflowId())
 	if err != nil {
 		return nil, err
 	}
-	req := request.GetUpdateRequest()
 	ret := &historyservice.UpdateWorkflowExecutionOptionsResponse{}
 
-	opts := req.GetWorkflowExecutionOptions()
-	if err := worker_versioning.ValidateVersioningOverride(opts.GetVersioningOverride()); err != nil {
-		return nil, err
-	}
+	// Store versioning override to send reactivation signal after successful persistence
+	var versioningOverrideForReactivation *workflowpb.VersioningOverride
 
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -51,7 +57,34 @@ func Invoke(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			mergedOpts, hasChanges, err := MergeAndApply(mutableState, opts, req.GetUpdateMask())
+			// If the requested override is pinned and omitted optional pinned version, fill in the current pinned version if it exists,
+			// or error if no pinned version exists.
+			// Clone the requested options to avoid mutating the original request but only do the cloning work if needed.
+			requestedOptions := req.GetWorkflowExecutionOptions()
+			if requestedOptions.GetVersioningOverride().GetPinned().GetBehavior() != workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_UNSPECIFIED &&
+				requestedOptions.GetVersioningOverride().GetPinned().GetVersion() == nil {
+				currentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(workflow.GetEffectiveDeployment(mutableState.GetExecutionInfo().GetVersioningInfo()))
+				if effectiveBevior := workflow.GetEffectiveVersioningBehavior(mutableState.GetExecutionInfo().GetVersioningInfo()); effectiveBevior != enumspb.VERSIONING_BEHAVIOR_PINNED {
+					return nil, serviceerror.NewFailedPreconditionf("must specify a specific pinned override version because workflow with id %v has behavior %s and is not yet pinned to any version",
+						mutableState.GetExecutionInfo().GetWorkflowId(),
+						effectiveBevior.String(),
+					)
+				}
+				var ok bool
+				requestedOptions, ok = proto.Clone(requestedOptions).(*workflowpb.WorkflowExecutionOptions)
+				if !ok { // this will never happen, but linter wants me to check the casting, so do it just in case
+					return nil, serviceerror.NewInternalf("failed to copy workflow options to workflow options: %+v", requestedOptions)
+				}
+				requestedOptions.GetVersioningOverride().GetPinned().Version = currentVersion
+			}
+
+			// Validate versioning override, if any.
+			err = worker_versioning.ValidateVersioningOverride(ctx, requestedOptions.GetVersioningOverride(), matchingClient, versionMembershipCache, mutableState.GetExecutionInfo().GetTaskQueue(), enumspb.TASK_QUEUE_TYPE_WORKFLOW, ns.ID().String())
+			if err != nil {
+				return nil, err
+			}
+
+			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -66,6 +99,9 @@ func Invoke(
 				}, nil
 			}
 
+			// Store versioning override to send reactivation signal after successful persistence
+			versioningOverrideForReactivation = mergedOpts.GetVersioningOverride()
+
 			// TODO (carly) part 2: handle safe deployment change --> CreateWorkflowTask=true
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -79,6 +115,11 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+
+	// Notify version workflow if we're pinning to a potentially drained version.
+	// This is done after successful persistence to avoid signaling if the update fails.
+	api.ReactivateVersionWorkflowIfPinned(ctx, ns, versioningOverrideForReactivation, reactivationSignalCache, reactivationSignaler, shardCtx.GetConfig().EnableVersionReactivationSignals())
+
 	return ret, nil
 }
 
@@ -88,6 +129,7 @@ func MergeAndApply(
 	ms historyi.MutableState,
 	opts *workflowpb.WorkflowExecutionOptions,
 	updateMask *fieldmaskpb.FieldMask,
+	identity string,
 ) (*workflowpb.WorkflowExecutionOptions, bool, error) {
 	// Merge the requested options mentioned in the field mask with the current options in the mutable state
 	mergedOpts, err := mergeWorkflowExecutionOptions(
@@ -109,7 +151,7 @@ func MergeAndApply(
 	if mergedOpts.GetVersioningOverride() == nil {
 		unsetOverride = true
 	}
-	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil)
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(mergedOpts.GetVersioningOverride(), unsetOverride, "", nil, nil, identity, mergedOpts.GetPriority())
 	if err != nil {
 		return nil, hasChanges, err
 	}
@@ -124,6 +166,11 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 			return nil
 		}
 		opts.VersioningOverride = override
+	}
+	if priority := ms.GetExecutionInfo().GetPriority(); priority != nil {
+		if cloned, ok := proto.Clone(priority).(*commonpb.Priority); ok {
+			opts.Priority = cloned
+		}
 	}
 	return opts
 }
@@ -155,5 +202,33 @@ func mergeWorkflowExecutionOptions(
 		}
 		mergeInto.VersioningOverride = mergeFrom.GetVersioningOverride()
 	}
+
+	// ==== Priority
+
+	if _, ok := updateFields["priority"]; ok {
+		mergeInto.Priority = mergeFrom.GetPriority()
+	}
+
+	if _, ok := updateFields["priority.priorityKey"]; ok {
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.PriorityKey = mergeFrom.GetPriority().GetPriorityKey()
+	}
+
+	if _, ok := updateFields["priority.fairnessKey"]; ok {
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.FairnessKey = mergeFrom.Priority.GetFairnessKey()
+	}
+
+	if _, ok := updateFields["priority.fairnessWeight"]; ok {
+		if mergeInto.Priority == nil {
+			mergeInto.Priority = &commonpb.Priority{}
+		}
+		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.GetFairnessWeight()
+	}
+
 	return mergeInto, nil
 }

@@ -5,6 +5,7 @@ option go_package = "go.temporal.io/server/api/batch/v1;batch";
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/api/enums/v1/batch_operation.proto";
+import "temporal/server/api/adminservice/v1/request_response.proto";
 import "google/protobuf/duration.proto";
 
 message BatchOperationInput { 
@@ -18,8 +19,14 @@ message BatchOperationInput {
 
   repeated string non_retryable_errors = 5;
 
+  // Only needed if StartBatchOperationRequest request is set.
   temporal.api.enums.v1.BatchOperationType batch_type = 6;
 
   // The request to start the batch operation.
+  // Mutually exclusive with StartAdminBatchOperationRequest admin_request.
   temporal.api.workflowservice.v1.StartBatchOperationRequest request = 7;
+
+  // The request to start an admin batch operation.
+  // Mutually exclusive with StartBatchOperationRequest request.
+  temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest admin_request = 8;
 }

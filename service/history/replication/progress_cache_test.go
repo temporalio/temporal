@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -71,8 +71,8 @@ func (s *progressCacheSuite) SetupTest() {
 	)
 	s.progressCache = NewProgressCache(s.shardContext.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
 	s.namespaceID = tests.NamespaceID.String()
-	s.workflowID = uuid.New()
-	s.runID = uuid.New()
+	s.workflowID = uuid.NewString()
+	s.runID = uuid.NewString()
 
 }
 

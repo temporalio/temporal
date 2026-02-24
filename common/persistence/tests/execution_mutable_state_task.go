@@ -13,11 +13,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
@@ -43,6 +44,7 @@ type (
 		Cancel context.CancelFunc
 	}
 
+	// testSerializer wraps a serializer to add support for fake tasks used in tests
 	testSerializer struct {
 		serialization.Serializer
 	}
@@ -51,15 +53,6 @@ type (
 var (
 	fakeImmediateTaskCategory = tasks.NewCategory(1234, tasks.CategoryTypeImmediate, "fake-immediate")
 	fakeScheduledTaskCategory = tasks.NewCategory(2345, tasks.CategoryTypeScheduled, "fake-scheduled")
-
-	taskCategories = []tasks.Category{
-		tasks.CategoryTransfer,
-		tasks.CategoryTimer,
-		tasks.CategoryReplication,
-		tasks.CategoryVisibility,
-		fakeImmediateTaskCategory,
-		fakeScheduledTaskCategory,
-	}
 )
 
 func NewExecutionMutableStateTaskSuite(
@@ -69,16 +62,16 @@ func NewExecutionMutableStateTaskSuite(
 	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
-	serializer = newTestSerializer(serializer)
+	testSer := &testSerializer{Serializer: serializer}
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			serializer,
+			testSer,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			serializer,
+			testSer,
 			nil,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
@@ -445,7 +438,7 @@ func (s *ExecutionMutableStateTaskSuite) TestIsReplicationDLQEmpty() {
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
-	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	now := time.Now().Truncate(common.ScheduledTaskMinPrecision)
 	timerTasks := []tasks.Task{
 		&tasks.UserTimerTask{
 			WorkflowKey:         s.WorkflowKey,
@@ -464,6 +457,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTimer: timerTasks,
 		},
@@ -484,7 +478,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetTimerTasksOrdered() {
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
-	now := time.Now().Truncate(p.ScheduledTaskMinPrecision)
+	now := time.Now().Truncate(common.ScheduledTaskMinPrecision)
 	scheduledTasks := []tasks.Task{
 		tasks.NewFakeTask(
 			s.WorkflowKey,
@@ -505,6 +499,7 @@ func (s *ExecutionMutableStateTaskSuite) TestGetScheduledTasksOrdered() {
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			fakeScheduledTaskCategory: scheduledTasks,
 		},
@@ -551,7 +546,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	now := time.Now().UTC()
 	randomTasks := make([]tasks.Task, 0, numTasks)
 	for i := 0; i != numTasks; i++ {
-		now = now.Truncate(p.ScheduledTaskMinPrecision)
+		now = now.Truncate(common.ScheduledTaskMinPrecision)
 		randomTasks = append(randomTasks, newTaskFn(s.WorkflowKey, currentTaskID, now))
 		currentTaskID += rand.Int63n(100) + 1
 		now = now.Add(time.Duration(rand.Int63n(1000_000_000)) + time.Millisecond)
@@ -562,6 +557,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
 		WorkflowID:  s.WorkflowKey.WorkflowID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
 		Tasks: map[tasks.Category][]tasks.Task{
 			category: randomTasks,
 		},
@@ -640,7 +636,7 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 		maxKey = minKey.Next()
 	} else {
 		minKey = tasks.NewKey(key.FireTime, 0)
-		maxKey = tasks.NewKey(key.FireTime.Add(persistence.ScheduledTaskMinPrecision), 0)
+		maxKey = tasks.NewKey(key.FireTime.Add(common.ScheduledTaskMinPrecision), 0)
 	}
 
 	historyTasks := s.PaginateTasks(category, minKey, maxKey, 1)
@@ -656,14 +652,6 @@ func (s *ExecutionMutableStateTaskSuite) GetAndCompleteHistoryTask(
 
 	historyTasks = s.PaginateTasks(category, minKey, maxKey, 1)
 	s.Empty(historyTasks)
-}
-
-func newTestSerializer(
-	serializer serialization.Serializer,
-) serialization.Serializer {
-	return &testSerializer{
-		Serializer: serializer,
-	}
 }
 
 func (s *testSerializer) SerializeTask(
@@ -687,7 +675,6 @@ func (s *testSerializer) SerializeTask(
 			EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		}, nil
 	}
-
 	return s.Serializer.SerializeTask(task)
 }
 

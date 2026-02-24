@@ -62,8 +62,11 @@ type (
 		// use mangled names, they use the bare base name.
 		RpcName() string
 		Key() PartitionKey
-		// RoutingKey returns the string that should be used to find the owner of a task queue partition.
-		RoutingKey() string
+		// RoutingKey returns the key and index within the key that should be used to find the
+		// owner of a task queue partition.
+		RoutingKey(int) (string, int)
+		// GradualChangeKey returns an identifier that can be used with gradual changes.
+		GradualChangeKey() []byte
 	}
 
 	// NormalPartition is used to distribute load of a TaskQueue in multiple Matching instances. A normal partition is
@@ -280,8 +283,13 @@ func (s *StickyPartition) Key() PartitionKey {
 	}
 }
 
-func (s *StickyPartition) RoutingKey() string {
-	return fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
+func (s *StickyPartition) RoutingKey(int) (string, int) {
+	return fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType()), 0
+}
+
+func (s *StickyPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", s.NamespaceId(), s.RpcName(), s.TaskType())
+	return []byte(key)
 }
 
 func (p *NormalPartition) TaskQueue() *TaskQueue {
@@ -339,8 +347,27 @@ func (p *NormalPartition) Key() PartitionKey {
 	}
 }
 
-func (p *NormalPartition) RoutingKey() string {
-	return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+func (p *NormalPartition) RoutingKey(batchSize int) (string, int) {
+	if batchSize == 0 {
+		return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType()), 0
+	}
+	// We want to use LookupN to spread partitions across available nodes, but LookupN takes O(n)
+	// time and space, so we should limit the n that we pass to it. Reduce the partition id by some
+	// factor and move that factor into the name.
+	batch := p.partitionId / batchSize
+	if batch == 0 {
+		// For the first batch, omit the batch number as if batchSize==0 so that the root
+		// partition (id 0, batch number 0) doesn't move if we turn on/off spreading.
+		return fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.TaskQueue().Name(), p.TaskType()), p.partitionId
+	}
+	// For subsequent batches, put the batch number in the key to hash.
+	return fmt.Sprintf("%s:%s:%d:%d", p.NamespaceId(), p.TaskQueue().Name(), batch, p.TaskType()),
+		p.partitionId % batchSize
+}
+
+func (p *NormalPartition) GradualChangeKey() []byte {
+	key := fmt.Sprintf("%s:%s:%d", p.NamespaceId(), p.RpcName(), p.TaskType())
+	return []byte(key)
 }
 
 // parseRpcName takes the rpc name of a task queue partition and returns a ParseTaskQueuePartition.

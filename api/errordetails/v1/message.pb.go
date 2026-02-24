@@ -281,8 +281,10 @@ type SyncStateFailure struct {
 	RunId               string                  `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	VersionedTransition *v1.VersionedTransition `protobuf:"bytes,4,opt,name=versioned_transition,json=versionedTransition,proto3" json:"versioned_transition,omitempty"`
 	VersionHistories    *v11.VersionHistories   `protobuf:"bytes,5,opt,name=version_histories,json=versionHistories,proto3" json:"version_histories,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// (-- api-linter: core::0141::forbidden-types=disabled --)
+	ArchetypeId   uint32 `protobuf:"varint,6,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SyncStateFailure) Reset() {
@@ -348,6 +350,13 @@ func (x *SyncStateFailure) GetVersionHistories() *v11.VersionHistories {
 		return x.VersionHistories
 	}
 	return nil
+}
+
+func (x *SyncStateFailure) GetArchetypeId() uint32 {
+	if x != nil {
+		return x.ArchetypeId
+	}
+	return 0
 }
 
 type StickyWorkerUnavailableFailure struct {
@@ -522,14 +531,15 @@ const file_temporal_server_api_errordetails_v1_message_proto_rawDesc = "" +
 	"\x13start_event_version\x18\x05 \x01(\x03R\x11startEventVersion\x12 \n" +
 	"\fend_event_id\x18\x06 \x01(\x03R\n" +
 	"endEventId\x12*\n" +
-	"\x11end_event_version\x18\a \x01(\x03R\x0fendEventVersion\"\xb8\x02\n" +
+	"\x11end_event_version\x18\a \x01(\x03R\x0fendEventVersion\"\xdb\x02\n" +
 	"\x10SyncStateFailure\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
 	"\x06run_id\x18\x03 \x01(\tR\x05runId\x12j\n" +
 	"\x14versioned_transition\x18\x04 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition\x12]\n" +
-	"\x11version_histories\x18\x05 \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistories\" \n" +
+	"\x11version_histories\x18\x05 \x01(\v20.temporal.server.api.history.v1.VersionHistoriesR\x10versionHistories\x12!\n" +
+	"\farchetype_id\x18\x06 \x01(\rR\varchetypeId\" \n" +
 	"\x1eStickyWorkerUnavailableFailure\" \n" +
 	"\x1eObsoleteDispatchBuildIdFailure\"\x1d\n" +
 	"\x1bObsoleteMatchingTaskFailure\"&\n" +

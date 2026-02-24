@@ -13,6 +13,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.AddTasksResponse:
 		return nil
+	case *historyservice.CancelNexusOperationRequest:
+		return nil
+	case *historyservice.CancelNexusOperationResponse:
+		return nil
 	case *historyservice.CloseShardRequest:
 		return nil
 	case *historyservice.CloseShardResponse:
@@ -203,6 +207,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.PauseActivityResponse:
 		return nil
+	case *historyservice.PauseWorkflowExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetPauseRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetPauseRequest().GetRunId()),
+		}
+	case *historyservice.PauseWorkflowExecutionResponse:
+		return nil
 	case *historyservice.PollMutableStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
@@ -374,6 +385,10 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.SignalWorkflowExecutionResponse:
 		return nil
+	case *historyservice.StartNexusOperationRequest:
+		return nil
+	case *historyservice.StartNexusOperationResponse:
+		return nil
 	case *historyservice.StartWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetStartRequest().GetWorkflowId()),
@@ -413,6 +428,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowRunID(r.GetFrontendRequest().GetExecution().GetRunId()),
 		}
 	case *historyservice.UnpauseActivityResponse:
+		return nil
+	case *historyservice.UnpauseWorkflowExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetUnpauseRequest().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetUnpauseRequest().GetRunId()),
+		}
+	case *historyservice.UnpauseWorkflowExecutionResponse:
 		return nil
 	case *historyservice.UpdateActivityOptionsRequest:
 		return []tag.Tag{

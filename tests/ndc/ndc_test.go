@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -181,7 +181,7 @@ func (s *NDCFunctionalTestSuite) TearDownSuite() {
 func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-single-branch-test" + uuid.New()
+	workflowID := "ndc-single-branch-test" + uuid.NewString()
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -191,7 +191,7 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 
 	versions := []int64{3, 13, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
 	for _, version := range versions {
-		runID := uuid.New()
+		runID := uuid.NewString()
 		historySize := int64(0)
 
 		var historyBatch []*historypb.History
@@ -225,7 +225,7 @@ func (s *NDCFunctionalTestSuite) TestSingleBranch() {
 func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-multiple-branches-test" + uuid.New()
+	workflowID := "ndc-multiple-branches-test" + uuid.NewString()
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -237,7 +237,7 @@ func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 	versionIncs := [][]int64{{1, 10}, {11, 10}}
 	versionInc := versionIncs[rand.Intn(len(versionIncs))]
 	for _, version := range versions {
-		runID := uuid.New()
+		runID := uuid.NewString()
 		historySize := int64(0)
 
 		var baseBranch []*historypb.History
@@ -355,7 +355,7 @@ func (s *NDCFunctionalTestSuite) TestMultipleBranches() {
 }
 
 func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
-	workflowID := "ndc-migration-test" + uuid.New()
+	workflowID := "ndc-migration-test" + uuid.NewString()
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -363,7 +363,7 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 	// cluster has initial version 1
 	historyClient := s.cluster.HistoryClient()
 
-	runID := uuid.New()
+	runID := uuid.NewString()
 
 	version := common.EmptyVersion
 	var baseBranch []*historypb.History
@@ -417,8 +417,8 @@ func (s *NDCFunctionalTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 func (s *NDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "replicate-workflow-state-partially-replicated" + uuid.New()
-	runID := uuid.New()
+	workflowID := "replicate-workflow-state-partially-replicated" + uuid.NewString()
+	runID := uuid.NewString()
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 
@@ -491,8 +491,8 @@ func (s *NDCFunctionalTestSuite) TestReplicateWorkflowState_PartialReplicated() 
 func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-handcrafted-multiple-branches-test" + uuid.New()
-	runID := uuid.New()
+	workflowID := "ndc-handcrafted-multiple-branches-test" + uuid.NewString()
+	runID := uuid.NewString()
 	historySize := int64(0)
 
 	workflowType := "event-generator-workflow-type"
@@ -540,7 +540,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 2,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -596,7 +596,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: 6,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 					Attempt:          1,
 				}},
 			},
@@ -634,7 +634,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 9,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -680,7 +680,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 13,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -749,7 +749,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 17,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -834,8 +834,8 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranches() {
 func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContinueAsNew() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-handcrafted-multiple-branches-with-continue-as-new-test" + uuid.New()
-	runID := uuid.New()
+	workflowID := "ndc-handcrafted-multiple-branches-with-continue-as-new-test" + uuid.NewString()
+	runID := uuid.NewString()
 	historySize := int64(0)
 
 	workflowType := "event-generator-workflow-type"
@@ -883,7 +883,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 2,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -939,7 +939,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: 6,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 					Attempt:          1,
 				}},
 			},
@@ -977,7 +977,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 9,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -1023,7 +1023,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 13,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -1065,7 +1065,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
-					NewExecutionRunId:            uuid.New(),
+					NewExecutionRunId:            uuid.NewString(),
 					WorkflowType:                 &commonpb.WorkflowType{Name: workflowType},
 					TaskQueue:                    &taskqueuepb.TaskQueue{Name: taskqueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 					Input:                        nil,
@@ -1134,7 +1134,7 @@ func (s *NDCFunctionalTestSuite) TestHandcraftedMultipleBranchesWithZombieContin
 func (s *NDCFunctionalTestSuite) TestImportSingleBranch() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-import-single-branch-test" + uuid.New()
+	workflowID := "ndc-import-single-branch-test" + uuid.NewString()
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -1144,7 +1144,7 @@ func (s *NDCFunctionalTestSuite) TestImportSingleBranch() {
 
 	versions := []int64{3, 13, 2, 202, 301, 401, 602, 502, 803, 1002, 902, 701, 1103}
 	for _, version := range versions {
-		runID := uuid.New()
+		runID := uuid.NewString()
 		historySize := int64(0)
 
 		var historyBatch []*historypb.History
@@ -1178,7 +1178,7 @@ func (s *NDCFunctionalTestSuite) TestImportSingleBranch() {
 func (s *NDCFunctionalTestSuite) TestImportMultipleBranches() {
 
 	s.setupRemoteFrontendClients()
-	workflowID := "ndc-import-multiple-branches-test" + uuid.New()
+	workflowID := "ndc-import-multiple-branches-test" + uuid.NewString()
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -1195,7 +1195,7 @@ func (s *NDCFunctionalTestSuite) TestImportMultipleBranches() {
 	}
 	versionInc := versionIncs[rand.Intn(len(versionIncs))]
 	for _, version := range versions {
-		runID := uuid.New()
+		runID := uuid.NewString()
 		historySize := int64(0)
 
 		var baseBranch []*historypb.History
@@ -1319,7 +1319,7 @@ func (s *NDCFunctionalTestSuite) TestImportMultipleBranches() {
 
 func (s *NDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 
-	workflowID := "ndc-events-reapply-zombie-workflow-test" + uuid.New()
+	workflowID := "ndc-events-reapply-zombie-workflow-test" + uuid.NewString()
 
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -1328,7 +1328,7 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 	historyClient := s.cluster.HistoryClient()
 
 	version := int64(102)
-	runID := uuid.New()
+	runID := uuid.NewString()
 	historySize := int64(0)
 	historyBatch := []*historypb.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
@@ -1356,7 +1356,7 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_ZombieWorkflow() {
 	s.verifyEventHistorySize(workflowID, runID, historySize)
 
 	version = int64(2)
-	runID = uuid.New()
+	runID = uuid.NewString()
 	historySize = int64(0)
 	historyBatch = []*historypb.History{}
 	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
@@ -1414,8 +1414,8 @@ func (s *NDCFunctionalTestSuite) TestEventsReapply_NonCurrentBranch_UpdateAccept
 }
 
 func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventType enumspb.EventType) {
-	workflowID := "ndc-events-reapply-non-current-test" + uuid.New()
-	runID := uuid.New()
+	workflowID := "ndc-events-reapply-non-current-test" + uuid.NewString()
+	runID := uuid.NewString()
 	historySize := int64(0)
 	workflowType := "event-generator-workflow-type"
 	taskqueue := "event-generator-taskQueue"
@@ -1540,8 +1540,8 @@ func (s *NDCFunctionalTestSuite) testEventsReapplyNonCurrentBranch(staleEventTyp
 
 func (s *NDCFunctionalTestSuite) TestResend() {
 
-	workflowID := "ndc-re-send-test" + uuid.New()
-	runID := uuid.New()
+	workflowID := "ndc-re-send-test" + uuid.NewString()
+	runID := uuid.NewString()
 	workflowType := "ndc-re-send-workflow-type"
 	taskqueue := "event-generator-taskQueue"
 	identity := "ndc-re-send-test"
@@ -1615,7 +1615,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 2,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -1671,7 +1671,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
 					ScheduledEventId: 6,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 					Attempt:          1,
 				}},
 			},
@@ -1709,7 +1709,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 9,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -1755,7 +1755,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 13,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -1843,7 +1843,7 @@ func (s *NDCFunctionalTestSuite) TestResend() {
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
 					ScheduledEventId: 17,
 					Identity:         identity,
-					RequestId:        uuid.New(),
+					RequestId:        uuid.NewString(),
 				}},
 			},
 		}},
@@ -2080,7 +2080,7 @@ func (s *NDCFunctionalTestSuite) generateNewRunHistory(
 		return nil, ""
 	}
 
-	newRunID := uuid.New()
+	newRunID := uuid.NewString()
 	event.GetWorkflowExecutionContinuedAsNewEventAttributes().NewExecutionRunId = newRunID
 
 	newRunFirstEvent := &historypb.HistoryEvent{
@@ -2094,8 +2094,8 @@ func (s *NDCFunctionalTestSuite) generateNewRunHistory(
 			ParentWorkflowNamespace:   nsName.String(),
 			ParentWorkflowNamespaceId: nsID.String(),
 			ParentWorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: uuid.New(),
-				RunId:      uuid.New(),
+				WorkflowId: uuid.NewString(),
+				RunId:      uuid.NewString(),
 			},
 			ParentInitiatedEventId:          event.GetEventId(),
 			TaskQueue:                       &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -2409,7 +2409,7 @@ func (s *NDCFunctionalTestSuite) setupRemoteFrontendClients() {
 func (s *NDCFunctionalTestSuite) sizeOfHistoryEvents(
 	events []*historypb.HistoryEvent,
 ) int64 {
-	blob, err := serialization.NewSerializer().SerializeEvents(events)
+	blob, err := s.serializer.SerializeEvents(events)
 	s.NoError(err)
 	return int64(len(blob.Data))
 }

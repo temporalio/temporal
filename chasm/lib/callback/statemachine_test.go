@@ -26,11 +26,11 @@ func TestValidTransitions(t *testing.T) {
 			},
 		},
 	}
-	callback.SetState(callbackspb.CALLBACK_STATUS_SCHEDULED)
+	callback.SetStateMachineState(callbackspb.CALLBACK_STATUS_SCHEDULED)
 
 	// AttemptFailed
 	mctx := &chasm.MockMutableContext{}
-	err := TransitionAttemptFailed.Apply(mctx, callback, EventAttemptFailed{
+	err := TransitionAttemptFailed.Apply(callback, mctx, EventAttemptFailed{
 		Time:        currentTime,
 		Err:         errors.New("test"),
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
@@ -38,7 +38,7 @@ func TestValidTransitions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Assert info object is updated
-	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, callback.StateMachineState())
 	require.Equal(t, int32(1), callback.Attempt)
 	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	require.False(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
@@ -48,15 +48,15 @@ func TestValidTransitions(t *testing.T) {
 
 	// Assert backoff task is generated
 	require.Len(t, mctx.Tasks, 1)
-	require.IsType(t, &callbackspb.InvocationTask{}, mctx.Tasks[0].Payload)
+	require.IsType(t, &callbackspb.BackoffTask{}, mctx.Tasks[0].Payload)
 
 	// Rescheduled
 	mctx = &chasm.MockMutableContext{}
-	err = TransitionRescheduled.Apply(mctx, callback, EventRescheduled{})
+	err = TransitionRescheduled.Apply(callback, mctx, EventRescheduled{})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, callback.StateMachineState())
 	require.Equal(t, int32(1), callback.Attempt)
 	require.Equal(t, "test", callback.LastAttemptFailure.Message)
 	// Remains unmodified
@@ -71,23 +71,23 @@ func TestValidTransitions(t *testing.T) {
 	dup := &Callback{
 		CallbackState: proto.Clone(callback.CallbackState).(*callbackspb.CallbackState),
 	}
-	dup.Status = callback.State()
+	dup.Status = callback.StateMachineState()
 
 	// Succeeded
 	currentTime = currentTime.Add(time.Second)
 	mctx = &chasm.MockMutableContext{}
-	err = TransitionSucceeded.Apply(mctx, callback, EventSucceeded{Time: currentTime})
+	err = TransitionSucceeded.Apply(callback, mctx, EventSucceeded{Time: currentTime})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, callback.StateMachineState())
 	require.Equal(t, int32(2), callback.Attempt)
 	require.Nil(t, callback.LastAttemptFailure)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
-	// Assert task is generated (success transitions also add tasks in chasm)
-	require.Len(t, mctx.Tasks, 1)
+	// Assert no task is generated on success transition
+	require.Empty(t, mctx.Tasks)
 
 	// Reset back to scheduled
 	callback = dup
@@ -96,17 +96,17 @@ func TestValidTransitions(t *testing.T) {
 
 	// failed
 	mctx = &chasm.MockMutableContext{}
-	err = TransitionFailed.Apply(mctx, callback, EventFailed{Time: currentTime, Err: errors.New("failed")})
+	err = TransitionFailed.Apply(callback, mctx, EventFailed{Time: currentTime, Err: errors.New("failed")})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed
-	require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.State())
+	require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, callback.StateMachineState())
 	require.Equal(t, int32(2), callback.Attempt)
 	require.Equal(t, "failed", callback.LastAttemptFailure.Message)
 	require.True(t, callback.LastAttemptFailure.GetApplicationFailureInfo().NonRetryable)
 	require.Equal(t, currentTime, callback.LastAttemptCompleteTime.AsTime())
 	require.Nil(t, callback.NextAttemptScheduleTime)
 
-	// Assert task is generated (failed transitions also add tasks in chasm)
-	require.Len(t, mctx.Tasks, 1)
+	// Assert task is not generated, failed is terminal
+	require.Empty(t, mctx.Tasks)
 }

@@ -121,17 +121,17 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if opts == nil {
 		return "", fmt.Errorf("no routing directive specified on %s", m.Desc.FullName())
 	}
-	if opts.Random && (opts.NamespaceId != "" || opts.ExecutionId != "") {
-		return "", fmt.Errorf("random directive cannot be combined with namespace_id or execution_id on %s", m.Desc.FullName())
+	if opts.Random && (opts.NamespaceId != "" || opts.BusinessId != "") {
+		return "", fmt.Errorf("random directive cannot be combined with namespace_id or business_id on %s", m.Desc.FullName())
 	}
 	if opts.Random {
 		return "shardID := int32(rand.Intn(int(c.numShards)) + 1)", nil
 	}
-	if opts.ExecutionId == "" {
-		return "", fmt.Errorf("execution_id directive empty on %s", m.Desc.FullName())
+	if opts.BusinessId == "" {
+		return "", fmt.Errorf("business_id directive empty on %s", m.Desc.FullName())
 	}
 	if opts.Random {
-		return "", fmt.Errorf("random directive cannot be combined with namespace_id or execution_id on %s", m.Desc.FullName())
+		return "", fmt.Errorf("random directive cannot be combined with namespace_id or business_id on %s", m.Desc.FullName())
 	}
 
 	namespaceIDField := opts.NamespaceId
@@ -143,12 +143,12 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to resolve namespace_id field path %q: %w", namespaceIDField, err)
 	}
-	executionIDFieldGetter, err := goFieldPath(m, opts.ExecutionId)
+	businessIDFieldGetter, err := goFieldPath(m, opts.BusinessId)
 	if err != nil {
-		return "", fmt.Errorf("unable to resolve execution_id field path %q: %w", opts.ExecutionId, err)
+		return "", fmt.Errorf("unable to resolve business_id field path %q: %w", opts.BusinessId, err)
 	}
 
-	return fmt.Sprintf("shardID := common.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, executionIDFieldGetter), nil
+	return fmt.Sprintf("shardID := common.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, businessIDFieldGetter), nil
 }
 
 func goFieldPath(m *protogen.Method, path string) (string, error) {
@@ -192,7 +192,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 
 	ctorName := fmt.Sprintf("New%s", structName)
 	w.println("// %s initializes a new %s.", ctorName, structName)
-	w.println("func New%s(", ctorName)
+	w.println("func %s(", ctorName)
 	w.indent()
 	w.println("dc *dynamicconfig.Collection,")
 	w.println("rpcFactory     common.RPCFactory,")
@@ -201,7 +201,7 @@ func (p *Plugin) genClient(w *writer, svc *protogen.Service) error {
 	w.println("logger         log.Logger,")
 	w.println("metricsHandler metrics.Handler,")
 	w.unindent()
-	w.println(") (*%s, error) {", structName)
+	w.println(") (%sClient, error) {", svc.GoName)
 	w.indent() // start ctor body
 	w.println("resolver, err := monitor.GetResolver(primitives.HistoryService)")
 	w.println("if err != nil {")

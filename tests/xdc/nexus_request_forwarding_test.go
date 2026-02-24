@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"testing"
@@ -191,6 +190,8 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Empty(t, handlerErr.Message)
+				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "handler_error:INTERNAL")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
@@ -211,7 +212,7 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
+				require.Equal(t, "cluster inactive", handlerErr.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -315,6 +316,8 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+				require.Empty(t, handlerErr.Message)
+				require.Error(t, handlerErr.Cause)
 				require.Equal(t, "deliberate internal failure", handlerErr.Cause.Error())
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "CancelNexusOperation", "handler_error:INTERNAL")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "forwarded_request_error")
@@ -335,7 +338,7 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 				var handlerErr *nexus.HandlerError
 				require.ErrorAs(t, retErr, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnavailable, handlerErr.Type)
-				require.Equal(t, "cluster inactive", handlerErr.Cause.Error())
+				require.Equal(t, "cluster inactive", handlerErr.Message)
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "CancelNexusOperation", "namespace_inactive_forwarding_disabled")
 			},
 		},
@@ -378,16 +381,14 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandbyToActive() {
 	testCases := []struct {
 		name                          string
-		getCompletionFn               func() (nexusrpc.OperationCompletion, error)
+		getCompletionFn               func() nexusrpc.CompleteOperationOptions
 		assertHistoryAndGetCompleteWF func(*testing.T, []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest
 		assertResult                  func(*testing.T, string)
 	}{
 		{
 			name: "success",
-			getCompletionFn: func() (nexusrpc.OperationCompletion, error) {
-				return nexusrpc.NewOperationCompletionSuccessful(s.mustToPayload("result"), nexusrpc.OperationCompletionSuccessfulOptions{
-					Serializer: cnexus.PayloadSerializer,
-				})
+			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{Result: s.mustToPayload("result")}
 			},
 			assertHistoryAndGetCompleteWF: func(t *testing.T, events []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest {
 				completedEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
@@ -411,11 +412,14 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 		},
 		{
 			name: "operation error",
-			getCompletionFn: func() (nexusrpc.OperationCompletion, error) {
-				f := nexus.Failure{Message: "intentional operation failure"}
-				return nexusrpc.NewOperationCompletionUnsuccessful(
-					&nexus.OperationError{State: nexus.OperationStateFailed, Cause: &nexus.FailureError{Failure: f}},
-					nexusrpc.OperationCompletionUnsuccessfulOptions{})
+			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
+				opErr := &nexus.OperationError{
+					State: nexus.OperationStateFailed,
+					Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "intentional operation failure"}},
+				}
+				return nexusrpc.CompleteOperationOptions{
+					Error: opErr,
+				}
 			},
 			assertHistoryAndGetCompleteWF: func(t *testing.T, events []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest {
 				failedEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
@@ -439,11 +443,11 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 		},
 		{
 			name: "canceled",
-			getCompletionFn: func() (nexusrpc.OperationCompletion, error) {
+			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
 				f := nexus.Failure{Message: "operation canceled"}
-				return nexusrpc.NewOperationCompletionUnsuccessful(
-					&nexus.OperationError{State: nexus.OperationStateCanceled, Cause: &nexus.FailureError{Failure: f}},
-					nexusrpc.OperationCompletionUnsuccessfulOptions{})
+				return nexusrpc.CompleteOperationOptions{
+					Error: &nexus.OperationError{State: nexus.OperationStateCanceled, Cause: &nexus.FailureError{Failure: f}},
+				}
 			},
 			assertHistoryAndGetCompleteWF: func(t *testing.T, events []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest {
 				canceledEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
@@ -592,10 +596,11 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 				return err == nil && len(resp.PendingNexusOperations) > 0
 			}, 5*time.Second, 500*time.Millisecond)
 
-			completion, err := tc.getCompletionFn()
+			completion := tc.getCompletionFn()
+			completion.Header = make(nexus.Header, 1)
+			completion.Header.Set(cnexus.CallbackTokenHeader, callbackToken)
+			snap, err := s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[1], publicCallbackUrl, completion)
 			s.NoError(err)
-			res, snap := s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[1], publicCallbackUrl, completion, callbackToken)
-			s.Equal(http.StatusOK, res.StatusCode)
 			s.Equal(1, len(snap["nexus_completion_requests"]))
 			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "request_forwarded"})
 
@@ -610,8 +615,10 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			})
 
 			// Resend the request and verify we get a not found error since the operation has already completed.
-			res, snap = s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[0], publicCallbackUrl, completion, callbackToken)
-			s.Equal(http.StatusNotFound, res.StatusCode)
+			snap, err = s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[0], publicCallbackUrl, completion)
+			var handlerErr *nexus.HandlerError
+			s.ErrorAs(err, &handlerErr)
+			s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
 			s.Equal(1, len(snap["nexus_completion_requests"]))
 			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "error_not_found"})
 
@@ -678,26 +685,19 @@ func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 	t *testing.T,
 	testCluster *testcore.TestCluster,
 	url string,
-	completion nexusrpc.OperationCompletion,
-	callbackToken string,
-) (*http.Response, map[string][]*metricstest.CapturedRecording) {
+	completion nexusrpc.CompleteOperationOptions,
+) (map[string][]*metricstest.CapturedRecording, error) {
 	metricsHandler, ok := testCluster.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
 	s.True(ok)
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
 
-	req, err := nexusrpc.NewCompletionHTTPRequest(ctx, url, completion)
-	require.NoError(t, err)
-	if callbackToken != "" {
-		req.Header.Add(cnexus.CallbackTokenHeader, callbackToken)
-	}
+	c := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: cnexus.PayloadSerializer,
+	})
+	err := c.CompleteOperation(ctx, url, completion)
 
-	res, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	_, err = io.ReadAll(res.Body)
-	require.NoError(t, err)
-	defer res.Body.Close()
-	return res, capture.Snapshot()
+	return capture.Snapshot(), err
 }
 
 func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest.CapturedRecording, ns string, method string, expectedOutcome string) {

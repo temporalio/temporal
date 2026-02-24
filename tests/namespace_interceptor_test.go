@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -54,7 +54,7 @@ type sutConnector struct {
 }
 
 func newSystemUnderTestConnector(s *NamespaceInterceptorTestSuite) *sutConnector {
-	id := uuid.New()
+	id := uuid.NewString()
 	return &sutConnector{
 		suite:           s,
 		identity:        "worker-1",
@@ -92,7 +92,7 @@ func newStartWorkflowExecutionRequest(ns namespace.Name, workflowId string, iden
 	wt := "functional-workflow-namespace-validator-interceptor"
 	workflowType := &commonpb.WorkflowType{Name: wt}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
+		RequestId:           uuid.NewString(),
 		Namespace:           ns.String(),
 		WorkflowId:          workflowId,
 		WorkflowType:        workflowType,

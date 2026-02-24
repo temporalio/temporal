@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -218,6 +219,12 @@ func (r *WorkflowImpl) FlushBufferedEvents() error {
 	if _, err = r.failWorkflowTask(); err != nil {
 		return err
 	}
+
+	// Don't schedule a new workflow task if the workflow is paused.
+	if r.mutableState.IsWorkflowExecutionStatusPaused() {
+		return nil
+	}
+
 	if _, err := r.mutableState.AddWorkflowTaskScheduledEvent(
 		false,
 		enumsspb.WORKFLOW_TASK_TYPE_NORMAL,
@@ -265,9 +272,10 @@ func (r *WorkflowImpl) terminateMutableState(
 
 	if !r.mutableState.IsWorkflow() {
 		return r.mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity: consts.IdentityHistoryService,
-			Reason:   common.FailureReasonWorkflowTerminationDueToVersionConflict,
-			Details:  payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
+			Identity:  consts.IdentityHistoryService,
+			Reason:    common.FailureReasonWorkflowTerminationDueToVersionConflict,
+			Details:   payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
+			RequestID: primitives.NewUUID().String(),
 		})
 	}
 

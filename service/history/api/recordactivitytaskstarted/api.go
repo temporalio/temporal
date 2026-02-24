@@ -41,8 +41,8 @@ func Invoke(
 	shardContext historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (resp *historyservice.RecordActivityTaskStartedResponse, retError error) {
-
 	var err error
 	response := &historyservice.RecordActivityTaskStartedResponse{}
 	var rejectCode rejectCode
@@ -62,7 +62,7 @@ func Invoke(
 			}
 
 			response, rejectCode, err = recordActivityTaskStarted(
-				ctx, shardContext, mutableState, request, matchingClient,
+				ctx, shardContext, mutableState, request, matchingClient, routingInfoCache,
 			)
 			if err != nil {
 				return nil, err
@@ -107,8 +107,9 @@ func recordActivityTaskStarted(
 	mutableState historyi.MutableState,
 	request *historyservice.RecordActivityTaskStartedRequest,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 ) (*historyservice.RecordActivityTaskStartedResponse, rejectCode, error) {
-	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()))
+	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.WorkflowExecution.WorkflowId)
 	if err != nil {
 		return nil, rejectCodeUndefined, err
 	}
@@ -165,12 +166,11 @@ func recordActivityTaskStarted(
 	}
 
 	if ai.Stamp != request.Stamp {
-		// activity has changes before task is started.
-		// ErrActivityStampMismatch is the error to indicate that requested activity has mismatched stamp
+		// This happens when the workflow task was rescheduled.
 		errorMessage := fmt.Sprintf(
-			"Activity task with this stamp not found. Id: %s,: type: %s, current stamp: %d",
+			"Activity task rejected; stamp has changed. Id: %s,: type: %s, current stamp: %d",
 			ai.ActivityId, ai.ActivityType.Name, ai.Stamp)
-		return nil, rejectCodeUndefined, serviceerror.NewNotFound(errorMessage)
+		return nil, rejectCodeUndefined, serviceerrors.NewObsoleteMatchingTask(errorMessage)
 	}
 
 	wfBehavior := mutableState.GetEffectiveVersioningBehavior()
@@ -198,19 +198,30 @@ func recordActivityTaskStarted(
 		// The workflow transition happens only if the workflow task of the same execution would go
 		// to the poller deployment. Otherwise, it means the activity is independently versioned, we
 		// allow it to start without affecting the workflow.
-		wftDepVer, err := getDeploymentVersionForWorkflowId(ctx,
+
+		wftDepVer, wftDepRevNum, err := getDeploymentVersionAndRevisionNumberForWorkflowID(ctx,
 			request.NamespaceId,
 			mutableState.GetExecutionInfo().GetTaskQueue(),
 			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 			matchingClient,
+			routingInfoCache,
 			mutableState.GetWorkflowKey().WorkflowID,
 		)
 		if err != nil {
 			// Let matching retry
 			return nil, rejectCodeUndefined, err
 		}
-		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) {
-			if err := mutableState.StartDeploymentTransition(pollerDeployment); err != nil {
+
+		// We start a transition if one of the following conditions are met:
+		// 1. The workflow will be dispatching to the same deployment as the activity but has not yet.
+		// 2. The workflow TQ is lagging behind the activity TQ, with respect to the current version of a deployment.
+
+		// Note: We use > instead of >= because a non-backlogged activity task could have the same revision number as the MS and that should not commence a transition.
+		// Note: Revision number mechanics are only involved if the dynamic config is enabled.
+		useRevisionNumber := shardContext.GetConfig().UseRevisionNumberForWorkerVersioning(namespaceName)
+		if pollerDeployment.Equal(worker_versioning.DeploymentFromDeploymentVersion(wftDepVer)) ||
+			(useRevisionNumber && pollerDeployment.GetSeriesName() == wftDepVer.GetDeploymentName() && request.TaskDispatchRevisionNumber > wftDepRevNum) {
+			if err := mutableState.StartDeploymentTransition(pollerDeployment, request.TaskDispatchRevisionNumber); err != nil {
 				if errors.Is(err, workflow.ErrPinnedWorkflowCannotTransition) {
 					// This must be a task from a time that the workflow was unpinned, but it's
 					// now pinned so can't transition. Matching can drop the task safely.
@@ -220,6 +231,7 @@ func recordActivityTaskStarted(
 				}
 				return nil, rejectCodeUndefined, err
 			}
+
 			// This activity started a transition, make sure the MS changes are written but
 			// reject the activity task.
 			return nil, rejectCodeStartedTransition, nil
@@ -268,31 +280,44 @@ func recordActivityTaskStarted(
 }
 
 // TODO (Shahab): move this method to a better place
-// TODO: cache this result (especially if the answer is true)
-func getDeploymentVersionForWorkflowId(
+func getDeploymentVersionAndRevisionNumberForWorkflowID(
 	ctx context.Context,
 	namespaceID string,
 	taskQueueName string,
 	taskQueueType enumspb.TaskQueueType,
 	matchingClient matchingservice.MatchingServiceClient,
+	routingInfoCache worker_versioning.RoutingInfoCache,
 	workflowId string,
-) (*deploymentspb.WorkerDeploymentVersion, error) {
-	resp, err := matchingClient.GetTaskQueueUserData(ctx,
-		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:   namespaceID,
-			TaskQueue:     taskQueueName,
-			TaskQueueType: taskQueueType,
-		})
-	if err != nil {
-		return nil, err
-	}
-	tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+) (*deploymentspb.WorkerDeploymentVersion, int64, error) {
+	// Check cache first for task queue routing info (independent of workflow ID)
+	routingInfo, ok := routingInfoCache.Get(namespaceID, taskQueueName, taskQueueType)
+
 	if !ok {
-		// The TQ is unversioned
-		return nil, nil
+		// Cache miss, fetch from matching
+		resp, err := matchingClient.GetTaskQueueUserData(ctx,
+			&matchingservice.GetTaskQueueUserDataRequest{
+				NamespaceId:   namespaceID,
+				TaskQueue:     taskQueueName,
+				TaskQueueType: taskQueueType,
+			})
+		if err != nil {
+			return nil, 0, err
+		}
+		tqData, ok := resp.GetUserData().GetData().GetPerType()[int32(taskQueueType)]
+		if ok {
+			// Calculate the routing info for versioned task queue
+			routingInfo.Current, routingInfo.CurrentRevisionNumber, _, routingInfo.Ramping, _, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, _ = worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
+		}
+		// else: routingInfo fields are all zero/nil (unversioned)
+
+		// Store routing info in cache (without workflow ID) - even for unversioned task queues
+		routingInfoCache.Put(namespaceID, taskQueueName, taskQueueType, routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber)
 	}
-	current, ramping := worker_versioning.CalculateTaskQueueVersioningInfo(tqData.GetDeploymentData())
-	return worker_versioning.FindDeploymentVersionForWorkflowID(current, ramping, workflowId), nil
+
+	// Apply workflow-specific routing logic
+	targetDeploymentVersion, targetDeploymentRevisionNumber := worker_versioning.FindTargetDeploymentVersionAndRevisionNumberForWorkflowID(routingInfo.Current, routingInfo.CurrentRevisionNumber, routingInfo.Ramping, routingInfo.RampPercentage, routingInfo.RampingRevisionNumber, workflowId)
+
+	return targetDeploymentVersion, targetDeploymentRevisionNumber, nil
 }
 
 func processActivityWorkflowRules(

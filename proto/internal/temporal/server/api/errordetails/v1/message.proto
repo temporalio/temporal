@@ -39,7 +39,9 @@ message SyncStateFailure {
     string workflow_id = 2;
     string run_id = 3;
     temporal.server.api.persistence.v1.VersionedTransition versioned_transition = 4;
-    temporal.server.api.history.v1.VersionHistories version_histories = 5; 
+    temporal.server.api.history.v1.VersionHistories version_histories = 5;
+    // (-- api-linter: core::0141::forbidden-types=disabled --)
+    uint32 archetype_id = 6; 
 }
 
 message StickyWorkerUnavailableFailure {

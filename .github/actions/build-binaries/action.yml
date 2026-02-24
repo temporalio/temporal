@@ -1,0 +1,57 @@
+name: Build Binaries
+description: Build Temporal binaries using GoReleaser
+
+inputs:
+  snapshot:
+    description: "Use snapshot mode (true) or release mode (false). Only applies to release command (build always uses snapshot)."
+    required: false
+    default: "true"
+  single-arch:
+    description: "Single architecture to build (amd64 or arm64, empty for all). Only used with build command, ignored if release is true."
+    required: false
+    default: ""
+  release:
+    description: "Use release command (true) or build command (false). When true, single-arch is ignored and snapshot is respected."
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Go
+      uses: actions/setup-go@v6
+      with:
+        go-version-file: "go.mod"
+        cache: true
+
+    - name: Run GoReleaser (release)
+      if: inputs.release == 'true'
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: v2.13.1
+        args: release ${{ inputs.snapshot == 'true' && '--snapshot --skip=publish' || '' }} --clean
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - name: Run GoReleaser (build - all architectures)
+      if: inputs.release != 'true' && inputs.single-arch == ''
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: v2.13.1
+        args: build --snapshot
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
+    - name: Run GoReleaser (build - single architecture)
+      if: inputs.release != 'true' && inputs.single-arch != ''
+      uses: goreleaser/goreleaser-action@v6
+      with:
+        distribution: goreleaser
+        version: v2.13.1
+        args: build --snapshot --single-target
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        GOOS: linux
+        GOARCH: ${{ inputs.single-arch }}

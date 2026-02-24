@@ -1,6 +1,8 @@
 package callback
 
 import (
+	"fmt"
+	"net/url"
 	"time"
 
 	failurepb "go.temporal.io/api/failure/v1"
@@ -17,8 +19,12 @@ type EventScheduled struct{}
 var TransitionScheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_STANDBY},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
-	func(ctx chasm.MutableContext, cb *Callback, event EventScheduled) error {
-		ctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
+	func(cb *Callback, ctx chasm.MutableContext, event EventScheduled) error {
+		u, err := url.Parse(cb.Callback.GetNexus().GetUrl())
+		if err != nil {
+			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+		}
+		ctx.AddTask(cb, chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -29,9 +35,17 @@ type EventRescheduled struct{}
 var TransitionRescheduled = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_BACKING_OFF},
 	callbackspb.CALLBACK_STATUS_SCHEDULED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventRescheduled) error {
+	func(cb *Callback, ctx chasm.MutableContext, event EventRescheduled) error {
 		cb.NextAttemptScheduleTime = nil
-		mctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		u, err := url.Parse(cb.Callback.GetNexus().Url)
+		if err != nil {
+			return fmt.Errorf("failed to parse URL: %v: %w", cb.Callback, err)
+		}
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{Destination: u.Scheme + "://" + u.Host},
+			&callbackspb.InvocationTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -46,7 +60,7 @@ type EventAttemptFailed struct {
 var TransitionAttemptFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_BACKING_OFF,
-	func(mctx chasm.MutableContext, cb *Callback, event EventAttemptFailed) error {
+	func(cb *Callback, ctx chasm.MutableContext, event EventAttemptFailed) error {
 		cb.recordAttempt(event.Time)
 		// Use 0 for elapsed time as we don't limit the retry by time (for now).
 		nextDelay := event.RetryPolicy.ComputeNextDelay(0, int(cb.Attempt), event.Err)
@@ -60,7 +74,11 @@ var TransitionAttemptFailed = chasm.NewTransition(
 				},
 			},
 		}
-		mctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
+		ctx.AddTask(
+			cb,
+			chasm.TaskAttributes{ScheduledTime: nextAttemptScheduleTime},
+			&callbackspb.BackoffTask{Attempt: cb.Attempt},
+		)
 		return nil
 	},
 )
@@ -74,7 +92,7 @@ type EventFailed struct {
 var TransitionFailed = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_FAILED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventFailed) error {
+	func(cb *Callback, ctx chasm.MutableContext, event EventFailed) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = &failurepb.Failure{
 			Message: event.Err.Error(),
@@ -84,7 +102,6 @@ var TransitionFailed = chasm.NewTransition(
 				},
 			},
 		}
-		mctx.AddTask(cb, chasm.TaskAttributes{ScheduledTime: time.Time{}}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )
@@ -97,10 +114,9 @@ type EventSucceeded struct {
 var TransitionSucceeded = chasm.NewTransition(
 	[]callbackspb.CallbackStatus{callbackspb.CALLBACK_STATUS_SCHEDULED},
 	callbackspb.CALLBACK_STATUS_SUCCEEDED,
-	func(mctx chasm.MutableContext, cb *Callback, event EventSucceeded) error {
+	func(cb *Callback, ctx chasm.MutableContext, event EventSucceeded) error {
 		cb.recordAttempt(event.Time)
 		cb.LastAttemptFailure = nil
-		mctx.AddTask(cb, chasm.TaskAttributes{}, &callbackspb.InvocationTask{})
 		return nil
 	},
 )

@@ -3,11 +3,11 @@ package migration
 import (
 	"context"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/chasm"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -38,6 +38,7 @@ type (
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
+		ChasmRegistry             *chasm.Registry
 	}
 
 	fxResult struct {
@@ -93,13 +94,13 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 
 func workflowVerifierProvider() WorkflowVerifier {
 	return func(
-		ctx context.Context,
-		request *verifyReplicationTasksRequest,
-		remoteAdminClient adminservice.AdminServiceClient,
-		localAdminClient adminservice.AdminServiceClient,
-		ns *namespace.Namespace,
-		we *commonpb.WorkflowExecution,
-		mu *adminservice.DescribeMutableStateResponse,
+		_ context.Context,
+		_ *verifyReplicationTasksRequest,
+		_ adminservice.AdminServiceClient,
+		_ adminservice.AdminServiceClient,
+		_ *namespace.Namespace,
+		_ *ExecutionInfo,
+		_ *adminservice.DescribeMutableStateResponse,
 	) (verifyResult, error) {
 		return verifyResult{
 			status: verified,
@@ -124,5 +125,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
+		chasmRegistry:                    wc.ChasmRegistry,
 	}
 }

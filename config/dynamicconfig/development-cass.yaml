@@ -37,8 +37,6 @@ system.enableDeploymentVersions:
   - value: true
 frontend.workerVersioningRuleAPIs:
   - value: true
-frontend.enableExecuteMultiOperation:
-  - value: true
 system.enableNexus:
   - value: true
 component.nexusoperations.callback.endpoint.template:
@@ -54,4 +52,8 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
 history.hostLevelCacheMaxSize:
   - value: 8192
 history.enableTransitionHistory:
+  - value: true
+history.enableChasm:
+  - value: true
+activity.enableStandalone:
   - value: true

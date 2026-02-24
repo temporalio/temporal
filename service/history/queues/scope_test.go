@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -41,7 +41,7 @@ func (s *scopeSuite) TearDownSuite() {
 
 func (s *scopeSuite) TestContains() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
@@ -57,7 +57,7 @@ func (s *scopeSuite) TestContains() {
 	}
 
 	mockTask := tasks.NewMockTask(s.controller)
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 	mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).MaxTimes(1)
 	s.False(scope.Contains(mockTask))
 }
@@ -97,11 +97,11 @@ func (s *scopeSuite) TestSplitByRange() {
 
 func (s *scopeSuite) TestSplitByPredicate_SamePredicateType() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
-	splitNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.New(), uuid.New())
+	splitNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.NewString(), uuid.NewString())
 	splitPredicate := tasks.NewNamespacePredicate(splitNamespaceIDs)
 	passScope, failScope := scope.SplitByPredicate(splitPredicate)
 	s.Equal(r, passScope.Range)
@@ -133,7 +133,7 @@ func (s *scopeSuite) TestSplitByPredicate_SamePredicateType() {
 	}
 
 	mockTask := tasks.NewMockTask(s.controller)
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 	mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
 	s.False(passScope.Contains(mockTask))
 	s.False(failScope.Contains(mockTask))
@@ -141,7 +141,7 @@ func (s *scopeSuite) TestSplitByPredicate_SamePredicateType() {
 
 func (s *scopeSuite) TestSplitByPredicate_DifferentPredicateType() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
@@ -174,7 +174,7 @@ func (s *scopeSuite) TestSplitByPredicate_DifferentPredicateType() {
 	}
 
 	mockTask := tasks.NewMockTask(s.controller)
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 	mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
 	for _, typeType := range splitTaskTypes {
 		mockTask.EXPECT().GetType().Return(typeType).MaxTimes(2)
@@ -190,14 +190,14 @@ func (s *scopeSuite) TestSplitByPredicate_DifferentPredicateType() {
 
 func (s *scopeSuite) TestCanMergeByRange() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
 	testPredicates := []tasks.Predicate{
 		predicate,
 		tasks.NewNamespacePredicate(namespaceIDs),
-		tasks.NewNamespacePredicate([]string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}),
+		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}),
 		tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER}),
 	}
 	s.True(predicate.Equals(testPredicates[0]))
@@ -278,7 +278,7 @@ func (s *scopeSuite) TestMergeByRange() {
 
 func (s *scopeSuite) TestCanMergeByPredicate() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
@@ -292,11 +292,11 @@ func (s *scopeSuite) TestCanMergeByPredicate() {
 
 func (s *scopeSuite) TestMergeByPredicate_SamePredicateType() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
-	mergeNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.New(), uuid.New())
+	mergeNamespaceIDs := append(slices.Clone(namespaceIDs[:rand.Intn(len(namespaceIDs))]), uuid.NewString(), uuid.NewString())
 	mergePredicate := tasks.NewNamespacePredicate(mergeNamespaceIDs)
 	mergedScope := scope.MergeByPredicate(NewScope(r, mergePredicate))
 	s.Equal(r, mergedScope.Range)
@@ -318,13 +318,13 @@ func (s *scopeSuite) TestMergeByPredicate_SamePredicateType() {
 
 	mockTask := tasks.NewMockTask(s.controller)
 	mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 	s.False(mergedScope.Contains(mockTask))
 }
 
 func (s *scopeSuite) TestMergeByPredicate_DifferentPredicateType() {
 	r := NewRandomRange()
-	namespaceIDs := []string{uuid.New(), uuid.New(), uuid.New(), uuid.New()}
+	namespaceIDs := []string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}
 	predicate := tasks.NewNamespacePredicate(namespaceIDs)
 	scope := NewScope(r, predicate)
 
@@ -353,7 +353,7 @@ func (s *scopeSuite) TestMergeByPredicate_DifferentPredicateType() {
 	}
 
 	mockTask := tasks.NewMockTask(s.controller)
-	mockTask.EXPECT().GetNamespaceID().Return(uuid.New()).AnyTimes()
+	mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
 	mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(r)).AnyTimes()
 	for _, typeType := range mergeTaskTypes {
 		mockTask.EXPECT().GetType().Return(typeType).MaxTimes(1)

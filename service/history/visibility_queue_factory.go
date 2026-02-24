@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -44,11 +45,22 @@ func NewVisibilityQueueFactory(
 					ActiveNamespaceWeights:         params.Config.VisibilityProcessorSchedulerActiveRoundRobinWeights,
 					StandbyNamespaceWeights:        params.Config.VisibilityProcessorSchedulerStandbyRoundRobinWeights,
 					InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+					ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+						Enabled:          params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+						MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+						QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+						QueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+					},
 				},
 				params.NamespaceRegistry,
 				params.Logger,
+				params.MetricsHandler,
+				params.TimeSource,
 			),
-			HostPriorityAssigner: queues.NewPriorityAssigner(),
+			HostPriorityAssigner: queues.NewPriorityAssigner(
+				params.NamespaceRegistry,
+				params.ClusterMetadata.GetCurrentClusterName(),
+			),
 			HostReaderRateLimiter: queues.NewReaderPriorityRateLimiter(
 				NewHostRateLimiterRateFn(
 					params.Config.VisibilityProcessorMaxPollHostRPS,
@@ -68,22 +80,21 @@ func (f *visibilityQueueFactory) CreateQueue(
 	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
 	metricsHandler := f.MetricsHandler.WithTags(metrics.OperationTag(metrics.OperationVisibilityQueueProcessorScope))
 
-	var shardScheduler = f.HostScheduler
-	if f.Config.TaskSchedulerEnableRateLimiter() {
-		shardScheduler = queues.NewRateLimitedScheduler(
-			f.HostScheduler,
-			queues.RateLimitedSchedulerOptions{
-				EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
-				StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
-			},
-			f.ClusterMetadata.GetCurrentClusterName(),
-			f.NamespaceRegistry,
-			f.SchedulerRateLimiter,
-			f.TimeSource,
-			logger,
-			metricsHandler,
-		)
-	}
+	shardScheduler := queues.NewRateLimitedScheduler(
+		f.HostScheduler,
+		queues.RateLimitedSchedulerOptions{
+			Enabled:          f.Config.TaskSchedulerEnableRateLimiter,
+			EnableShadowMode: f.Config.TaskSchedulerEnableRateLimiterShadowMode,
+			StartupDelay:     f.Config.TaskSchedulerRateLimiterStartupDelay,
+		},
+		f.ClusterMetadata.GetCurrentClusterName(),
+		f.NamespaceRegistry,
+		f.SchedulerRateLimiter,
+		f.TimeSource,
+		f.ChasmRegistry,
+		logger,
+		metricsHandler,
+	)
 
 	rescheduler := queues.NewRescheduler(
 		shardScheduler,
@@ -101,6 +112,7 @@ func (f *visibilityQueueFactory) CreateQueue(
 		f.Config.VisibilityProcessorEnsureCloseBeforeDelete,
 		f.Config.VisibilityProcessorEnableCloseWorkflowCleanup,
 		f.Config.VisibilityProcessorRelocateAttributesMinBlobSize,
+		f.Config.ExternalPayloadsEnabled,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
@@ -114,6 +126,8 @@ func (f *visibilityQueueFactory) CreateQueue(
 		shard.GetTimeSource(),
 		shard.GetNamespaceRegistry(),
 		shard.GetClusterMetadata(),
+		f.ChasmRegistry,
+		queues.GetTaskTypeTagValue,
 		logger,
 		metricsHandler,
 		f.Tracer,
