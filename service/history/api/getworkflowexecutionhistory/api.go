@@ -3,6 +3,7 @@ package getworkflowexecutionhistory
 import (
 	"context"
 	"errors"
+	"math"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -94,6 +95,11 @@ func appendTransientTasks(
 		}
 
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTask); err != nil {
+			shardContext.GetLogger().Warn("Transient workflow task validation failed in appendTransientTasks",
+				tag.WorkflowNamespaceID(namespaceID.String()),
+				tag.WorkflowID(execution.GetWorkflowId()),
+				tag.WorkflowRunID(execution.GetRunId()),
+				tag.Error(err))
 			return
 		}
 	}
@@ -420,6 +426,43 @@ func Invoke(
 
 			// Query and append transient/speculative tasks if on last page
 			if len(continuationToken.PersistenceToken) == 0 {
+				// Re-query mutable state to detect events committed to DB during pagination (race condition fix).
+				// When a speculative/transient WFT times out or fails between the first and last DB page fetches,
+				// those events are committed to DB with IDs < continuationToken.NextEventId but were excluded
+				// because the DB fetch was capped at the original boundary. Fetch the gap now, then update
+				// the nextEventID boundary so appendTransientTasks validates against the correct ID.
+				_, _, _, freshNextEventID, freshIsRunning, freshVersionHistoryItem, freshVersionedTransition, freshTransientTasks, freshErr :=
+					queryMutableState(namespaceID, execution, common.EmptyEventID,
+						continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+				if freshErr == nil && freshNextEventID > continuationToken.NextEventId {
+					// Events were committed to DB during pagination — fetch the gap.
+					if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
+						var gapBlob []*commonpb.DataBlob
+						gapBlob, _, freshErr = api.GetRawHistory(ctx, shardContext, namespaceName, namespaceID, execution,
+							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil, continuationToken.BranchToken)
+						if freshErr == nil {
+							historyBlob = append(historyBlob, gapBlob...)
+						}
+					} else {
+						var gapHistory *historypb.History
+						gapHistory, _, freshErr = api.GetHistory(ctx, shardContext, namespaceName, namespaceID, execution,
+							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil,
+							continuationToken.BranchToken, persistenceVisibilityMgr)
+						if freshErr == nil && gapHistory != nil {
+							history.Events = append(history.Events, gapHistory.Events...)
+						}
+					}
+					if freshErr == nil {
+						// Update the event boundary so appendTransientTasks validates against the correct nextEventID.
+						continuationToken.NextEventId = freshNextEventID
+						continuationToken.IsWorkflowRunning = freshIsRunning
+						continuationToken.VersionHistoryItem = freshVersionHistoryItem
+						continuationToken.VersionedTransition = freshVersionedTransition
+						// Provide fresh transient tasks to appendTransientTasks to avoid a redundant re-query.
+						cachedTransientTasks = freshTransientTasks
+					}
+				}
+
 				appendTransientTasks(
 					ctx,
 					shardContext,
