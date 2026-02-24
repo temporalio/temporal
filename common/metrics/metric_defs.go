@@ -1340,6 +1340,10 @@ var (
 		"schedule_migration_completed",
 		WithDescription("The number of times a V1 schedule successfully completes migration to CHASM"),
 	)
+	ScheduleMigrationFailed = NewCounterDef(
+		"schedule_migration_failed",
+		WithDescription("The number of times a V1 schedule fails migration to CHASM"),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")

@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/util"
@@ -381,20 +380,9 @@ func (a *activities) MigrateSchedule(ctx context.Context, req *schedulerpb.Migra
 		// Treat "already exists" as success (idempotency)
 		var alreadyExists *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &alreadyExists) {
-			a.Logger.Warn("MigrateSchedule: CHASM schedule already exists, treating as success",
-				tag.WorkflowNamespace(req.GetState().GetSchedulerState().GetNamespace()),
-				tag.ScheduleID(req.GetState().GetSchedulerState().GetScheduleId()),
-			)
-			a.MetricsHandler.Counter(metrics.ScheduleMigrationCompleted.Name()).Record(1)
 			return nil
 		}
 		return translateError(err, "MigrateSchedule")
 	}
-
-	a.Logger.Info("MigrateSchedule: successfully created CHASM schedule",
-		tag.WorkflowNamespace(req.GetState().GetSchedulerState().GetNamespace()),
-		tag.ScheduleID(req.GetState().GetSchedulerState().GetScheduleId()),
-	)
-	a.MetricsHandler.Counter(metrics.ScheduleMigrationCompleted.Name()).Record(1)
 	return nil
 }

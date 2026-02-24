@@ -324,10 +324,11 @@ func (s *scheduler) run() error {
 
 			err := s.executeMigration()
 			if err == nil {
-				s.logger.Info("Migration to CHASM succeeded, terminating V1 workflow",
+				s.logger.Info("Migration to CHASM succeeded, closing V1 workflow",
 					"namespace", s.State.Namespace,
 					"schedule-id", s.State.ScheduleId,
 				)
+				s.metrics.Counter(metrics.ScheduleMigrationCompleted.Name()).Inc(1)
 				return nil
 			}
 			s.logger.Error("Migration to CHASM failed, continuing V1 workflow",
@@ -335,6 +336,7 @@ func (s *scheduler) run() error {
 				"schedule-id", s.State.ScheduleId,
 				"error", err,
 			)
+			s.metrics.Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
 			// Restore the original pause state on failure.
 			s.Schedule.State.Paused = wasPaused
 			s.Schedule.State.Notes = previousNotes
