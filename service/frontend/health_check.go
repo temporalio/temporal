@@ -87,12 +87,8 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 	receiveCh := make(chan hostResult, len(hosts))
 	for _, host := range hosts {
 		go func(hostAddress string) {
-			resp, err := h.healthCheckFn(ctx, hostAddress)
+			resp, err := h.checkHost(ctx, hostAddress)
 			if err != nil {
-				h.logger.Warn("failed to ping deep health check", tag.Error(err), tag.ServerName(string(h.serviceName)))
-				// Synthetic check: the host health check RPC failed, so we create a
-				// HealthCheck entry to propagate the error message upstream. The State
-				// here mirrors DeepHealthCheckResponse.State since there's only one check.
 				resp = &historyservice.DeepHealthCheckResponse{
 					State: enumsspb.HEALTH_STATE_NOT_SERVING,
 					Checks: []*healthspb.HealthCheck{
@@ -100,18 +96,6 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 							CheckType: health.CheckTypeHostAvailability,
 							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 							Message:   fmt.Sprintf("failed to reach host for health check: %v", err),
-						},
-					},
-				}
-			} else if resp == nil {
-				// Synthetic check: the host returned a nil response without error.
-				resp = &historyservice.DeepHealthCheckResponse{
-					State: enumsspb.HEALTH_STATE_NOT_SERVING,
-					Checks: []*healthspb.HealthCheck{
-						{
-							CheckType: health.CheckTypeHostAvailability,
-							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
-							Message:   "no response received from health check",
 						},
 					},
 				}
@@ -172,6 +156,29 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 			Hosts:   hostDetails,
 		},
 	}, nil
+}
+
+func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (resp *historyservice.DeepHealthCheckResponse, retErr error) {
+	defer log.CapturePanic(h.logger, &retErr)
+
+	resp, err := h.healthCheckFn(ctx, hostAddress)
+	if err != nil {
+		h.logger.Warn("failed to ping deep health check", tag.Error(err), tag.ServerName(string(h.serviceName)))
+		return nil, err
+	}
+	if resp == nil {
+		resp = &historyservice.DeepHealthCheckResponse{
+			State: enumsspb.HEALTH_STATE_NOT_SERVING,
+			Checks: []*healthspb.HealthCheck{
+				{
+					CheckType: health.CheckTypeHostAvailability,
+					State:     enumsspb.HEALTH_STATE_NOT_SERVING,
+					Message:   "no response received from health check",
+				},
+			},
+		}
+	}
+	return resp, nil
 }
 
 func ensureMinimumProportionOfHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
