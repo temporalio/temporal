@@ -229,43 +229,25 @@ func CreateSchedulerFromMigration(
 	req *schedulerpb.MigrateScheduleRequest,
 ) (*Scheduler, error) {
 	state := req.GetState()
-	if state == nil {
-		state = &schedulerpb.SchedulerMigrationState{}
-	}
-
-	schedulerState := state.GetSchedulerState()
-	if schedulerState == nil {
-		schedulerState = &schedulerpb.SchedulerState{}
-	}
 
 	sched := &Scheduler{
-		SchedulerState:       schedulerState,
-		cacheConflictToken:   schedulerState.ConflictToken,
+		SchedulerState:       state.GetSchedulerState(),
+		cacheConflictToken:   state.GetSchedulerState().GetConflictToken(),
 		Backfillers:          make(chasm.Map[string, *Backfiller]),
 		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
 	}
 	sched.setNullableFields()
 
-	invokerState := state.GetInvokerState()
-	if invokerState == nil {
-		invokerState = &schedulerpb.InvokerState{
-			BufferedStarts: []*schedulespb.BufferedStart{},
-		}
-	}
 	invoker := &Invoker{
-		InvokerState: invokerState,
+		InvokerState: state.GetInvokerState(),
 	}
 	sched.Invoker = chasm.NewComponentField(ctx, invoker)
 	if len(invoker.BufferedStarts) > 0 {
 		invoker.addTasks(ctx)
 	}
 
-	generatorState := state.GetGeneratorState()
-	if generatorState == nil {
-		generatorState = &schedulerpb.GeneratorState{}
-	}
 	generator := &Generator{
-		GeneratorState: generatorState,
+		GeneratorState: state.GetGeneratorState(),
 	}
 	sched.Generator = chasm.NewComponentField(ctx, generator)
 	generator.Generate(ctx)

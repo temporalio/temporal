@@ -127,7 +127,7 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	lastResult := sched.LastCompletionResult.Get(ctx)
 	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
 
-	node.SetRootComponent(sched)
+	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction()
 	require.NoError(t, err)
 }
@@ -161,7 +161,7 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	invoker := sched.Invoker.Get(ctx)
 	require.Empty(t, invoker.BufferedStarts)
 
-	node.SetRootComponent(sched)
+	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction()
 	require.NoError(t, err)
 }

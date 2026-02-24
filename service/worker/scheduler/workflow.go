@@ -1021,12 +1021,10 @@ func (s *scheduler) executeMigration() error {
 		s.now(),
 	)
 	migrateOptions := workflow.LocalActivityOptions{
-		ScheduleToCloseTimeout: 1 * time.Hour,
+		ScheduleToCloseTimeout: 5 * time.Second,
 		StartToCloseTimeout:    5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-			MaximumInterval: 60 * time.Second,
-			MaximumAttempts: 10,
+			MaximumAttempts: 1,
 		},
 	}
 	return workflow.ExecuteLocalActivity(

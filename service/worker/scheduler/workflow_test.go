@@ -2313,6 +2313,8 @@ func (s *workflowSuite) TestMigrateFailure() {
 		s.env.SignalWorkflow(SignalNameMigrate, nil)
 	}, 1*time.Second)
 
+	// After migration failure, the workflow should keep running (not return nil).
+	// CAN after 3 iterations proves the workflow continued past the failure.
 	s.run(&schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
 			Interval: []*schedulepb.IntervalSpec{{
@@ -2321,49 +2323,36 @@ func (s *workflowSuite) TestMigrateFailure() {
 		},
 	}, 3)
 
-	// Verify the workflow continued running after the migration failure
-	// rather than terminating (returning nil) like it does on success.
-	// The test harness forces CAN after 3 iterations, so a CAN error
-	// here proves the workflow kept going.
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
 func (s *workflowSuite) TestMigrateFailureThenSignal() {
-	// Mock MigrateSchedule activity to always fail (activity retries up to 10 times).
+	// Mock MigrateSchedule activity to always fail (no retries, single attempt).
 	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).
 		Return(errors.New("migration failed"))
 
-	// Send migrate signal. The activity will retry with exponential backoff
-	// (1s initial, 60s max, 10 attempts) taking ~244s of simulated time.
+	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNameMigrate, nil)
 	}, 1*time.Second)
-	// Verify the schedule is paused during migration retries.
-	s.env.RegisterDelayedCallback(func() {
-		desc := s.describe()
-		s.True(desc.Schedule.State.Paused)
-		s.Equal("paused for migration to CHASM", desc.Schedule.State.Notes)
-	}, 3*time.Second)
-	// After retries exhaust (~244s), original pause state (unpaused) should be restored.
+	// After migration fails (immediately, no retries), original pause state should be restored.
+	// Send a pause patch and verify it's processed, proving the workflow kept running.
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.False(desc.Schedule.State.Paused, "schedule should be unpaused after migration failure")
 		s.Empty(desc.Schedule.State.Notes)
-	}, 250*time.Second)
-	// Send a pause patch and verify it's processed.
-	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNamePatch, &schedulepb.SchedulePatch{
 			Pause: "paused after failed migration",
 		})
-	}, 251*time.Second)
+	}, 5*time.Second)
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.True(desc.Schedule.State.Paused)
 		s.Equal("paused after failed migration", desc.Schedule.State.Notes)
 		// Send force-CAN to unblock the workflow (paused with no timer).
 		s.env.SignalWorkflow(SignalNameForceCAN, nil)
-	}, 260*time.Second)
+	}, 10*time.Second)
 
 	s.run(&schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
