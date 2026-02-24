@@ -80,6 +80,6 @@ func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(empty_namespace)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
 	assert.False(t, errorMask.shouldMaskErrors(req))
 
-	var ei interface{}
+	var ei any
 	assert.False(t, errorMask.shouldMaskErrors(ei))
 }

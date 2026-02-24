@@ -709,7 +709,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	for i := 1; i < wfPartitions; i++ {
 		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	}
-	for i := 0; i < actPartitions; i++ {
+	for i := range actPartitions {
 		go check(i, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	}
 

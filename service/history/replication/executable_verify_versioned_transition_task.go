@@ -71,7 +71,7 @@ func NewExecutableVerifyVersionedTransitionTask(
 	}
 }
 
-func (e *ExecutableVerifyVersionedTransitionTask) QueueID() interface{} {
+func (e *ExecutableVerifyVersionedTransitionTask) QueueID() any {
 	return e.WorkflowKey
 }
 

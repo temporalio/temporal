@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -2835,42 +2836,136 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 		return nil, errRequestNotSet
 	}
 
-	namespaceId, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	// route heartbeat to the matching service
-	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
-		heartbeats := []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat}
-		_, err = wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
-			NamespaceId: namespaceId.String(),
-			HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
-				Namespace:       request.Namespace,
-				Identity:        request.Identity,
-				WorkerHeartbeat: heartbeats,
-			},
+	// Run all shutdown operations concurrently to minimize latency.
+	var waitGroup sync.WaitGroup
+
+	// Cancel outstanding polls (best-effort)
+	if wh.config.EnableCancelWorkerPollsOnShutdown(request.GetNamespace()) {
+		waitGroup.Go(func() {
+			wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
 		})
-		if err != nil {
-			wh.logger.Error("Failed to record worker heartbeat during shutdown.",
-				tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
-				tag.Error(err))
-		}
 	}
 
+	// Record final heartbeat (best-effort)
+	if request.WorkerHeartbeat != nil && wh.config.WorkerHeartbeatsEnabled(request.GetNamespace()) {
+		waitGroup.Go(func() {
+			_, err := wh.matchingClient.RecordWorkerHeartbeat(ctx, &matchingservice.RecordWorkerHeartbeatRequest{
+				NamespaceId: namespaceID.String(),
+				HeartbeartRequest: &workflowservice.RecordWorkerHeartbeatRequest{
+					Namespace:       request.Namespace,
+					Identity:        request.Identity,
+					WorkerHeartbeat: []*workerpb.WorkerHeartbeat{request.WorkerHeartbeat},
+				},
+			})
+			if err != nil {
+				wh.logger.Error("Failed to record worker heartbeat during shutdown.",
+					tag.WorkflowTaskQueueName(request.WorkerHeartbeat.GetTaskQueue()),
+					tag.Error(err))
+			}
+		})
+	}
+
+	// Unload sticky task queue (required - error fails shutdown)
 	// TODO: update poller info to indicate poller was shut down (pass identity/reason along)
-	_, err = wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
-		NamespaceId: namespaceId.String(),
+	_, unloadError := wh.matchingClient.ForceUnloadTaskQueuePartition(ctx, &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: namespaceID.String(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     request.GetStickyTaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW, // sticky task queues are always workflow queues
 		},
 	})
-	if err != nil {
-		return nil, err
+
+	waitGroup.Wait()
+
+	if unloadError != nil {
+		return nil, unloadError
 	}
 
 	return &workflowservice.ShutdownWorkerResponse{}, nil
+}
+
+// cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
+// This is a best-effort operation - errors are logged but don't fail the shutdown.
+func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.ShutdownWorkerRequest,
+) {
+	workerInstanceKey := request.GetWorkerInstanceKey()
+	taskQueueName := request.GetTaskQueue()
+	if workerInstanceKey == "" || taskQueueName == "" {
+		return
+	}
+
+	namespaceName := request.GetNamespace()
+
+	// Use task queue types from request, or default to both workflow and activity
+	taskTypes := request.GetTaskQueueTypes()
+	if len(taskTypes) == 0 {
+		taskTypes = []enumspb.TaskQueueType{
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		}
+	}
+
+	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
+	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	if err != nil {
+		wh.logger.Warn("Invalid task queue name for poll cancellation.",
+			tag.WorkflowTaskQueueName(taskQueueName),
+			tag.Error(err))
+		return
+	}
+
+	var waitGroup sync.WaitGroup
+	var totalCancelled atomic.Int32
+	var failedPartitions atomic.Int32
+
+	for _, taskType := range taskTypes {
+		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
+		if numPartitions < 1 {
+			numPartitions = 1
+		}
+
+		tq := tqFamily.TaskQueue(taskType)
+		for partitionID := range numPartitions {
+			partition := tq.NormalPartition(partitionID)
+			waitGroup.Go(func() {
+				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
+					NamespaceId: namespaceID,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: partition.RpcName(),
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType:     taskType,
+					WorkerInstanceKey: workerInstanceKey,
+					WorkerIdentity:    request.GetIdentity(),
+				})
+				if err != nil {
+					failedPartitions.Add(1)
+					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.String("worker-instance-key", workerInstanceKey),
+						tag.Error(err))
+				} else {
+					totalCancelled.Add(resp.CancelledCount)
+				}
+			})
+		}
+	}
+	waitGroup.Wait()
+
+	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
+		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
+			tag.String("worker-instance-key", workerInstanceKey),
+			tag.NewInt32("cancelled-count", totalCancelled.Load()),
+			tag.NewInt32("failed-partitions", failedPartitions.Load()))
+	}
 }
 
 // QueryWorkflow returns query result for a specified workflow execution
@@ -3376,6 +3471,17 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 		wh.config.EnableCHASMSchedulerCreation(namespaceName)
 }
 
+// isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
+// indicates that the request should be routed to the legacy (V1) scheduler stack.
+// This accounts for two situations:
+//   - NotFound: the CHASM stack doesn't have a schedule for that ID
+//   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
+//     for the V1 stack)
+func isSchedulerErrorLegacyRoutable(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	return errors.As(err, &notFoundErr)
+}
+
 // Validates inner start workflow request. Note that this can mutate search attributes if present.
 func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 	namespaceName namespace.Name,
@@ -3825,8 +3931,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		if err == nil {
 			return resp, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4072,8 +4177,7 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4231,8 +4335,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4307,8 +4410,7 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 		if err == nil {
 			return resp, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -4399,8 +4501,7 @@ func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflow
 		if err == nil {
 			return res, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if !errors.As(err, &notFoundErr) {
+		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
 	}
@@ -5582,8 +5683,11 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
-	if details := request.GetResponse().GetStartOperation().GetOperationError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	// nolint:staticcheck // checking deprecated field for backwards compatibility
+	if opErr := request.GetResponse().GetStartOperation().GetOperationError(); opErr != nil {
+		if details := opErr.GetFailure().GetDetails(); details != nil && !json.Valid(details) {
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
 	}
 
 	matchingRequest := &matchingservice.RespondNexusTaskCompletedRequest{
@@ -5623,8 +5727,16 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
 
-	if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) {
-		return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
+	}
+	if request.GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) { // nolint:staticcheck // checking deprecated field for backwards compatibility
+			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
+		}
+	}
+	if request.GetFailure() != nil && request.GetFailure().GetNexusHandlerFailureInfo() == nil {
+		return nil, serviceerror.NewInvalidArgument("request Failure must contain error or failure with NexusHandlerFailureInfo")
 	}
 
 	// NOTE: Not checking blob size limit here as we already enforce the 4 MB gRPC request limit and since this

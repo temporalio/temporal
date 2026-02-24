@@ -10,7 +10,7 @@ import (
 func Test_Encode_Success(t *testing.T) {
 	r := require.New(t)
 
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -47,7 +47,7 @@ func Test_Encode_Success(t *testing.T) {
 func Test_Encode_NilMap(t *testing.T) {
 	r := require.New(t)
 
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -71,7 +71,7 @@ func Test_Encode_NilMap(t *testing.T) {
 
 func Test_Encode_Error(t *testing.T) {
 	r := require.New(t)
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -102,7 +102,7 @@ func Test_Decode_Success(t *testing.T) {
 		"key5": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key6": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}}
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -150,7 +150,7 @@ func Test_Decode_NilMap(t *testing.T) {
 		"key5": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 		"key6": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}}
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,
@@ -179,7 +179,7 @@ func Test_Decode_Error(t *testing.T) {
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}}
-	sa, err := Encode(map[string]interface{}{
+	sa, err := Encode(map[string]any{
 		"key1": "val1",
 		"key2": 2,
 		"key3": true,

@@ -431,7 +431,7 @@ func createExecutions(
 ) []*ExecutionInfo {
 	var executions []*ExecutionInfo
 
-	for i := 0; i < len(states); i++ {
+	for range states {
 		executions = append(executions, execution1)
 	}
 

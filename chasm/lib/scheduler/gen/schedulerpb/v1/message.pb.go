@@ -42,7 +42,10 @@ type SchedulerState struct {
 	ConflictToken int64 `protobuf:"varint,8,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	// The closed flag is set true after a schedule completes, and the idle timer
 	// expires.
-	Closed        bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
+	Closed bool `protobuf:"varint,9,opt,name=closed,proto3" json:"closed,omitempty"`
+	// When true, this scheduler is a sentinel that exists only to reserve the
+	// schedule ID. All API operations return NotFound.
+	Sentinel      bool `protobuf:"varint,10,opt,name=sentinel,proto3" json:"sentinel,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -122,6 +125,13 @@ func (x *SchedulerState) GetConflictToken() int64 {
 func (x *SchedulerState) GetClosed() bool {
 	if x != nil {
 		return x.Closed
+	}
+	return false
+}
+
+func (x *SchedulerState) GetSentinel() bool {
+	if x != nil {
+		return x.Sentinel
 	}
 	return false
 }
@@ -525,7 +535,7 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_message_proto protoreflect
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xad\x02\n" +
+	":temporal/server/chasm/lib/scheduler/proto/v1/message.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a&temporal/api/schedule/v1/message.proto\x1a-temporal/server/api/schedule/v1/message.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc9\x02\n" +
 	"\x0eSchedulerState\x12>\n" +
 	"\bschedule\x18\x02 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
 	"\x04info\x18\x03 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12\x1c\n" +
@@ -534,7 +544,9 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\vschedule_id\x18\a \x01(\tR\n" +
 	"scheduleId\x12%\n" +
 	"\x0econflict_token\x18\b \x01(\x03R\rconflictToken\x12\x16\n" +
-	"\x06closed\x18\t \x01(\bR\x06closed\"\xa8\x01\n" +
+	"\x06closed\x18\t \x01(\bR\x06closed\x12\x1a\n" +
+	"\bsentinel\x18\n" +
+	" \x01(\bR\bsentinel\"\xa8\x01\n" +
 	"\x0eGeneratorState\x12J\n" +
 	"\x13last_processed_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x11lastProcessedTime\x12J\n" +
 	"\x13future_action_times\x18\x04 \x03(\v2\x1a.google.protobuf.TimestampR\x11futureActionTimes\"\xeb\x02\n" +

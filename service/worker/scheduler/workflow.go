@@ -477,7 +477,7 @@ func (s *scheduler) getNextTimeV1(after time.Time) GetNextTimeResult {
 	s.nextTimeCacheV1 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		results := make(map[time.Time]GetNextTimeResult)
 		for t := after; !t.IsZero() && len(results) < nextTimeCacheV1Size; {
 			next := s.cspec.GetNextTime(s.jitterSeed(), t)
@@ -549,7 +549,7 @@ func (s *scheduler) fillNextTimeCacheV2(start time.Time) {
 	s.nextTimeCacheV2 = nil
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
-	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	val := workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		cache := &schedulespb.NextTimeCache{
 			Version:      int64(s.tweakables.Version),
 			StartTime:    timestamppb.New(start),
@@ -607,7 +607,7 @@ func (s *scheduler) getNextTime(after time.Time) GetNextTimeResult {
 	// Run this logic in a SideEffect so that we can fix bugs there without breaking
 	// existing schedule workflows.
 	var next GetNextTimeResult
-	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+	panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 		return s.cspec.GetNextTime(s.jitterSeed(), after)
 	}).Get(&next))
 	return next
@@ -1043,7 +1043,7 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(req.StartTime)
-	for i := 0; i < maxListMatchingTimesCount; i++ {
+	for range maxListMatchingTimesCount {
 		// don't need to call GetNextTime in SideEffect because this is just a query
 		t1 = s.cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(req.EndTime)) {
@@ -1149,7 +1149,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 		// marshal manually to get proto encoding (default dataconverter will use json)
 		newInfoBytes, err := newInfo.Marshal()
 		if err == nil {
-			err = workflow.UpsertMemo(s.ctx, map[string]interface{}{
+			err = workflow.UpsertMemo(s.ctx, map[string]any{
 				MemoFieldInfo: newInfoBytes,
 			})
 		}
@@ -1164,7 +1164,7 @@ func (s *scheduler) updateMemoAndSearchAttributes() {
 	if currentPausedPayload == nil ||
 		payload.Decode(currentPausedPayload, &currentPaused) != nil ||
 		currentPaused != s.Schedule.State.Paused {
-		err := workflow.UpsertSearchAttributes(s.ctx, map[string]interface{}{
+		err := workflow.UpsertSearchAttributes(s.ctx, map[string]any{ //nolint:staticcheck // SA1019: untyped search attributes required here
 			sadefs.TemporalSchedulePaused: s.Schedule.State.Paused,
 		})
 		if err != nil {
@@ -1182,8 +1182,8 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	get := func(ctx workflow.Context) interface{} { return CurrentTweakablePolicies }
-	eq := func(a, b interface{}) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
+	get := func(ctx workflow.Context) any { return CurrentTweakablePolicies }
+	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
 	if err := workflow.MutableSideEffect(s.ctx, "tweakables", get, eq).Get(&s.tweakables); err != nil {
 		panic("can't decode TweakablePolicies:" + err.Error())
 	}
@@ -1558,7 +1558,7 @@ func (s *scheduler) getLastEvent() time.Time {
 
 func (s *scheduler) newUUIDString() string {
 	if len(s.uuidBatch) == 0 {
-		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) interface{} {
+		panicIfErr(workflow.SideEffect(s.ctx, func(ctx workflow.Context) any {
 			out := make([]string, 10)
 			for i := range out {
 				out[i] = uuid.NewString()

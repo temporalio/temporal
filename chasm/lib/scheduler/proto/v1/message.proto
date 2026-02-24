@@ -29,6 +29,10 @@ message SchedulerState {
     // The closed flag is set true after a schedule completes, and the idle timer
     // expires.
     bool closed = 9;
+
+    // When true, this scheduler is a sentinel that exists only to reserve the
+    // schedule ID. All API operations return NotFound.
+    bool sentinel = 10;
 }
 
 // CHASM scheduler's Generator internal state.

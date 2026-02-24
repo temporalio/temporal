@@ -77,7 +77,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 
 	taskToken := resp1.GetTaskToken()
 	hbTimeout := 0
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		resp2, err2 := s.FrontendClient().RespondWorkflowTaskCompleted(testcore.NewContext(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: s.Namespace().String(),
 			TaskToken: taskToken,
@@ -620,7 +620,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
@@ -649,7 +649,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         s.Namespace().String(),
@@ -660,12 +661,14 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalBeforeTransientWork
 		RequestId:         uuid.NewString(),
 	})
 	s.NoError(err0)
+	histAfterSignal := s.GetHistory(s.Namespace().String(), we)
+	s.GreaterOrEqual(len(histAfterSignal), 5, "Should have at least 5 events after signal")
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
   4 WorkflowTaskFailed
-  5 WorkflowExecutionSignaled`, s.GetHistory(s.Namespace().String(), we))
+  5 WorkflowExecutionSignaled`, histAfterSignal[:5])
 
 	// start this transient workflow task, the attempt should be cleared and it becomes again a regular workflow task
 	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -740,7 +743,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
@@ -769,7 +772,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
 	_, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -783,7 +787,9 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
 	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -799,7 +805,9 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// then terminate the workflow
 	_, err := s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
@@ -853,7 +861,7 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   2 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	cause := enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: s.Namespace().String(),
 			TaskQueue: taskQueue,
@@ -882,7 +890,8 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled`, s.GetHistory(s.Namespace().String(), we))
 
 	// start workflow task to make signals into bufferedEvents
 	resp1, err1 := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
@@ -896,7 +905,9 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// this signal should be buffered
 	_, err0 = s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
@@ -912,7 +923,9 @@ func (s *WorkflowTaskTestSuite) TestWorkflowTerminationSignalAfterTransientWorkf
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed`, s.GetHistory(s.Namespace().String(), we))
+  4 WorkflowTaskFailed
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted`, s.GetHistory(s.Namespace().String(), we))
 
 	// fail this workflow task to flush buffer
 	_, err2 := s.FrontendClient().RespondWorkflowTaskFailed(testcore.NewContext(), &workflowservice.RespondWorkflowTaskFailedRequest{

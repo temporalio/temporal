@@ -27,10 +27,10 @@ func NewCallerInfoInterceptor(
 
 func (i *CallerInfoInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	ctx = PopulateCallerInfo(
 		ctx,
 		func() string { return string(MustGetNamespaceName(i.namespaceRegistry, req)) },

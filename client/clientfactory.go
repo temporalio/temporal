@@ -129,7 +129,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (interface{}, error) {
+	clientProvider := func(clientKey string) (any, error) {
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}

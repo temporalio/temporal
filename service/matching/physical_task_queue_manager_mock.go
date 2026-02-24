@@ -282,6 +282,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
+// RemovePoller mocks base method.
+func (m *MockphysicalTaskQueueManager) RemovePoller(arg0 pollerIdentity) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RemovePoller", arg0)
+}
+
+// RemovePoller indicates an expected call of RemovePoller.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RemovePoller(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePoller", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RemovePoller), arg0)
+}
+
 // ReprocessRedirectedTasksAfterStop mocks base method.
 func (m *MockphysicalTaskQueueManager) ReprocessRedirectedTasksAfterStop() {
 	m.ctrl.T.Helper()

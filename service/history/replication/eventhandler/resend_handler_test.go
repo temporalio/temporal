@@ -126,7 +126,7 @@ type historyEventMatrixMatcher struct {
 	expected [][]*historypb.HistoryEvent
 }
 
-func (m *historyEventMatrixMatcher) Matches(x interface{}) bool {
+func (m *historyEventMatrixMatcher) Matches(x any) bool {
 	actual, ok := x.([][]*historypb.HistoryEvent)
 	if !ok {
 		return false
