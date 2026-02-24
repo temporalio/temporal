@@ -119,9 +119,6 @@ func (r *WorkflowImpl) Revive(ctx context.Context, taskRefresher workflow.TaskRe
 	state, _ := r.mutableState.GetWorkflowStateStatus()
 	if state != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil
-	} else if state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// workflow already finished
-		return nil
 	}
 
 	// mutable state is in zombie state, need to set the state correctly accordingly
