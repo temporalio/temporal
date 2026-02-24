@@ -75,10 +75,10 @@ const (
 	// id, used for validation in the frontend.
 	AppendedTimestampForValidation = "-2009-11-10T23:00:00Z"
 
-	SignalNameUpdate   = "update"
-	SignalNamePatch    = "patch"
-	SignalNameRefresh  = "refresh"
-	SignalNameForceCAN = "force-continue-as-new"
+	SignalNameUpdate         = "update"
+	SignalNamePatch          = "patch"
+	SignalNameRefresh        = "refresh"
+	SignalNameForceCAN       = "force-continue-as-new"
 	SignalNameMigrateToChasm = "migrate-to-chasm"
 
 	QueryNameDescribe          = "describe"
@@ -125,9 +125,9 @@ type (
 		watchingFuture     workflow.Future
 
 		// Signal requests
-		pendingPatch     *schedulepb.SchedulePatch
-		pendingUpdate    *schedulespb.FullUpdateRequest
-		forceCAN bool
+		pendingPatch  *schedulepb.SchedulePatch
+		pendingUpdate *schedulespb.FullUpdateRequest
+		forceCAN      bool
 
 		uuidBatch []string
 
