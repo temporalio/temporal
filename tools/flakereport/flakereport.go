@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/urfave/cli/v2"
@@ -18,6 +19,7 @@ const (
 	defaultRepository   = "temporalio/temporal"
 	defaultBranch       = "main"
 	defaultConcurrency  = 20
+	slackMaxListItems   = 10
 )
 
 // NewCliApp instantiates a new instance of the CLI application
@@ -66,10 +68,6 @@ func NewCliApp() *cli.App {
 					Name:  "output-dir",
 					Value: "out",
 					Usage: "Output directory for report files",
-				},
-				&cli.BoolFlag{
-					Name:  "github-summary",
-					Usage: "Generate GitHub Actions step summary",
 				},
 				&cli.StringFlag{
 					Name:    "slack-webhook",
@@ -147,13 +145,14 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, t
 		for _, artifact := range artifacts {
 			totalArtifacts++
 			jobs = append(jobs, ArtifactJob{
-				Repo:        repo,
-				RunID:       run.ID,
-				Artifact:    artifact,
-				TempDir:     tempDir,
-				RunNumber:   i + 1,
-				TotalRuns:   len(runs),
-				ArtifactNum: totalArtifacts,
+				Repo:         repo,
+				RunID:        run.ID,
+				RunCreatedAt: run.CreatedAt,
+				Artifact:     artifact,
+				TempDir:      tempDir,
+				RunNumber:    i + 1,
+				TotalRuns:    len(runs),
+				ArtifactNum:  totalArtifacts,
 			})
 		}
 	}
@@ -164,6 +163,7 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, t
 
 // buildReportSummary builds the complete report summary from processed data
 func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
+	suiteReports []SuiteReport,
 	allFailures []TestFailure, allTestRuns []TestRun, runs []WorkflowRun, successfulRuns int) *ReportSummary {
 
 	// Calculate overall failure rate
@@ -179,6 +179,7 @@ func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerRep
 		Timeouts:           timeoutReports,
 		Crashes:            crashReports,
 		CIBreakers:         ciBreakerReports,
+		Suites:             suiteReports,
 		TotalFailures:      len(allFailures),
 		TotalTestRuns:      totalTestRuns,
 		OverallFailureRate: overallFailureRate,
@@ -197,7 +198,6 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	maxLinks := c.Int("max-links")
 	concurrency := c.Int("concurrency")
 	outputDir := c.String("output-dir")
-	enableGitHubSummary := c.Bool("github-summary")
 	slackWebhook := c.String("slack-webhook")
 	runID := c.String("run-id")
 	refName := c.String("ref-name")
@@ -265,7 +265,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Classify failures
 	flakyMap, timeoutMap, crashMap := classifyFailures(grouped)
-	fmt.Printf("Flaky tests (>%d failures): %d\n", minFlakyFailures, len(flakyMap))
+	fmt.Printf("Flaky tests: %d\n", len(flakyMap))
 	fmt.Printf("Timeout tests: %d\n", len(timeoutMap))
 	fmt.Printf("Crash tests: %d\n", len(crashMap))
 
@@ -279,35 +279,45 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	crashReports := convertToReports(crashMap, testRunCounts, repo, maxLinks)
 	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, repo, maxLinks)
 
+	// Compute suite-level breakdown
+	suiteReports := generateSuiteReports(allFailures, allTestRuns)
+	fmt.Printf("Suites: %d\n", len(suiteReports))
+
 	// Build summary
 	summary := buildReportSummary(
 		flakyReports, timeoutReports, crashReports, ciBreakerReports,
+		suiteReports,
 		allFailures, allTestRuns, runs, successfulRuns,
 	)
 
-	// Write output files
 	fmt.Println("\n=== Writing report files ===")
-	if err = writeReportFiles(outputDir, summary, maxLinks); err != nil {
-		return fmt.Errorf("failed to write report files: %w", err)
+	if err = os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
-	// Write GitHub Actions summary
-	if enableGitHubSummary {
-		fmt.Println("\n=== Writing GitHub Actions summary ===")
-		summaryContent := generateGitHubSummary(summary, runID, maxLinks)
-		if err := writeGitHubSummary(summaryContent); err != nil {
-			fmt.Printf("Warning: Failed to write GitHub summary: %v\n", err)
-		}
+	// Write failure JSON data
+	if err = writeFailuresJSON(outputDir, allFailures, repo); err != nil {
+		return fmt.Errorf("failed to write failures.json: %w", err)
 	}
 
-	// Send Slack notification
+	// Write GitHub summary (to GITHUB_STEP_SUMMARY if set, otherwise to output dir)
+	fmt.Println("\n=== Writing GitHub summary ===")
+	summaryContent := generateGitHubSummary(summary, runID, maxLinks)
+	if err := writeGitHubSummary(summaryContent, outputDir); err != nil {
+		fmt.Printf("Warning: Failed to write GitHub summary: %v\n", err)
+	}
+
+	// Build and send Slack message
+	message := buildSuccessMessage(summary, runID, repo, days)
 	if slackWebhook != "" {
 		fmt.Println("\n=== Sending Slack notification ===")
-		_, flakySlack, _ := generateFlakyReport(summary.FlakyTests, maxLinks)
-		_, ciBreakerSlack := generateCIBreakerReport(summary.CIBreakers, maxLinks)
-		message := buildSuccessMessage(summary, flakySlack, ciBreakerSlack, runID, repo, days)
-		if err := sendSlackMessage(slackWebhook, message); err != nil {
+		if err := message.send(slackWebhook); err != nil {
 			fmt.Printf("Warning: Failed to send Slack notification: %v\n", err)
+		}
+	} else {
+		md := message.renderMarkdown()
+		if writeErr := os.WriteFile(filepath.Join(outputDir, "slack-report.md"), []byte(md), 0644); writeErr != nil {
+			fmt.Printf("Warning: Failed to write slack-report.md: %v\n", writeErr)
 		}
 	}
 
@@ -322,7 +332,7 @@ func sendFailureNotification(webhookURL, runID, refName, sha, repo string, err e
 
 	fmt.Println("Sending failure notification to Slack...")
 	message := buildFailureMessage(runID, refName, sha, repo)
-	if sendErr := sendSlackMessage(webhookURL, message); sendErr != nil {
+	if sendErr := message.send(webhookURL); sendErr != nil {
 		fmt.Printf("Warning: Failed to send failure notification: %v\n", sendErr)
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -36,7 +37,7 @@ func truncateToSlackLimit(text string, limit int) string {
 }
 
 // buildSuccessMessage creates success notification with report summary
-func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent string, runID, repo string, days int) *SlackMessage {
+func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *SlackMessage {
 	// Calculate CI success rate
 	ciSuccessRate := 0.0
 	if summary.TotalWorkflowRuns > 0 {
@@ -77,26 +78,38 @@ func buildSuccessMessage(summary *ReportSummary, flakyContent, ciBreakerContent 
 		},
 	}
 
-	// Add CI breakers details if present
-	if ciBreakerContent != "" {
-		ciBreakerText := fmt.Sprintf("*CI Breakers (Failed All Retries):*\n%s", ciBreakerContent)
+	// Add CI breakers details
+	if lines := formatReportLines(summary.CIBreakers); len(lines) > 0 {
+		if len(lines) > slackMaxListItems {
+			lines = lines[:slackMaxListItems]
+		}
+		text := fmt.Sprintf("*CI Breakers (top %d):*\n%s", slackMaxListItems, strings.Join(lines, "\n"))
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: truncateToSlackLimit(ciBreakerText, 2900),
+				Text: truncateToSlackLimit(text, 2900),
 			},
 		})
 	}
 
-	// Add flaky tests details if present
-	if flakyContent != "" {
-		flakyText := fmt.Sprintf("*Flaky Tests Details:*\n%s", flakyContent)
+	// Add flaky tests details (already sorted by failure rate)
+	var flakyFiltered []TestReport
+	for _, r := range summary.FlakyTests {
+		if r.FailureCount >= minFlakyFailures {
+			flakyFiltered = append(flakyFiltered, r)
+		}
+	}
+	if lines := formatReportLines(flakyFiltered); len(lines) > 0 {
+		if len(lines) > slackMaxListItems {
+			lines = lines[:slackMaxListItems]
+		}
+		text := fmt.Sprintf("*Flaky Tests (top %d):*\n%s", slackMaxListItems, strings.Join(lines, "\n"))
 		msg.Blocks = append(msg.Blocks, SlackBlock{
 			Type: "section",
 			Text: &SlackText{
 				Type: "mrkdwn",
-				Text: truncateToSlackLimit(flakyText, 2900),
+				Text: truncateToSlackLimit(text, 2900),
 			},
 		})
 	}
@@ -141,7 +154,7 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 					},
 					{
 						Type: "mrkdwn",
-						Text: fmt.Sprintf("*Commit:*\n%s", sha[:7]),
+						Text: fmt.Sprintf("*Commit:*\n%.7s", sha),
 					},
 					{
 						Type: "mrkdwn",
@@ -167,13 +180,32 @@ func buildFailureMessage(runID, refName, sha, repo string) *SlackMessage {
 	return msg
 }
 
-// sendSlackMessage sends message to webhook URL
-func sendSlackMessage(webhookURL string, message *SlackMessage) error {
+// renderMarkdown renders a SlackMessage as markdown, treating each block's text as markdown.
+func (msg *SlackMessage) renderMarkdown() string {
+	var sb strings.Builder
+	for _, block := range msg.Blocks {
+		if block.Text != nil {
+			sb.WriteString(block.Text.Text)
+			sb.WriteString("\n\n")
+		}
+		for _, field := range block.Fields {
+			sb.WriteString(field.Text)
+			sb.WriteString("\n")
+		}
+		if len(block.Fields) > 0 {
+			sb.WriteString("\n")
+		}
+	}
+	return sb.String()
+}
+
+// send sends message to webhook URL
+func (msg *SlackMessage) send(webhookURL string) error {
 	if webhookURL == "" {
 		return errors.New("webhook URL is empty")
 	}
 
-	jsonData, err := json.Marshal(message)
+	jsonData, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
