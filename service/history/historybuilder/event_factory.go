@@ -68,16 +68,18 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		FirstWorkflowTaskBackoff:        request.FirstWorkflowTaskBackoff,
 		FirstExecutionRunId:             firstRunID,
 		OriginalExecutionRunId:          originalRunID,
-		Memo:                            payload.FilterNilMemo(req.Memo),
-		SearchAttributes:                payload.FilterNilSearchAttributes(req.SearchAttributes),
-		WorkflowId:                      req.WorkflowId,
-		SourceVersionStamp:              request.SourceVersionStamp,
-		CompletionCallbacks:             req.CompletionCallbacks,
-		RootWorkflowExecution:           request.RootExecutionInfo.GetExecution(),
-		InheritedBuildId:                request.InheritedBuildId,
-		VersioningOverride:              worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
-		Priority:                        req.GetPriority(),
-		InheritedPinnedVersion:          request.InheritedPinnedVersion,
+		// Filter nil values here rather than in the API layer because not all
+		// creation paths go through the frontend (e.g. continue-as-new, child workflows, replication).
+		Memo:                   payload.FilterNilMemo(req.Memo),
+		SearchAttributes:       payload.FilterNilSearchAttributes(req.SearchAttributes),
+		WorkflowId:             req.WorkflowId,
+		SourceVersionStamp:     request.SourceVersionStamp,
+		CompletionCallbacks:    req.CompletionCallbacks,
+		RootWorkflowExecution:  request.RootExecutionInfo.GetExecution(),
+		InheritedBuildId:       request.InheritedBuildId,
+		VersioningOverride:     worker_versioning.ConvertOverrideToV32(nonNilVersioningOverride),
+		Priority:               req.GetPriority(),
+		InheritedPinnedVersion: request.InheritedPinnedVersion,
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
 		EagerExecutionAccepted:   req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo: request.InheritedAutoUpgradeInfo,
@@ -481,9 +483,11 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		Initiator:                    command.Initiator,
 		Failure:                      command.Failure,
 		LastCompletionResult:         command.LastCompletionResult,
-		Memo:                         payload.FilterNilMemo(command.Memo),
-		SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
-		InheritBuildId:               command.InheritBuildId,
+		// Filter nil values here rather than in the API layer because not all
+		// creation paths go through the frontend (continue-as-new, child workflows, replication).
+		Memo:             payload.FilterNilMemo(command.Memo),
+		SearchAttributes: payload.FilterNilSearchAttributes(command.SearchAttributes),
+		InheritBuildId:   command.InheritBuildId,
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -728,7 +732,7 @@ func (b *EventFactory) CreateWorkflowPropertiesModifiedEvent(
 	event.Attributes = &historypb.HistoryEvent_WorkflowPropertiesModifiedEventAttributes{
 		WorkflowPropertiesModifiedEventAttributes: &historypb.WorkflowPropertiesModifiedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
-			UpsertedMemo:                 payload.FilterNilMemo(command.UpsertedMemo),
+			UpsertedMemo:                 command.UpsertedMemo,
 		},
 	}
 	return event
@@ -848,11 +852,13 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			WorkflowIdReusePolicy:        command.WorkflowIdReusePolicy,
 			RetryPolicy:                  command.RetryPolicy,
 			CronSchedule:                 command.CronSchedule,
-			Memo:                         payload.FilterNilMemo(command.Memo),
-			SearchAttributes:             payload.FilterNilSearchAttributes(command.SearchAttributes),
-			ParentClosePolicy:            command.GetParentClosePolicy(),
-			InheritBuildId:               command.InheritBuildId,
-			Priority:                     command.Priority,
+			// Filter nil values here rather than in the API layer because not all
+			// creation paths go through the frontend (continue-as-new, child workflows, replication).
+			Memo:              payload.FilterNilMemo(command.Memo),
+			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
+			ParentClosePolicy: command.GetParentClosePolicy(),
+			InheritBuildId:    command.InheritBuildId,
+			Priority:          command.Priority,
 		},
 	}
 	return event
