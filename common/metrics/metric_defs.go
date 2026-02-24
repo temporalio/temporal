@@ -817,8 +817,8 @@ var (
 		"task_persistence_latency",
 		WithDescription("Context key for persistence duration; not emitted."),
 	)
-	TaskProcessingLatencyNoPersistence = NewTimerDef(
-		"task_latency_processing_no_persistence",
+	TaskProcessingNoPersistenceLatency = NewTimerDef(
+		"task_processing_no_persistence_latency",
 		WithDescription("Latency for processing a history task one time excluding persistence."),
 	)
 	TaskLatency = NewTimerDef(

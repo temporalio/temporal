@@ -326,7 +326,7 @@ func (e *executableImpl) Execute() (retErr error) {
 
 		if persistenceDuration, ok := metrics.ContextCounterGet(ctx, metrics.TaskPersistenceLatency.Name()); ok {
 			attemptNoPersistence := attemptLatency - time.Duration(persistenceDuration)
-			metrics.TaskProcessingLatencyNoPersistence.With(e.metricsHandler).Record(attemptNoPersistence)
+			metrics.TaskProcessingNoPersistenceLatency.With(e.metricsHandler).Record(attemptNoPersistence)
 		}
 
 		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))

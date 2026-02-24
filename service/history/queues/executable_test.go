@@ -370,7 +370,7 @@ func (s *executableSuite) TestExecute_CallerInfo() {
 	s.NoError(executable.Execute())
 }
 
-func (s *executableSuite) TestExecute_TaskProcessingLatencyNoPersistence_RecordedWhenPersistenceInContext() {
+func (s *executableSuite) TestExecute_TaskProcessingNoPersistenceLatency_RecordedWhenPersistenceInContext() {
 	scheduleLatency := 100 * time.Millisecond
 	persistenceDuration := 50 * time.Millisecond
 	attemptLatency := 200 * time.Millisecond
@@ -400,14 +400,14 @@ func (s *executableSuite) TestExecute_TaskProcessingLatencyNoPersistence_Recorde
 	s.NoError(executable.Execute())
 
 	snapshot := capture.Snapshot()
-	recordings := snapshot[metrics.TaskProcessingLatencyNoPersistence.Name()]
+	recordings := snapshot[metrics.TaskProcessingNoPersistenceLatency.Name()]
 	s.Require().Len(recordings, 1)
 	actualNoPersistence, ok := recordings[0].Value.(time.Duration)
 	s.Require().True(ok)
 	s.Equal(expectedNoPersistence, actualNoPersistence)
 }
 
-func (s *executableSuite) TestExecute_TaskProcessingLatencyNoPersistence_NotRecordedWhenNoPersistence() {
+func (s *executableSuite) TestExecute_TaskProcessingNoPersistenceLatency_NotRecordedWhenNoPersistence() {
 	scheduleLatency := 100 * time.Millisecond
 	attemptLatency := 200 * time.Millisecond
 
@@ -435,7 +435,7 @@ func (s *executableSuite) TestExecute_TaskProcessingLatencyNoPersistence_NotReco
 	s.NoError(executable.Execute())
 
 	snapshot := capture.Snapshot()
-	recordings := snapshot[metrics.TaskProcessingLatencyNoPersistence.Name()]
+	recordings := snapshot[metrics.TaskProcessingNoPersistenceLatency.Name()]
 	s.Empty(recordings)
 }
 
