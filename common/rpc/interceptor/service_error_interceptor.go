@@ -11,10 +11,10 @@ import (
 
 func ServiceErrorInterceptor(
 	ctx context.Context,
-	req interface{},
+	req any,
 	_ *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 
 	resp, err := handler(ctx, req)
 

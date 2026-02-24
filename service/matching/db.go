@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/service/matching/counter"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -385,6 +386,34 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDel
 		*count += countDelta
 	}
 	db.subqueues[subqueue].oldestTime = oldestTime
+}
+
+func (db *taskQueueDB) persistTopKFairnessKeys(subqueue subqueueIndex, entries []counter.TopKEntry) {
+	db.Lock()
+	defer db.Unlock()
+
+	counts := make([]*persistencespb.FairnessKeyCount, len(entries))
+	for i, entry := range entries {
+		counts[i] = &persistencespb.FairnessKeyCount{Key: entry.Key, Count: entry.Count}
+	}
+
+	db.subqueues[subqueue].TopKFairnessCounts = counts
+	db.lastChange = time.Now()
+}
+
+func (db *taskQueueDB) getTopKFairnessKeys(subqueue subqueueIndex) []counter.TopKEntry {
+	db.Lock()
+	defer db.Unlock()
+
+	if subqueue >= subqueueIndex(len(db.subqueues)) {
+		return nil
+	}
+	counts := db.subqueues[subqueue].TopKFairnessCounts
+	entries := make([]counter.TopKEntry, len(counts))
+	for i, count := range counts {
+		entries[i] = counter.TopKEntry{Key: count.Key, Count: count.Count}
+	}
+	return entries
 }
 
 // getApproximateBacklogCountsBySubqueue return the approximate backlog count for each subqueue.

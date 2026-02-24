@@ -31,11 +31,11 @@ func (c *ClientStreamErrorInterceptor) CloseSend() error {
 	return errorConvert(c.ClientStream.CloseSend())
 }
 
-func (c *ClientStreamErrorInterceptor) SendMsg(m interface{}) error {
+func (c *ClientStreamErrorInterceptor) SendMsg(m any) error {
 	return errorConvert(c.ClientStream.SendMsg(m))
 }
 
-func (c *ClientStreamErrorInterceptor) RecvMsg(m interface{}) error {
+func (c *ClientStreamErrorInterceptor) RecvMsg(m any) error {
 	return errorConvert(c.ClientStream.RecvMsg(m))
 }
 
@@ -55,7 +55,7 @@ func StreamErrorInterceptor(
 }
 
 func CustomErrorStreamInterceptor(
-	srv interface{},
+	srv any,
 	serverStream grpc.ServerStream,
 	info *grpc.StreamServerInfo,
 	handler grpc.StreamHandler,

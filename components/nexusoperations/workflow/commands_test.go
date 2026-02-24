@@ -275,9 +275,32 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, 0, len(tcx.history.Events))
 	})
 
+	t.Run("system endpoint skips payload size validation", func(t *testing.T) {
+		tcx := newTestContext(t, defaultConfig)
+		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
+			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+				ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+					Endpoint:  commonnexus.SystemEndpoint,
+					Service:   "service",
+					Operation: "op",
+					Input: &commonpb.Payload{
+						Data: []byte("ab"),
+					},
+				},
+			},
+		})
+		// Should NOT get payload size error; instead gets ProcessInput validation error (service not found).
+		var failWFTErr workflow.FailWorkflowTaskError
+		require.ErrorAs(t, err, &failWFTErr)
+		require.False(t, failWFTErr.TerminateWorkflow)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+		require.NotContains(t, failWFTErr.Message, "Input exceeds size limit")
+		require.Empty(t, tcx.history.Events)
+	})
+
 	t.Run("exceeds max concurrent operations", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
@@ -807,7 +830,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 		tcx testContext,
 		scheduledEventID int64,
 		eventType enumspb.EventType,
-		eventAttr interface{},
+		eventAttr any,
 		def hsm.EventDefinition,
 	) {
 		coll := nexusoperations.MachineCollection(tcx.ms.HSM())
@@ -864,7 +887,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 	cases := []struct {
 		name      string
 		eventType enumspb.EventType
-		eventAttr interface{}
+		eventAttr any
 		eventDef  hsm.EventDefinition
 	}{
 		{

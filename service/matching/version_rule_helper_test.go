@@ -50,7 +50,7 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 
 	histogram := make(map[string]int)
 	runs := 1000000
-	for i := 0; i < runs; i++ {
+	for i := range runs {
 		b := FindAssignmentBuildId(rules, "run-"+strconv.Itoa(i))
 		histogram[b]++
 	}
@@ -66,12 +66,12 @@ func TestFindAssignmentBuildId_WithRamp(t *testing.T) {
 func TestCalcRampThresholdUniform(t *testing.T) {
 	buildPref := "bldXYZ-"
 	histogram := [100]int{}
-	for i := 0; i < 1000000; i++ {
+	for i := range 1000000 {
 		v := calcRampThreshold(buildPref + strconv.Itoa(i))
 		histogram[int32(v)]++
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		assert.InEpsilon(t, 10000, histogram[i], 0.1)
 	}
 }

@@ -117,7 +117,7 @@ func readTasks(
 
 	// We want to run a test where the client makes multiple requests to the server because the client is stateful. In
 	// particular, the first request here should establish a connection, and the next one should reuse that connection.
-	for i := 0; i < numTasks; i++ {
+	for i := range numTasks {
 		res, err := client.GetDLQTasks(context.Background(), &historyservice.GetDLQTasksRequest{
 			DlqKey: &commonspb.HistoryDLQKey{
 				TaskCategory:  int32(tasks.CategoryTransfer.ID()),
@@ -181,7 +181,7 @@ func enqueueTasks(
 	task := &tasks.WorkflowTask{
 		TaskID: 42,
 	}
-	for i := 0; i < numTasks; i++ {
+	for range numTasks {
 		_, err := historyTaskQueueManager.EnqueueTask(context.Background(), &persistence.EnqueueTaskRequest{
 			QueueType:     persistence.QueueTypeHistoryDLQ,
 			SourceCluster: sourceCluster,

@@ -34,7 +34,7 @@ func CheckTaskVersion(
 	namespace *namespace.Namespace,
 	version int64,
 	taskVersion int64,
-	task interface{},
+	task any,
 ) error {
 
 	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {

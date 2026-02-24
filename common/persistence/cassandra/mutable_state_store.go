@@ -506,7 +506,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		rowTypeExecutionTaskID,
 	).WithContext(ctx)
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	if err := query.MapScan(result); err != nil {
 		return nil, gocql.ConvertError("GetWorkflowExecution", err)
 	}
@@ -573,7 +573,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 	}
 	state.ChasmNodes = chasmNodeBlobs
 
-	eList := result["buffered_events_list"].([]map[string]interface{})
+	eList := result["buffered_events_list"].([]map[string]any) //nolint:revive // unchecked-type-assertion: consistent with surrounding Cassandra result parsing
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
 	for _, v := range eList {
 		blob := createHistoryEventBatchBlob(v)
@@ -969,7 +969,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 		rowTypeExecutionTaskID,
 	).WithContext(ctx)
 
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	if err := query.MapScan(result); err != nil {
 		return nil, gocql.ConvertError("GetCurrentExecution", err)
 	}
@@ -1060,7 +1060,7 @@ func (d *MutableStateStore) ListConcreteExecutions(
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	for iter.MapScan(result) {
 		if execution, ok := result["execution"]; ok {
 			executionBytes, ok := execution.([]byte)
@@ -1070,7 +1070,7 @@ func (d *MutableStateStore) ListConcreteExecutions(
 
 			if len(executionBytes) == 0 {
 				// current record has no value in execution column.
-				result = make(map[string]interface{})
+				result = make(map[string]any)
 				continue
 			}
 
@@ -1081,7 +1081,7 @@ func (d *MutableStateStore) ListConcreteExecutions(
 			response.States = append(response.States, state)
 		}
 
-		result = make(map[string]interface{})
+		result = make(map[string]any)
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
@@ -1108,7 +1108,7 @@ func (d *MutableStateStore) getCurrentRecordRunID(
 }
 
 func mutableStateFromRow(
-	result map[string]interface{},
+	result map[string]any,
 ) (*p.InternalWorkflowMutableState, error) {
 	eiBytes, ok := result["execution"].([]byte)
 	if !ok {
@@ -1139,7 +1139,7 @@ func mutableStateFromRow(
 }
 
 func executionStateBlobFromRow(
-	result map[string]interface{},
+	result map[string]any,
 ) (*commonpb.DataBlob, error) {
 	state, ok := result["execution_state"].([]byte)
 	if !ok {

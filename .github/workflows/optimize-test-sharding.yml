@@ -6,6 +6,9 @@ on:
     - cron: "0 7 * * *"
   workflow_dispatch: # Allow manual trigger
 
+permissions:
+  contents: read
+
 env:
   SALT_FILE: tests/testcore/shard_salt.txt
   BRANCH: auto/optimize-test-sharding
@@ -57,6 +60,9 @@ jobs:
           # Delete remote branch if it exists from a previous run.
           # This will also close a previous, stuck PR if it exists.
           git push origin --delete ${{ env.BRANCH }} 2>/dev/null || true
+
+          git config --local user.name 'Temporal Data'
+          git config --local user.email 'commander-data@temporal.io'
 
           git checkout -b ${{ env.BRANCH }}
           git add "${{ env.SALT_FILE }}"

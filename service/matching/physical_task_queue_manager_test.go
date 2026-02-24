@@ -153,8 +153,8 @@ func makePollMetadata(rps float64) *pollMetadata {
 
 // runOneShotPoller spawns a goroutine to call tqMgr.PollTask on the provided tqMgr.
 // The second return value is a channel of either error or *internalTask.
-func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan interface{}) {
-	out := make(chan interface{}, 1)
+func runOneShotPoller(ctx context.Context, tqm physicalTaskQueueManager) (*goro.Handle, chan any) {
+	out := make(chan any, 1)
 	handle := goro.NewHandle(ctx).Go(func(ctx context.Context) error {
 		task, err := tqm.PollTask(ctx, makePollMetadata(rpsInf))
 		if task == nil {
@@ -240,7 +240,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 
 	startTaskID := int64(1)
 	taskCount := int64(3)
-	for i := int64(0); i < taskCount; i++ {
+	for i := range taskCount {
 		blm.taskAckManager.addTask(startTaskID + i)
 	}
 
@@ -266,7 +266,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestLegacyDescribeTaskQueue() {
 	// Add a poller and complete all tasks
 	pollerIdent := pollerIdentity("test-poll")
 	s.tqMgr.pollerHistory.updatePollerInfo(pollerIdent, &pollMetadata{})
-	for i := int64(0); i < taskCount; i++ {
+	for i := range taskCount {
 		_, numAcked := blm.taskAckManager.completeTask(startTaskID + i)
 		blm.db.updateBacklogStats(-numAcked, time.Time{})
 	}

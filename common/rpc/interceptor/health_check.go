@@ -60,10 +60,10 @@ func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *H
 // UnaryIntercept implements the gRPC unary interceptor interface
 func (h *HealthCheckInterceptor) UnaryIntercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	startTime := time.Now()
 	resp, err := handler(ctx, req)
 	elapsed := time.Since(startTime)

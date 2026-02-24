@@ -119,6 +119,14 @@ type Config struct {
 	TaskSchedulerNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TaskSchedulerInactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
 
+	// ExecutionQueueScheduler settings for sequential per-workflow task processing
+	TaskSchedulerEnableExecutionQueueScheduler dynamicconfig.BoolPropertyFn
+	// TaskSchedulerExecutionQueueSchedulerMaxQueues requires restart to take effect
+	TaskSchedulerExecutionQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
+	// TaskSchedulerExecutionQueueSchedulerQueueTTL requires restart to take effect
+	TaskSchedulerExecutionQueueSchedulerQueueTTL         dynamicconfig.DurationPropertyFn
+	TaskSchedulerExecutionQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
+
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
 	TimerProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -200,8 +208,6 @@ type Config struct {
 	// right now only used by GetMutableState
 	LongPollExpirationInterval dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
-	// encoding the history events
-	EventEncodingType dynamicconfig.StringPropertyFnWithNamespaceFilter
 	// whether or not using ParentClosePolicy
 	EnableParentClosePolicy dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// whether or not enable system workers for processing parent close policy task
@@ -514,14 +520,18 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
-		TaskSchedulerEnableRateLimiter:            dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
-		TaskSchedulerEnableRateLimiterShadowMode:  dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
-		TaskSchedulerRateLimiterStartupDelay:      dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
-		TaskSchedulerGlobalMaxQPS:                 dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
-		TaskSchedulerMaxQPS:                       dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
-		TaskSchedulerNamespaceMaxQPS:              dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
-		TaskSchedulerGlobalNamespaceMaxQPS:        dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
-		TaskSchedulerInactiveChannelDeletionDelay: dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
+		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
+		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
+		TaskSchedulerGlobalMaxQPS:                            dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
+		TaskSchedulerMaxQPS:                                  dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
+		TaskSchedulerNamespaceMaxQPS:                         dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
+		TaskSchedulerGlobalNamespaceMaxQPS:                   dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
+		TaskSchedulerInactiveChannelDeletionDelay:            dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskSchedulerEnableExecutionQueueScheduler:           dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Get(dc),
+		TaskSchedulerExecutionQueueSchedulerMaxQueues:        dynamicconfig.TaskSchedulerExecutionQueueSchedulerMaxQueues.Get(dc),
+		TaskSchedulerExecutionQueueSchedulerQueueTTL:         dynamicconfig.TaskSchedulerExecutionQueueSchedulerQueueTTL.Get(dc),
+		TaskSchedulerExecutionQueueSchedulerQueueConcurrency: dynamicconfig.TaskSchedulerExecutionQueueSchedulerQueueConcurrency.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),
@@ -617,7 +627,6 @@ func NewConfig(
 		// history client: client/history/client.go set the client timeout 30s
 		// TODO: Return this value to the client: go.temporal.io/server/issues/294
 		LongPollExpirationInterval:          dynamicconfig.HistoryLongPollExpirationInterval.Get(dc),
-		EventEncodingType:                   dynamicconfig.DefaultEventEncoding.Get(dc),
 		EnableParentClosePolicy:             dynamicconfig.EnableParentClosePolicy.Get(dc),
 		NumParentClosePolicySystemWorkflows: dynamicconfig.NumParentClosePolicySystemWorkflows.Get(dc),
 		EnableParentClosePolicyWorker:       dynamicconfig.EnableParentClosePolicyWorker.Get(dc),

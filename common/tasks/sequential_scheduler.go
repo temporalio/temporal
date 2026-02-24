@@ -111,7 +111,7 @@ func (s *SequentialScheduler[T]) Submit(task T) {
 	_, fnEvaluated, err := s.queues.PutOrDo(
 		queue.ID(),
 		queue,
-		func(key interface{}, value interface{}) error {
+		func(key any, value any) error {
 			value.(SequentialTaskQueue[T]).Add(task)
 			return nil
 		},
@@ -172,7 +172,7 @@ func (s *SequentialScheduler[T]) TrySubmit(task T) bool {
 	_, fnEvaluated, err := s.queues.PutOrDo(
 		queue.ID(),
 		queue,
-		func(key interface{}, value interface{}) error {
+		func(key any, value any) error {
 			value.(SequentialTaskQueue[T]).Add(task)
 			return nil
 		},
@@ -231,7 +231,7 @@ func (s *SequentialScheduler[T]) updateWorkerCount(targetWorkerNum int) {
 func (s *SequentialScheduler[T]) startWorkers(
 	count int,
 ) {
-	for i := 0; i < count; i++ {
+	for range count {
 		shutdownCh := make(chan struct{})
 		s.workerShutdownCh = append(s.workerShutdownCh, shutdownCh)
 
@@ -293,7 +293,7 @@ func (s *SequentialScheduler[T]) processTaskQueue(
 			if !queue.IsEmpty() {
 				s.executeTask(queue)
 			} else {
-				deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
+				deleted := s.queues.RemoveIf(queue.ID(), func(key any, value any) bool {
 					return value.(SequentialTaskQueue[T]).IsEmpty()
 				})
 				if deleted {
@@ -354,7 +354,7 @@ LoopDrainQueues:
 				for !queue.IsEmpty() {
 					queue.Remove().Abort()
 				}
-				deleted := s.queues.RemoveIf(queue.ID(), func(key interface{}, value interface{}) bool {
+				deleted := s.queues.RemoveIf(queue.ID(), func(key any, value any) bool {
 					return value.(SequentialTaskQueue[T]).IsEmpty()
 				})
 				if deleted {

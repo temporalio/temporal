@@ -20,7 +20,7 @@ const MarkPoisonPillMaxAttempts = 3
 type (
 	TrackableExecutableTask interface {
 		ctasks.Task
-		QueueID() interface{}
+		QueueID() any
 		TaskID() int64
 		TaskCreationTime() time.Time
 		MarkPoisonPill() error

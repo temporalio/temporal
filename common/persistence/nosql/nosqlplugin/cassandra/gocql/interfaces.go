@@ -14,10 +14,10 @@ import (
 type (
 	// Session is the interface for interacting with the database.
 	Session interface {
-		Query(string, ...interface{}) Query
+		Query(string, ...any) Query
 		NewBatch(BatchType) *Batch
 		ExecuteBatch(*Batch) error
-		MapExecuteBatchCAS(*Batch, map[string]interface{}) (bool, Iter, error)
+		MapExecuteBatchCAS(*Batch, map[string]any) (bool, Iter, error)
 		AwaitSchemaAgreement(ctx context.Context) error
 		Close()
 	}
@@ -25,25 +25,25 @@ type (
 	// Query is the interface for query object.
 	Query interface {
 		Exec() error
-		Scan(...interface{}) error
-		ScanCAS(...interface{}) (bool, error)
-		MapScan(map[string]interface{}) error
-		MapScanCAS(map[string]interface{}) (bool, error)
+		Scan(...any) error
+		ScanCAS(...any) (bool, error)
+		MapScan(map[string]any) error
+		MapScanCAS(map[string]any) (bool, error)
 		Iter() Iter
 		PageSize(int) Query
 		PageState([]byte) Query
 		WithContext(context.Context) Query
 		WithTimestamp(int64) Query
 		Consistency(Consistency) Query
-		Bind(...interface{}) Query
+		Bind(...any) Query
 		Idempotent(bool) Query
 		SetSpeculativeExecutionPolicy(SpeculativeExecutionPolicy) Query
 	}
 
 	// Iter is the interface for executing and iterating over all resulting rows.
 	Iter interface {
-		Scan(...interface{}) bool
-		MapScan(map[string]interface{}) bool
+		Scan(...any) bool
+		MapScan(map[string]any) bool
 		PageState() []byte
 		Close() error
 	}

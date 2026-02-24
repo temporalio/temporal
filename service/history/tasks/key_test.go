@@ -83,9 +83,9 @@ func (s *taskKeySuite) TestSort() {
 	numTaskPerInstant := 16
 
 	taskKeys := Keys{}
-	for i := 0; i < numInstant; i++ {
+	for range numInstant {
 		fireTime := time.Unix(0, rand.Int63())
-		for j := 0; j < numTaskPerInstant; j++ {
+		for range numTaskPerInstant {
 			taskKeys = append(taskKeys, NewKey(fireTime, rand.Int63()))
 		}
 	}

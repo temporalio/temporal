@@ -164,7 +164,7 @@ func DecodeWorkerDeploymentMemo(memo *commonpb.Memo) (*deploymentspb.WorkerDeplo
 }
 
 func getSafeDurationConfig(ctx workflow.Context, id string, unsafeGetter func() time.Duration, defaultValue time.Duration) (time.Duration, error) {
-	get := func(_ workflow.Context) interface{} {
+	get := func(_ workflow.Context) any {
 		return unsafeGetter()
 	}
 	var value time.Duration

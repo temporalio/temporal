@@ -373,7 +373,7 @@ func (s *VersioningIntegSuite) TestSeriesOfUpdates() {
 	ctx := testcore.NewContext()
 	tq := "functional-versioning-series"
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		s.addNewDefaultBuildId(ctx, tq, s.prefixed(fmt.Sprintf("foo-%d", i)))
 	}
 	s.addCompatibleBuildId(ctx, tq, s.prefixed("foo-2.1"), s.prefixed("foo-2"), false)
@@ -596,7 +596,7 @@ func (s *VersioningIntegSuite) TestDispatchNewWorkflowWithRamp() {
 	defer w2.Stop()
 
 	counter := make(map[string]int)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
 		s.NoError(err)
 		var out string
@@ -1398,7 +1398,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf1 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1445,7 +1445,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf11 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -1483,7 +1483,7 @@ func (s *VersioningIntegSuite) testWorkflowTaskRedirectInRetry(firstTask bool) {
 	wf12 := func(ctx workflow.Context) (string, error) {
 		if !firstTask {
 			// add an activity to move workflow past first WFT
-			var out interface{}
+			var out any
 			err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 1 * time.Second}), act).Get(ctx, &out)
 			s.NoError(err)
@@ -4103,7 +4103,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 
 	workerN := 3
 	workerMap := make(map[string]worker.Worker)
-	for i := 0; i < workerN; i++ {
+	for range workerN {
 		wId := testcore.RandomizeStr("id")
 		w := worker.New(s.SdkClient(), tq, worker.Options{
 			UseBuildIDForVersioning: false,

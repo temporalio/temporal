@@ -207,7 +207,7 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 				// so here, we reduce the duration between two heartbeats, so that they are
 				// more likely be sent in the heartbeat batch at 1.6s
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					activity.RecordHeartbeat(ctx, i)
 					time.Sleep(200 * time.Millisecond) //nolint:forbidigo
 				}
@@ -449,7 +449,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
 			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.Namespace().String(),
@@ -681,7 +681,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 	s.Equal(descResp.GetPendingActivities()[0].GetActivityId(), "B")
 
 	s.Logger.Info("Waiting for workflow to complete", tag.WorkflowRunID(we.RunId))
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		s.False(workflowComplete)
 
 		s.Logger.Info("Processing workflow task:", tag.Counter(i))
@@ -985,7 +985,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
 			response, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{

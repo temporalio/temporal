@@ -51,7 +51,7 @@ type ComponentRef struct {
 	componentPath      []string
 	componentInitialVT *persistencespb.VersionedTransition
 
-	validationFn func(NodeBackend, Context, Component) error
+	validationFn func(NodeBackend, Context, Component, *Registry) error
 }
 
 // NewComponentRef creates a new ComponentRef with a registered root component go type.
