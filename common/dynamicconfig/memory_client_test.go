@@ -85,6 +85,42 @@ func TestMemoryClientPartialOverride(t *testing.T) {
 	assert.Nil(t, c.GetValue(k))
 }
 
+func TestMemoryClientPartialOverrideNonStackRemoval(t *testing.T) {
+	c := dynamicconfig.NewMemoryClient()
+	k := dynamicconfig.MakeKey("key")
+
+	nsA := dynamicconfig.Constraints{Namespace: "ns-a"}
+	nsB := dynamicconfig.Constraints{Namespace: "ns-b"}
+	nsC := dynamicconfig.Constraints{Namespace: "ns-c"}
+
+	// Three partial overrides.
+	removeA := c.PartialOverrideValue(k, []dynamicconfig.ConstrainedValue{{Constraints: nsA, Value: 1}})
+	removeB := c.PartialOverrideValue(k, []dynamicconfig.ConstrainedValue{{Constraints: nsB, Value: 2}})
+	removeC := c.PartialOverrideValue(k, []dynamicconfig.ConstrainedValue{{Constraints: nsC, Value: 3}})
+
+	assert.Equal(t, []dynamicconfig.ConstrainedValue{
+		{Constraints: nsC, Value: 3},
+		{Constraints: nsB, Value: 2},
+		{Constraints: nsA, Value: 1},
+	}, c.GetValue(k))
+
+	// Remove the middle one (non-stack order). The other two must survive.
+	removeB()
+	assert.Equal(t, []dynamicconfig.ConstrainedValue{
+		{Constraints: nsC, Value: 3},
+		{Constraints: nsA, Value: 1},
+	}, c.GetValue(k))
+
+	// Remove the first one (still non-stack). Only C remains.
+	removeA()
+	assert.Equal(t, []dynamicconfig.ConstrainedValue{
+		{Constraints: nsC, Value: 3},
+	}, c.GetValue(k))
+
+	removeC()
+	assert.Nil(t, c.GetValue(k))
+}
+
 func TestMemoryClientSubscriptions(t *testing.T) {
 	c := dynamicconfig.NewMemoryClient()
 	k := dynamicconfig.MakeKey("key")

@@ -54,10 +54,7 @@ func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
 			return result
 		}
 	}
-	if len(result) > 0 {
-		return result
-	}
-	return nil
+	return result
 }
 
 func (d *MemoryClient) OverrideSetting(setting GenericSetting, value any) (cleanup func()) {

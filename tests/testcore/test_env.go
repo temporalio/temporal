@@ -255,29 +255,30 @@ func (e *testEnv) Tv() *testvars.TestVars {
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
 func (e *testEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
-	if e.isShared {
-		if !canBeNamespaceScoped(setting.Precedence()) {
-			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
-		}
-
-		// Wrap value with namespace constraint for test isolation on shared clusters.
-		ns := e.nsName.String()
-		if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
-			result := make([]dynamicconfig.ConstrainedValue, len(cvs))
-			for i, cv := range cvs {
-				cv.Constraints.Namespace = ns
-				result[i] = cv
-			}
-			value = result
-		} else {
-			value = []dynamicconfig.ConstrainedValue{{
-				Constraints: dynamicconfig.Constraints{Namespace: ns},
-				Value:       value,
-			}}
-		}
-		return e.cluster.host.partialOverrideDynamicConfig(e.t, setting.Key(), value)
+	if !e.isShared {
+		return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
 	}
-	return e.cluster.host.overrideDynamicConfig(e.t, setting.Key(), value)
+
+	if !canBeNamespaceScoped(setting.Precedence()) {
+		e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
+	}
+
+	// Wrap value with namespace constraint for test isolation on shared clusters.
+	ns := e.nsName.String()
+	if cvs, ok := value.([]dynamicconfig.ConstrainedValue); ok {
+		result := make([]dynamicconfig.ConstrainedValue, len(cvs))
+		for i, cv := range cvs {
+			cv.Constraints.Namespace = ns
+			result[i] = cv
+		}
+		value = result
+	} else {
+		value = []dynamicconfig.ConstrainedValue{{
+			Constraints: dynamicconfig.Constraints{Namespace: ns},
+			Value:       value,
+		}}
+	}
+	return e.cluster.host.partialOverrideDynamicConfig(e.t, setting.Key(), value)
 }
 
 func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
