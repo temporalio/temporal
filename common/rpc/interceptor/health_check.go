@@ -47,7 +47,11 @@ var excludedAPIsForHealthSignal = map[string]struct{}{
 	"PollWorkflowExecutionUpdate":  {},
 	"PollWorkflowExecutionHistory": {},
 	"UpdateWorkflowExecution":      {},
-	"QueryWorkflow":                {},
+	// QueryWorkflow is excluded because its latency reflects worker availability,
+	// not history node health. With no workers polling, queries block ~30s until
+	// context deadline, which can push AverageLatency() past the threshold
+	// and cause healthy nodes to report HEALTH_STATE_NOT_SERVING.
+	"QueryWorkflow": {},
 }
 
 var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
