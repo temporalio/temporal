@@ -103,8 +103,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 						},
 					},
 				}
-			}
-			if resp == nil {
+			} else if resp == nil {
 				// Synthetic check: the host returned a nil response without error.
 				resp = &historyservice.DeepHealthCheckResponse{
 					State: enumsspb.HEALTH_STATE_NOT_SERVING,
