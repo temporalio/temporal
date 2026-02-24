@@ -79,7 +79,7 @@ const (
 	SignalNamePatch    = "patch"
 	SignalNameRefresh  = "refresh"
 	SignalNameForceCAN = "force-continue-as-new"
-	SignalNameMigrate  = "migrate"
+	SignalNameMigrateToChasm = "migrate-to-chasm"
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
@@ -735,7 +735,7 @@ func (s *scheduler) sleep(nextWakeup time.Time) {
 	forceCAN := workflow.GetSignalChannel(s.ctx, SignalNameForceCAN)
 	sel.AddReceive(forceCAN, s.handleForceCANSignal)
 
-	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameMigrate)
+	migrateCh := workflow.GetSignalChannel(s.ctx, SignalNameMigrateToChasm)
 	sel.AddReceive(migrateCh, s.handleMigrateSignal)
 
 	if s.hasMoreAllowAllBackfills() {
@@ -1000,7 +1000,7 @@ func (s *scheduler) executeMigration() error {
 	workflowInfo := workflow.GetInfo(s.ctx)
 
 	//nolint:staticcheck // SA1019 Migration needs raw proto format, not typed search attributes.
-	req := migration.LegacyToMigrateScheduleRequest(
+	req := migration.LegacyToCreateFromMigrationStateRequest(
 		s.Schedule,
 		s.Info,
 		s.State,
@@ -1017,7 +1017,7 @@ func (s *scheduler) executeMigration() error {
 	}
 	return workflow.ExecuteLocalActivity(
 		workflow.WithLocalActivityOptions(s.ctx, migrateOptions),
-		s.a.MigrateSchedule,
+		s.a.MigrateScheduleToChasm,
 		req).
 		Get(s.ctx, nil)
 }

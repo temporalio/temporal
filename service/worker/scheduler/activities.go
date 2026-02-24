@@ -374,15 +374,15 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 	return res
 }
 
-func (a *activities) MigrateSchedule(ctx context.Context, req *schedulerpb.MigrateScheduleRequest) error {
-	_, err := a.SchedulerClient.MigrateSchedule(ctx, req)
+func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
 		// Treat "already exists" as success (idempotency)
 		var alreadyExists *serviceerror.WorkflowExecutionAlreadyStarted
 		if errors.As(err, &alreadyExists) {
 			return nil
 		}
-		return translateError(err, "MigrateSchedule")
+		return translateError(err, "MigrateScheduleToChasm")
 	}
 	return nil
 }

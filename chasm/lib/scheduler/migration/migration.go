@@ -14,8 +14,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// LegacyToMigrateScheduleRequest converts legacy (workflow-backed) scheduler state to a
-// MigrateScheduleRequest proto. This is the primary V1-to-V2 migration function.
+// LegacyToCreateFromMigrationStateRequest converts legacy (workflow-backed) scheduler
+// state to a CreateFromMigrationStateRequest proto. This is the primary V1-to-V2
+// migration function.
 //
 // The migrationTime parameter is used for initializing timestamps that don't have a
 // direct mapping from V1 state (e.g., StartTime for running workflows).
@@ -34,14 +35,14 @@ import (
 //
 // Note: In V2, RunningWorkflows and RecentActions are computed on-demand from
 // BufferedStarts by the Invoker, rather than being stored separately in ScheduleInfo.
-func LegacyToMigrateScheduleRequest(
+func LegacyToCreateFromMigrationStateRequest(
 	schedule *schedulepb.Schedule,
 	info *schedulepb.ScheduleInfo,
 	state *schedulespb.InternalState,
 	searchAttributes *commonpb.SearchAttributes,
 	memo *commonpb.Memo,
 	migrationTime time.Time,
-) *schedulerpb.MigrateScheduleRequest {
+) *schedulerpb.CreateFromMigrationStateRequest {
 	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
 	infoClone := common.CloneProto(info)
 	infoClone.RunningWorkflows = nil
@@ -97,7 +98,7 @@ func LegacyToMigrateScheduleRequest(
 	backfillers := convertBackfillsLegacyToCHASM(state.OngoingBackfills)
 	lastCompletion := convertLastCompletionLegacyToCHASM(state.LastCompletionResult, state.ContinuedFailure)
 
-	return &schedulerpb.MigrateScheduleRequest{
+	return &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: state.NamespaceId,
 		State: &schedulerpb.SchedulerMigrationState{
 			SchedulerState:       schedulerState,

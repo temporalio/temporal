@@ -222,11 +222,11 @@ func CreateScheduler(
 // Unlike CreateScheduler, this preserves the conflict token and other state from V1.
 //
 // The migrated state components (scheduler, generator, invoker, backfillers) are
-// directly initialized from the MigrateScheduleRequest, preserving all state including
-// the conflict token for client compatibility.
+// directly initialized from the request, preserving all state including the
+// conflict token for client compatibility.
 func CreateSchedulerFromMigration(
 	ctx chasm.MutableContext,
-	req *schedulerpb.MigrateScheduleRequest,
+	req *schedulerpb.CreateFromMigrationStateRequest,
 ) (*Scheduler, error) {
 	state := req.GetState()
 

@@ -41,7 +41,7 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	now := time.Now().UTC()
 	_, _, node := setupSchedulerForTest(t)
 
-	req := &schedulerpb.MigrateScheduleRequest{
+	req := &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
 			SchedulerState: &schedulerpb.SchedulerState{
@@ -135,7 +135,7 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	_, _, node := setupSchedulerForTest(t)
 
-	req := &schedulerpb.MigrateScheduleRequest{
+	req := &schedulerpb.CreateFromMigrationStateRequest{
 		NamespaceId: namespaceID,
 		State: &schedulerpb.SchedulerMigrationState{
 			SchedulerState: &schedulerpb.SchedulerState{

@@ -2272,11 +2272,11 @@ func (s *workflowSuite) TestCANBySignal() {
 
 func (s *workflowSuite) TestMigrateSuccess() {
 	// Mock MigrateSchedule activity to succeed.
-	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().Return(nil)
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(SignalNameMigrate, nil)
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
@@ -2305,12 +2305,12 @@ func (s *workflowSuite) TestMigrateSuccess() {
 
 func (s *workflowSuite) TestMigrateFailure() {
 	// Mock MigrateSchedule activity to fail.
-	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().
 		Return(errors.New("migration failed"))
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(SignalNameMigrate, nil)
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	// After migration failure, the workflow should keep running (not return nil).
@@ -2329,14 +2329,14 @@ func (s *workflowSuite) TestMigrateFailure() {
 
 func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 	// First attempt fails, second attempt succeeds (on next run loop iteration).
-	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().
 		Return(errors.New("migration failed"))
-	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).Once().
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().
 		Return(nil)
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(SignalNameMigrate, nil)
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
@@ -2366,12 +2366,12 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 
 func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	// Mock MigrateSchedule activity to always fail (no retries, single attempt).
-	s.env.OnActivity(new(activities).MigrateSchedule, mock.Anything, mock.Anything).
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).
 		Return(errors.New("migration failed"))
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
-		s.env.SignalWorkflow(SignalNameMigrate, nil)
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 	// After migration failure, send a pause patch and verify it's processed,
 	// proving the workflow kept running and still handles signals.

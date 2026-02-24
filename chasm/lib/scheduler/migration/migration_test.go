@@ -34,7 +34,7 @@ func newTestSchedule() *schedulepb.Schedule {
 	}
 }
 
-func TestLegacyToMigrateScheduleRequest(t *testing.T) {
+func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	now := time.Now().UTC()
 	state := &schedulespb.InternalState{
 		Namespace:         "test-ns",
@@ -78,7 +78,7 @@ func TestLegacyToMigrateScheduleRequest(t *testing.T) {
 	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
 	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
 
-	req := LegacyToMigrateScheduleRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
+	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
 	require.NotNil(t, req)
 	require.Equal(t, "test-ns-id", req.NamespaceId)

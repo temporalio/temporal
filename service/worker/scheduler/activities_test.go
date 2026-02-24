@@ -18,12 +18,12 @@ type mockSchedulerClient struct {
 	migrateErr error
 }
 
-func (m *mockSchedulerClient) MigrateSchedule(
+func (m *mockSchedulerClient) CreateFromMigrationState(
 	_ context.Context,
-	_ *schedulerpb.MigrateScheduleRequest,
+	_ *schedulerpb.CreateFromMigrationStateRequest,
 	_ ...grpc.CallOption,
-) (*schedulerpb.MigrateScheduleResponse, error) {
-	return &schedulerpb.MigrateScheduleResponse{}, m.migrateErr
+) (*schedulerpb.CreateFromMigrationStateResponse, error) {
+	return &schedulerpb.CreateFromMigrationStateResponse{}, m.migrateErr
 }
 
 func newTestActivities(client schedulerpb.SchedulerServiceClient) *activities {
@@ -36,31 +36,31 @@ func newTestActivities(client schedulerpb.SchedulerServiceClient) *activities {
 	}
 }
 
-func TestMigrateSchedule_Success(t *testing.T) {
+func TestMigrateScheduleToChasm_Success(t *testing.T) {
 	client := &mockSchedulerClient{}
 	a := newTestActivities(client)
 
-	err := a.MigrateSchedule(context.Background(), &schedulerpb.MigrateScheduleRequest{})
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{})
 	require.NoError(t, err)
 }
 
-func TestMigrateSchedule_AlreadyExists(t *testing.T) {
+func TestMigrateScheduleToChasm_AlreadyExists(t *testing.T) {
 	client := &mockSchedulerClient{
 		migrateErr: serviceerror.NewWorkflowExecutionAlreadyStarted("already exists", "", ""),
 	}
 	a := newTestActivities(client)
 
-	err := a.MigrateSchedule(context.Background(), &schedulerpb.MigrateScheduleRequest{})
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{})
 	require.NoError(t, err, "already-exists should be treated as success")
 }
 
-func TestMigrateSchedule_OtherError(t *testing.T) {
+func TestMigrateScheduleToChasm_OtherError(t *testing.T) {
 	client := &mockSchedulerClient{
 		migrateErr: errors.New("some transient error"),
 	}
 	a := newTestActivities(client)
 
-	err := a.MigrateSchedule(context.Background(), &schedulerpb.MigrateScheduleRequest{})
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "MigrateSchedule")
+	require.Contains(t, err.Error(), "MigrateScheduleToChasm")
 }

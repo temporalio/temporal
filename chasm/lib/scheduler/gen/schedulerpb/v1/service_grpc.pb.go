@@ -26,7 +26,7 @@ const (
 	SchedulerService_DeleteSchedule_FullMethodName            = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/DeleteSchedule"
 	SchedulerService_DescribeSchedule_FullMethodName          = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/DescribeSchedule"
 	SchedulerService_ListScheduleMatchingTimes_FullMethodName = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/ListScheduleMatchingTimes"
-	SchedulerService_MigrateSchedule_FullMethodName           = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/MigrateSchedule"
+	SchedulerService_CreateFromMigrationState_FullMethodName  = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/CreateFromMigrationState"
 )
 
 // SchedulerServiceClient is the client API for SchedulerService service.
@@ -39,7 +39,7 @@ type SchedulerServiceClient interface {
 	DeleteSchedule(ctx context.Context, in *DeleteScheduleRequest, opts ...grpc.CallOption) (*DeleteScheduleResponse, error)
 	DescribeSchedule(ctx context.Context, in *DescribeScheduleRequest, opts ...grpc.CallOption) (*DescribeScheduleResponse, error)
 	ListScheduleMatchingTimes(ctx context.Context, in *ListScheduleMatchingTimesRequest, opts ...grpc.CallOption) (*ListScheduleMatchingTimesResponse, error)
-	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	CreateFromMigrationState(ctx context.Context, in *CreateFromMigrationStateRequest, opts ...grpc.CallOption) (*CreateFromMigrationStateResponse, error)
 }
 
 type schedulerServiceClient struct {
@@ -104,9 +104,9 @@ func (c *schedulerServiceClient) ListScheduleMatchingTimes(ctx context.Context, 
 	return out, nil
 }
 
-func (c *schedulerServiceClient) MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error) {
-	out := new(MigrateScheduleResponse)
-	err := c.cc.Invoke(ctx, SchedulerService_MigrateSchedule_FullMethodName, in, out, opts...)
+func (c *schedulerServiceClient) CreateFromMigrationState(ctx context.Context, in *CreateFromMigrationStateRequest, opts ...grpc.CallOption) (*CreateFromMigrationStateResponse, error) {
+	out := new(CreateFromMigrationStateResponse)
+	err := c.cc.Invoke(ctx, SchedulerService_CreateFromMigrationState_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ type SchedulerServiceServer interface {
 	DeleteSchedule(context.Context, *DeleteScheduleRequest) (*DeleteScheduleResponse, error)
 	DescribeSchedule(context.Context, *DescribeScheduleRequest) (*DescribeScheduleResponse, error)
 	ListScheduleMatchingTimes(context.Context, *ListScheduleMatchingTimesRequest) (*ListScheduleMatchingTimesResponse, error)
-	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error)
 	mustEmbedUnimplementedSchedulerServiceServer()
 }
 
@@ -149,8 +149,8 @@ func (UnimplementedSchedulerServiceServer) DescribeSchedule(context.Context, *De
 func (UnimplementedSchedulerServiceServer) ListScheduleMatchingTimes(context.Context, *ListScheduleMatchingTimesRequest) (*ListScheduleMatchingTimesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListScheduleMatchingTimes not implemented")
 }
-func (UnimplementedSchedulerServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+func (UnimplementedSchedulerServiceServer) CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateFromMigrationState not implemented")
 }
 func (UnimplementedSchedulerServiceServer) mustEmbedUnimplementedSchedulerServiceServer() {}
 
@@ -273,20 +273,20 @@ func _SchedulerService_ListScheduleMatchingTimes_Handler(srv interface{}, ctx co
 	return interceptor(ctx, in, info, handler)
 }
 
-func _SchedulerService_MigrateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(MigrateScheduleRequest)
+func _SchedulerService_CreateFromMigrationState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateFromMigrationStateRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SchedulerServiceServer).MigrateSchedule(ctx, in)
+		return srv.(SchedulerServiceServer).CreateFromMigrationState(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SchedulerService_MigrateSchedule_FullMethodName,
+		FullMethod: SchedulerService_CreateFromMigrationState_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServiceServer).MigrateSchedule(ctx, req.(*MigrateScheduleRequest))
+		return srv.(SchedulerServiceServer).CreateFromMigrationState(ctx, req.(*CreateFromMigrationStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -323,8 +323,8 @@ var SchedulerService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SchedulerService_ListScheduleMatchingTimes_Handler,
 		},
 		{
-			MethodName: "MigrateSchedule",
-			Handler:    _SchedulerService_MigrateSchedule_Handler,
+			MethodName: "CreateFromMigrationState",
+			Handler:    _SchedulerService_CreateFromMigrationState_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

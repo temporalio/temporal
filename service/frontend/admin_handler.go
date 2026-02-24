@@ -2435,7 +2435,7 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         request.Namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-				SignalName:        scheduler.SignalNameMigrate,
+				SignalName:        scheduler.SignalNameMigrateToChasm,
 				Identity:          request.Identity,
 				RequestId:         request.RequestId,
 			},
