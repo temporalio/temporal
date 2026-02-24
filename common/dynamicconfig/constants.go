@@ -1432,6 +1432,13 @@ second per poller by one physical queue manager`,
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
+	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
+		"matching.enablePollerAutoscalingMetrics",
+		false,
+		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
+The metric has 2 dimensions: namespace_id and poller_type (workflow, activity, nexus). Disabled by default
+as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
+	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
 		false,

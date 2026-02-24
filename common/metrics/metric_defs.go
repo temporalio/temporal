@@ -29,7 +29,12 @@ const (
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
 	WorkerPluginNameTagName     = "worker_plugin_name"
+	PollerTypeTagName           = "poller_type"
 	headerCallsiteTagName       = "header_callsite"
+
+	PollerTypeWorkflow = "workflow"
+	PollerTypeActivity = "activity"
+	PollerTypeNexus    = "nexus"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1203,6 +1208,13 @@ var (
 		"worker_plugin_name",
 		WithDescription(
 			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand poller autoscaling adoption.
+	PollerAutoscalingEnabledMetric = NewGaugeDef(
+		"poller_autoscaling_enabled",
+		WithDescription(
+			"Set to 1 if workers report poller autoscaling enabled. Dimensions: namespace_id, poller_type"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
