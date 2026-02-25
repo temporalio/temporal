@@ -193,6 +193,20 @@ func (mr *MockShardContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockShardContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
 }
 
+// EndpointRegistry mocks base method.
+func (m *MockShardContext) EndpointRegistry() chasm.EndpointRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EndpointRegistry")
+	ret0, _ := ret[0].(chasm.EndpointRegistry)
+	return ret0
+}
+
+// EndpointRegistry indicates an expected call of EndpointRegistry.
+func (mr *MockShardContextMockRecorder) EndpointRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndpointRegistry", reflect.TypeOf((*MockShardContext)(nil).EndpointRegistry))
+}
+
 // GenerateTaskID mocks base method.
 func (m *MockShardContext) GenerateTaskID() (int64, error) {
 	m.ctrl.T.Helper()
@@ -968,6 +982,20 @@ func (m *MockControllableContext) DeleteWorkflowExecution(ctx context.Context, w
 func (mr *MockControllableContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockControllableContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, archetypeID, branchToken, closeExecutionVisibilityTaskID, workflowCloseTime, stage)
+}
+
+// EndpointRegistry mocks base method.
+func (m *MockControllableContext) EndpointRegistry() chasm.EndpointRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EndpointRegistry")
+	ret0, _ := ret[0].(chasm.EndpointRegistry)
+	return ret0
+}
+
+// EndpointRegistry indicates an expected call of EndpointRegistry.
+func (mr *MockControllableContextMockRecorder) EndpointRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndpointRegistry", reflect.TypeOf((*MockControllableContext)(nil).EndpointRegistry))
 }
 
 // FinishStop mocks base method.
