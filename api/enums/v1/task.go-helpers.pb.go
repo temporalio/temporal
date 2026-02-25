@@ -57,6 +57,7 @@ var (
 		"ReplicationSyncVersionedTransition": 31,
 		"ChasmPure":                          32,
 		"Chasm":                              33,
+		"ActivityCommand":                    34,
 	}
 )
 
@@ -69,6 +70,24 @@ func TaskTypeFromString(s string) (TaskType, error) {
 		return TaskType(v), nil
 	}
 	return TaskType(0), fmt.Errorf("%s is not a valid TaskType", s)
+}
+
+var (
+	ActivityCommandType_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Cancel":      1,
+	}
+)
+
+// ActivityCommandTypeFromString parses a ActivityCommandType value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to ActivityCommandType
+func ActivityCommandTypeFromString(s string) (ActivityCommandType, error) {
+	if v, ok := ActivityCommandType_value[s]; ok {
+		return ActivityCommandType(v), nil
+	} else if v, ok := ActivityCommandType_shorthandValue[s]; ok {
+		return ActivityCommandType(v), nil
+	}
+	return ActivityCommandType(0), fmt.Errorf("%s is not a valid ActivityCommandType", s)
 }
 
 var (

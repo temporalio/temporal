@@ -350,6 +350,7 @@ message TransferTaskInfo {
         // by some other task, so this task doesn't need to worry about it.
         bool can_skip_visibility_archival = 1;
     }
+
     oneof task_details {
         CloseExecutionTaskDetails close_execution_task_details = 16;
 
@@ -482,6 +483,25 @@ message OutboundTaskInfo {
 
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 9;
+
+        // If the task is a worker commands task.
+        WorkerCommandsTask worker_commands_task = 10;
+    }
+}
+
+// WorkerCommandsTask contains worker commands to dispatch via Nexus.
+message WorkerCommandsTask {
+    repeated WorkerCommand commands = 1;
+
+    message WorkerCommand {
+        oneof type {
+            CancelActivity cancel_activity = 1;
+        }
+    }
+
+    message CancelActivity {
+        // Task token identifying the activity to cancel.
+        bytes task_token = 1;
     }
 }
 

@@ -70,6 +70,20 @@ func (m *MockMutableState) EXPECT() *MockMutableStateMockRecorder {
 	return m.recorder
 }
 
+// AddActivityCommandTasks mocks base method.
+func (m *MockMutableState) AddActivityCommandTasks(taskTokens [][]byte, controlQueue string, commandType enums0.ActivityCommandType) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddActivityCommandTasks", taskTokens, controlQueue, commandType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddActivityCommandTasks indicates an expected call of AddActivityCommandTasks.
+func (mr *MockMutableStateMockRecorder) AddActivityCommandTasks(taskTokens, controlQueue, commandType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddActivityCommandTasks", reflect.TypeOf((*MockMutableState)(nil).AddActivityCommandTasks), taskTokens, controlQueue, commandType)
+}
+
 // AddActivityTaskCancelRequestedEvent mocks base method.
 func (m *MockMutableState) AddActivityTaskCancelRequestedEvent(arg0, arg1 int64, arg2 string) (*history.HistoryEvent, *persistence.ActivityInfo, error) {
 	m.ctrl.T.Helper()

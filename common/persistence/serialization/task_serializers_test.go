@@ -169,6 +169,19 @@ func (s *taskSerializerSuite) TestTransferResetTask() {
 	s.assertEqualTasks(resetTask)
 }
 
+func (s *taskSerializerSuite) TestOutboundActivityCommandTask() {
+	activityCommandTask := &tasks.ActivityCommandTask{
+		WorkflowKey:         s.workflowKey,
+		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
+		TaskID:              rand.Int63(),
+		CommandType:         enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
+		TaskTokens:          [][]byte{[]byte("token1"), []byte("token2"), []byte("token3")},
+		Destination:         "test-control-queue",
+	}
+
+	s.assertEqualTasks(activityCommandTask)
+}
+
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {
 	workflowTaskTimer := &tasks.WorkflowTaskTimeoutTask{
 		WorkflowKey:         s.workflowKey,
