@@ -13,6 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -51,6 +52,7 @@ type (
 		nexus            *nexusTaskInfo   // non-nil for a nexus task that's locally sync matched
 		started          *startedTaskInfo // non-nil for a task received from a parent partition which is already started
 		namespace        namespace.Name
+		createTime       *timestamppb.Timestamp
 		source           enumsspb.TaskSource
 		responseC        chan taskResponse // non-nil only where there is a caller waiting for response (sync match)
 		backlogCountHint func() int64
@@ -133,6 +135,7 @@ func newInternalTaskForSyncMatch(
 				TaskId: syncMatchTaskId,
 			},
 		},
+		createTime:   getCreateTime(forwardInfo),
 		forwardInfo:  forwardInfo,
 		source:       source,
 		redirectInfo: redirectInfo,
@@ -154,6 +157,7 @@ func newInternalTaskFromBacklog(
 			AllocatedTaskInfo: info,
 			completionFunc:    completionFunc,
 		},
+		createTime:        info.GetData().GetCreateTime(),
 		source:            enumsspb.TASK_SOURCE_DB_BACKLOG,
 		effectivePriority: effectivePriorityFactor * priorityKey(info.GetData().GetPriority().GetPriorityKey()),
 	}
@@ -168,11 +172,19 @@ func newInternalQueryTask(
 			taskID:  taskID,
 			request: request,
 		},
+		createTime:        getCreateTime(request.GetForwardInfo()),
 		forwardInfo:       request.GetForwardInfo(),
 		responseC:         make(chan taskResponse, 1),
 		source:            enumsspb.TASK_SOURCE_HISTORY,
 		effectivePriority: effectivePriorityFactor * priorityKey(request.GetPriority().GetPriorityKey()),
 	}
+}
+
+func getCreateTime(f *taskqueuespb.TaskForwardInfo) *timestamppb.Timestamp {
+	if f != nil && f.GetCreateTime() != nil {
+		return f.GetCreateTime()
+	}
+	return timestamppb.Now()
 }
 
 func newInternalNexusTask(
@@ -188,6 +200,7 @@ func newInternalNexusTask(
 			operationDeadline: operationDeadline,
 			request:           request,
 		},
+		createTime:  getCreateTime(request.GetForwardInfo()),
 		forwardInfo: request.GetForwardInfo(),
 		responseC:   make(chan taskResponse, 1),
 		source:      enumsspb.TASK_SOURCE_HISTORY,

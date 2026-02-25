@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -23,6 +24,7 @@ type (
 		queue     *PhysicalTaskQueueKey
 		partition *tqid.NormalPartition
 		client    matchingservice.MatchingServiceClient
+		testHooks testhooks.TestHooks
 	}
 )
 
@@ -40,6 +42,7 @@ func newPriForwarder(
 	cfg *forwarderConfig,
 	queue *PhysicalTaskQueueKey,
 	client matchingservice.MatchingServiceClient,
+	testHooks testhooks.TestHooks,
 ) (*priForwarder, error) {
 	partition, ok := queue.Partition().(*tqid.NormalPartition)
 	if !ok {
@@ -50,11 +53,16 @@ func newPriForwarder(
 		client:    client,
 		partition: partition,
 		queue:     queue,
+		testHooks: testHooks,
 	}, nil
 }
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
 func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) error {
+	if delay, ok := testhooks.Get[time.Duration](f.testHooks, testhooks.MatchingForwardTaskDelay); ok {
+		time.Sleep(delay)
+	}
+
 	degree := f.cfg.ForwarderMaxChildrenPerNode()
 	target, err := f.partition.ParentPartition(degree)
 	if err != nil {
@@ -127,8 +135,10 @@ func (f *priForwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 	}
 	// task is forwarded for the first time
 	return &taskqueuespb.TaskForwardInfo{
+		CreateTime:         task.createTime,
 		TaskSource:         task.source,
 		SourcePartition:    f.partition.RpcName(),
+		OriginPartition:    f.partition.RpcName(),
 		DispatchBuildId:    f.queue.Version().BuildId(),
 		DispatchVersionSet: f.queue.Version().VersionSet(),
 		RedirectInfo:       task.redirectInfo,
@@ -140,6 +150,10 @@ func (f *priForwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
+	if delay, ok := testhooks.Get[time.Duration](f.testHooks, testhooks.MatchingForwardTaskDelay); ok {
+		time.Sleep(delay)
+	}
+
 	degree := f.cfg.ForwarderMaxChildrenPerNode()
 	target, err := f.partition.ParentPartition(degree)
 	if err != nil {
@@ -155,6 +169,7 @@ func (f *priForwarder) ForwardQueryTask(
 		QueryRequest:     task.query.request.QueryRequest,
 		VersionDirective: task.query.request.VersionDirective,
 		ForwardInfo:      f.getForwardInfo(task),
+		Priority:         task.query.request.GetPriority(),
 	})
 
 	return resp, err
@@ -162,6 +177,10 @@ func (f *priForwarder) ForwardQueryTask(
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
 func (f *priForwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+	if delay, ok := testhooks.Get[time.Duration](f.testHooks, testhooks.MatchingForwardTaskDelay); ok {
+		time.Sleep(delay)
+	}
+
 	degree := f.cfg.ForwarderMaxChildrenPerNode()
 	target, err := f.partition.ParentPartition(degree)
 	if err != nil {

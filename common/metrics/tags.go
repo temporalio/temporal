@@ -267,6 +267,14 @@ func TaskPriorityTag(value string) Tag {
 	return Tag{Key: TaskPriorityTagName, Value: value}
 }
 
+func TaskSourceTag(source enumsspb.TaskSource) Tag {
+	return Tag{Key: "source", Value: source.String()}
+}
+
+func ForwardedTag(forwarded bool) Tag {
+	return Tag{Key: "forwarded", Value: strconv.FormatBool(forwarded)}
+}
+
 func MatchingTaskPriorityTag(value int32) Tag {
 	priStr := ""
 	if value != 0 {

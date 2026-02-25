@@ -84,6 +84,7 @@ type (
 		BacklogNegligibleAge                     dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		MaxWaitForPollerBeforeFwd                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		QueryPollerUnavailableWindow             dynamicconfig.DurationPropertyFn
+		EmitTaskDispatchLatencyAtPoll            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		QueryWorkflowTaskTimeoutLogRate          dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		MembershipUnloadDelay                    dynamicconfig.DurationPropertyFn
 		TaskQueueInfoByBuildIdTTL                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -148,7 +149,8 @@ type (
 		PriorityBacklogForwarding    func() bool
 		BacklogNegligibleAge         func() time.Duration
 		MaxWaitForPollerBeforeFwd    func() time.Duration
-		QueryPollerUnavailableWindow func() time.Duration
+		QueryPollerUnavailableWindow       func() time.Duration
+		EmitTaskDispatchLatencyAtPoll      func() bool
 		// Time to hold a poll request before returning an empty response if there are no tasks
 		LongPollExpirationInterval func() time.Duration
 		BacklogTaskForwardTimeout  func() time.Duration
@@ -322,6 +324,7 @@ func NewConfig(
 		BacklogNegligibleAge:                     dynamicconfig.MatchingBacklogNegligibleAge.Get(dc),
 		MaxWaitForPollerBeforeFwd:                dynamicconfig.MatchingMaxWaitForPollerBeforeFwd.Get(dc),
 		QueryPollerUnavailableWindow:             dynamicconfig.QueryPollerUnavailableWindow.Get(dc),
+		EmitTaskDispatchLatencyAtPoll:            dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll.Get(dc),
 		QueryWorkflowTaskTimeoutLogRate:          dynamicconfig.MatchingQueryWorkflowTaskTimeoutLogRate.Get(dc),
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
@@ -414,6 +417,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 			return config.MaxWaitForPollerBeforeFwd(ns.String(), taskQueueName, taskType)
 		},
 		QueryPollerUnavailableWindow: config.QueryPollerUnavailableWindow,
+		EmitTaskDispatchLatencyAtPoll: func() bool {
+			return config.EmitTaskDispatchLatencyAtPoll(ns.String(), taskQueueName, taskType)
+		},
 		LongPollExpirationInterval: func() time.Duration {
 			return config.LongPollExpirationInterval(ns.String(), taskQueueName, taskType)
 		},
