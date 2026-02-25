@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -1416,9 +1417,9 @@ func mergeStatsByPriority(into, from map[int32]*taskqueuepb.TaskQueueStats) {
 			continue
 		}
 		ensureStatsWithAge(into, pri)
-		// mergeStats requires non-nil ApproximateBacklogAge on both inputs.
+		// MergeStats requires non-nil ApproximateBacklogAge on both inputs.
 		s = cloneTaskQueueStats(s)
-		mergeStats(into[pri], s)
+		taskqueue.MergeStats(into[pri], s)
 	}
 }
 
