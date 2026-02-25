@@ -37,6 +37,6 @@ const (
 )
 
 type Key[T any, S any] struct {
-	id    keyID
+	id        keyID
 	scopeType ScopeType
 }
