@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -29,6 +30,8 @@ type (
 		sqlStore                       persistencesql.SqlStore
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
+		metricsHandler                 metrics.Handler
+		logger                         log.Logger
 	}
 )
 
@@ -54,6 +57,8 @@ func NewSQLVisibilityStore(
 		sqlStore:                       persistencesql.NewSqlStore(db, logger),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		metricsHandler:                 metricsHandler,
+		logger:                         logger,
 	}, nil
 }
 
@@ -386,6 +391,13 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	if err != nil {
 		return nil, err
 	}
+	if len(request.SearchAttributes.GetIndexedFields()) != len(searchAttributes) {
+		for name := range request.SearchAttributes.GetIndexedFields() {
+			if _, ok := searchAttributes[name]; !ok {
+				s.logger.Warn("Skipping unknown search attribute while generating visibility record", tag.String("search-attribute", name))
+			}
+		}
+	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
@@ -471,6 +483,9 @@ func (s *VisibilityStore) processRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		tp, err := saTypeMap.GetType(name)
 		if err != nil {
+			if errors.Is(err, searchattribute.ErrInvalidName) {
+				continue
+			}
 			return nil, err
 		}
 		if tp == enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST {
