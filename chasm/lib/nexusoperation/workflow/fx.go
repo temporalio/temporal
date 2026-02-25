@@ -7,18 +7,14 @@ import (
 	"go.uber.org/fx"
 )
 
-type registerParams struct {
-	fx.In
-
-	Registry      *command.Registry
-	Config        *nexusoperation.Config
-	ChasmRegistry *chasm.Registry
-}
-
 var Module = fx.Module(
 	"chasm.lib.nexusoperations.workflow",
 	nexusoperation.Module,
-	fx.Invoke(func(p registerParams) error {
-		return registerCommandHandlers(p.Registry, p.Config, p.ChasmRegistry.NexusEndpointProcessor)
+	fx.Invoke(func(
+		registry *command.Registry,
+		config *nexusoperation.Config,
+		chasmRegistry *chasm.Registry,
+	) error {
+		return registerCommandHandlers(registry, config, chasmRegistry.NexusEndpointProcessor)
 	}),
 )

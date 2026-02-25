@@ -53,11 +53,11 @@ func registerCommandHandlers(
 //nolint:revive // cognitive-complexity: this is a direct port of the HSM command handler
 func (ch *commandHandler) handleScheduleCommand(
 	chasmCtx chasm.MutableContext,
+	wf *chasmworkflow.Workflow,
 	validator command.Validator,
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	wf, _ := opts.ChasmWorkflow.(*chasmworkflow.Workflow)
 	ns := chasmCtx.NamespaceEntry()
 	nsName := ns.Name().String()
 
@@ -288,6 +288,7 @@ func (ch *commandHandler) handleScheduleCommand(
 
 func handleCancelCommand(
 	chasmCtx chasm.MutableContext,
+	wf *chasmworkflow.Workflow,
 	validator command.Validator,
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
