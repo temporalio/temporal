@@ -59,16 +59,16 @@ func Call[S any](th TestHooks, key Key[func(), S], scope S) {
 
 // Hook bundles a key and value for type-erased use in InjectHook.
 type Hook struct {
-	scopeType Scope
+	scopeType ScopeType
 	apply     func(TestHooks, any) func()
 }
 
-func (h Hook) Scope() Scope                         { return h.scopeType }
+func (h Hook) Scope() ScopeType                     { return h.scopeType }
 func (h Hook) Apply(th TestHooks, scope any) func() { return h.apply(th, scope) }
 
 func NewHook[T any, S any](key Key[T, S], value T) Hook {
 	return Hook{
-		scopeType: key.scope,
+		scopeType: key.scopeType,
 		apply: func(th TestHooks, scope any) func() {
 			if _, ok := scope.(S); !ok {
 				panic("testhooks: scope type mismatch")
@@ -90,7 +90,7 @@ var keyCounter atomic.Int64
 
 func newKey[T any, S any]() Key[T, S] {
 	var zero S
-	var s Scope
+	var s ScopeType
 	switch any(zero).(type) {
 	case namespace.ID:
 		s = ScopeNamespace
@@ -99,5 +99,5 @@ func newKey[T any, S any]() Key[T, S] {
 	default:
 		panic("testhooks: unknown scope type")
 	}
-	return Key[T, S]{id: keyCounter.Add(1), scope: s}
+	return Key[T, S]{id: keyCounter.Add(1), scopeType: s}
 }

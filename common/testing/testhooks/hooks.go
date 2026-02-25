@@ -28,15 +28,15 @@ type global struct{}
 // GlobalScope is the singleton value for global hooks.
 var GlobalScope = global{}
 
-// Scope indicates the scope of a hook at runtime.
-type Scope int
+// ScopeType indicates the scope of a hook at runtime.
+type ScopeType int
 
 const (
-	ScopeNamespace Scope = iota
+	ScopeNamespace ScopeType = iota
 	ScopeGlobal
 )
 
 type Key[T any, S any] struct {
 	id    keyID
-	scope Scope
+	scopeType ScopeType
 }

@@ -39,7 +39,7 @@ func Call[S any](_ TestHooks, _ Key[func(), S], _ S) {}
 // Hook is an empty stub in production mode. NewHook and its methods are only available with -tags=test_dep.
 type Hook struct{}
 
-func (h Hook) Scope() Scope {
+func (h Hook) Scope() ScopeType {
 	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
 }
 
