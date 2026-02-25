@@ -148,7 +148,8 @@ type (
 
 		stateMachineRegistry *hsm.Registry
 
-		chasmRegistry *chasm.Registry
+		chasmRegistry    *chasm.Registry
+		endpointRegistry chasm.EndpointRegistry
 	}
 
 	remoteClusterInfo struct {
@@ -2077,6 +2078,7 @@ func newContext(
 	eventsCache events.Cache,
 	stateMachineRegistry *hsm.Registry,
 	chasmRegistry *chasm.Registry,
+	endpointRegistry chasm.EndpointRegistry,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	sequenceID := atomic.AddInt64(&shardContextSequenceID, 1)
@@ -2126,6 +2128,7 @@ func newContext(
 		ioSemaphore:             locks.NewPrioritySemaphore(ioConcurrency),
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
+		endpointRegistry:        endpointRegistry,
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2230,6 +2233,10 @@ func (s *ContextImpl) StateMachineRegistry() *hsm.Registry {
 
 func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 	return s.chasmRegistry
+}
+
+func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
+	return s.endpointRegistry
 }
 
 func (s *ContextImpl) GetCachedWorkflowContext(

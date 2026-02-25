@@ -4,6 +4,8 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -116,6 +118,25 @@ func (w *Workflow) AddCompletionCallbacks(
 		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
+}
+
+func (w *Workflow) AddNexusOperation(
+	ctx chasm.MutableContext,
+	key string,
+	op *nexusoperation.Operation,
+) {
+	if w.Operations == nil {
+		w.Operations = make(chasm.Map[string, *nexusoperation.Operation])
+	}
+	w.Operations[key] = chasm.NewComponentField(ctx, op)
+}
+
+func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	return w.MSPointer.AddHistoryEvent(t, setAttributes)
+}
+
+func (w *Workflow) PendingNexusOperationCount() int {
+	return len(w.Operations)
 }
 
 func (w *Workflow) GetNexusCompletion(
