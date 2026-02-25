@@ -74,7 +74,7 @@ jobs:
           platform: ${{ inputs.platform }}
           cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}
-          load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
+          load: ${{ inputs.platform == 'linux/amd64' }}
 
       - name: Build and push Docker images
         if: ${{ inputs.push }}

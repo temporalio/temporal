@@ -70,15 +70,15 @@ runs:
       run: |
         .github/actions/build-docker-images/scripts/docker-build-helper download-cli
 
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
     - name: Extract server version from binary
       id: extract-version
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
         .github/actions/build-docker-images/scripts/docker-build-helper extract-version
-
-    - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
