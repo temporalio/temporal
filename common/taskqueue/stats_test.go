@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -28,8 +27,8 @@ func TestMergeStats(t *testing.T) {
 
 	require.Equal(t, int64(30), into.ApproximateBacklogCount)
 	require.Equal(t, 100*time.Second, into.ApproximateBacklogAge.AsDuration())
-	require.Equal(t, float64(7), into.TasksAddRate)
-	require.Equal(t, float64(4), into.TasksDispatchRate)
+	require.InDelta(t, 7, into.TasksAddRate, 1e-9)
+	require.InDelta(t, 4, into.TasksDispatchRate, 1e-9)
 }
 
 func TestDedupPollers(t *testing.T) {
