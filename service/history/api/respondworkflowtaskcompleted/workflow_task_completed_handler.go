@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -327,12 +328,16 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	default:
 		var commandHandler chasmcommand.Handler
 		var chasmCtx chasm.MutableContext
+		var chasmWorkflow *chasmworkflow.Workflow
 
 		// TODO: need to handle migration between HSM and CHASM
 
+		handlerOpts := chasmcommand.HandlerOptions{
+			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
+		}
 		if handler.mutableState.ChasmEnabled() {
 			// Use CHASM command handler.
-			_, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
+			chasmWorkflow, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -350,16 +355,14 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			}
 
 			// Wrap HSM command handler to match CHASM command handler signature.
-			commandHandler = func(_ chasm.MutableContext, v chasmcommand.Validator, cmd *commandpb.Command, opts chasmcommand.HandlerOptions) error {
+			commandHandler = func(_ chasm.MutableContext, _ *chasmworkflow.Workflow, v chasmcommand.Validator, cmd *commandpb.Command, opts chasmcommand.HandlerOptions) error {
 				return legacyHandler(ctx, handler.mutableState, v, opts.WorkflowTaskCompletedEventID, cmd)
 			}
 		}
 
 		// Invoke command handler.
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err = commandHandler(chasmCtx, validator, command, chasmcommand.HandlerOptions{
-			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
-		})
+		err = commandHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
 		var failWFTErr chasmcommand.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.TerminateWorkflow {
