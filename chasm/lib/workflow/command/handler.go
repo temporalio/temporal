@@ -4,6 +4,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
 
 type HandlerOptions struct {
@@ -14,6 +15,7 @@ type HandlerOptions struct {
 // worker request.
 type Handler func(
 	chasmCtx chasm.MutableContext,
+	wf *chasmworkflow.Workflow,
 	validator Validator,
 	command *commandpb.Command,
 	opts HandlerOptions,
