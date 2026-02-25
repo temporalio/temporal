@@ -1447,6 +1447,21 @@ func serializeOutboundTask(
 			},
 		}
 	case *tasks.ActivityCommandTask:
+		commands := make([]*persistencespb.WorkerCommandsTask_WorkerCommand, 0, len(task.TaskTokens))
+		for _, token := range task.TaskTokens {
+			switch task.CommandType {
+			case enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL:
+				commands = append(commands, &persistencespb.WorkerCommandsTask_WorkerCommand{
+					Type: &persistencespb.WorkerCommandsTask_WorkerCommand_CancelActivity{
+						CancelActivity: &persistencespb.WorkerCommandsTask_CancelActivity{
+							TaskToken: token,
+						},
+					},
+				})
+			default:
+				return nil, serviceerror.NewInternalf("unknown activity command type: %v", task.CommandType)
+			}
+		}
 		outboundTaskInfo = &persistencespb.OutboundTaskInfo{
 			NamespaceId:    task.NamespaceID,
 			WorkflowId:     task.WorkflowID,
@@ -1455,10 +1470,9 @@ func serializeOutboundTask(
 			TaskType:       task.GetType(),
 			Destination:    task.Destination,
 			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-			TaskDetails: &persistencespb.OutboundTaskInfo_ActivityCommandInfo{
-				ActivityCommandInfo: &persistencespb.ActivityCommandTaskInfo{
-					CommandType: task.CommandType,
-					TaskTokens:  task.TaskTokens,
+			TaskDetails: &persistencespb.OutboundTaskInfo_WorkerCommandsTask{
+				WorkerCommandsTask: &persistencespb.WorkerCommandsTask{
+					Commands: commands,
 				},
 			},
 		}
@@ -1505,7 +1519,15 @@ func deserializeOutboundTask(
 			Destination:         info.Destination,
 		}, nil
 	case enumsspb.TASK_TYPE_ACTIVITY_COMMAND:
-		activityCommandInfo := info.GetActivityCommandInfo()
+		workerCommandsTask := info.GetWorkerCommandsTask()
+		var commandType enumsspb.ActivityCommandType
+		var taskTokens [][]byte
+		for _, cmd := range workerCommandsTask.GetCommands() {
+			if cancelActivity := cmd.GetCancelActivity(); cancelActivity != nil {
+				commandType = enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL
+				taskTokens = append(taskTokens, cancelActivity.GetTaskToken())
+			}
+		}
 		return &tasks.ActivityCommandTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				info.NamespaceId,
@@ -1514,8 +1536,8 @@ func deserializeOutboundTask(
 			),
 			VisibilityTimestamp: info.VisibilityTime.AsTime(),
 			TaskID:              info.TaskId,
-			CommandType:         activityCommandInfo.GetCommandType(),
-			TaskTokens:          activityCommandInfo.GetTaskTokens(),
+			CommandType:         commandType,
+			TaskTokens:          taskTokens,
 			Destination:         info.Destination,
 		}, nil
 	default:

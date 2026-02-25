@@ -484,18 +484,25 @@ message OutboundTaskInfo {
         // If the task addresses a CHASM component, this field will be set.
         ChasmTaskInfo chasm_task_info = 9;
 
-        // If the task is an activity command task.
-        ActivityCommandTaskInfo activity_command_info = 10;
+        // If the task is a worker commands task.
+        WorkerCommandsTask worker_commands_task = 10;
     }
 }
 
-// ActivityCommandTaskInfo contains details for activity command operation.
-message ActivityCommandTaskInfo {
-    // Type of command to send.
-    temporal.server.api.enums.v1.ActivityCommandType command_type = 1;
+// WorkerCommandsTask contains worker commands to dispatch via Nexus.
+message WorkerCommandsTask {
+    repeated WorkerCommand commands = 1;
 
-    // Task tokens of activities.
-    repeated bytes task_tokens = 2;
+    message WorkerCommand {
+        oneof type {
+            CancelActivity cancel_activity = 1;
+        }
+    }
+
+    message CancelActivity {
+        // Task token identifying the activity to cancel.
+        bytes task_token = 1;
+    }
 }
 
 message NexusInvocationTaskInfo {
