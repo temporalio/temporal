@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -942,8 +943,10 @@ func (s *VisibilityStore) GenerateESDoc(
 		metrics.ElasticsearchDocumentGenerateFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf("unable to decode search attributes: %v", err)
 	}
-	if skipped := len(request.SearchAttributes.GetIndexedFields()) - len(searchAttributes); skipped > 0 {
-		metrics.UnknownSearchAttributeSkippedCount.With(s.metricsHandler).Record(int64(skipped))
+	for name := range request.SearchAttributes.GetIndexedFields() {
+		if _, ok := searchAttributes[name]; !ok {
+			s.logger.Warn("Skipping unknown search attribute while generating visibility record", tag.String("search-attribute", name))
+		}
 	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.

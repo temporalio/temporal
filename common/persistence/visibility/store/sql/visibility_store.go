@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -34,6 +35,7 @@ type (
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		chasmRegistry                  *chasm.Registry
 		metricsHandler                 metrics.Handler
+		logger                         log.Logger
 
 		enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn
 	}
@@ -76,6 +78,7 @@ func NewSQLVisibilityStore(
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		chasmRegistry:                  chasmRegistry,
 		metricsHandler:                 metricsHandler,
+		logger:                         logger,
 
 		enableUnifiedQueryConverter: enableUnifiedQueryConverter,
 	}, nil
@@ -791,8 +794,12 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	if err != nil {
 		return nil, err
 	}
-	if skipped := len(request.SearchAttributes.GetIndexedFields()) - len(searchAttributes); skipped > 0 {
-		metrics.UnknownSearchAttributeSkippedCount.With(s.metricsHandler).Record(int64(skipped))
+	if len(request.SearchAttributes.GetIndexedFields()) != len(searchAttributes) {
+		for name := range request.SearchAttributes.GetIndexedFields() {
+			if _, ok := searchAttributes[name]; !ok {
+				s.logger.Warn("Skipping unknown search attribute while generating visibility record", tag.String("search-attribute", name))
+			}
+		}
 	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
