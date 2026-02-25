@@ -83,6 +83,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 						Message: handlerErr.Message,
 					}
 				}
+
 			}
 			return err
 		}
