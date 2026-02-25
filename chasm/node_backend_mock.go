@@ -31,6 +31,7 @@ type MockNodeBackend struct {
 	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent            func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	HandleGetNamespaceEntry          func() *namespace.Namespace
+	HandleEndpointRegistry        func() EndpointRegistry
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -185,6 +186,13 @@ func (m *MockNodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes fun
 func (m *MockNodeBackend) GetNamespaceEntry() *namespace.Namespace {
 	if m.HandleGetNamespaceEntry != nil {
 		return m.HandleGetNamespaceEntry()
+	}
+	return nil
+}
+
+func (m *MockNodeBackend) EndpointRegistry() EndpointRegistry {
+	if m.HandleEndpointRegistry != nil {
+		return m.HandleEndpointRegistry()
 	}
 	return nil
 }

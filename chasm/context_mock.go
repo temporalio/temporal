@@ -2,6 +2,7 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -24,9 +25,9 @@ type MockContext struct {
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
 	HandleLibrary              func(name string) (Library, bool)
-	HandleNamespaceEntry       func() *namespace.Namespace
-	HandleEndpointByName       func(EndpointRegistry, string) (*persistencespb.NexusEndpointEntry, error)
-	HandleMetricsHandler       func() metrics.Handler
+	HandleNamespaceEntry func() *namespace.Namespace
+	HandleEndpointByName func(string) (*persistencespb.NexusEndpointEntry, error)
+	HandleMetricsHandler func() metrics.Handler
 
 	ctx context.Context
 }
@@ -38,18 +39,11 @@ func (c *MockContext) goContext() context.Context {
 	return c.ctx
 }
 
-func (c *MockContext) EndpointByName(reg EndpointRegistry, name string) (*persistencespb.NexusEndpointEntry, error) {
+func (c *MockContext) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
 	if c.HandleEndpointByName != nil {
-		return c.HandleEndpointByName(reg, name)
+		return c.HandleEndpointByName(name)
 	}
-	if reg != nil {
-		nsID := namespace.ID("")
-		if ns := c.NamespaceEntry(); ns != nil {
-			nsID = ns.ID()
-		}
-		return reg.GetByName(context.Background(), nsID, name)
-	}
-	return nil, nil
+	return nil, fmt.Errorf("endpoint registry not available")
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -127,8 +121,8 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleStateTransitionCount: c.HandleStateTransitionCount,
 		HandleLibrary:              c.HandleLibrary,
 		HandleNamespaceEntry:       c.HandleNamespaceEntry,
-		HandleEndpointByName:       c.HandleEndpointByName,
-		HandleMetricsHandler:       c.HandleMetricsHandler,
+		HandleEndpointByName: c.HandleEndpointByName,
+		HandleMetricsHandler: c.HandleMetricsHandler,
 		ctx:                        context.WithValue(c.goContext(), key, value),
 	}
 }

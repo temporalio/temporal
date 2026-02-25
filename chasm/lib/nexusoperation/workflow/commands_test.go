@@ -74,7 +74,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 		},
 	}
 	chReg := command.NewRegistry()
-	require.NoError(t, registerCommandHandlers(chReg, cfg, endpointReg, chasm.NewNexusEndpointProcessor()))
+	require.NoError(t, registerCommandHandlers(chReg, cfg, chasm.NewNexusEndpointProcessor()))
 
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	backend := &chasm.MockNodeBackend{
@@ -104,6 +104,9 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 		MockContext: chasm.MockContext{
 			HandleNamespaceEntry: func() *namespace.Namespace {
 				return tests.GlobalNamespaceEntry
+			},
+			HandleEndpointByName: func(name string) (*persistencespb.NexusEndpointEntry, error) {
+				return endpointReg.GetByName(context.Background(), tests.GlobalNamespaceEntry.ID(), name)
 			},
 		},
 	}

@@ -211,6 +211,7 @@ type (
 			ctx context.Context,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
+		EndpointRegistry() EndpointRegistry
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.

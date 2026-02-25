@@ -2,6 +2,7 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -32,7 +33,7 @@ type Context interface {
 	// NamespaceEntry returns the namespace entry for the execution.
 	NamespaceEntry() *namespace.Namespace
 	// EndpointByName resolves a nexus endpoint entry.
-	EndpointByName(reg EndpointRegistry, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+	EndpointByName(endpointName string) (*persistencespb.NexusEndpointEntry, error)
 	// MetricsHandler returns a metrics handler with bare minimum tags (no namespace tag).
 	MetricsHandler() metrics.Handler
 	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
@@ -175,7 +176,11 @@ func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
 }
 
-func (c *immutableCtx) EndpointByName(reg EndpointRegistry, name string) (*persistencespb.NexusEndpointEntry, error) {
+func (c *immutableCtx) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	reg := c.root.backend.EndpointRegistry()
+	if reg == nil {
+		return nil, fmt.Errorf("endpoint registry not available")
+	}
 	return reg.GetByName(c.ctx, c.NamespaceEntry().ID(), name)
 }
 

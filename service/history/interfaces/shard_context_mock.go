@@ -135,6 +135,20 @@ func (mr *MockShardContextMockRecorder) ChasmRegistry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockShardContext)(nil).ChasmRegistry))
 }
 
+// EndpointRegistry mocks base method.
+func (m *MockShardContext) EndpointRegistry() chasm.EndpointRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EndpointRegistry")
+	ret0, _ := ret[0].(chasm.EndpointRegistry)
+	return ret0
+}
+
+// EndpointRegistry indicates an expected call of EndpointRegistry.
+func (mr *MockShardContextMockRecorder) EndpointRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndpointRegistry", reflect.TypeOf((*MockShardContext)(nil).EndpointRegistry))
+}
+
 // ConflictResolveWorkflowExecution mocks base method.
 func (m *MockShardContext) ConflictResolveWorkflowExecution(ctx context.Context, request *persistence0.ConflictResolveWorkflowExecutionRequest) (*persistence0.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -910,6 +924,20 @@ func (m *MockControllableContext) ChasmRegistry() *chasm.Registry {
 func (mr *MockControllableContextMockRecorder) ChasmRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ChasmRegistry", reflect.TypeOf((*MockControllableContext)(nil).ChasmRegistry))
+}
+
+// EndpointRegistry mocks base method.
+func (m *MockControllableContext) EndpointRegistry() chasm.EndpointRegistry {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EndpointRegistry")
+	ret0, _ := ret[0].(chasm.EndpointRegistry)
+	return ret0
+}
+
+// EndpointRegistry indicates an expected call of EndpointRegistry.
+func (mr *MockControllableContextMockRecorder) EndpointRegistry() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndpointRegistry", reflect.TypeOf((*MockControllableContext)(nil).EndpointRegistry))
 }
 
 // ConflictResolveWorkflowExecution mocks base method.

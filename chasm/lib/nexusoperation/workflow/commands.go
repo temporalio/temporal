@@ -27,18 +27,16 @@ import (
 )
 
 type commandHandler struct {
-	config           *nexusoperation.Config
-	endpointRegistry commonnexus.EndpointRegistry
-	nexusProcessor   *chasm.NexusEndpointProcessor
+	config         *nexusoperation.Config
+	nexusProcessor *chasm.NexusEndpointProcessor
 }
 
 func registerCommandHandlers(
 	registry *command.Registry,
 	config *nexusoperation.Config,
-	endpointRegistry commonnexus.EndpointRegistry,
 	nexusProcessor *chasm.NexusEndpointProcessor,
 ) error {
-	h := &commandHandler{config: config, endpointRegistry: endpointRegistry, nexusProcessor: nexusProcessor}
+	h := &commandHandler{config: config, nexusProcessor: nexusProcessor}
 
 	if err := registry.Register(
 		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
@@ -109,7 +107,7 @@ func (ch *commandHandler) handleScheduleCommand(
 			return err
 		}
 	} else {
-		endpoint, err := chasmCtx.EndpointByName(ch.endpointRegistry, attrs.Endpoint)
+		endpoint, err := chasmCtx.EndpointByName(attrs.Endpoint)
 		if err != nil {
 			if errors.As(err, new(*serviceerror.NotFound)) {
 				return command.FailWorkflowTaskError{
