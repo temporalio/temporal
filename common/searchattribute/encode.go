@@ -1,6 +1,8 @@
 package searchattribute
 
 import (
+	"errors"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
@@ -29,6 +31,13 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 		if typeMap != nil {
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
+				if errors.Is(err, ErrInvalidName) {
+					// Silently skip unknown search attributes. This can happen due to
+					// version mismatches where a newer server wrote a predefined SA
+					// that this server doesn't recognize.
+					delete(indexedFields, saName)
+					continue
+				}
 				lastErr = err
 				continue
 			}
@@ -59,6 +68,12 @@ func Decode(
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
+				if errors.Is(err, ErrInvalidName) {
+					// Silently skip unknown search attributes. This can happen due to
+					// version mismatches where a newer server wrote a predefined SA
+					// that this server doesn't recognize.
+					continue
+				}
 				lastErr = err
 			}
 		}
