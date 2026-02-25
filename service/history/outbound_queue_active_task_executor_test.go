@@ -115,6 +115,8 @@ func (s *outboundQueueActiveTaskExecutorSuite) SetupTest() {
 		s.logger,
 		s.metricsHandler,
 		s.mockChasmEngine,
+		nil, // matchingRawClient - not used in these tests
+		nil, // config - not used in these tests
 	)
 }
 
