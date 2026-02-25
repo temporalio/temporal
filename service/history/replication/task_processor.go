@@ -471,7 +471,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 	}
 }
 
-func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
+func (p *taskProcessorImpl) paginationFn(_ []byte) ([]any, []byte, error) {
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	var lastProcessedVisTime *timestamppb.Timestamp
 	if !p.maxRxProcessedTimestamp.IsZero() {
@@ -501,7 +501,7 @@ func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error
 			// since sync shard status are periodically updated
 		}
 
-		var tasks []interface{}
+		var tasks []any
 		for _, task := range resp.GetReplicationTasks() {
 			tasks = append(tasks, task)
 		}

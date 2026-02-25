@@ -2944,6 +2944,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 					},
 					TaskQueueType:     taskType,
 					WorkerInstanceKey: workerInstanceKey,
+					WorkerIdentity:    request.GetIdentity(),
 				})
 				if err != nil {
 					failedPartitions.Add(1)

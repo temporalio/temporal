@@ -3,7 +3,7 @@
 # - docker/targets/admin-tools.Dockerfile (ARG ALPINE_TAG)
 # NOTE: We use just the tag without a digest pin because digest-pinned manifest lists
 # cause platform resolution issues in multi-arch buildx builds (InvalidBaseImagePlatform warnings).
-ARG ALPINE_TAG=3.23
+ARG ALPINE_TAG=3.23.3
 
 FROM alpine:${ALPINE_TAG}
 

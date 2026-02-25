@@ -79,10 +79,6 @@ const (
 	// Lower bound for the deadline in which buffered actions are dropped.
 	startWorkflowMinDeadline = 5 * time.Second
 
-	// Because the catchup window doesn't apply to a manual start, pick a custom
-	// execution deadline before timing out a start.
-	manualStartExecutionDeadline = 1 * time.Hour
-
 	// Upper bound on how many times starting an individual buffered action should be retried.
 	InvokerMaxStartAttempts = 10 // TODO - dial this up/remove it
 )

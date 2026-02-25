@@ -402,11 +402,34 @@ lint-protos: $(BUF) $(INTERNAL_BINPB) $(CHASM_BINPB)
 	@$(BUF) lint $(INTERNAL_BINPB)
 	@$(BUF) lint --config chasm/lib/buf.yaml $(CHASM_BINPB)
 
-fmt: fmt-imports fmt-yaml
+fmt: fmt-gofix fmt-imports fmt-yaml
+
+# Some fixes enable others (e.g. rangeint may expose minmax opportunities),
+# so - as recommended by the Go team - we run go fix in a loop until it reaches
+# a fixed point. We check for "files updated" in the output rather than relying
+# on the exit code alone, since go fix can exit non-zero without actually
+# modifying any files (see https://github.com/golang/go/issues/77482).
+# Note: go fix automatically skips generated files.
+GOFIX_FLAGS ?= -any -rangeint
+GOFIX_MAX_ITERATIONS ?= 5
+fmt-gofix:
+	@printf $(COLOR) "Run go fix..."
+	@n=0; while [ $$n -lt $(GOFIX_MAX_ITERATIONS) ]; do \
+		output=$$(go fix $(GOFIX_FLAGS) ./... 2>&1); \
+		echo "$$output"; \
+		if ! echo "$$output" | grep -q "files updated"; then break; fi; \
+		n=$$((n + 1)); \
+		printf $(COLOR) "Re-running go fix..."; \
+	done; \
+	if [ $$n -ge $(GOFIX_MAX_ITERATIONS) ]; then echo "ERROR: go fix did not converge after $(GOFIX_MAX_ITERATIONS) iterations"; exit 1; fi
 
 fmt-imports: $(GCI) # Don't get confused, there is a single linter called gci, which is a part of the mega linter we use is called golangci-lint.
-		@printf $(COLOR) "Formatting imports..."
-		@$(GCI) write --skip-generated -s standard -s default ./*
+	@printf $(COLOR) "Formatting imports..."
+	@$(GCI) write --skip-generated -s standard -s default ./*
+
+parallelize-tests:
+	@printf $(COLOR) "Add t.Parallel() to tests..."
+	@go run ./cmd/tools/parallelize $(INTEGRATION_TEST_DIRS)
 
 fmt-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Formatting YAML files..."

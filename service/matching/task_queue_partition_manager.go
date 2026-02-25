@@ -498,10 +498,9 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 		}
 	}
 
-	if identity, ok := ctx.Value(identityKey).(string); ok && identity != "" {
+	identity, hasIdentity := ctx.Value(identityKey).(string)
+	if hasIdentity && identity != "" {
 		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
-		// update timestamp when long poll ends
-		defer dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	// The desired global rate limit for the task queue can come from multiple sources:
@@ -518,6 +517,12 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
 		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+	}
+
+	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).
+	// Skip on cancellation to avoid re-adding entry after RemovePoller was called.
+	if hasIdentity && identity != "" && ctx.Err() != context.Canceled {
+		dbq.UpdatePollerInfo(pollerIdentity(identity), pollMetadata)
 	}
 
 	return task, versionSetUsed, err
@@ -782,6 +787,18 @@ func (pm *taskQueuePartitionManagerImpl) GetAllPollerInfo() []*taskqueuepb.Polle
 	return ret
 }
 
+// RemovePoller eagerly removes a poller from history for graceful shutdown.
+func (pm *taskQueuePartitionManagerImpl) RemovePoller(identity pollerIdentity) {
+	if dbq := pm.defaultQueue(); dbq != nil {
+		dbq.RemovePoller(identity)
+	}
+	pm.versionedQueuesLock.RLock()
+	defer pm.versionedQueuesLock.RUnlock()
+	for _, vq := range pm.versionedQueues {
+		vq.RemovePoller(identity)
+	}
+}
+
 func (pm *taskQueuePartitionManagerImpl) HasAnyPollerAfter(accessTime time.Time) bool {
 	dbq := pm.defaultQueue()
 	if dbq != nil && dbq.HasPollerAfter(accessTime) {
@@ -865,6 +882,23 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 	ctx context.Context,
 	buildIds map[string]bool,
 	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus bool,
+) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+	return pm.describe(ctx, buildIds, includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, false)
+}
+
+// Describe returns information about physical queues for the requested versions, including
+// pollers, stats (with "versioning attribution", which means the default queue backlog is
+// proportionally attributed to the Current and Ramping versioned backlog counts based on
+// routing config), and internal status. When Describe is called by external clients, each
+// described queue is marked alive to reset its idle timeout and prevent it from being unloaded.
+// When we describe the task queue from inside the partition manager to expose periodic metrics,
+// we pass skipMarkAlive=true to suppress this side effect and avoid preventing idle queue unloading.
+//
+//nolint:revive // cognitive complexity 67 (> max enabled 25) but this is just a renaming of an existing function.
+func (pm *taskQueuePartitionManagerImpl) describe(
+	ctx context.Context,
+	buildIds map[string]bool,
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive bool,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 
@@ -1048,7 +1082,11 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 		}
 		versionsInfo[bid] = vInfo
 
-		physicalQueue.MarkAlive() // Count Describe for liveness
+		if !skipMarkAlive {
+			// Skipped by periodic metrics emission to avoid resetting the idle timeout,
+			// which would prevent queues from ever being unloaded.
+			physicalQueue.MarkAlive()
+		}
 	}
 
 	return &matchingservice.DescribeTaskQueuePartitionResponse{
@@ -1153,7 +1191,7 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
-	resp, err := pm.Describe(ctx, buildIds, true, true, false, false)
+	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
 	if err != nil {
 		return
 	}

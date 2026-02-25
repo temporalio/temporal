@@ -4,21 +4,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type idleTasksSuite struct {
-	schedulerSuite
-}
-
-func TestIdleTasksSuite(t *testing.T) {
-	suite.Run(t, &idleTasksSuite{})
-}
 
 type idleValidateTestCase struct {
 	configIdleTime           time.Duration
@@ -30,66 +22,9 @@ type idleValidateTestCase struct {
 	expectedValid            bool
 }
 
-func (s *idleTasksSuite) TestExecute() {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
-
-	// Create executor with default config
-	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
-		Config: defaultConfig(),
-	})
-
-	// Verify scheduler starts open
-	s.False(sched.Closed)
-
-	// Execute the idle task
-	err := executor.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
-	s.NoError(err)
-
-	// Verify scheduler is now closed
-	s.True(sched.Closed)
-}
-
-func (s *idleTasksSuite) TestValidate_SchedulerNotIdle() {
-	now := s.timeSource.Now()
-	s.runValidateTestCase(&idleValidateTestCase{
-		configIdleTime:    10 * time.Minute,
-		taskIdleTimeTotal: 10 * time.Minute,
-		scheduledTime:     now,
-		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.Context) {
-			// Make scheduler not idle by setting it as paused
-			sched.Schedule.State.Paused = true
-		},
-		expectedValid: false,
-	})
-}
-
-func (s *idleTasksSuite) TestValidate_ValidIdleTask() {
-	now := s.timeSource.Now()
-	s.runValidateTestCase(&idleValidateTestCase{
-		configIdleTime:           10 * time.Minute,
-		taskIdleTimeTotal:        10 * time.Minute,
-		scheduledTime:            now,
-		idleMatchesScheduledTime: true,
-		expectedValid:            true,
-	})
-}
-
-func (s *idleTasksSuite) TestValidate_SchedulerAlreadyClosed() {
-	now := s.timeSource.Now()
-	s.runValidateTestCase(&idleValidateTestCase{
-		configIdleTime:           10 * time.Minute,
-		taskIdleTimeTotal:        10 * time.Minute,
-		scheduledTime:            now,
-		schedulerClosed:          true,
-		idleMatchesScheduledTime: true,
-		expectedValid:            false, // Should return !scheduler.Closed (false when closed)
-	})
-}
-
-func (s *idleTasksSuite) runValidateTestCase(c *idleValidateTestCase) {
-	ctx := s.newMutableContext()
-	sched := s.scheduler
+func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase) {
+	ctx := env.MutableContext()
+	sched := env.Scheduler
 
 	sched.Closed = c.schedulerClosed
 
@@ -125,6 +60,66 @@ func (s *idleTasksSuite) runValidateTestCase(c *idleValidateTestCase) {
 	}
 
 	isValid, err := executor.Validate(ctx, sched, taskAttrs, task)
-	s.NoError(err)
-	s.Equal(c.expectedValid, isValid)
+	require.NoError(t, err)
+	require.Equal(t, c.expectedValid, isValid)
+}
+
+func TestIdleTask_Execute(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+
+	executor := scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
+		Config: defaultConfig(),
+	})
+
+	// Verify scheduler starts open.
+	require.False(t, sched.Closed)
+
+	// Execute the idle task.
+	err := executor.Execute(ctx, sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerIdleTask{})
+	require.NoError(t, err)
+
+	// Verify scheduler is now closed.
+	require.True(t, sched.Closed)
+}
+
+func TestIdleTask_Validate_SchedulerNotIdle(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:    10 * time.Minute,
+		taskIdleTimeTotal: 10 * time.Minute,
+		scheduledTime:     now,
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.Context) {
+			// Make scheduler not idle by setting it as paused.
+			sched.Schedule.State.Paused = true
+		},
+		expectedValid: false,
+	})
+}
+
+func TestIdleTask_Validate_ValidIdleTask(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:           10 * time.Minute,
+		taskIdleTimeTotal:        10 * time.Minute,
+		scheduledTime:            now,
+		idleMatchesScheduledTime: true,
+		expectedValid:            true,
+	})
+}
+
+func TestIdleTask_Validate_SchedulerAlreadyClosed(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:           10 * time.Minute,
+		taskIdleTimeTotal:        10 * time.Minute,
+		scheduledTime:            now,
+		schedulerClosed:          true,
+		idleMatchesScheduledTime: true,
+		expectedValid:            false, // Should return !scheduler.Closed (false when closed).
+	})
 }

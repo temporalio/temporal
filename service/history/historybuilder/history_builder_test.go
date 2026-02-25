@@ -2473,7 +2473,7 @@ func (s *historyBuilderSuite) flush() *historypb.HistoryEvent {
 func (s *historyBuilderSuite) taskIDGenerator(number int) ([]int64, error) {
 	nextTaskID := s.nextTaskID
 	result := make([]int64, number)
-	for i := 0; i < number; i++ {
+	for i := range number {
 		result[i] = nextTaskID
 		nextTaskID++
 	}

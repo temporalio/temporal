@@ -35,7 +35,7 @@ func ExampleExponentialRetryPolicy_WithMaximumInterval() {
 	p2 = p2.WithMaximumInterval(time.Second * 10)
 	var e1, e2 time.Duration
 	fmt.Printf("%-10s| %15s| %15s\n", "Attempt", "Delay", "Capped Delay")
-	for attempts := 0; attempts < 10; attempts++ {
+	for attempts := range 10 {
 		d1 := p1.ComputeNextDelay(e1, attempts, nil)
 		d2 := p2.ComputeNextDelay(e2, attempts, nil)
 		e1 += d1
@@ -127,7 +127,7 @@ func (s *RetryPolicySuite) TestBackoffCoefficient() {
 
 	r, _ := createRetrier(policy)
 	min, max := getNextBackoffRange(2 * time.Second)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		next := r.NextBackOff(nil)
 		s.True(next >= min, "NextBackoff too low")
 		s.True(next < max, "NextBackoff too high")
@@ -205,7 +205,7 @@ func (s *RetryPolicySuite) TestNoMaxAttempts() {
 		WithMaximumInterval(10 * time.Second)
 
 	r, ts := createRetrier(policy)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		next := r.NextBackOff(nil)
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		ts.Advance(next)
@@ -216,7 +216,7 @@ func (s *RetryPolicySuite) TestUnbounded() {
 	policy := createPolicy(50 * time.Millisecond)
 
 	r, ts := createRetrier(policy)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		next := r.NextBackOff(nil)
 		s.True(next > 0 || next == done, "Unexpected value for next retry duration: %v", next)
 		ts.Advance(next)

@@ -23,7 +23,7 @@ type (
 // e.g. unable to find namespace
 func MustGetNamespaceName(
 	namespaceRegistry namespace.Registry,
-	req interface{},
+	req any,
 ) namespace.Name {
 	namespaceName, err := GetNamespaceName(namespaceRegistry, req)
 	if err != nil {
@@ -34,7 +34,7 @@ func MustGetNamespaceName(
 
 func GetNamespaceName(
 	namespaceRegistry namespace.Registry,
-	req interface{},
+	req any,
 ) (namespace.Name, error) {
 	switch request := req.(type) {
 	case *workflowservice.RegisterNamespaceRequest:

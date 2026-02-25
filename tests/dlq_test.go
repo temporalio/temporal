@@ -51,7 +51,7 @@ type (
 		writer           bytes.Buffer
 		sdkClientFactory sdk.ClientFactory
 		tdbgApp          *cli.App
-		deleteBlockCh    chan interface{}
+		deleteBlockCh    chan any
 
 		failingWorkflowIDPrefix atomic.Pointer[string]
 	}
@@ -144,7 +144,7 @@ func (s *DLQSuite) SetupTest() {
 
 	s.Worker().RegisterWorkflow(myWorkflow)
 
-	s.deleteBlockCh = make(chan interface{})
+	s.deleteBlockCh = make(chan any)
 	close(s.deleteBlockCh)
 }
 
@@ -172,7 +172,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 		QueueKey: queueKey,
 	})
 	s.NoError(err)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		task := &tasks.WorkflowTask{
 			WorkflowKey: workflowKey,
 			TaskID:      int64(42 + i),
@@ -308,7 +308,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 	numWorkflows := 3
 	var dlqMessageID int64
 	var runs []sdkclient.WorkflowRun
-	for i := 0; i < numWorkflows; i++ {
+	for range numWorkflows {
 		run, dlqMessageID = s.executeDoomedWorkflow(ctx)
 		runs = append(runs, run)
 	}
@@ -323,7 +323,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 	s.Empty(dlqTasks)
 
 	// Verify that the workflows now eventually complete successfully.
-	for i := 0; i < numWorkflows; i++ {
+	for i := range numWorkflows {
 		s.validateWorkflowRun(ctx, runs[i])
 	}
 
@@ -341,7 +341,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
-	s.deleteBlockCh = make(chan interface{})
+	s.deleteBlockCh = make(chan any)
 	ctx := context.Background()
 	ctx, cancel := context.WithTimeout(ctx, dlqTestTimeout)
 	defer cancel()

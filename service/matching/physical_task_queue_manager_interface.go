@@ -49,6 +49,7 @@ type (
 		// error is returned, if dispatched to local poller then nil and nil is returned.
 		DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error)
 		UpdatePollerInfo(pollerIdentity, *pollMetadata)
+		RemovePoller(pollerIdentity)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue

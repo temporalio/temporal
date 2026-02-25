@@ -17,10 +17,10 @@ func NewMetadataContextInterceptor() *MetadataContextInterceptor {
 // Intercept adds metadata context to all incoming gRPC requests
 func (m *MetadataContextInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	ctx = contextutil.WithMetadataContext(ctx)
 	return handler(ctx, req)
 }

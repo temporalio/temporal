@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/service/matching/counter"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -387,6 +388,34 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDel
 	db.subqueues[subqueue].oldestTime = oldestTime
 }
 
+func (db *taskQueueDB) persistTopKFairnessKeys(subqueue subqueueIndex, entries []counter.TopKEntry) {
+	db.Lock()
+	defer db.Unlock()
+
+	counts := make([]*persistencespb.FairnessKeyCount, len(entries))
+	for i, entry := range entries {
+		counts[i] = &persistencespb.FairnessKeyCount{Key: entry.Key, Count: entry.Count}
+	}
+
+	db.subqueues[subqueue].TopKFairnessCounts = counts
+	db.lastChange = time.Now()
+}
+
+func (db *taskQueueDB) getTopKFairnessKeys(subqueue subqueueIndex) []counter.TopKEntry {
+	db.Lock()
+	defer db.Unlock()
+
+	if subqueue >= subqueueIndex(len(db.subqueues)) {
+		return nil
+	}
+	counts := db.subqueues[subqueue].TopKFairnessCounts
+	entries := make([]counter.TopKEntry, len(counts))
+	for i, count := range counts {
+		entries[i] = counter.TopKEntry{Key: count.Key, Count: count.Count}
+	}
+	return entries
+}
+
 // getApproximateBacklogCountsBySubqueue return the approximate backlog count for each subqueue.
 // The index corresponds to the subqueue id.
 func (db *taskQueueDB) getApproximateBacklogCountsBySubqueue() []int64 {
@@ -733,18 +762,33 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 	}
 }
 
-// emitPhysicalBacklogGaugesLocked emits the physical_approximate_backlog_count,
-// physical_approximate_backlog_age_seconds, and the legacy task_lag_per_tl gauges
-// tagged by priority key.
-// Physical backlog metrics are only emitted for the default (unversioned) queue.
-// Version-attributed backlog metrics for all worker versions (including appropriate
-// attribution of the default queue's tasks to current and ramping versions) are emitted
-// separately by the partition manager via fetchAndEmitLogicalBacklogMetrics.
+// emitPhysicalBacklogGaugesLocked emits backlog gauges tagged by priority key, along with
+// the legacy task_lag_per_tl gauge.
+//
+// When version-attributed backlog metrics are enabled (BacklogMetricsEmitInterval > 0), this
+// emits physical_approximate_backlog_count and physical_approximate_backlog_age_seconds for
+// the unversioned queue only. Version-attributed metrics (including appropriate attribution of
+// the default queue's tasks to current and ramping versions) are emitted separately by the
+// partition manager via fetchAndEmitLogicalBacklogMetrics.
+//
+// When version-attributed metrics are disabled (BacklogMetricsEmitInterval == 0), this falls back
+// to emitting the original approximate_backlog_count and approximate_backlog_age_seconds for
+// all queues (including versioned queues when BreakdownMetricsByBuildID is enabled).
 func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
-	if !db.config.BreakdownMetricsByTaskQueue() ||
-		!db.config.BreakdownMetricsByPartition() ||
-		db.queue.IsVersioned() {
+	if !db.config.BreakdownMetricsByTaskQueue() || !db.config.BreakdownMetricsByPartition() {
 		return
+	}
+
+	attributionEnabled := db.config.BacklogMetricsEmitInterval() > 0
+
+	if attributionEnabled {
+		if db.queue.IsVersioned() {
+			return
+		}
+	} else {
+		if db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID() {
+			return
+		}
 	}
 
 	var totalLag int64
@@ -764,13 +808,20 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 		}
 	}
 
+	backlogCountGauge := metrics.ApproximateBacklogCount
+	backlogAgeGauge := metrics.ApproximateBacklogAgeSeconds
+	if attributionEnabled {
+		backlogCountGauge = metrics.PhysicalApproximateBacklogCount
+		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
+	}
+
 	for priority, count := range counts {
-		metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
+		backlogCountGauge.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
 	}
 	if oldestTime.IsZero() {
-		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+		backlogAgeGauge.With(db.metricsHandler).Record(0)
 	} else {
-		metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		backlogAgeGauge.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -828,11 +879,20 @@ func (db *taskQueueDB) cloneSubqueues() []persistencespb.SubqueueInfo {
 }
 
 func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
-	// Physical backlog metrics are only emitted for the default (unversioned) queue.
-	if !db.config.BreakdownMetricsByTaskQueue() ||
-		!db.config.BreakdownMetricsByPartition() ||
-		db.queue.IsVersioned() {
+	if !db.config.BreakdownMetricsByTaskQueue() || !db.config.BreakdownMetricsByPartition() {
 		return
+	}
+
+	attributionEnabled := db.config.BacklogMetricsEmitInterval() > 0
+
+	if attributionEnabled {
+		if db.queue.IsVersioned() {
+			return
+		}
+	} else {
+		if db.queue.IsVersioned() && !db.config.BreakdownMetricsByBuildID() {
+			return
+		}
 	}
 
 	priorities := make(map[int32]struct{})
@@ -842,9 +902,16 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 	}
 	db.Unlock()
 
-	for k := range priorities {
-		metrics.PhysicalApproximateBacklogCount.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	backlogCountGauge := metrics.ApproximateBacklogCount
+	backlogAgeGauge := metrics.ApproximateBacklogAgeSeconds
+	if attributionEnabled {
+		backlogCountGauge = metrics.PhysicalApproximateBacklogCount
+		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
-	metrics.PhysicalApproximateBacklogAgeSeconds.With(db.metricsHandler).Record(0)
+
+	for k := range priorities {
+		backlogCountGauge.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+	}
+	backlogAgeGauge.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

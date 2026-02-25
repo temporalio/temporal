@@ -55,7 +55,7 @@ func ProtoSliceEqual[T proto.Message](t assert.TestingT, a []T, b []T) bool {
 	if len(a) != len(b) {
 		return false
 	}
-	for i := 0; i < len(a); i++ {
+	for i := range a {
 		if diff := cmp.Diff(a[i], b[i], protocmp.Transform()); diff != "" {
 			return assert.Fail(t, fmt.Sprintf("Proto mismatch at index %d (-want +got):\n%v", i, diff))
 		}

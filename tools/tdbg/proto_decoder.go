@@ -41,6 +41,8 @@ func decodePayloadsRecursive(v any, encoder codec.JSONPBEncoder) {
 		for _, item := range val {
 			decodePayloadsRecursive(item, encoder)
 		}
+	default:
+		// Other types don't need decoding.
 	}
 }
 

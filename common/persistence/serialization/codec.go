@@ -2,12 +2,41 @@ package serialization
 
 import (
 	"errors"
+	"fmt"
+	"os"
+	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/codec"
 	"google.golang.org/protobuf/proto"
 )
+
+// SerializerDataEncodingEnvVar controls which codec is used for encoding DataBlobs.
+//
+// Currently supported values (case-insensitive):
+//   - "json"
+//   - "proto3"
+//
+// Decoding always support all encodings regardless of this setting.
+//
+// WARNING: This environment variable should only be used for testing; and never set it in production.
+const SerializerDataEncodingEnvVar = "TEMPORAL_TEST_DATA_ENCODING"
+
+// EncodingTypeFromEnv returns an EncodingType based on the environment variable `TEMPORAL_TEST_DATA_ENCODING`.
+// It defaults to "ENCODING_TYPE_PROTO3" codec if the environment variable is not set.
+func EncodingTypeFromEnv() enumspb.EncodingType {
+	codecType := os.Getenv(SerializerDataEncodingEnvVar)
+	switch strings.ToLower(codecType) {
+	case "", "proto3":
+		return enumspb.ENCODING_TYPE_PROTO3
+	case "json":
+		return enumspb.ENCODING_TYPE_JSON
+	default:
+		//nolint:forbidigo // should fail fast and hard if used incorrectly
+		panic(fmt.Sprintf("unknown codec %q for environment variable %s", codecType, SerializerDataEncodingEnvVar))
+	}
+}
 
 // ProtoEncode is kept for backward compatibility.
 func ProtoEncode(m proto.Message) (*commonpb.DataBlob, error) {
