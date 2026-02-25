@@ -157,6 +157,42 @@ func (c *clientImpl) QueryWorkflow(ctx context.Context, request *matchingservice
 	return client.QueryWorkflow(ctx, request, opts...)
 }
 
+func (c *clientImpl) DispatchNexusTask(
+	ctx context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS, request.GetForwardInfo().GetSourcePartition())
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DispatchNexusTask(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollNexusTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	request = common.CloneProto(request)
+	client, release, err := c.pickClientForRead(
+		request.GetRequest().GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+		request.GetForwardedSource())
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	ctx, cancel := c.createLongPollContext(ctx)
+	defer cancel()
+	return client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
 // processInputPartition returns a partition in certain cases that load balancer involvement is not necessary,
 // otherwise, returns a task queue to pass down to the load balancer.
 func (c *clientImpl) processInputPartition(proto *taskqueuepb.TaskQueue, nsid string, taskType enumspb.TaskQueueType, forwardedFrom string) (tqid.Partition, *tqid.TaskQueue) {

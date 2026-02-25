@@ -74,12 +74,14 @@ const (
 	MatchingClientPollWorkflowTaskQueueScope = "MatchingClientPollWorkflowTaskQueue"
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollActivityTaskQueueScope = "MatchingClientPollActivityTaskQueue"
+	MatchingClientPollNexusTaskQueueScope    = "MatchingClientPollNexusTaskQueue"
 	// MatchingClientAddActivityTaskScope tracks RPC calls to matching service
 	MatchingClientAddActivityTaskScope = "MatchingClientAddActivityTask"
 	// MatchingClientAddWorkflowTaskScope tracks RPC calls to matching service
 	MatchingClientAddWorkflowTaskScope = "MatchingClientAddWorkflowTask"
 	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
-	MatchingClientQueryWorkflowScope = "MatchingClientQueryWorkflow"
+	MatchingClientQueryWorkflowScope     = "MatchingClientQueryWorkflow"
+	MatchingClientDispatchNexusTaskScope = "MatchingDispatchNexusTask"
 )
 
 // Worker
