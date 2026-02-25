@@ -31,7 +31,7 @@ type MockNodeBackend struct {
 	HandleGetNexusCompletion         func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent            func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	HandleGetNamespaceEntry          func() *namespace.Namespace
-	HandleEndpointRegistry        func() EndpointRegistry
+	HandleEndpointRegistry           func() EndpointRegistry
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex

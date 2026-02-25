@@ -291,7 +291,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 	t.Run("exceeds max concurrent operations", func(t *testing.T) {
 		t.Skip("requires TransitionScheduled implementation")
 		tcx := newTestContext(t, defaultConfig)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
@@ -820,7 +820,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 		tcx testContext,
 		scheduledEventID int64,
 		eventType enumspb.EventType,
-		eventAttr interface{},
+		eventAttr any,
 	) {
 		nodeID := operationKey(scheduledEventID)
 
@@ -874,7 +874,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 	cases := []struct {
 		name      string
 		eventType enumspb.EventType
-		eventAttr interface{}
+		eventAttr any
 	}{
 		{
 			name:      "completed event deletes node",

@@ -2,7 +2,7 @@ package chasm
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"slices"
 	"sync"
 	"time"
@@ -43,7 +43,7 @@ func (c *MockContext) EndpointByName(name string) (*persistencespb.NexusEndpoint
 	if c.HandleEndpointByName != nil {
 		return c.HandleEndpointByName(name)
 	}
-	return nil, fmt.Errorf("endpoint registry not available")
+	return nil, errors.New("endpoint registry not available")
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -121,8 +121,8 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleStateTransitionCount: c.HandleStateTransitionCount,
 		HandleLibrary:              c.HandleLibrary,
 		HandleNamespaceEntry:       c.HandleNamespaceEntry,
-		HandleEndpointByName: c.HandleEndpointByName,
-		HandleMetricsHandler: c.HandleMetricsHandler,
+		HandleEndpointByName:       c.HandleEndpointByName,
+		HandleMetricsHandler:       c.HandleMetricsHandler,
 		ctx:                        context.WithValue(c.goContext(), key, value),
 	}
 }

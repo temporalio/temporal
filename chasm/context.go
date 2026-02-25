@@ -2,7 +2,7 @@ package chasm
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -179,7 +179,7 @@ func (c *immutableCtx) goContext() context.Context {
 func (c *immutableCtx) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
 	reg := c.root.backend.EndpointRegistry()
 	if reg == nil {
-		return nil, fmt.Errorf("endpoint registry not available")
+		return nil, errors.New("endpoint registry not available")
 	}
 	return reg.GetByName(c.ctx, c.NamespaceEntry().ID(), name)
 }
