@@ -173,3 +173,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace go.temporal.io/sdk => go.temporal.io/sdk v1.40.1-0.20260225164502-65294e36aba4
