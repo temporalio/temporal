@@ -64,9 +64,9 @@ func appendTransientTasks(
 			transientWorkflowTask = cachedTransientTasks
 		} else {
 			shardContext.GetLogger().Warn("PREMATURE-EOS: cached transient workflow task is invalid",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewStringTag("Namespace", namespaceID.String()),
+				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+				tag.NewStringTag("RunID", execution.GetRunId()),
 				tag.Error(err))
 		}
 	}
@@ -84,24 +84,22 @@ func appendTransientTasks(
 			eventNotifier,
 		)
 		if err != nil {
-			// // Transient events don't exist or are already committed - this is OK
-			// // Just return without appending (events are in persisted history)
-			// if err != nil {
+			// Transient events don't exist or are already committed - this is OK
+			// Just return without appending (events are in persisted history)
 			shardContext.GetLogger().Warn("PREMATURE-EOS: failed to refetch transient events",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewStringTag("Namespace", namespaceID.String()),
+				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+				tag.NewStringTag("RunID", execution.GetRunId()),
 				tag.Error(err))
-			// }
 			return
 		}
 		if msResp.GetTransientOrSpeculativeTasks() == nil {
 			if msResp.GetNextEventId() != nextEventID {
 				shardContext.GetLogger().Warn(
 					"PREMATURE-EOS: transient workflow task is unexpectedly nil when nextEventID indicates there should be transient tasks",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
+					tag.NewStringTag("Namespace", namespaceID.String()),
+					tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+					tag.NewStringTag("RunID", execution.GetRunId()),
 					tag.NewInt64("ms-resp-next-event-id", msResp.GetNextEventId()),
 					tag.NewInt64("expected-next-event-id", nextEventID),
 				)
@@ -116,9 +114,9 @@ func appendTransientTasks(
 
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTask); err != nil {
 			shardContext.GetLogger().Warn("PREMATURE-EOS: transient workflow task validation failed in appendTransientTasks",
-				tag.WorkflowNamespaceID(namespaceID.String()),
-				tag.WorkflowID(execution.GetWorkflowId()),
-				tag.WorkflowRunID(execution.GetRunId()),
+				tag.NewStringTag("Namespace", namespaceID.String()),
+				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+				tag.NewStringTag("RunID", execution.GetRunId()),
 				tag.Error(err))
 			return
 		}

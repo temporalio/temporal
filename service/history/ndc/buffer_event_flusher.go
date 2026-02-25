@@ -57,9 +57,9 @@ func (r *BufferEventFlusherImpl) flush(
 		if r.mutableState.HasStartedWorkflowTask() && r.mutableState.IsTransientWorkflowTask() {
 			wfKey := r.wfContext.GetWorkflowKey()
 			r.logger.Warn("PREMATURE-EOS: clearing transient workflow task (no buffered events)",
-				tag.WorkflowNamespaceID(wfKey.NamespaceID),
-				tag.WorkflowID(wfKey.WorkflowID),
-				tag.WorkflowRunID(wfKey.RunID),
+				tag.NewStringTag("Namespace", wfKey.NamespaceID),
+				tag.NewStringTag("WorkflowID", wfKey.WorkflowID),
+				tag.NewStringTag("RunID", wfKey.RunID),
 				tag.Attempt(r.mutableState.GetExecutionInfo().WorkflowTaskAttempt),
 			)
 			if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
