@@ -13,6 +13,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
@@ -197,11 +199,13 @@ type (
 		// TODO: Add methods needed from MutateState here.
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
+		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
 		CurrentVersionedTransition() *persistencespb.VersionedTransition
 		GetWorkflowKey() definition.WorkflowKey
 		AddTasks(...tasks.Task)
+		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 		UpdateWorkflowStateStatus(
 			state enumsspb.WorkflowExecutionState,
@@ -212,6 +216,7 @@ type (
 			ctx context.Context,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
+		EndpointRegistry() EndpointRegistry
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
