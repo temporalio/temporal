@@ -36,6 +36,17 @@ func Get[T any, S any](_ TestHooks, _ Key[T, S], _ S) (T, bool) {
 // TestHooks should be used very sparingly, see comment on TestHooks.
 func Call[S any](_ TestHooks, _ Key[func(), S], _ S) {}
 
+// Hook is an empty stub in production mode. NewHook and its methods are only available with -tags=test_dep.
+type Hook struct{}
+
+func (h Hook) Scope() Scope {
+	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
+
+func (h Hook) Apply(_ TestHooks, _ any) func() {
+	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
+
 // Set is only to be used by test code together with the test_dep build tag.
 func Set[T any, S any](_ TestHooks, _ Key[T, S], _ T, _ any) func() {
 	panic("testhooks.Set called but TestHooks are not enabled: use -tags=test_dep when running `go test`")

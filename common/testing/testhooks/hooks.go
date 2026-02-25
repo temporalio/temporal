@@ -36,27 +36,6 @@ const (
 	ScopeGlobal
 )
 
-// Hook bundles a key and value for type-erased use in InjectHook.
-type Hook struct {
-	scopeType Scope
-	apply     func(TestHooks, any) func()
-}
-
-func (h Hook) Scope() Scope                         { return h.scopeType }
-func (h Hook) Apply(th TestHooks, scope any) func() { return h.apply(th, scope) }
-
-func NewHook[T any, S any](key Key[T, S], value T) Hook {
-	return Hook{
-		scopeType: key.scope,
-		apply: func(th TestHooks, scope any) func() {
-			if _, ok := scope.(S); !ok {
-				panic("testhooks: scope type mismatch")
-			}
-			return Set(th, key, value, scope)
-		},
-	}
-}
-
 type Key[T any, S any] struct {
 	id    keyID
 	scope Scope
