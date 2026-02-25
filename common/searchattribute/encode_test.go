@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -69,7 +70,7 @@ func Test_Encode_NilMap(t *testing.T) {
 	assert.Equal("json/plain", string(sa.IndexedFields["key6"].GetMetadata()["encoding"]))
 }
 
-func Test_Encode_Error(t *testing.T) {
+func Test_Encode_SkipsUnknownSearchAttributes(t *testing.T) {
 	assert := assert.New(t)
 	sa, err := Encode(map[string]interface{}{
 		"key1": "val1",
@@ -77,16 +78,15 @@ func Test_Encode_Error(t *testing.T) {
 		"key3": true,
 	}, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}})
 
-	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidName)
-	assert.Len(sa.IndexedFields, 3)
+	// key2 is unknown and should be silently skipped.
+	assert.NoError(err)
+	assert.Len(sa.IndexedFields, 2)
 	assert.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	assert.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
-	assert.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	assert.NotContains(sa.IndexedFields, "key2")
 	assert.Equal("true", string(sa.IndexedFields["key3"].GetData()))
 	assert.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
 }
@@ -171,8 +171,8 @@ func Test_Decode_NilMap(t *testing.T) {
 	assert.Nil(vals["key6"])
 }
 
-func Test_Decode_Error(t *testing.T) {
-	assert := assert.New(t)
+func Test_Decode_SkipsUnknownSearchAttributes(t *testing.T) {
+	r := require.New(t)
 
 	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
@@ -184,33 +184,46 @@ func Test_Decode_Error(t *testing.T) {
 		"key2": 2,
 		"key3": true,
 	}, typeMap)
-	assert.NoError(err)
+	r.NoError(err)
 
+	// Decode with a typeMap that doesn't include key2: key2 should be silently skipped.
 	vals, err := Decode(
 		sa,
 		&NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 			"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
-			"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 			"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 		}},
 		true,
 	)
-	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidName)
-	assert.Len(sa.IndexedFields, 3)
-	assert.Equal("val1", vals["key1"])
-	assert.Equal(int64(2), vals["key2"])
-	assert.Equal(true, vals["key3"])
+	r.NoError(err)
+	r.Len(vals, 2)
+	r.Equal("val1", vals["key1"])
+	r.NotContains(vals, "key2")
+	r.Equal(true, vals["key3"])
+}
+
+func Test_Decode_Error(t *testing.T) {
+	typeMap := &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
+		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
+		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
+	}}
+	sa, err := Encode(map[string]interface{}{
+		"key1": "val1",
+		"key2": 2,
+		"key3": true,
+	}, typeMap)
+	assert.NoError(t, err)
 
 	delete(sa.IndexedFields["key1"].Metadata, "type")
 	delete(sa.IndexedFields["key2"].Metadata, "type")
 	delete(sa.IndexedFields["key3"].Metadata, "type")
 
-	vals, err = Decode(sa, nil, true)
-	assert.Error(err)
-	assert.ErrorIs(err, ErrInvalidType)
-	assert.Len(vals, 3)
-	assert.Nil(vals["key1"])
-	assert.Nil(vals["key2"])
-	assert.Nil(vals["key3"])
+	vals, err := Decode(sa, nil, true)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrInvalidType)
+	assert.Len(t, vals, 3)
+	assert.Nil(t, vals["key1"])
+	assert.Nil(t, vals["key2"])
+	assert.Nil(t, vals["key3"])
 }
