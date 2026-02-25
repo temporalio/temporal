@@ -259,8 +259,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	// Count test runs by name for failure rate calculation
 	testRunCounts := countTestRuns(allTestRuns)
 
-	// Group failures by test name
+	// Group failures by test name, then remove parent entries whose subtests were observed.
 	grouped := groupFailuresByTest(allFailures)
+	filterParentTests(grouped, testRunCounts)
 	fmt.Printf("Unique tests with failures: %d\n", len(grouped))
 
 	// Classify failures
