@@ -32,6 +32,13 @@ func Encode(searchAttributes map[string]any, typeMap *NameTypeMap) (*commonpb.Se
 		if typeMap != nil {
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
+				if errors.Is(err, ErrInvalidName) {
+					// Silently skip unknown search attributes. This can happen due to
+					// version mismatches where a newer server wrote a predefined SA
+					// that this server doesn't recognize.
+					delete(indexedFields, saName)
+					continue
+				}
 				lastErr = err
 				continue
 			}
@@ -62,13 +69,17 @@ func Decode(
 			var err error
 			saType, err = typeMap.getType(saName, customCategory|predefinedCategory)
 			if err != nil {
-				if errors.Is(err, ErrInvalidName) {
+				if sadefs.IsChasmSearchAttribute(saName) {
+					// Chasm search attributes are not in the standard type map;
+					// allow them through with UNSPECIFIED type.
+				} else if errors.Is(err, ErrInvalidName) {
 					// Silently skip unknown search attributes. This can happen due to
 					// version mismatches where a newer server wrote a predefined SA
 					// that this server doesn't recognize.
 					continue
+				} else {
+					lastErr = err
 				}
-				lastErr = err
 			}
 		}
 

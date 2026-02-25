@@ -33,6 +33,7 @@ type (
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		chasmRegistry                  *chasm.Registry
+		metricsHandler                 metrics.Handler
 
 		enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn
 	}
@@ -74,6 +75,7 @@ func NewSQLVisibilityStore(
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		chasmRegistry:                  chasmRegistry,
+		metricsHandler:                 metricsHandler,
 
 		enableUnifiedQueryConverter: enableUnifiedQueryConverter,
 	}, nil
@@ -788,6 +790,9 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	searchAttributes, err = searchattribute.Decode(request.SearchAttributes, &saTypeMap, false)
 	if err != nil {
 		return nil, err
+	}
+	if skipped := len(request.SearchAttributes.GetIndexedFields()) - len(searchAttributes); skipped > 0 {
+		metrics.UnknownSearchAttributeSkippedCount.With(s.metricsHandler).Record(int64(skipped))
 	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.

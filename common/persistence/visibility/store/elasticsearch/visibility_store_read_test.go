@@ -135,6 +135,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockMetricsHandler = metrics.NewMockHandler(s.controller)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(testNamespace.String())).Return(s.mockMetricsHandler).AnyTimes()
+	s.mockMetricsHandler.EXPECT().Counter(metrics.UnknownSearchAttributeSkippedCount.Name()).Return(metrics.NoopCounterMetricFunc).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)

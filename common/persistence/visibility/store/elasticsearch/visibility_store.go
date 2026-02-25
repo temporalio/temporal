@@ -942,6 +942,9 @@ func (s *VisibilityStore) GenerateESDoc(
 		metrics.ElasticsearchDocumentGenerateFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf("unable to decode search attributes: %v", err)
 	}
+	if skipped := len(request.SearchAttributes.GetIndexedFields()) - len(searchAttributes); skipped > 0 {
+		metrics.UnknownSearchAttributeSkippedCount.With(s.metricsHandler).Record(int64(skipped))
+	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)

@@ -69,7 +69,7 @@ func Test_Encode_NilMap(t *testing.T) {
 	r.Equal("json/plain", string(sa.IndexedFields["key6"].GetMetadata()["encoding"]))
 }
 
-func Test_Encode_Error(t *testing.T) {
+func Test_Encode_SkipsUnknownSearchAttributes(t *testing.T) {
 	r := require.New(t)
 	sa, err := Encode(map[string]any{
 		"key1": "val1",
@@ -77,16 +77,15 @@ func Test_Encode_Error(t *testing.T) {
 		"key3": true,
 	}, &NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"key4": enumspb.INDEXED_VALUE_TYPE_INT,
 		"key3": enumspb.INDEXED_VALUE_TYPE_BOOL,
 	}})
 
-	r.Error(err)
-	r.ErrorIs(err, ErrInvalidName)
-	r.Len(sa.IndexedFields, 3)
+	// key2 is unknown and should be silently skipped.
+	r.NoError(err)
+	r.Len(sa.IndexedFields, 2)
 	r.Equal(`"val1"`, string(sa.IndexedFields["key1"].GetData()))
 	r.Equal("Text", string(sa.IndexedFields["key1"].GetMetadata()["type"]))
-	r.Equal("2", string(sa.IndexedFields["key2"].GetData()))
+	r.NotContains(sa.IndexedFields, "key2")
 	r.Equal("true", string(sa.IndexedFields["key3"].GetData()))
 	r.Equal("Bool", string(sa.IndexedFields["key3"].GetMetadata()["type"]))
 }
