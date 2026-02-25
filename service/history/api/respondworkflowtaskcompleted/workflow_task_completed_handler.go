@@ -328,12 +328,13 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	default:
 		var commandHandler chasmcommand.Handler
 		var chasmCtx chasm.MutableContext
-		var chasmWorkflow *chasmworkflow.Workflow
 
 		// TODO: need to handle migration between HSM and CHASM
 
+		var handlerOpts chasmcommand.HandlerOptions
 		if handler.mutableState.ChasmEnabled() {
 			// Use CHASM command handler.
+			var chasmWorkflow *chasmworkflow.Workflow
 			chasmWorkflow, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
 			if err != nil {
 				return nil, err
@@ -344,6 +345,10 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			if !ok {
 				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
 			}
+			handlerOpts = chasmcommand.HandlerOptions{
+				WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
+				ChasmWorkflow:               chasmWorkflow,
+			}
 		} else {
 			// Use HSM command handler.
 			legacyHandler, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
@@ -352,16 +357,17 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			}
 
 			// Wrap HSM command handler to match CHASM command handler signature.
-			commandHandler = func(_ chasm.MutableContext, _ *chasmworkflow.Workflow, v chasmcommand.Validator, cmd *commandpb.Command, opts chasmcommand.HandlerOptions) error {
+			commandHandler = func(_ chasm.MutableContext, v chasmcommand.Validator, cmd *commandpb.Command, opts chasmcommand.HandlerOptions) error {
 				return legacyHandler(ctx, handler.mutableState, v, opts.WorkflowTaskCompletedEventID, cmd)
+			}
+			handlerOpts = chasmcommand.HandlerOptions{
+				WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 			}
 		}
 
 		// Invoke command handler.
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err = commandHandler(chasmCtx, chasmWorkflow, validator, command, chasmcommand.HandlerOptions{
-			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
-		})
+		err = commandHandler(chasmCtx, validator, command, handlerOpts)
 		var failWFTErr chasmcommand.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.TerminateWorkflow {

@@ -4,18 +4,18 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
 
 type HandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
+	// ChasmWorkflow is the CHASM workflow component (*chasmworkflow.Workflow), passed as any to avoid import cycles.
+	ChasmWorkflow any
 }
 
 // Handler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
 // worker request.
 type Handler func(
 	chasmCtx chasm.MutableContext,
-	wf *chasmworkflow.Workflow,
 	validator Validator,
 	command *commandpb.Command,
 	opts HandlerOptions,
