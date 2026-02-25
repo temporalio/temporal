@@ -2,10 +2,13 @@ package chasm
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 type Context interface {
@@ -24,6 +27,10 @@ type Context interface {
 	ExecutionInfo() ExecutionInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
+	// NamespaceEntry returns the namespace entry for the execution.
+	NamespaceEntry() *namespace.Namespace
+	// EndpointByName resolves a nexus endpoint entry.
+	EndpointByName(endpointName string) (*persistencespb.NexusEndpointEntry, error)
 	// MetricsHandler returns a metrics handler with namespace tag.
 	MetricsHandler() metrics.Handler
 	// Value returns the value associated with this context for key. The behavior is the same as context.Context.Value().
@@ -43,6 +50,7 @@ type Context interface {
 	goContext() context.Context
 }
 
+<<<<<<< HEAD
 type ExecutionInfo struct {
 	// StateTransitionCount is the number of create/update transactions in the history of this execution.
 	StateTransitionCount int64
@@ -52,6 +60,10 @@ type ExecutionInfo struct {
 	// An execution is closed when its root component reaches a terminal state in its lifecycle.
 	// If the component is still running (not yet closed), it returns a zero time.Time value.
 	CloseTime time.Time
+=======
+type EndpointRegistry interface {
+	GetByName(ctx context.Context, namespaceID namespace.ID, endpointName string) (*persistencespb.NexusEndpointEntry, error)
+>>>>>>> d1b6be7d00 (Nexus ScheduleCommand in CHASM (#9278))
 }
 
 type MutableContext interface {
@@ -61,9 +73,6 @@ type MutableContext interface {
 	// The task is associated with the given component and will be invoked via the registered handler for the given task
 	// referencing the component.
 	AddTask(Component, TaskAttributes, any)
-
-	// Add more methods here for other storage commands/primitives.
-	// e.g. HistoryEvent
 
 	// Get a Ref for the component
 	// This ref to the component state at the end of the transition
@@ -176,8 +185,20 @@ func (c *immutableCtx) structuredRef(component Component) (ComponentRef, error) 
 	return c.root.structuredRef(component)
 }
 
+func (c *immutableCtx) NamespaceEntry() *namespace.Namespace {
+	return c.root.backend.GetNamespaceEntry()
+}
+
 func (c *immutableCtx) goContext() context.Context {
 	return c.ctx
+}
+
+func (c *immutableCtx) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	reg := c.root.backend.EndpointRegistry()
+	if reg == nil {
+		return nil, errors.New("endpoint registry not available")
+	}
+	return reg.GetByName(c.ctx, c.NamespaceEntry().ID(), name)
 }
 
 // NewMutableContext creates a new MutableContext from an existing Context and root Node.
