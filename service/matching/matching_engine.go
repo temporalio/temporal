@@ -1354,8 +1354,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							if req.GetReportStats() {
 								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-								mergedStats = &taskqueuepb.TaskQueueStats{}
-								taskqueue.MergeStats(mergedStats, totalStats)
+								mergedStats = cloneTaskQueueStats(totalStats)
 								taskqueue.MergeStats(mergedStats, partitionStats)
 							}
 
