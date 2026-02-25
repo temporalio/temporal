@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -1091,7 +1092,7 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyEmitted(expectedForwarded, expec
 				}, nil
 			},
 		)
-		s.NoError(err)
+		assert.NoError(s.T(), err)
 	}()
 
 	// Poll and handle the activity task with DeploymentOptions.
@@ -1109,7 +1110,7 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyEmitted(expectedForwarded, expec
 				}, nil
 			},
 		)
-		s.NoError(err)
+		assert.NoError(s.T(), err)
 	}()
 
 	// Wait for pollers to arrive at root partition 0 for both task queue types
@@ -1270,7 +1271,7 @@ func (s *TaskQueueSuite) testNexusTaskDispatchLatencyEmitted(expectedForwarded, 
 				return &workflowservice.RespondNexusTaskCompletedRequest{}, nil
 			},
 		)
-		s.NoError(err)
+		assert.NoError(s.T(), err)
 	}()
 
 	// Wait for nexus poller to arrive at root partition before dispatching.
@@ -1395,7 +1396,7 @@ func (s *TaskQueueSuite) testQueryTaskDispatchLatencyEmitted(expectedForwarded, 
 				}, nil
 			},
 		)
-		s.NoError(err)
+		assert.NoError(s.T(), err)
 		close(wftDone)
 	}()
 
@@ -1459,7 +1460,7 @@ func (s *TaskQueueSuite) testQueryTaskDispatchLatencyEmitted(expectedForwarded, 
 				}, nil
 			},
 		)
-		s.NoError(err)
+		assert.NoError(s.T(), err)
 		close(queryDone)
 	}()
 
