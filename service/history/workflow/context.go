@@ -102,6 +102,7 @@ func (c *ContextImpl) IsDirty() bool {
 func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
+		c.throttledLogger.Warn("PREMATURE-EOS: workflow context cleared with live mutable state")
 		c.MutableState.GetQueryRegistry().Clear()
 		c.MutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
 		c.MutableState = nil

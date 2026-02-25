@@ -410,6 +410,9 @@ func (c *ControllerImpl) acquireShards(ctx context.Context) {
 	tryAcquire := func(shardID int32) {
 		if err := c.ownership.verifyOwnership(shardID); err != nil {
 			if IsShardOwnershipLostError(err) {
+				c.contextTaggedLogger.Warn("PREMATURE-EOS: closing shard due to ownership loss detected during acquire",
+					tag.ShardID(shardID),
+				)
 				// current host is not owner of shard, unload it if it is already loaded.
 				if c.config.ShardLingerTimeLimit() > 0 {
 					c.shardLingerThenClose(ctx, shardID)

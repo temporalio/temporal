@@ -1623,6 +1623,9 @@ func (s *ContextImpl) transition(request contextRequest) error {
 		s.state = contextStateStopping
 		s.stopReason = request.reason
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext)
+		if request.reason == stopReasonOwnershipLost {
+			s.contextTaggedLogger.Warn("PREMATURE-EOS: shard stopping due to ownership loss")
+		}
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.FinishStop()
