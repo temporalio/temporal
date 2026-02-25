@@ -106,6 +106,7 @@ type (
 		GetFinalizer() *finalizer.Finalizer
 
 		ChasmRegistry() *chasm.Registry
+		EndpointRegistry() chasm.EndpointRegistry
 	}
 
 	// A ControllableContext is a Context plus other methods needed by

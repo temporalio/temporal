@@ -2,13 +2,16 @@ package chasm
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"sync"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 var _ Context = (*MockContext)(nil)
@@ -21,13 +24,15 @@ type MockContext struct {
 	HandleRef                  func(component Component) ([]byte, error)
 	HandleExecutionCloseTime   func() time.Time
 	HandleStateTransitionCount func() int64
+	HandleLibrary              func(name string) (Library, bool)
+	HandleNamespaceEntry       func() *namespace.Namespace
+	HandleEndpointByName       func(string) (*persistencespb.NexusEndpointEntry, error)
 	HandleMetricsHandler       func() metrics.Handler
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method.
 	// Defaults to context.Background() if nil.
-	GoCtx         context.Context
-	HandleLibrary func(name string) (Library, bool)
+	GoCtx context.Context
 }
 
 func (c *MockContext) goContext() context.Context {
@@ -35,6 +40,13 @@ func (c *MockContext) goContext() context.Context {
 		c.GoCtx = context.Background()
 	}
 	return c.GoCtx
+}
+
+func (c *MockContext) EndpointByName(name string) (*persistencespb.NexusEndpointEntry, error) {
+	if c.HandleEndpointByName != nil {
+		return c.HandleEndpointByName(name)
+	}
+	return nil, errors.New("endpoint registry not available")
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -76,6 +88,13 @@ func (c *MockContext) StateTransitionCount() int64 {
 	return 0
 }
 
+func (c *MockContext) NamespaceEntry() *namespace.Namespace {
+	if c.HandleNamespaceEntry != nil {
+		return c.HandleNamespaceEntry()
+	}
+	return nil
+}
+
 func (c *MockContext) Logger() log.Logger {
 	executionKey := c.ExecutionKey()
 	return log.NewTestLogger().With(
@@ -103,6 +122,9 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleRef:                  c.HandleRef,
 		HandleExecutionCloseTime:   c.HandleExecutionCloseTime,
 		HandleStateTransitionCount: c.HandleStateTransitionCount,
+		HandleLibrary:              c.HandleLibrary,
+		HandleNamespaceEntry:       c.HandleNamespaceEntry,
+		HandleEndpointByName:       c.HandleEndpointByName,
 		HandleMetricsHandler:       c.HandleMetricsHandler,
 		GoCtx:                      context.WithValue(c.goContext(), key, value),
 	}
