@@ -2575,7 +2575,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated_NilSearch
 	s.Nil(attrs.SearchAttributes.IndexedFields["nilKey"])
 }
 
-func (s *historyBuilderSuite) payloadEncode(value interface{}) (*commonpb.Payload, error) {
+func (s *historyBuilderSuite) payloadEncode(value any) (*commonpb.Payload, error) {
 	dataConverter := converter.GetDefaultDataConverter()
 	return dataConverter.ToPayload(value)
 }

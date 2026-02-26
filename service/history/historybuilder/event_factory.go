@@ -487,7 +487,7 @@ func (b EventFactory) CreateContinuedAsNewEvent(
 		// creation paths go through the frontend (continue-as-new, child workflows, replication).
 		Memo:             payload.FilterNilMemo(command.Memo),
 		SearchAttributes: payload.FilterNilSearchAttributes(command.SearchAttributes),
-		InheritBuildId:   command.InheritBuildId,
+		InheritBuildId:   command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{
 		WorkflowExecutionContinuedAsNewEventAttributes: attributes,
@@ -857,7 +857,7 @@ func (b *EventFactory) CreateStartChildWorkflowExecutionInitiatedEvent(
 			Memo:              payload.FilterNilMemo(command.Memo),
 			SearchAttributes:  payload.FilterNilSearchAttributes(command.SearchAttributes),
 			ParentClosePolicy: command.GetParentClosePolicy(),
-			InheritBuildId:    command.InheritBuildId,
+			InheritBuildId:    command.InheritBuildId, //nolint:staticcheck // SA1019: worker versioning v0.2
 			Priority:          command.Priority,
 		},
 	}
