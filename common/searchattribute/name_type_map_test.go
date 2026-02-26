@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func Test_IsValid(t *testing.T) {
@@ -60,10 +61,10 @@ func Test_GetType(t *testing.T) {
 
 	ivt, err = NameTypeMap{}.GetType("key1")
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
+	assert.True(errors.Is(err, sadefs.ErrInvalidName))
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 	ivt, err = typeMap.GetType("key4")
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
+	assert.True(errors.Is(err, sadefs.ErrInvalidName))
 	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 }

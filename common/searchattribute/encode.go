@@ -83,7 +83,7 @@ func Decode(
 			}
 		}
 
-		searchAttributeValue, err := DecodeValue(saPayload, saType, allowList)
+		searchAttributeValue, err := sadefs.DecodeValue(saPayload, saType, allowList)
 		if err != nil {
 			lastErr = err
 			result[saName] = nil
