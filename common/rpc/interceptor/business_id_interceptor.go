@@ -52,7 +52,7 @@ const (
 	PatternDeploymentVersion
 	// PatternPollerGroupID indicates extraction via GetPollerGroupId() directly
 	PatternPollerGroupID
-	// PatternNamespace indicates extraction via GetNamespace() - used when any cell for the namespace is acceptable
+	// PatternNamespace indicates extraction via GetNamespace() - used when we want to send all calls to a particular api and namespace to a single cell at a time.
 	PatternNamespace
 	// PatternUpdateRef indicates extraction via GetUpdateRef().GetWorkflowExecution().GetWorkflowId()
 	PatternUpdateRef
