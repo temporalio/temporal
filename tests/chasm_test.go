@@ -638,25 +638,23 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.True(ok)
 	s.Equal("Running", executionStatus)
 
-	// Close the store and verify the status changes
-	_, err = tests.ClosePayloadStoreHandler(
+	_, err = tests.CancelPayloadStoreHandler(
 		ctx,
-		tests.ClosePayloadStoreRequest{
+		tests.CancelPayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
 		},
 	)
 	s.NoError(err)
 
-	// Query for Completed status using ExecutionStatus as CHASM alias
-	visQueryCompleted := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Completed'", archetypeID)
+	visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", archetypeID, storeID)
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
-				Query:         visQueryCompleted + fmt.Sprintf(" AND PayloadStoreId = '%s'", storeID),
+				Query:         visQueryCanceled,
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 1

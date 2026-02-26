@@ -38,6 +38,13 @@ type (
 
 	ClosePayloadStoreResponse struct{}
 
+	CancelPayloadStoreRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+	}
+
+	CancelPayloadStoreResponse struct{}
+
 	AddPayloadRequest struct {
 		NamespaceID namespace.ID
 		StoreID     string
@@ -133,6 +140,24 @@ func ClosePayloadStoreHandler(
 		),
 		(*PayloadStore).Close,
 		nil,
+	)
+	return resp, err
+}
+
+func CancelPayloadStoreHandler(
+	ctx context.Context,
+	request CancelPayloadStoreRequest,
+) (CancelPayloadStoreResponse, error) {
+	resp, _, err := chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*PayloadStore](
+			chasm.ExecutionKey{
+				NamespaceID: request.NamespaceID.String(),
+				BusinessID:  request.StoreID,
+			},
+		),
+		(*PayloadStore).Cancel,
+		request,
 	)
 	return resp, err
 }
