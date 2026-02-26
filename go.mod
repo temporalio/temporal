@@ -42,7 +42,7 @@ require (
 	github.com/prometheus/common v0.62.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
@@ -61,7 +61,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.34.0
 	go.opentelemetry.io/otel/trace v1.34.0
 	go.temporal.io/api v1.62.2
-	go.temporal.io/sdk v1.38.0
+	go.temporal.io/sdk v1.40.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/mock v0.6.0
 	go.uber.org/multierr v1.11.0
@@ -79,7 +79,26 @@ require (
 	modernc.org/sqlite v1.44.3
 )
 
-require github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+require (
+	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/ebitengine/purego v0.9.0 // indirect
+	github.com/go-ole/go-ole v1.2.6 // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
+	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
+	github.com/parquet-go/parquet-go v0.25.1 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
+	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/shirou/gopsutil/v4 v4.25.10 // indirect
+	github.com/spf13/cobra v1.7.0 // indirect
+	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/temporalio/features v0.0.0-20251218214540-e36ee9b474e2 // indirect
+	github.com/temporalio/omes v0.0.0-20260219181924-8e4c1f54f3b0 // indirect
+	github.com/tklauser/go-sysconf v0.3.15 // indirect
+	github.com/tklauser/numcpus v0.10.0 // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+)
 
 require (
 	cel.dev/expr v0.23.1 // indirect
@@ -173,3 +192,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+tool github.com/temporalio/omes/cmd

@@ -59,9 +59,9 @@ func TestMixedBrain(t *testing.T) {
 			t.Parallel()
 			downloadAndBuildReleaseServer(t, releaseBinary)
 		})
-		t.Run("download and build Omes", func(t *testing.T) {
+		t.Run("build Omes", func(t *testing.T) {
 			t.Parallel()
-			downloadAndBuildOmes(t, tmpDir)
+			buildOmes(t, omesBinary)
 		})
 	})
 	if t.Failed() {
