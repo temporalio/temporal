@@ -13,26 +13,41 @@ import (
 type Component interface {
 	LifecycleState(Context) LifecycleState
 
-	Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error)
-
 	// we may not need this in the beginning
 	mustEmbedUnimplementedComponent()
 }
 
+type TerminableComponent interface {
+	Component
+
+	// Terminate method is invoked by the chasm framework on an execution's root component when the execution
+	// needs to be forcefully terminated.
+	// Some examples include:
+	// - Execution state becomes too large.
+	// - Two running executions with the same businessID when namespace performs a force failover.
+	Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error)
+}
+
 type TerminateComponentRequest struct {
-	Identity string
-	Reason   string
-	Details  *commonpb.Payloads
+	Identity  string
+	Reason    string
+	Details   *commonpb.Payloads
+	RequestID string
 }
 
 type TerminateComponentResponse struct{}
 
+// RootComponent is the interface that must be implemented by the top level component of a chasm execution.
+// When the RootComponent's LifecycleState transitions to a closed state, the entire execution is considered closed,
+// and will be cleaned up by the chasm framework after namespace's retention period. The BusinessID is also available for reuse.
+//
+// TODO: (not yet true) Visibility record will no longer be updated after RootComponent is closed.
+type RootComponent interface {
+	TerminableComponent
+}
+
 // Embed UnimplementedComponent to get forward compatibility
 type UnimplementedComponent struct{}
-
-func (UnimplementedComponent) Terminate(MutableContext, TerminateComponentRequest) (TerminateComponentResponse, error) {
-	return TerminateComponentResponse{}, nil
-}
 
 func (UnimplementedComponent) mustEmbedUnimplementedComponent() {}
 

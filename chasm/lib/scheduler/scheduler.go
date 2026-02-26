@@ -89,6 +89,7 @@ var (
 	ErrClosed                = serviceerror.NewFailedPrecondition("schedule closed")
 	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
+	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -132,6 +133,30 @@ func NewScheduler(
 	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	return sched, nil
+}
+
+// NewSentinel returns a sentinel CHASM scheduler that exists only to reserve
+// the schedule ID. Sentinels have no sub-components and return NotFound
+// on all API operations.
+func NewSentinel(
+	ctx chasm.MutableContext,
+	namespace, namespaceID, scheduleID string,
+) *Scheduler {
+	return &Scheduler{
+		SchedulerState: &schedulerpb.SchedulerState{
+			Namespace:     namespace,
+			NamespaceId:   namespaceID,
+			ScheduleId:    scheduleID,
+			Sentinel:      true,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+		cacheConflictToken: scheduler.InitialConflictToken,
+	}
+}
+
+// IsSentinel returns true if this is a sentinel scheduler.
+func (s *Scheduler) IsSentinel() bool {
+	return s.Sentinel
 }
 
 // setNullableFields sets fields that are nullable in API requests.
@@ -193,12 +218,22 @@ func CreateScheduler(
 	return sched, nil
 }
 
+// LifecycleState implements the chasm.Component interface.
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
 		return chasm.LifecycleStateCompleted
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+// Terminate implements the chasm.RootComponent interface.
+func (s *Scheduler) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// TODO: Implement terminate logic.
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 // NewRangeBackfiller returns an intialized Backfiller component, which should
@@ -473,6 +508,9 @@ func (s *Scheduler) Describe(
 	req *schedulerpb.DescribeScheduleRequest,
 	specBuilder *scheduler.SpecBuilder,
 ) (*schedulerpb.DescribeScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	if s.Closed {
 		return nil, ErrClosed
 	}
@@ -554,6 +592,9 @@ func (s *Scheduler) ListMatchingTimes(
 	req *schedulerpb.ListScheduleMatchingTimesRequest,
 	specBuilder *scheduler.SpecBuilder,
 ) (*schedulerpb.ListScheduleMatchingTimesResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	if s.Closed {
 		return nil, ErrClosed
 	}
@@ -570,7 +611,7 @@ func (s *Scheduler) ListMatchingTimes(
 
 	var out []*timestamppb.Timestamp
 	t1 := timestamp.TimeValue(frontendReq.StartTime)
-	for i := 0; i < maxListMatchingTimesCount; i++ {
+	for range maxListMatchingTimesCount {
 		t1 = cspec.GetNextTime(s.jitterSeed(), t1).Next
 		if t1.IsZero() || t1.After(timestamp.TimeValue(frontendReq.EndTime)) {
 			break
@@ -590,6 +631,9 @@ func (s *Scheduler) Delete(
 	ctx chasm.MutableContext,
 	req *schedulerpb.DeleteScheduleRequest,
 ) (*schedulerpb.DeleteScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	s.Closed = true
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
@@ -601,6 +645,9 @@ func (s *Scheduler) Update(
 	ctx chasm.MutableContext,
 	req *schedulerpb.UpdateScheduleRequest,
 ) (*schedulerpb.UpdateScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
@@ -643,6 +690,9 @@ func (s *Scheduler) Patch(
 	ctx chasm.MutableContext,
 	req *schedulerpb.PatchScheduleRequest,
 ) (*schedulerpb.PatchScheduleResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
 	// Handle paused status.
 	if req.FrontendRequest.Patch.Pause != "" {
 		s.Schedule.State.Paused = true
@@ -688,6 +738,11 @@ func (s *Scheduler) executionStatus() string {
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyValue {
+	if s.Sentinel {
+		return []chasm.SearchAttributeKeyValue{
+			executionStatusSearchAttribute.Value(s.executionStatus()),
+		}
+	}
 	return []chasm.SearchAttributeKeyValue{
 		executionStatusSearchAttribute.Value(s.executionStatus()),
 		chasm.SearchAttributeTemporalSchedulePaused.Value(s.Schedule.GetState().GetPaused()),
@@ -698,6 +753,9 @@ func (s *Scheduler) SearchAttributes(chasm.Context) []chasm.SearchAttributeKeyVa
 func (s *Scheduler) Memo(
 	ctx chasm.Context,
 ) proto.Message {
+	if s.Sentinel {
+		return nil
+	}
 	return s.ListInfo(ctx)
 }
 

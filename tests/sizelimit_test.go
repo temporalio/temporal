@@ -150,7 +150,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistoryCountLimi
 	var signalErr error
 	// Send signals until workflow is force terminated
 SignalLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// Send another signal without RunID
 		signalName := "another signal"
 		signalInput := payloads.EncodeString("another signal input")
@@ -311,7 +311,7 @@ func (s *SizeLimitFunctionalSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 
 	// Wait for workflow to fail.
 	var historyEvents []*historypb.HistoryEvent
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		historyEvents = s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: id, RunId: we.GetRunId()})
 		lastEvent := historyEvents[len(historyEvents)-1]
 		if lastEvent.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED {
@@ -506,7 +506,7 @@ func (s *SizeLimitFunctionalSuite) TestTerminateWorkflowCausedByHistorySizeLimit
 	// Send signals until workflow is force terminated
 	largePayload := make([]byte, 900)
 SignalLoop:
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// Send another signal without RunID
 		signalName := "another signal"
 		signalInput, err := payloads.Encode(largePayload)

@@ -8,7 +8,6 @@ import "temporal/server/api/historyservice/v1/request_response.proto";
 // HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 // of workflow instances already created.
 service HistoryService {
-
     // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
     // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to produce the
     // initial list of commands for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
@@ -428,5 +427,13 @@ service HistoryService {
 
     // UnpauseWorkflowExecution unpauses the workflow execution specified in the request.
     rpc UnpauseWorkflowExecution (UnpauseWorkflowExecutionRequest) returns (UnpauseWorkflowExecutionResponse) {
+    }
+
+    // StartNexusOperation starts a Nexus operation on the __temporal_system endpoint.
+    rpc StartNexusOperation (StartNexusOperationRequest) returns (StartNexusOperationResponse) {
+    }
+
+    // CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
+    rpc CancelNexusOperation (CancelNexusOperationRequest) returns (CancelNexusOperationResponse) {
     }
 }

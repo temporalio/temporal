@@ -16,6 +16,7 @@ This document describes the project's testing setup, utilities and best practice
 - `TEMPORAL_TEST_OTEL_OUTPUT`: Enables OpenTelemetry (OTEL) trace output for failed tests to the provided file path.
 - `TEMPORAL_TEST_SHARED_CLUSTERS`: Number of shared clusters in the pool. Each can be used by multiple tests simultaneously.
 - `TEMPORAL_TEST_DEDICATED_CLUSTERS`: Number of dedicated clusters in the pool. Each can be used by one test only at a time.
+- `TEMPORAL_TEST_DATA_ENCODING`: Controls the encoding used for persistence DataBlobs. Available options: `proto3` (default) or `json`.
 
 ### Debugging via IDE
 
@@ -27,6 +28,19 @@ To pass in the required build tags, add them to the "Go tool arguments" field in
 ```
 -tags disable_grpc_modules,test_dep
 ```
+
+## Best Practices
+
+### Parallelization
+
+All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
+unless there is a reason not to.
+
+`make parallelize-tests` can be used to automatically add `t.Parallel()`.
+Use `//parallelize:ignore` to opt your test out of it.
+
+Functional tests in `tests/` using `testcore.NewEnv(t)` will always use `t.Parallel()`;
+unless the `MustRunSequential` option is passed.
 
 ## Test helpers
 
@@ -107,6 +121,20 @@ or if there's no SDK support for that API available yet.
 You'll find a fully initialized task poller in any functional test suite, look for `s.TaskPoller`.
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
+
+### testhooks package
+
+The `testhooks` package injects test-specific behavior into production code paths that are otherwise
+difficult to test. This is a **last resort** - prefer mocking and dependency injection when possible.
+
+**Example:**
+
+The UpdateWithStart API has a race window between releasing a lock and starting a workflow where
+another request could create the same workflow first. The `UpdateWithStartInBetweenLockAndStart`
+hook lets tests inject a callback at this exact point, making it possible to reliably test
+conflict handling.
+
+_NOTE: Tests using testhooks must be run with `-tags=test_dep`._
 
 ### softassert package
 

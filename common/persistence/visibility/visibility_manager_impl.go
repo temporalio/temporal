@@ -549,7 +549,7 @@ func isChasmExecution(searchAttributes *commonpb.SearchAttributes) bool {
 // aliasChasmSearchAttributes aliases CHASM search attribute field names and converts them to VisibilityValue.
 // This function mirrors the pattern of searchattribute.AliasFields for custom search attributes.
 func aliasChasmSearchAttributes(
-	decodedSearchAttributes map[string]interface{},
+	decodedSearchAttributes map[string]any,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 ) (map[string]chasm.VisibilityValue, error) {
 	if mapper == nil || len(decodedSearchAttributes) == 0 {
@@ -583,7 +583,7 @@ func aliasChasmSearchAttributes(
 
 // convertToVisibilityValue converts a value to VisibilityValue based on its runtime type.
 // After Decode, the types should be correct, so simple type detection is sufficient.
-func convertToVisibilityValue(value interface{}) chasm.VisibilityValue {
+func convertToVisibilityValue(value any) chasm.VisibilityValue {
 	switch val := value.(type) {
 	case int:
 		return chasm.VisibilityValueInt64(int64(val))

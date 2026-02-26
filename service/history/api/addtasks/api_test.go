@@ -81,7 +81,7 @@ func TestInvoke(t *testing.T) {
 					return nil
 				}).Times(2)
 				params.req.Tasks = nil
-				for i := 0; i < numWorkflows; i++ {
+				for i := range numWorkflows {
 					workflowKey := definition.NewWorkflowKey(
 						string(tests.NamespaceID),
 						strconv.Itoa(i),

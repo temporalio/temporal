@@ -36,6 +36,7 @@ import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
 import "temporal/server/api/common/v1/dlq.proto";
+import "temporal/server/api/health/v1/message.proto";
 
 extend google.protobuf.MessageOptions {
     optional RoutingOptions routing = 7234;
@@ -154,6 +155,9 @@ message GetMutableStateResponse {
     string inherited_build_id = 23;
     repeated temporal.server.api.persistence.v1.VersionedTransition transition_history = 24;
     temporal.api.workflow.v1.WorkflowExecutionVersioningInfo versioning_info = 25;
+    // Transient or speculative workflow task events which are not yet persisted in the history.
+    // These events should be appended to the history when it is returned to the worker.
+    temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
 }
 
 message PollMutableStateRequest {
@@ -1293,6 +1297,8 @@ message DeepHealthCheckRequest {
 
 message DeepHealthCheckResponse {
     temporal.server.api.enums.v1.HealthState state = 1;
+    // Per-check diagnostic results. Populated for all checks regardless of state.
+    repeated temporal.server.api.health.v1.HealthCheck checks = 2;
 }
 
 message SyncWorkflowStateRequest {
@@ -1401,3 +1407,27 @@ message UnpauseWorkflowExecutionRequest {
 }
 
 message UnpauseWorkflowExecutionResponse { }
+
+message StartNexusOperationRequest {
+    option (routing).shard_id = "shard_id";
+
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    temporal.api.nexus.v1.StartOperationRequest request = 3;
+}
+
+message StartNexusOperationResponse {
+    temporal.api.nexus.v1.StartOperationResponse response = 1;
+}
+
+message CancelNexusOperationRequest {
+    option (routing).shard_id = "shard_id";
+
+    string namespace_id = 1;
+    int32 shard_id = 2;
+    temporal.api.nexus.v1.CancelOperationRequest request = 3;
+}
+
+message CancelNexusOperationResponse {
+    temporal.api.nexus.v1.CancelOperationResponse response = 1;
+}

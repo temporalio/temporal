@@ -871,13 +871,14 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
 				3 WorkflowTaskStarted
 				4 WorkflowTaskCompleted
+				5 WorkflowTaskScheduled
+				6 WorkflowTaskStarted
 			`, events)
 
 			// VersioningInfo should not have changed before the update has been processed by the poller.
@@ -957,13 +958,14 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_FailedUpdate_DoesNotTransitionTo
 			6 WorkflowTaskStarted
 		  `, task.History)
 
-			// Verify that events from the speculative task are *not* written to the workflow history before being processed by the poller
 			events := s.GetHistory(s.Namespace().String(), execution)
 			s.EqualHistoryEvents(`
 				1 WorkflowExecutionStarted
 				2 WorkflowTaskScheduled
 				3 WorkflowTaskStarted
 				4 WorkflowTaskCompleted
+				5 WorkflowTaskScheduled
+				6 WorkflowTaskStarted
 			`, events)
 
 			// VersioningInfo should not have changed before the update has been processed by the poller.
@@ -1315,12 +1317,12 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	numTests := 50
 	counter := make(map[string]int)
 	runs := make([]sdkclient.WorkflowRun, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv1.TaskQueue().GetName()}, "wf")
 		s.NoError(err)
 		runs[i] = run
 	}
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		var out string
 		s.NoError(runs[i].Get(ctx, &out))
 		counter[out]++
@@ -1525,7 +1527,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 		s.updateTaskQueueDeploymentData(tv2, true, 0, false, 0, tqTypeWf, tqTypeAct)
 	}
 	// poll activity from v2 worker, this should start a transition but should not immediately start the activity.
-	go s.idlePollActivity(tv2, true, time.Minute, "v2 worker should not receive the activity")
+	go s.idlePollActivity(context.Background(), tv2, true, time.Minute, "v2 worker should not receive the activity")
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		dwf, err := s.FrontendClient().DescribeWorkflowExecution(
@@ -1850,7 +1852,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	time.Sleep(time.Millisecond * 200) //nolint:forbidigo
 
 	// Pollers of d1 are there, but should not get any task
-	go s.idlePollActivity(tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
+	go s.idlePollActivity(ctx, tv1, true, ver3MinPollTime, "activities should not go to the old deployment")
 
 	go func() {
 		for i := 2; i <= 4; i++ {
@@ -2445,8 +2447,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					s.verifySpeculativeTask(execution)
 				} else if transientTask {
 					s.verifyTransientTask(task)
-					// Get events from server-side history instead of task.History.Events, because task.History.Events has an
-					// extra started event with the CaN suggestion in the transient task case
+					// Get events from server-side history, this includes transient events.
 					historyEvents = s.GetHistory(s.Namespace().String(), execution)
 				}
 
@@ -2457,18 +2458,31 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 					}
 				}
 				if enableSendTargetVersionChanged {
-					// Verify ContinueAsNewSuggested and reasons were sent on the last WFT started event (but not the earlier ones).
-					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 2 WFT started events
+					// Verify TargetWorkerDeploymentVersionChanged was sent on WFT started events after deployment change.
+					// Events BEFORE deployment change (events 3, 7) should NOT have the flag.
+					// Events AFTER deployment change (all subsequent WFTs) SHOULD have the flag, regardless of success/failure.
+					// The flag is recomputed on every WFT, so both failed attempts and retries will have it if conditions persist.
+					s.Greater(len(wfTaskStartedEvents), 2) // make sure there are at least 3 WFT started events
+
+					// In this test, deployment is changed after event 7 (`s.setCurrentDeployment(tv2)`).
+					// So the first 2 WFT started events should NOT have the flag,
+					// and all subsequent events SHOULD have the flag.
+					eventsBeforeDeploymentChange := 2 // Events 3 and 7
+
 					for i, event := range wfTaskStartedEvents {
 						attr := event.GetWorkflowTaskStartedEventAttributes()
-						if i == len(wfTaskStartedEvents)-1 { // last event
+						if i < eventsBeforeDeploymentChange {
+							// Events before deployment change should NOT have the flag
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
-							s.True(attr.GetTargetWorkerDeploymentVersionChanged())
-						} else { // earlier events
+							s.False(attr.GetTargetWorkerDeploymentVersionChanged(),
+								"Event %d should not have flag (before deployment change)", event.GetEventId())
+						} else {
+							// Events after deployment change SHOULD have the flag (including failed attempts and transient retries)
 							s.False(attr.GetSuggestContinueAsNew())
 							s.Require().Empty(attr.GetSuggestContinueAsNewReasons())
-							s.False(attr.GetTargetWorkerDeploymentVersionChanged())
+							s.True(attr.GetTargetWorkerDeploymentVersionChanged(),
+								"Event %d should have flag (after deployment change)", event.GetEventId())
 						}
 					}
 				} else {
@@ -2578,7 +2592,6 @@ func (s *Versioning3Suite) triggerTransientWFT(ctx context.Context, tv *testvars
 
 // Verify this is a speculative task - events not yet in persisted history
 func (s *Versioning3Suite) verifySpeculativeTask(execution *commonpb.WorkflowExecution) {
-	// use history events instead of task events because some of the task.History.Events aren't persisted yet
 	events := s.GetHistory(s.Namespace().String(), execution)
 	s.EqualHistoryEvents(`
 						1 WorkflowExecutionStarted
@@ -2589,6 +2602,8 @@ func (s *Versioning3Suite) verifySpeculativeTask(execution *commonpb.WorkflowExe
 						6 WorkflowTaskScheduled
 						7 WorkflowTaskStarted
 						8 WorkflowTaskCompleted
+						9 WorkflowTaskScheduled
+						10 WorkflowTaskStarted
 					`, events)
 }
 
@@ -4020,6 +4035,7 @@ func (s *Versioning3Suite) idlePollUnversionedActivity(
 }
 
 func (s *Versioning3Suite) idlePollActivity(
+	ctx context.Context,
 	tv *testvars.TestVars,
 	versioned bool,
 	timeout time.Duration,
@@ -4035,11 +4051,13 @@ func (s *Versioning3Suite) idlePollActivity(
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				s.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.Fail(unexpectedTaskMessage)
+				a := s.Assert()
+				a.Fail(unexpectedTaskMessage)
 			}
 			return nil, nil
 		},
 		taskpoller.WithTimeout(timeout),
+		taskpoller.WithContext(ctx),
 	)
 }
 
@@ -4119,7 +4137,7 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		tp   enumspb.TaskQueueType
 	}
 	remaining := make(map[partAndType]struct{})
-	for i := 0; i < partitionCount; i++ {
+	for i := range partitionCount {
 		for _, tqt := range tqTypes {
 			remaining[partAndType{i, tqt}] = struct{}{}
 		}
@@ -4515,7 +4533,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 
 	// Start an idle activity poller on v0. This poller should not receive any activity tasks
 	//nolint:testifylint
-	go s.idlePollActivity(tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
+	go s.idlePollActivity(ctx, tv0, true, ver3MinPollTime, "activity should not go to the old deployment")
 
 	// Start a poller on v1
 	activityTaskCh := make(chan struct{}, 1)
@@ -5530,6 +5548,163 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 
 	// Verify backlog is now empty
 	s.validateBacklogCount(tv1, tqTypeWf, 0)
+}
+
+func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithoutSignal() {
+	s.testTransitionDuringTransientTask(false)
+}
+
+func (s *Versioning3Suite) TestTransitionDuringTransientTask_WithSignal() {
+	s.testTransitionDuringTransientTask(true)
+}
+
+// TestTransitionDuringTransientTask verifies that a deployment version transition to v1
+// is properly set when a workflow task fails and is retried, and that the transition completes
+// successfully after a signal is sent during the retry backoff period.
+func (s *Versioning3Suite) testTransitionDuringTransientTask(withSignal bool) {
+
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// Create test vars for v1
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// We need to keep pollers until the task queues are properly registered
+	pollCtx, pollCtxCancel := context.WithTimeout(ctx, 60*time.Second)
+	go s.idlePollWorkflow(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
+	go s.idlePollActivity(pollCtx, tv1, true, ver3MinPollTime, "should not get any tasks yet")
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf, tqTypeAct)
+	pollCtxCancel()
+
+	// Start the workflow
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tv1.WorkflowID(),
+	}
+	runID := s.startWorkflow(tv1, nil)
+	execution.RunId = runID
+
+	// Poll first workflow task and schedule two activities
+	s.unversionedPollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Schedule two activities
+			return respondWftWithActivities(tv1, tv1, false, vbUnspecified, "activity-1", "activity-2"), nil
+		})
+
+	// Complete the first activity to generate a new wft
+	s.unversionedPollActivityAndHandle(tv1, nil,
+		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondActivity(), nil
+		})
+
+	// Poll and fail the next workflow task - this will cause a transient WFT to be scheduled with retry backoff
+	s.unversionedPollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Return error to fail the task
+			return nil, errors.New("intentional workflow task failure")
+		})
+
+	// Set v1 as current deployment
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf, tqTypeAct)
+
+	if withSignal {
+		// While during retry backoff, send a signal to the workflow
+		// Signal would convert the transient task to normal because of the new history event being inserted after the first task failure
+		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: execution,
+			SignalName:        "test-signal",
+			Input:             tv1.Any().Payloads(),
+			Identity:          tv1.WorkerIdentity(),
+		})
+		s.NoError(err)
+	}
+
+	// Poll the second activity to cause transition to v1.
+	s.idlePollActivity(ctx, tv1, true, ver3MinPollTime, "should not get the activity because it started a transition")
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
+
+	// Print workflow describe and history
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: execution,
+	})
+	if err == nil && descResp != nil {
+		fmt.Println("=== Workflow Describe ===")
+		fmt.Printf("pending activities: %v\n", descResp.PendingActivities)
+		fmt.Println("=========================")
+	}
+
+	histResp, err := s.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: s.Namespace().String(),
+		Execution: execution,
+	})
+	if err == nil && histResp != nil {
+		fmt.Println("=== Workflow Event History ===")
+		for i, event := range histResp.History.Events {
+			fmt.Printf("Event %d: %s (EventId: %d)\n", i, event.EventType, event.EventId)
+		}
+		fmt.Println("==============================")
+	}
+
+	// After the retry backoff, poll and complete the workflow task
+	// This should complete the transition and the workflow should be on v1
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Verify that a deployment version transition to v1 is set in the workflow
+			s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnspecified, nil, nil, tv1.DeploymentVersionTransition())
+
+			if withSignal {
+				s.EqualHistory(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted
+			5 ActivityTaskScheduled // activity-1
+			6 ActivityTaskScheduled // activity-2
+			7 ActivityTaskStarted // activity-1
+			8 ActivityTaskCompleted // activity-1
+			9 WorkflowTaskScheduled
+			10 WorkflowTaskStarted
+			11 WorkflowTaskFailed
+			12 WorkflowExecutionSignaled
+			13 WorkflowTaskScheduled // normal task
+			14 WorkflowTaskStarted
+		  `, task.History)
+			} else {
+				// Verify this is the transient (retry) attempt
+				s.verifyTransientTask(task)
+				s.EqualHistory(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted
+			5 ActivityTaskScheduled // activity-1
+			6 ActivityTaskScheduled // activity-2
+			7 ActivityTaskStarted // activity-1
+			8 ActivityTaskCompleted // activity-1
+			9 WorkflowTaskScheduled
+			10 WorkflowTaskStarted
+			11 WorkflowTaskFailed
+			12 WorkflowTaskScheduled // Transient task
+			13 WorkflowTaskStarted
+		  `, task.History)
+			}
+
+			// Complete the workflow
+			return respondCompleteWorkflow(tv1, vbUnpinned), nil
+		})
+
+	// Verify the transition is completed and the workflow is on v1
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 }
 
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {

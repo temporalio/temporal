@@ -167,7 +167,7 @@ type (
 		ESClient                         esclient.Client
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor nsreplication.TaskExecutor
-		DynamicConfigOverrides           map[dynamicconfig.Key]interface{}
+		DynamicConfigOverrides           map[dynamicconfig.Key]any
 		TLSConfigProvider                *encryption.FixedTLSConfigProvider
 		CaptureMetricsHandler            *metricstest.CaptureHandler
 		// ServiceFxOptions is populated by WithFxOptionsForService.

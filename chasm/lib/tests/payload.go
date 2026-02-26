@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -41,11 +42,22 @@ type (
 		Payloads   chasm.Map[string, *commonpb.Payload]
 		Visibility chasm.Field[*chasm.Visibility]
 	}
+
+	componentContextKey string
+)
+
+const (
+	componentCtxKey componentContextKey = "key"
+	componentCtxVal string              = "value"
 )
 
 func NewPayloadStore(
 	mutableContext chasm.MutableContext,
 ) (*PayloadStore, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return nil, err
+	}
+
 	store := &PayloadStore{
 		State: &testspb.TestPayloadStore{
 			TotalCount:      0,
@@ -60,17 +72,37 @@ func NewPayloadStore(
 	return store, nil
 }
 
+func assertContextValue(chasmContext chasm.Context) error {
+	if val := chasmContext.Value(componentCtxKey); val != componentCtxVal {
+		return softassert.UnexpectedInternalErr(
+			chasmContext.Logger(),
+			"registered component key value pair not available in context",
+			nil,
+		)
+	}
+
+	return nil
+}
+
 func (s *PayloadStore) Describe(
-	_ chasm.Context,
+	chasmContext chasm.Context,
 	_ DescribePayloadStoreRequest,
 ) (*testspb.TestPayloadStore, error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return nil, err
+	}
+
 	return common.CloneProto(s.State), nil
 }
 
 func (s *PayloadStore) Close(
-	_ chasm.MutableContext,
-	_ ClosePayloadStoreRequest,
+	chasmContext chasm.MutableContext,
+	_ chasm.NoValue,
 ) (ClosePayloadStoreResponse, error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return ClosePayloadStoreResponse{}, err
+	}
+
 	s.State.Closed = true
 	return ClosePayloadStoreResponse{}, nil
 }
@@ -79,6 +111,10 @@ func (s *PayloadStore) AddPayload(
 	mutableContext chasm.MutableContext,
 	request AddPayloadRequest,
 ) (*testspb.TestPayloadStore, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return nil, err
+	}
+
 	if _, ok := s.Payloads[request.PayloadKey]; ok {
 		return nil, serviceerror.NewAlreadyExistsf("payload already exists with key: %s", request.PayloadKey)
 	}
@@ -113,6 +149,10 @@ func (s *PayloadStore) GetPayload(
 	chasmContext chasm.Context,
 	key string,
 ) (*commonpb.Payload, error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return nil, err
+	}
+
 	if field, ok := s.Payloads[key]; ok {
 		return field.Get(chasmContext), nil
 	}
@@ -123,6 +163,10 @@ func (s *PayloadStore) RemovePayload(
 	mutableContext chasm.MutableContext,
 	key string,
 ) (*testspb.TestPayloadStore, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return nil, err
+	}
+
 	if _, ok := s.Payloads[key]; !ok {
 		return nil, serviceerror.NewNotFoundf("payload not found with key: %s", key)
 	}
@@ -138,28 +182,57 @@ func (s *PayloadStore) RemovePayload(
 }
 
 func (s *PayloadStore) LifecycleState(
-	_ chasm.Context,
+	chasmContext chasm.Context,
 ) chasm.LifecycleState {
+	if err := assertContextValue(chasmContext); err != nil {
+		// nolint:forbidigo // Panic here for testing.
+		panic("registered component key value pair not available in context")
+	}
+
 	if s.State.Closed {
 		return chasm.LifecycleStateCompleted
 	}
 	return chasm.LifecycleStateRunning
 }
 
+func (s *PayloadStore) Terminate(
+	mutableContext chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	if err := assertContextValue(mutableContext); err != nil {
+		return chasm.TerminateComponentResponse{}, err
+	}
+
+	if _, err := s.Close(mutableContext, nil); err != nil {
+		return chasm.TerminateComponentResponse{}, err
+	}
+	return chasm.TerminateComponentResponse{}, nil
+}
+
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface
 func (s *PayloadStore) SearchAttributes(
-	ctx chasm.Context,
+	chasmContext chasm.Context,
 ) []chasm.SearchAttributeKeyValue {
+	if err := assertContextValue(chasmContext); err != nil {
+		// nolint:forbidigo // Panic here for testing.
+		panic("registered component key value pair not available in context")
+	}
+
 	return []chasm.SearchAttributeKeyValue{
 		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
 		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
-		ExecutionStatusSearchAttribute.Value(s.LifecycleState(ctx).String()),
+		ExecutionStatusSearchAttribute.Value(s.LifecycleState(chasmContext).String()),
 		chasm.SearchAttributeTemporalScheduledByID.Value(TestScheduleID),
 		chasm.SearchAttributeTaskQueue.Value(DefaultPayloadStoreTaskQueue),
 	}
 }
 
 // Memo implements chasm.VisibilityMemoProvider interface
-func (s *PayloadStore) Memo(_ chasm.Context) proto.Message {
+func (s *PayloadStore) Memo(chasmContext chasm.Context) proto.Message {
+	if err := assertContextValue(chasmContext); err != nil {
+		// nolint:forbidigo // Panic here for testing.
+		panic("registered component key value pair not available in context")
+	}
+
 	return s.State
 }

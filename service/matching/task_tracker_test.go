@@ -10,7 +10,7 @@ import (
 
 // addTasks is a helper which adds numberOfTasks to a taskTracker
 func trackTasksHelper(tr *taskTracker, numberOfTasks int) {
-	for i := 0; i < numberOfTasks; i++ {
+	for range numberOfTasks {
 		// adding a bunch of tasks
 		tr.incrementTaskCount()
 	}

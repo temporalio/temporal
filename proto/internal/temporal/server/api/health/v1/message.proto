@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package temporal.server.api.health.v1;
+
+option go_package = "go.temporal.io/server/api/health/v1;health";
+
+import "temporal/server/api/enums/v1/cluster.proto";
+
+// Individual health check result.
+// The check_type field uses human-readable strings rather than an enum for extensibility.
+message HealthCheck {
+    // Machine-readable check type identifier for programmatic matching.
+    // Known values defined as Go constants in api/health/v1/types.go:
+    //   "grpc_health", "rpc_latency", "rpc_error_ratio",
+    //   "persistence_latency", "persistence_error_ratio",
+    //   "host_availability", "task_queue_backlog"
+    // We use strings instead of an enum for flexibility: new check types can be
+    // added without proto changes. See HealthCheck.message for human-readable details.
+    string check_type = 1;
+    temporal.server.api.enums.v1.HealthState state = 2;
+    // Actual observed value (0 if N/A).
+    double value = 3;
+    // Threshold that was exceeded (0 if N/A).
+    double threshold = 4;
+    // Human-readable detail describing what happened, e.g.
+    // "RPC latency 850.00ms exceeded 500.00ms threshold".
+    string message = 5;
+}
+
+// Health details for a single host.
+message HostHealthDetail {
+    string address = 1;
+    temporal.server.api.enums.v1.HealthState state = 2;
+    repeated HealthCheck checks = 3;
+}
+
+// Health details for a service (history, frontend, matching).
+message ServiceHealthDetail {
+    string service = 1;
+    temporal.server.api.enums.v1.HealthState state = 2;
+    repeated HostHealthDetail hosts = 3;
+    // Service-level diagnostic message (e.g. "no available hosts", "resolver error").
+    string message = 4;
+}

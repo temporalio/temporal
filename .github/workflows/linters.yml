@@ -86,7 +86,7 @@ jobs:
       - name: lint system workflows with workflowcheck
         run: make workflowcheck
 
-  fmt-imports:
+  fmt:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
@@ -101,7 +101,7 @@ jobs:
 
       - name: format golang import statements
         run: |
-          make fmt-imports
+          make fmt
 
       - name: check-is-dirty
         run: |
@@ -112,7 +112,7 @@ jobs:
             exit 1
           fi
 
-  lint-yaml:
+  parallelize-tests:
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v6
@@ -125,8 +125,18 @@ jobs:
           check-latest: true
           cache: true
 
-      - name: check yaml formatting
-        run: make lint-yaml
+      - name: check test parallelization
+        run: make parallelize-tests
+
+      - name: check-is-dirty
+        run: |
+          if [[ -n $(git status --porcelain) ]]; then
+            echo "Detected uncommitted changes after running parallelize-tests."
+            echo "Run 'make parallelize-tests' locally and commit the changes."
+            git status
+            git diff
+            exit 1
+          fi
 
   golangci:
     runs-on: ubuntu-24.04-arm
@@ -157,12 +167,12 @@ jobs:
   linters-succeed:
     name: All Linters Succeed
     needs:
+      - fmt
       - lint-api
       - lint-protos
       - lint-actions
-      - fmt-imports
-      - lint-yaml
       - golangci
+      - parallelize-tests
     runs-on: ubuntu-24.04-arm
     if: always()
     env:
