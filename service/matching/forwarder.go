@@ -169,7 +169,7 @@ func (fwdr *Forwarder) getForwardInfo(task *internalTask) *taskqueuespb.TaskForw
 	}
 	// task is forwarded for the first time
 	forwardInfo := &taskqueuespb.TaskForwardInfo{
-		CreateTime:         task.createTime,
+		CreateTime:         task.getCreateTime(),
 		TaskSource:         task.source,
 		SourcePartition:    fwdr.partition.RpcName(),
 		OriginPartition:    fwdr.partition.RpcName(),

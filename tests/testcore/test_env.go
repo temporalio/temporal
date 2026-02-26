@@ -29,7 +29,7 @@ import (
 var shardSalt string
 
 var (
-	_                Env      = (*testEnv)(nil)
+	_                Env      = (*TestEnv)(nil)
 	sequentialSuites sync.Map // map[string]*sequentialSuite
 )
 
@@ -44,7 +44,7 @@ type Env interface {
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
-type testEnv struct {
+type TestEnv struct {
 	*FunctionalTestBase
 	*require.Assertions
 	historyrequire.HistoryRequire
@@ -131,7 +131,7 @@ func MustRunSequential(t *testing.T, reason string) {
 //
 // By default, tests are marked as parallel. Use MustRunSequential on the
 // test's parent `testing.T` to run them sequentially instead.
-func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
+func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
@@ -184,7 +184,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
-	env := &testEnv{
+	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
 		HistoryRequire:     historyrequire.New(t),
@@ -208,11 +208,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 }
 
 // Use test env-specific namespace here for test isolation.
-func (e *testEnv) Namespace() namespace.Name {
+func (e *TestEnv) Namespace() namespace.Name {
 	return e.nsName
 }
 
-func (e *testEnv) NamespaceID() namespace.ID {
+func (e *TestEnv) NamespaceID() namespace.ID {
 	return e.nsID
 }
 
@@ -221,7 +221,7 @@ func (e *testEnv) NamespaceID() namespace.ID {
 // It auto-detects the scope from the hook:
 // - For namespace-scoped hooks: scopes it to the test's namespace
 // - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
-func (e *testEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
+func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
@@ -237,22 +237,22 @@ func (e *testEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	return e.cluster.host.injectHook(e.t, hook, scope)
 }
 
-func (e *testEnv) TaskPoller() *taskpoller.TaskPoller {
+func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 	return e.taskPoller
 }
 
-func (e *testEnv) T() *testing.T {
+func (e *TestEnv) T() *testing.T {
 	return e.t
 }
 
-func (e *testEnv) Tv() *testvars.TestVars {
+func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
-func (e *testEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
+func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	if e.isShared {
 		if !canBeNamespaceScoped(setting.Precedence()) {
 			e.t.Fatalf("OverrideDynamicConfig for setting %s (precedence %v) cannot be called on a shared cluster; use testcore.WithDedicatedCluster()", setting.Key(), setting.Precedence())
