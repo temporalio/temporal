@@ -688,6 +688,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	task := newInternalQueryTask(taskID, request)
+	pm.config.setDefaultPriority(task)
 
 reredirectTask:
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
@@ -715,8 +716,6 @@ reredirectTask:
 		dbq.MarkAlive()
 	}
 
-	// we set default priority inside the loop in case default priority changes in between iterations
-	pm.config.setDefaultPriority(task)
 	res, err := syncMatchQueue.DispatchQueryTask(ctx, task)
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchQueryTask
@@ -745,6 +744,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	}
 
 	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
+	pm.config.setDefaultPriority(task)
 
 reredirectTask:
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
@@ -771,8 +771,6 @@ reredirectTask:
 		dbq.MarkAlive()
 	}
 
-	// we set default priority inside the loop in case default priority changes in between iterations
-	pm.config.setDefaultPriority(task)
 	res, err := syncMatchQueue.DispatchNexusTask(ctx, task)
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchNexusTask

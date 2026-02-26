@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -59,7 +60,7 @@ func newPriForwarder(
 
 // ForwardTask forwards an activity or workflow task to the parent task queue partition if it exists
 func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) error {
-	if delay, ok := testhooks.Get[time.Duration](f.testHooks, testhooks.MatchingForwardTaskDelay); ok {
+	if delay, ok := testhooks.Get(f.testHooks, testhooks.MatchingForwardTaskDelay, namespace.ID(task.event.Data.GetNamespaceId())); ok {
 		time.Sleep(delay)
 	}
 
@@ -150,7 +151,7 @@ func (f *priForwarder) ForwardQueryTask(
 	ctx context.Context,
 	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	if delay, ok := testhooks.Get[time.Duration](f.testHooks, testhooks.MatchingForwardTaskDelay); ok {
+	if delay, ok := testhooks.Get(f.testHooks, testhooks.MatchingForwardTaskDelay, namespace.ID(task.query.request.GetNamespaceId())); ok {
 		time.Sleep(delay)
 	}
 
@@ -177,7 +178,7 @@ func (f *priForwarder) ForwardQueryTask(
 
 // ForwardNexusTask forwards a nexus task to parent task queue partition, if it exists.
 func (f *priForwarder) ForwardNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
-	if delay, ok := testhooks.Get[time.Duration](f.testHooks, testhooks.MatchingForwardTaskDelay); ok {
+	if delay, ok := testhooks.Get(f.testHooks, testhooks.MatchingForwardTaskDelay, namespace.ID(task.nexus.request.GetNamespaceId())); ok {
 		time.Sleep(delay)
 	}
 

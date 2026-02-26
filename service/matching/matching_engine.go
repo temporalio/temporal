@@ -2160,7 +2160,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				rc := req.GetUpdateRoutingConfig()
 				tqWorkerDeploymentData := deploymentData.GetDeploymentsData()[req.GetDeploymentName()]
 
-				ignoreRevCheck, _ := testhooks.Get[bool](e.testHooks, testhooks.MatchingIgnoreRoutingConfigRevisionCheck)
+				ignoreRevCheck, _ := testhooks.Get(e.testHooks, testhooks.MatchingIgnoreRoutingConfigRevisionCheck, namespace.ID(req.NamespaceId))
 				if ignoreRevCheck || rc.GetRevisionNumber() > tqWorkerDeploymentData.GetRoutingConfig().GetRevisionNumber() {
 					changed = true
 					// Update routing config when newer or equal revision is provided
@@ -2903,7 +2903,7 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		return
 	}
 
-	taskCreateTime := task.createTime
+	taskCreateTime := getTaskCreateTime(task)
 	if taskCreateTime == nil {
 		return
 	}
@@ -2932,6 +2932,22 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
 		metrics.WorkerVersionTag(workerVersion, e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)),
 	)
+}
+
+func getTaskCreateTime(task *internalTask) *timestamppb.Timestamp {
+	switch {
+	case task.event != nil:
+		return task.event.Data.GetCreateTime()
+	case task.query != nil:
+		if f := task.query.request.GetForwardInfo(); f != nil && f.GetCreateTime() != nil {
+			return f.GetCreateTime()
+		}
+	case task.nexus != nil:
+		if f := task.nexus.request.GetForwardInfo(); f != nil && f.GetCreateTime() != nil {
+			return f.GetCreateTime()
+		}
+	}
+	return nil
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded

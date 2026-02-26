@@ -26,6 +26,8 @@ const (
 	namespaceState = "namespace_state"
 	sourceCluster  = "source_cluster"
 	targetCluster  = "target_cluster"
+	taskSourceTag  = "source"
+	forwardedTag   = "forwarded"
 	fromCluster    = "from_cluster"
 	toCluster      = "to_cluster"
 	taskQueue      = "taskqueue"
@@ -268,11 +270,11 @@ func TaskPriorityTag(value string) Tag {
 }
 
 func TaskSourceTag(source enumsspb.TaskSource) Tag {
-	return Tag{Key: "source", Value: source.String()}
+	return Tag{Key: taskSourceTag, Value: source.String()}
 }
 
 func ForwardedTag(forwarded bool) Tag {
-	return Tag{Key: "forwarded", Value: strconv.FormatBool(forwarded)}
+	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {
