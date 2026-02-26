@@ -39,7 +39,7 @@ func New{{$P.Name}}TypedSetting[T any](key string, def T, description string) {{
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -52,7 +52,7 @@ func New{{$P.Name}}TypedSettingWithConverter[T any](key string, convert func(any
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -65,7 +65,7 @@ func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key string, convert
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 

@@ -753,7 +753,7 @@ func NewGlobalTypedSetting[T any](key string, def T, description string) GlobalT
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -765,7 +765,7 @@ func NewGlobalTypedSettingWithConverter[T any](key string, convert func(any) (T,
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -777,7 +777,7 @@ func NewGlobalTypedSettingWithConstrainedDefault[T any](key string, convert func
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -889,7 +889,7 @@ func NewNamespaceTypedSetting[T any](key string, def T, description string) Name
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -901,7 +901,7 @@ func NewNamespaceTypedSettingWithConverter[T any](key string, convert func(any) 
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -913,7 +913,7 @@ func NewNamespaceTypedSettingWithConstrainedDefault[T any](key string, convert f
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1025,7 +1025,7 @@ func NewNamespaceIDTypedSetting[T any](key string, def T, description string) Na
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1037,7 +1037,7 @@ func NewNamespaceIDTypedSettingWithConverter[T any](key string, convert func(any
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1049,7 +1049,7 @@ func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key string, convert
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1161,7 +1161,7 @@ func NewTaskQueueTypedSetting[T any](key string, def T, description string) Task
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1173,7 +1173,7 @@ func NewTaskQueueTypedSettingWithConverter[T any](key string, convert func(any) 
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1185,7 +1185,7 @@ func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key string, convert f
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1321,7 +1321,7 @@ func NewShardIDTypedSetting[T any](key string, def T, description string) ShardI
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1333,7 +1333,7 @@ func NewShardIDTypedSettingWithConverter[T any](key string, convert func(any) (T
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1345,7 +1345,7 @@ func NewShardIDTypedSettingWithConstrainedDefault[T any](key string, convert fun
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1457,7 +1457,7 @@ func NewTaskTypeTypedSetting[T any](key string, def T, description string) TaskT
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1469,7 +1469,7 @@ func NewTaskTypeTypedSettingWithConverter[T any](key string, convert func(any) (
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1481,7 +1481,7 @@ func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key string, convert fu
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1593,7 +1593,7 @@ func NewDestinationTypedSetting[T any](key string, def T, description string) De
 		convert:     ConvertStructure[T](def),
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1605,7 +1605,7 @@ func NewDestinationTypedSettingWithConverter[T any](key string, convert func(any
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 
@@ -1617,7 +1617,7 @@ func NewDestinationTypedSettingWithConstrainedDefault[T any](key string, convert
 		convert:     convert,
 		description: description,
 	}
-	register(s)
+	register(s, key)
 	return s
 }
 

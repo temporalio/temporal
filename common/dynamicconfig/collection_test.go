@@ -428,6 +428,15 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 	})
 }
 
+func (s *collectionSuite) TestRegisteredName() {
+	setting := dynamicconfig.NewGlobalIntSetting("settingWithUppercaseLetters", 10, "")
+	// For a registered setting, RegisteredName will return the original name.
+	s.Equal("settingWithUppercaseLetters", setting.Key().RegisteredName())
+
+	// For a key that has not been registered, it will return the empty string.
+	s.Empty(dynamicconfig.MakeKey("settingDoesNotExist").RegisteredName())
+}
+
 // someEnum is an example type for DynamicConfigParseHook.
 type someEnum int32
 
