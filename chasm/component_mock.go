@@ -53,21 +53,6 @@ func (mr *MockComponentMockRecorder) LifecycleState(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleState", reflect.TypeOf((*MockComponent)(nil).LifecycleState), arg0)
 }
 
-// Terminate mocks base method.
-func (m *MockComponent) Terminate(arg0 MutableContext, arg1 TerminateComponentRequest) (TerminateComponentResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Terminate", arg0, arg1)
-	ret0, _ := ret[0].(TerminateComponentResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Terminate indicates an expected call of Terminate.
-func (mr *MockComponentMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockComponent)(nil).Terminate), arg0, arg1)
-}
-
 // mustEmbedUnimplementedComponent mocks base method.
 func (m *MockComponent) mustEmbedUnimplementedComponent() {
 	m.ctrl.T.Helper()
@@ -78,4 +63,134 @@ func (m *MockComponent) mustEmbedUnimplementedComponent() {
 func (mr *MockComponentMockRecorder) mustEmbedUnimplementedComponent() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedComponent", reflect.TypeOf((*MockComponent)(nil).mustEmbedUnimplementedComponent))
+}
+
+// MockTerminableComponent is a mock of TerminableComponent interface.
+type MockTerminableComponent struct {
+	ctrl     *gomock.Controller
+	recorder *MockTerminableComponentMockRecorder
+	isgomock struct{}
+}
+
+// MockTerminableComponentMockRecorder is the mock recorder for MockTerminableComponent.
+type MockTerminableComponentMockRecorder struct {
+	mock *MockTerminableComponent
+}
+
+// NewMockTerminableComponent creates a new mock instance.
+func NewMockTerminableComponent(ctrl *gomock.Controller) *MockTerminableComponent {
+	mock := &MockTerminableComponent{ctrl: ctrl}
+	mock.recorder = &MockTerminableComponentMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTerminableComponent) EXPECT() *MockTerminableComponentMockRecorder {
+	return m.recorder
+}
+
+// LifecycleState mocks base method.
+func (m *MockTerminableComponent) LifecycleState(arg0 Context) LifecycleState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LifecycleState", arg0)
+	ret0, _ := ret[0].(LifecycleState)
+	return ret0
+}
+
+// LifecycleState indicates an expected call of LifecycleState.
+func (mr *MockTerminableComponentMockRecorder) LifecycleState(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleState", reflect.TypeOf((*MockTerminableComponent)(nil).LifecycleState), arg0)
+}
+
+// Terminate mocks base method.
+func (m *MockTerminableComponent) Terminate(arg0 MutableContext, arg1 TerminateComponentRequest) (TerminateComponentResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Terminate", arg0, arg1)
+	ret0, _ := ret[0].(TerminateComponentResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Terminate indicates an expected call of Terminate.
+func (mr *MockTerminableComponentMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockTerminableComponent)(nil).Terminate), arg0, arg1)
+}
+
+// mustEmbedUnimplementedComponent mocks base method.
+func (m *MockTerminableComponent) mustEmbedUnimplementedComponent() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "mustEmbedUnimplementedComponent")
+}
+
+// mustEmbedUnimplementedComponent indicates an expected call of mustEmbedUnimplementedComponent.
+func (mr *MockTerminableComponentMockRecorder) mustEmbedUnimplementedComponent() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedComponent", reflect.TypeOf((*MockTerminableComponent)(nil).mustEmbedUnimplementedComponent))
+}
+
+// MockRootComponent is a mock of RootComponent interface.
+type MockRootComponent struct {
+	ctrl     *gomock.Controller
+	recorder *MockRootComponentMockRecorder
+	isgomock struct{}
+}
+
+// MockRootComponentMockRecorder is the mock recorder for MockRootComponent.
+type MockRootComponentMockRecorder struct {
+	mock *MockRootComponent
+}
+
+// NewMockRootComponent creates a new mock instance.
+func NewMockRootComponent(ctrl *gomock.Controller) *MockRootComponent {
+	mock := &MockRootComponent{ctrl: ctrl}
+	mock.recorder = &MockRootComponentMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRootComponent) EXPECT() *MockRootComponentMockRecorder {
+	return m.recorder
+}
+
+// LifecycleState mocks base method.
+func (m *MockRootComponent) LifecycleState(arg0 Context) LifecycleState {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LifecycleState", arg0)
+	ret0, _ := ret[0].(LifecycleState)
+	return ret0
+}
+
+// LifecycleState indicates an expected call of LifecycleState.
+func (mr *MockRootComponentMockRecorder) LifecycleState(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LifecycleState", reflect.TypeOf((*MockRootComponent)(nil).LifecycleState), arg0)
+}
+
+// Terminate mocks base method.
+func (m *MockRootComponent) Terminate(arg0 MutableContext, arg1 TerminateComponentRequest) (TerminateComponentResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Terminate", arg0, arg1)
+	ret0, _ := ret[0].(TerminateComponentResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Terminate indicates an expected call of Terminate.
+func (mr *MockRootComponentMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockRootComponent)(nil).Terminate), arg0, arg1)
+}
+
+// mustEmbedUnimplementedComponent mocks base method.
+func (m *MockRootComponent) mustEmbedUnimplementedComponent() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "mustEmbedUnimplementedComponent")
+}
+
+// mustEmbedUnimplementedComponent indicates an expected call of mustEmbedUnimplementedComponent.
+func (mr *MockRootComponentMockRecorder) mustEmbedUnimplementedComponent() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "mustEmbedUnimplementedComponent", reflect.TypeOf((*MockRootComponent)(nil).mustEmbedUnimplementedComponent))
 }

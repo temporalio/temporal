@@ -39,7 +39,7 @@ type perNsWorkerManagerSuite struct {
 	cmp1 *workercommon.MockPerNSWorkerComponent
 	cmp2 *workercommon.MockPerNSWorkerComponent
 
-	manager *perNamespaceWorkerManager
+	manager *PerNamespaceWorkerManager
 }
 
 func TestPerNsWorkerManager(t *testing.T) {
@@ -57,7 +57,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 	s.cmp1 = workercommon.NewMockPerNSWorkerComponent(s.controller)
 	s.cmp2 = workercommon.NewMockPerNSWorkerComponent(s.controller)
 
-	s.manager = NewPerNamespaceWorkerManager(perNamespaceWorkerManagerInitParams{
+	s.manager = PerNamespaceWorkerManagerProvider(perNamespaceWorkerManagerInitParams{
 		Logger:            s.logger,
 		SdkClientFactory:  s.cfactory,
 		NamespaceRegistry: s.registry,
@@ -558,7 +558,7 @@ func TestPerNsWorkerManagerSubscription(t *testing.T) {
 	t.Cleanup(dc.Stop)
 	config := NewConfig(dc, nil)
 
-	manager := NewPerNamespaceWorkerManager(perNamespaceWorkerManagerInitParams{
+	manager := PerNamespaceWorkerManagerProvider(perNamespaceWorkerManagerInitParams{
 		Logger:            logger,
 		SdkClientFactory:  cfactory,
 		NamespaceRegistry: registry,

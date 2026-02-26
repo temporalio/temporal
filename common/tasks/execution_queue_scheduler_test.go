@@ -124,7 +124,7 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_SameWorkflow() {
 	testWG := sync.WaitGroup{}
 	testWG.Add(numTasks)
 
-	for i := 0; i < numTasks; i++ {
+	for i := range numTasks {
 		taskIndex := i
 		mockTask := NewMockTask(s.controller)
 		mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
@@ -144,7 +144,7 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_SameWorkflow() {
 
 	// Verify tasks executed in order
 	s.Len(executionOrder, numTasks)
-	for i := 0; i < numTasks; i++ {
+	for i := range numTasks {
 		s.Equal(i, executionOrder[i], "Tasks should execute in submission order")
 	}
 }
@@ -163,15 +163,15 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_DifferentWorkflow
 		orders []int
 	}
 	executionOrders := make([]*workflowOrders, numWorkflows)
-	for i := 0; i < numWorkflows; i++ {
+	for i := range numWorkflows {
 		executionOrders[i] = &workflowOrders{orders: make([]int, 0, tasksPerWorkflow)}
 	}
 
 	testWG := sync.WaitGroup{}
 	testWG.Add(numWorkflows * tasksPerWorkflow)
 
-	for wf := 0; wf < numWorkflows; wf++ {
-		for t := 0; t < tasksPerWorkflow; t++ {
+	for wf := range numWorkflows {
+		for t := range tasksPerWorkflow {
 			workflowID := wf
 			taskIndex := t
 			mockTask := NewMockTask(s.controller)
@@ -191,9 +191,9 @@ func (s *executionQueueSchedulerSuite) TestSequentialExecution_DifferentWorkflow
 	testWG.Wait()
 
 	// Verify each workflow's tasks executed in order
-	for wf := 0; wf < numWorkflows; wf++ {
+	for wf := range numWorkflows {
 		s.Len(executionOrders[wf].orders, tasksPerWorkflow)
-		for i := 0; i < tasksPerWorkflow; i++ {
+		for i := range tasksPerWorkflow {
 			s.Equal(i, executionOrders[wf].orders[i], "Workflow %d tasks should execute in order", wf)
 		}
 	}
@@ -383,7 +383,7 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 	var processedCount int32
 	testWG := sync.WaitGroup{}
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		testWG.Add(1)
 
 		mockTask := NewMockTask(s.controller)
@@ -445,7 +445,7 @@ func (s *executionQueueSchedulerSuite) TestMaxQueues_RejectsNewQueues() {
 	blockCh := make(chan struct{})
 	defer close(blockCh)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		mockTask := NewMockTask(s.controller)
 		mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 		mockTask.EXPECT().Execute().DoAndReturn(func() error {
@@ -483,13 +483,13 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_DifferentWorkflows(
 	startWG := sync.WaitGroup{}
 	startWG.Add(numSubmitters)
 
-	for i := 0; i < numSubmitters; i++ {
+	for i := range numSubmitters {
 		submitterID := i
 		go func() {
 			startWG.Done()
 			startWG.Wait() // Sync all submitters to start at once
 
-			for j := 0; j < tasksPerSubmitter; j++ {
+			for range tasksPerSubmitter {
 				mockTask := NewMockTask(s.controller)
 				mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 				mockTask.EXPECT().Execute().Return(nil).Times(1)
@@ -530,12 +530,12 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_SameWorkflow() {
 	startWG := sync.WaitGroup{}
 	startWG.Add(numSubmitters)
 
-	for i := 0; i < numSubmitters; i++ {
+	for range numSubmitters {
 		go func() {
 			startWG.Done()
 			startWG.Wait()
 
-			for j := 0; j < tasksPerSubmitter; j++ {
+			for range tasksPerSubmitter {
 				mockTask := NewMockTask(s.controller)
 				mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 				mockTask.EXPECT().Execute().DoAndReturn(func() error {

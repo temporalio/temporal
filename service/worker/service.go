@@ -62,7 +62,7 @@ type (
 		config           *Config
 
 		workerManager                    *workerManager
-		perNamespaceWorkerManager        *perNamespaceWorkerManager
+		perNamespaceWorkerManager        *PerNamespaceWorkerManager
 		scanner                          *scanner.Scanner
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
@@ -121,7 +121,7 @@ func NewService(
 	taskManager persistence.TaskManager,
 	historyClient resource.HistoryClient,
 	workerManager *workerManager,
-	perNamespaceWorkerManager *perNamespaceWorkerManager,
+	perNamespaceWorkerManager *PerNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
 	matchingClient resource.MatchingClient,
 	namespaceReplicationTaskExecutor nsreplication.TaskExecutor,
