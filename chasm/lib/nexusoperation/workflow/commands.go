@@ -46,7 +46,7 @@ func registerCommandHandlers(
 	}
 	return registry.Register(
 		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-		handleCancelCommand,
+		h.handleCancelCommand,
 	)
 }
 
@@ -286,13 +286,58 @@ func (ch *commandHandler) handleScheduleCommand(
 	return nil
 }
 
-func handleCancelCommand(
+func (ch *commandHandler) handleCancelCommand(
 	chasmCtx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
 	validator command.Validator,
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	// TODO: Implement CHASM nexus operation cancellation
-	return serviceerror.NewUnimplemented("CHASM nexus operation cancellation not yet implemented")
+	if !ch.config.Enabled() {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
+			Message: "Nexus operations disabled",
+		}
+	}
+
+	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
+	if attrs == nil {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "empty CancelNexusOperationCommandAttributes",
+		}
+	}
+
+	key := strconv.FormatInt(attrs.ScheduledEventId, 10)
+	opField, ok := wf.Operations[key]
+	// CONSIDER: When CHASM supports buffered events, allow cancellation of a completed operation if its terminal
+	// event is buffered but not yet applied — a workflow cannot know the operation already completed while its
+	// workflow task was in flight.
+	if !ok {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+
+	op := opField.Get(chasmCtx)
+
+	event := wf.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId:             attrs.ScheduledEventId,
+				WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+			},
+		}
+		he.UserMetadata = cmd.UserMetadata
+	})
+
+	err := op.Cancel(chasmCtx, event.GetEventId())
+	if errors.Is(err, nexusoperation.ErrOperationAlreadyCompleted) || errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for an already complete or canceled operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+	return err
 }
