@@ -121,7 +121,7 @@ var methodToPattern = map[string]BusinessIDPattern{
 	"DeleteWorkerDeploymentVersion":         PatternDeploymentVersion,
 	"UpdateWorkerDeploymentVersionMetadata": PatternDeploymentVersion,
 
-	// namespace (deterministic routing to any cell for the namespace)
+	// namespace (deterministic routing to a single cell for the namespace)
 	// TODO(mcn): Switch to worker_grouping_key when available for load balancing
 	"FetchWorkerConfig":     PatternNamespace,
 	"UpdateWorkerConfig":    PatternNamespace,
