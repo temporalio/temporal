@@ -70,18 +70,13 @@ const (
 
 // Matching Client Operations
 const (
-	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope = "MatchingClientPollWorkflowTaskQueue"
-	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollActivityTaskQueueScope = "MatchingClientPollActivityTaskQueue"
 	MatchingClientPollNexusTaskQueueScope    = "MatchingClientPollNexusTaskQueue"
-	// MatchingClientAddActivityTaskScope tracks RPC calls to matching service
-	MatchingClientAddActivityTaskScope = "MatchingClientAddActivityTask"
-	// MatchingClientAddWorkflowTaskScope tracks RPC calls to matching service
-	MatchingClientAddWorkflowTaskScope = "MatchingClientAddWorkflowTask"
-	// MatchingClientQueryWorkflowScope tracks RPC calls to matching service
-	MatchingClientQueryWorkflowScope     = "MatchingClientQueryWorkflow"
-	MatchingClientDispatchNexusTaskScope = "MatchingDispatchNexusTask"
+	MatchingClientAddActivityTaskScope       = "MatchingClientAddActivityTask"
+	MatchingClientAddWorkflowTaskScope       = "MatchingClientAddWorkflowTask"
+	MatchingClientQueryWorkflowScope         = "MatchingClientQueryWorkflow"
+	MatchingClientDispatchNexusTaskScope     = "MatchingDispatchNexusTask"
 )
 
 // Worker

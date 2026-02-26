@@ -162,6 +162,13 @@ func (c *clientImpl) DispatchNexusTask(
 	request *matchingservice.DispatchNexusTaskRequest,
 	opts ...grpc.CallOption,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
+	// use shallow copy since Request may contain a large payload
+	request = &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: request.NamespaceId,
+		TaskQueue:   common.CloneProto(request.TaskQueue),
+		Request:     request.Request,
+		ForwardInfo: request.ForwardInfo,
+	}
 	client, err := c.pickClientForWrite(request.GetTaskQueue(), request.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_NEXUS, request.GetForwardInfo().GetSourcePartition())
 	if err != nil {
 		return nil, err

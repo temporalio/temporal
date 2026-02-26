@@ -22,6 +22,15 @@ import (
 
 func TestDispatchNexusTaskWithMatchingBehaviors(t *testing.T) {
 	t.Parallel()
+
+	type testCase struct {
+		name             string
+		forcePollForward bool
+		forceTaskForward bool
+		forceAsync       bool
+	}
+
+	var cases []testCase
 	for _, forcePollForward := range []bool{false, true} {
 		for _, forceTaskForward := range []bool{false, true} {
 			for _, forceAsync := range []bool{false, true} {
@@ -39,37 +48,45 @@ func TestDispatchNexusTaskWithMatchingBehaviors(t *testing.T) {
 				} else {
 					name += "AllowSync"
 				}
-
-				t.Run(name, func(t *testing.T) {
-					s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
-
-					if forceTaskForward || forcePollForward {
-						s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-						s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-					} else {
-						s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-						s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-					}
-					if forceTaskForward {
-						s.InjectHook(testhooks.MatchingLBForceWritePartition, 11)
-					} else {
-						s.InjectHook(testhooks.MatchingLBForceWritePartition, 0)
-					}
-					if forcePollForward {
-						s.InjectHook(testhooks.MatchingLBForceReadPartition, 5)
-					} else {
-						s.InjectHook(testhooks.MatchingLBForceReadPartition, 0)
-					}
-					if forceAsync {
-						s.InjectHook(testhooks.MatchingDisableSyncMatch, true)
-					} else {
-						s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
-					}
-
-					dispatchAndCompleteNexusTask(t, s, forceTaskForward, forcePollForward)
+				cases = append(cases, testCase{
+					name:             name,
+					forcePollForward: forcePollForward,
+					forceTaskForward: forceTaskForward,
+					forceAsync:       forceAsync,
 				})
 			}
 		}
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// TODO: probably a new cluster is not needed once we can validate the forwarding behavior
+			// by task queue name match. for that task_dispatch_latency metric needs to be fixed first.
+			s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+
+			if tc.forceTaskForward || tc.forcePollForward {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+			} else {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+			}
+
+			writePartition := 0
+			if tc.forceTaskForward {
+				writePartition = 11
+			}
+			s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, writePartition))
+
+			readPartition := 0
+			if tc.forcePollForward {
+				readPartition = 5
+			}
+			s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, readPartition))
+			s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, tc.forceAsync))
+
+			dispatchAndCompleteNexusTask(t, s, tc.forceTaskForward, tc.forcePollForward)
+		})
 	}
 }
 
@@ -82,16 +99,15 @@ func TestDispatchNexusTaskOnNonRootPartitionNoForwarding(t *testing.T) {
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingTasks, 0) // disable forwarding
 	s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxOutstandingPolls, 0) // disable forwarding
-	s.InjectHook(testhooks.MatchingLBForceWritePartition, 1)
-	s.InjectHook(testhooks.MatchingLBForceReadPartition, 1)
-	s.InjectHook(testhooks.MatchingDisableSyncMatch, false)
+	s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
+	s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
+	s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
 
 	dispatchAndCompleteNexusTask(t, s, false, false)
 }
 
 func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwarded, expectPollForwarded bool) {
 	t.Helper()
-	require := require.New(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -121,7 +137,6 @@ func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwar
 	}
 	dispatchDone := make(chan dispatchResult, 1)
 
-	// Start polling for the nexus task via the frontend client in the background.
 	type pollResult struct {
 		resp *workflowservice.PollNexusTaskQueueResponse
 		err  error
@@ -139,7 +154,6 @@ func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwar
 		pollDone <- pollResult{resp: resp, err: err}
 	}()
 
-	// Dispatch the nexus task via the matching client.
 	go func() {
 		resp, err := matchingClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 			NamespaceId: s.NamespaceID().String(),
@@ -152,23 +166,20 @@ func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwar
 		dispatchDone <- dispatchResult{resp: resp, err: err}
 	}()
 
-	// Wait for the poll to return a task.
 	var pollRes pollResult
 	select {
 	case pollRes = <-pollDone:
 	case <-ctx.Done():
-		require.FailNow("timed out waiting for poll to return a task")
+		require.FailNow(t, "timed out waiting for poll to return a task")
 	}
-	require.NoError(pollRes.err)
-	require.NotNil(pollRes.resp)
-	require.NotEmpty(pollRes.resp.TaskToken)
-	require.NotNil(pollRes.resp.Request)
+	require.NoError(t, pollRes.err)
+	require.NotNil(t, pollRes.resp)
+	require.NotEmpty(t, pollRes.resp.TaskToken)
+	require.NotNil(t, pollRes.resp.Request)
 
-	// Verify the dispatched request is what we sent.
-	require.Equal(nexusRequest.GetStartOperation().GetService(), pollRes.resp.Request.GetStartOperation().GetService())
-	require.Equal(nexusRequest.GetStartOperation().GetOperation(), pollRes.resp.Request.GetStartOperation().GetOperation())
+	require.Equal(t, nexusRequest.GetStartOperation().GetService(), pollRes.resp.Request.GetStartOperation().GetService())
+	require.Equal(t, nexusRequest.GetStartOperation().GetOperation(), pollRes.resp.Request.GetStartOperation().GetOperation())
 
-	// Complete the task via the frontend client with a sync success response.
 	completionPayload := &commonpb.Payload{
 		Metadata: map[string][]byte{"encoding": []byte("json/plain")},
 		Data:     []byte(`"nexus-result"`),
@@ -189,26 +200,23 @@ func dispatchAndCompleteNexusTask(t *testing.T, s testcore.Env, expectTaskForwar
 			},
 		},
 	})
-	require.NoError(err)
+	require.NoError(t, err)
 
-	// Wait for the dispatch caller to receive the completed result.
 	var dispatchRes dispatchResult
 	select {
 	case dispatchRes = <-dispatchDone:
 	case <-ctx.Done():
-		require.FailNow("timed out waiting for dispatch result")
+		require.FailNow(t, "timed out waiting for dispatch result")
 	}
-	require.NoError(dispatchRes.err)
-	require.NotNil(dispatchRes.resp)
+	require.NoError(t, dispatchRes.err)
+	require.NotNil(t, dispatchRes.resp)
 
-	// Verify the dispatch response contains the completed result.
 	response := dispatchRes.resp.GetResponse()
-	require.NotNil(response, "expected dispatch response to contain a nexus response")
+	require.NotNil(t, response, "expected dispatch response to contain a nexus response")
 	syncSuccess := response.GetStartOperation().GetSyncSuccess()
-	require.NotNil(syncSuccess, "expected sync success response, got: %v", response)
-	require.Equal(completionPayload.Data, syncSuccess.Payload.Data)
+	require.NotNil(t, syncSuccess, "expected sync success response, got: %v", response)
+	require.Equal(t, completionPayload.Data, syncSuccess.Payload.Data)
 
-	// Verify forwarding behavior via metrics.
 	verifyForwardingMetrics(t, capture, expectTaskForwarded, expectPollForwarded)
 }
 
@@ -218,12 +226,8 @@ func verifyForwardingMetrics(
 	expectTaskForwarded bool,
 	expectPollForwarded bool,
 ) {
-	t.Helper()
-	require := require.New(t)
-
 	snap := capture.Snapshot()
 
-	// Verify forwarded metric has the expected operation
 	dispatchRecordings := snap["forwarded"]
 	foundExpectedTaskForward := false
 	for _, rec := range dispatchRecordings {
@@ -232,12 +236,11 @@ func verifyForwardingMetrics(
 			break
 		}
 	}
-	require.Equal(expectTaskForwarded, foundExpectedTaskForward,
+	require.Equal(t, expectTaskForwarded, foundExpectedTaskForward,
 		"expected task forward mismatch, expected: %v, actual: %v", expectTaskForwarded, foundExpectedTaskForward)
 
-	// Verify poll_latency has the expected "forwarded" and "task_type" tags.
 	pollRecordings := snap["poll_latency"]
-	require.NotEmpty(pollRecordings, "expected poll_latency metric to be recorded")
+	require.NotEmpty(t, pollRecordings, "expected poll_latency metric to be recorded")
 	foundExpectedPollForward := false
 	for _, rec := range pollRecordings {
 		if rec.Tags["forwarded"] == fmt.Sprintf("%v", expectPollForwarded) && rec.Tags["task_type"] == "Nexus" {
@@ -245,7 +248,7 @@ func verifyForwardingMetrics(
 			break
 		}
 	}
-	require.True(foundExpectedPollForward,
+	require.True(t, foundExpectedPollForward,
 		"expected poll_latency with forwarded=%v and task_type=Nexus, recordings: %v",
 		expectPollForwarded, formatRecordings(pollRecordings))
 }
