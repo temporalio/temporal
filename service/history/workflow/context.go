@@ -102,7 +102,22 @@ func (c *ContextImpl) IsDirty() bool {
 func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
-		c.throttledLogger.Warn("PREMATURE-EOS: workflow context cleared with live mutable state")
+		var pendingWFTType, startedWFTType string
+		var pendingScheduledEventID, startedEventID int64
+		if wft := c.MutableState.GetPendingWorkflowTask(); wft != nil {
+			pendingWFTType = wft.Type.String()
+			pendingScheduledEventID = wft.ScheduledEventID
+		}
+		if wft := c.MutableState.GetStartedWorkflowTask(); wft != nil {
+			startedWFTType = wft.Type.String()
+			startedEventID = wft.StartedEventID
+		}
+		c.throttledLogger.Warn("PREMATURE-EOS: workflow context cleared with live mutable state",
+			tag.WorkflowTaskType(pendingWFTType),
+			tag.NewInt64("wft-scheduled-event-id", pendingScheduledEventID),
+			tag.NewStringTag("wft-started-type", startedWFTType),
+			tag.NewInt64("wft-started-event-id", startedEventID),
+		)
 		c.MutableState.GetQueryRegistry().Clear()
 		c.MutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
 		c.MutableState = nil

@@ -122,6 +122,109 @@ func TestPrematureEndOfStream(t *testing.T) {
 	_ = client.TerminateWorkflow(ctx, wfID, run.GetRunID(), "cleanup")
 }
 
+// TestTransientWFT_ContextClear_CausesHistoryGap reproduces the transient-WFT variant of the
+// premature end-of-stream bug.
+//
+// Mechanism: a transient WFT (attempt > 1) is created when a WFT fails. Its WFT_SCHEDULED and
+// WFT_STARTED events are not persisted — they live only in mutable state. If the shard is closed
+// while the transient WFT is in Started state, workflowContext.Clear() drops that in-memory state.
+// On shard reload, execution info records attempt=2 (persisted), so GetWorkflowExecutionHistory
+// can reconstruct the WFT_SCHEDULED transient event — but WFT_STARTED is permanently lost.
+// A worker holding a token with NextEventId=7 then receives history ending at event 6: premature EOS.
+//
+// This test fails today (only 5 events returned after CloseShard) and passes after the fix (6 events).
+func TestTransientWFT_ContextClear_CausesHistoryGap(t *testing.T) {
+	env := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	wfID := fmt.Sprintf("transient-eos-%s", uuid.NewString()[:8])
+	tq := fmt.Sprintf("tq-%s", uuid.NewString()[:8])
+	taskQueue := &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	identity := "test-worker"
+
+	// Step 1: Start a plain workflow.
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:          env.Namespace().String(),
+		RequestId:          uuid.NewString(),
+		WorkflowId:         wfID,
+		WorkflowType:       &commonpb.WorkflowType{Name: "transient-eos-wf"},
+		TaskQueue:          taskQueue,
+		WorkflowRunTimeout: durationpb.New(120 * time.Second),
+		Identity:           identity,
+	})
+	require.NoError(t, err)
+	runID := startResp.RunId
+	we := &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: runID}
+
+	// Step 2: Poll initial WFT (attempt=1).
+	poll1, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: taskQueue,
+		Identity:  identity,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, poll1.TaskToken, "expected to poll the initial WFT")
+
+	// Step 3: Fail the initial WFT → server schedules a transient WFT (attempt=2).
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(ctx, &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: poll1.TaskToken,
+		Cause:     enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:  identity,
+	})
+	require.NoError(t, err)
+
+	// Step 4: Poll the transient WFT (attempt=2) — leaves it in Started state.
+	// Mutable state now has 2 transient events: WFT_SCHEDULED(2) + WFT_STARTED(2).
+	var poll2 *workflowservice.PollWorkflowTaskQueueResponse
+	require.Eventually(t, func() bool {
+		poll2, err = env.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: taskQueue,
+			Identity:  identity,
+		})
+		return err == nil && len(poll2.TaskToken) > 0
+	}, 10*time.Second, 100*time.Millisecond, "expected to poll transient WFT (attempt=2)")
+
+	// Step 5: GetHistory before CloseShard — expect 6 events:
+	//   4 persisted: WorkflowExecutionStarted, WFT_SCHEDULED, WFT_STARTED, WFT_FAILED
+	//   2 transient:  WFT_SCHEDULED(attempt=2), WFT_STARTED(attempt=2)
+	histBefore, err := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:       env.Namespace().String(),
+		Execution:       we,
+		MaximumPageSize: 1000,
+	})
+	require.NoError(t, err)
+	eventsBefore := histBefore.History.Events
+	require.Equal(t, 6, len(eventsBefore),
+		"expected 6 events (4 persisted + 2 transient) before CloseShard")
+	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, eventsBefore[len(eventsBefore)-1].EventType,
+		"last event before CloseShard should be transient WFT_STARTED")
+
+	// Step 6: Close the shard — workflowContext.Clear() drops in-memory transient state.
+	env.CloseShard(env.NamespaceID().String(), wfID)
+
+	// Step 7: GetHistory after CloseShard — should still return 6 events.
+	// Bug: WFT_STARTED(attempt=2) is lost after shard reload; only 5 events returned
+	// (WFT_SCHEDULED is reconstructed from exec info, WFT_STARTED is permanently lost).
+	// This assertion fails today and passes after the fix.
+	histAfter, err := env.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:       env.Namespace().String(),
+		Execution:       we,
+		MaximumPageSize: 1000,
+	})
+	require.NoError(t, err)
+	eventsAfter := histAfter.History.Events
+	require.Equal(t, 6, len(eventsAfter),
+		"expected 6 events after CloseShard (4 persisted + 2 transient: WFT_SCHEDULED + WFT_STARTED); "+
+			"got %d — WFT_STARTED(attempt=2) is lost after shard reload (premature EOS bug)",
+		len(eventsAfter))
+	require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, eventsAfter[len(eventsAfter)-1].EventType,
+		"last event after CloseShard should be transient WFT_STARTED (attempt=2)")
+}
+
 // TestConsecutiveWorkflowTasksViaForceCreate demonstrates the history pattern
 //
 //	WorkflowTaskScheduled, WorkflowTaskStarted, WorkflowTaskCompleted,
