@@ -5704,6 +5704,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: "unknown-worker",
 			})
 
@@ -5727,6 +5730,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: workerKey,
 			})
 
@@ -5750,6 +5756,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		// Cancel worker1's polls only
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: "worker-1",
 			})
 
@@ -5777,6 +5786,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
 			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "/_sys/test-queue/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 				WorkerInstanceKey: workerKey,
 			})
 
