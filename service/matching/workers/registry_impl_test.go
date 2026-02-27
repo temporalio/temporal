@@ -576,13 +576,15 @@ func TestActivitySlotsMetric(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          dynamicconfig.GetIntPropertyFn(1),
-		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:      captureHandler,
-		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+		NumBuckets:                       dynamicconfig.GetIntPropertyFn(1),
+		TTL:                              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:                   captureHandler,
+		EnablePluginMetrics:              dynamicconfig.GetBoolPropertyFn(true),
+		ExternalPayloadsEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn([]string{}),
 	})
 	defer m.Stop()
 
@@ -643,13 +645,15 @@ func TestPluginMetricsExported(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
-		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:      captureHandler,
-		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
+		NumBuckets:                       dynamicconfig.GetIntPropertyFn(2),
+		TTL:                              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:                   captureHandler,
+		EnablePluginMetrics:              dynamicconfig.GetBoolPropertyFn(true),
+		ExternalPayloadsEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn([]string{}),
 	})
 	defer m.Stop()
 
@@ -721,13 +725,15 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	defer captureHandler.StopCapture(capture)
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:          dynamicconfig.GetIntPropertyFn(2),
-		TTL:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:         dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:            dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval:    dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:      captureHandler,
-		EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(false),
+		NumBuckets:                       dynamicconfig.GetIntPropertyFn(2),
+		TTL:                              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:                 dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:                   captureHandler,
+		EnablePluginMetrics:              dynamicconfig.GetBoolPropertyFn(false),
+		ExternalPayloadsEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn([]string{}),
 	})
 	defer m.Stop()
 
