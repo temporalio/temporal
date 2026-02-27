@@ -25,6 +25,7 @@ type (
 	HealthSignalAggregator interface {
 		Record(latency time.Duration, err error)
 		AverageLatency() float64
+		P99Latency() float64
 		ErrorRatio() float64
 	}
 
@@ -34,7 +35,7 @@ type (
 
 		aggregatorEnabled dynamicconfig.BoolPropertyFn
 
-		latencyAverage aggregate.MovingWindowAverage
+		latencyAverage *aggregate.MovingWindowAvgImpl
 		errorRatio     aggregate.MovingWindowAverage
 
 		logger log.Logger
@@ -127,6 +128,13 @@ func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 		s.logger.Debug("health signal aggregator is disabled")
 	}
 	return s.latencyAverage.Average()
+}
+
+func (s *healthSignalAggregatorImpl) P99Latency() float64 {
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
+	}
+	return s.latencyAverage.Percentile(0.99)
 }
 
 func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {

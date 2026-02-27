@@ -11,6 +11,7 @@ const (
 	CheckTypeGRPCHealth          = "grpc_health"
 	CheckTypeRPCLatency          = "rpc_latency"
 	CheckTypeRPCErrorRatio       = "rpc_error_ratio"
+	CheckTypeRPCP99Latency       = "rpc_p99_latency"
 	CheckTypePersistenceLatency  = "persistence_latency"
 	CheckTypePersistenceErrRatio = "persistence_error_ratio"
 	CheckTypeHostAvailability    = "host_availability"

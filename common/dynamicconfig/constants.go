@@ -2751,6 +2751,11 @@ that task will be sent to DLQ.`,
 		500,
 		"History service health check on RPC average latency (millisecond) threshold",
 	)
+	HealthRPCP99LatencyFailure = NewGlobalFloatSetting(
+		"history.healthRPCP99LatencyFailure",
+		1000,
+		"History service health check on RPC P99 latency (millisecond) threshold",
+	)
 	HealthRPCErrorRatio = NewGlobalFloatSetting(
 		"history.healthRPCErrorRatio",
 		0.90,
