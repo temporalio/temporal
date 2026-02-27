@@ -382,9 +382,9 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 		)
 		s.NoError(err)
 
-		_, err = tests.ClosePayloadStoreHandler(
+		_, err = tests.CancelPayloadStoreHandler(
 			s.chasmContext,
-			tests.ClosePayloadStoreRequest{
+			tests.CancelPayloadStoreRequest{
 				NamespaceID: s.NamespaceID(),
 				StoreID:     storeID,
 			},
@@ -422,7 +422,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 		totalCount += group.Count
 		var groupValue string
 		s.NoError(payload.Decode(group.Values[0], &groupValue))
-		s.Contains([]string{"Running", "Completed"}, groupValue)
+		s.Contains([]string{"Running", "Canceled"}, groupValue)
 	}
 	s.Equal(int64(5), totalCount)
 
