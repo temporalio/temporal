@@ -148,11 +148,6 @@ func (s *PayloadStore) RemovePayload(
 func (s *PayloadStore) LifecycleState(
 	_ chasm.Context,
 ) chasm.LifecycleState {
-	if err := assertContextValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic here for testing.
-		panic("registered component key value pair not available in context")
-	}
-
 	if s.State.Canceled {
 		return chasm.LifecycleStateFailed
 	}
@@ -166,12 +161,7 @@ func (s *PayloadStore) LifecycleState(
 func (s *PayloadStore) SearchAttributes(
 	ctx chasm.Context,
 ) []chasm.SearchAttributeKeyValue {
-	if err := assertContextValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic here for testing.
-		panic("registered component key value pair not available in context")
-	}
-
-	status := s.LifecycleState(chasmContext).String()
+	status := s.LifecycleState(ctx).String()
 	if s.State.Canceled {
 		status = "Canceled"
 	}
