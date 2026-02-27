@@ -3842,10 +3842,10 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Expect cancellation for 2 partitions x 2 task types = 4 calls (in any order due to parallelization)
+	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(4)
+		Times(2)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -3888,7 +3888,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// CancelOutstandingWorkerPolls returns an error (simulates old matching node)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnimplemented("method not implemented")).
-		Times(2) // 1 partition x 2 task types
+		Times(2) // 2 task types (workflow, activity)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -3926,13 +3926,13 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Mixed results: some succeed, some fail (2 partitions x 2 task types = 4 calls)
+	// Mixed results: some succeed, some fail (2 task types = 2 calls)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(2)
+		Times(1)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnavailable("temporary error")).
-		Times(2)
+		Times(1)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
