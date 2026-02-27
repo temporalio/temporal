@@ -134,6 +134,21 @@ Note: detection was already partially working (host_health showed `declined_serv
 P99 check improves detection speed and reliability and closes the gap where average latency
 and error ratio checks were both flat throughout the incident.
 
+### 2a. Add persistence P99 latency check (not yet implemented)
+Per-operation persistence latency data shows `GetOrCreateShard` at **5.47s average** at
+13:34:55 — the exact moment `xlhv4` started up. All other operations were in the normal
+ms range. The existing persistence average latency check missed this because `GetOrCreateShard`
+is low-volume and gets diluted by thousands of normal operations.
+
+A persistence P99 check on `xlhv4`'s own `persistenceHealthSignal` would have fired
+immediately during shard recovery (5.47s >> 500ms threshold) — **before cross-shard callers
+started timing out**. This is a more targeted signal than the RPC P99 check because it
+fires on the root cause (slow Astra calls) rather than the downstream symptom (hanging RPCs).
+
+Implementation is small — `HealthSignalAggregator` already has `P99Latency()` from the
+work in item 2. Needs: `HealthPersistenceP99LatencyFailure` in dynamicconfig (default 500ms),
+config wiring, and check 7 in `handler.go` calling `h.persistenceHealthSignal.P99Latency()`.
+
 ### 3. Investigate gocql flow control propagation
 Understand exactly how one pod's flow control causes cell-wide context deadline exceeded
 errors. Is there a shared resource or is this purely cross-shard call propagation?

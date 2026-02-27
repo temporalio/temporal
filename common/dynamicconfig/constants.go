@@ -2741,6 +2741,11 @@ that task will be sent to DLQ.`,
 		500,
 		"History service health check on persistence average latency (millisecond) threshold",
 	)
+	HealthPersistenceP99LatencyFailure = NewGlobalFloatSetting(
+		"history.healthPersistenceP99LatencyFailure",
+		500,
+		"History service health check on persistence P99 latency (millisecond) threshold",
+	)
 	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
 		"history.healthPersistenceErrorRatio",
 		0.90,

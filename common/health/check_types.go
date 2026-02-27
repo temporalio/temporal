@@ -12,8 +12,9 @@ const (
 	CheckTypeRPCLatency          = "rpc_latency"
 	CheckTypeRPCErrorRatio       = "rpc_error_ratio"
 	CheckTypeRPCP99Latency       = "rpc_p99_latency"
-	CheckTypePersistenceLatency  = "persistence_latency"
-	CheckTypePersistenceErrRatio = "persistence_error_ratio"
+	CheckTypePersistenceLatency    = "persistence_latency"
+	CheckTypePersistenceP99Latency = "persistence_p99_latency"
+	CheckTypePersistenceErrRatio   = "persistence_error_ratio"
 	CheckTypeHostAvailability    = "host_availability"
 	CheckTypeTaskQueueBacklog    = "task_queue_backlog"
 )
