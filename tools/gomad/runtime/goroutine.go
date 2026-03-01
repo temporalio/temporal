@@ -83,6 +83,11 @@ func (g *goroutine) suspended(b *syncBlock, tags ...Tag) {
 	verify.T(g.state == running,
 		"trying to suspend goroutine #%v that was not running: (%v)", g.id, g.describeState())
 
+	// capture the source location at the point of suspension for deadlock diagnostics
+	if b != nil && b.loc == "" {
+		b.loc = currentSourceLocation()
+	}
+
 	if CurrentSimulator().debug {
 		switch {
 		case b.requireSyncMatch:

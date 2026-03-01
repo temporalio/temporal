@@ -22,28 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package lib
+//go:build fixture
+
+package fixtures
 
 import (
 	"context"
-	"os"
+	"os/signal"
+
+	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "gomad.local/go.temporal.io/server/tools/gomad/api/lib"
 )
 
-func Notify(c chan<- os.Signal, sig ...os.Signal) {
-	// TODO
+func signal_notify_context_fixture() {
+	SIMAPI.FuncStart()
+	ctx, stop := SIMLIB.NotifyContext(SIMLIB.Background())
+	_, _ = ctx, stop
 }
 
-func Stop(c chan<- os.Signal) {
-	// TODO
-}
-
-// NotifyContext returns a copy of the parent context that is marked done
-// (its Done channel is closed) when one of the specified signals arrives,
-// when the returned stop function is called, or when the parent context's
-// Done channel is closed, whichever happens first.
-//
-// In simulation, OS signals never arrive; the returned context can only be
-// cancelled via the stop function or parent cancellation.
-func NotifyContext(parent context.Context, signals ...os.Signal) (context.Context, context.CancelFunc) {
-	return WithCancel(parent)
-}
+var _ = context.Background
+var _ = signal.NotifyContext

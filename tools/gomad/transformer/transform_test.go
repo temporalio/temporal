@@ -69,5 +69,5 @@ func TestTransform(t *testing.T) {
 	}
 	_, err := transformer.Run(cfg)
 	require.NoError(t, err)
-	require.Equal(t, 24, testCount)
+	require.Equal(t, 25, testCount)
 }

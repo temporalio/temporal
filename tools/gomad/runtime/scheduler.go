@@ -27,6 +27,7 @@ package sim_runtime
 import (
 	"fmt"
 	"math/rand"
+	"sort"
 	"strings"
 	"time"
 	"unsafe"
@@ -188,13 +189,23 @@ func (s *scheduler) currentEventQueue() *eventQueue {
 			if len(s.goroutines) > 0 {
 				var unresolved []string
 				for _, g := range s.goroutines {
-					// ignore simulation-internal goroutine
+					// ignore simulation-internal goroutines
 					if !g.internal {
-						unresolved = append(unresolved, fmt.Sprintf("#%d (%v)", g.id, g.describeState()))
+						desc := fmt.Sprintf("#%d", g.id)
+						if g.syncBlock != nil {
+							desc += fmt.Sprintf(" blocked on %v", g.syncBlock.op.string())
+							if g.syncBlock.loc != "" {
+								desc += fmt.Sprintf(" at %v", g.syncBlock.loc)
+							}
+						} else {
+							desc += fmt.Sprintf(" (%v)", g.describeState())
+						}
+						unresolved = append(unresolved, desc)
 					}
 				}
+				sort.Strings(unresolved)
 				verify.T(len(unresolved) == 0,
-					"no more events but goroutines are not done: %v", strings.Join(unresolved, ", "))
+					"deadlock: all goroutines are blocked\n\t%v", strings.Join(unresolved, "\n\t"))
 			}
 			return nil
 		}

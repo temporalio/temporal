@@ -103,8 +103,9 @@ var (
 			"Exit":            false,
 		},
 		"os/signal": {
-			"Notify": true,
-			"Stop":   true,
+			"Notify":        true,
+			"NotifyContext": true,
+			"Stop":          true,
 		},
 		// TODO: not supported yet
 		"reflect.Value": {
