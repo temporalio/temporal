@@ -5556,18 +5556,17 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		t.Run("workflow start conflict", func(t *testing.T) {
 			t.Run("workflow id conflict policy fail: use-existing", func(t *testing.T) {
-				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				s := testcore.NewEnv(t)
 				startReq := startWorkflowReq(s, s.Tv())
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 
 				// simulate a race condition
-				s.InjectHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
+				s.InjectHook(testhooks.NewHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
 					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 					s.NoError(err)
-				})
+				}))
 
 				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
 
@@ -5637,8 +5636,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("return retryable error after retry", func(t *testing.T) {
-				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				s := testcore.NewEnv(t)
 				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
@@ -5655,10 +5653,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				// wait until the update is admitted
 				waitUpdateAdmitted(s, s.Tv())
 
-				s.InjectHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
+				s.InjectHook(testhooks.NewHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
 					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
 					s.NoError(err)
-				})
+				}))
 
 				// complete workflow (twice including retry)
 				for range 2 {

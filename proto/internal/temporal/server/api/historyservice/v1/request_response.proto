@@ -36,6 +36,7 @@ import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
 import "temporal/server/api/common/v1/dlq.proto";
+import "temporal/server/api/health/v1/message.proto";
 
 extend google.protobuf.MessageOptions {
     optional RoutingOptions routing = 7234;
@@ -1296,6 +1297,8 @@ message DeepHealthCheckRequest {
 
 message DeepHealthCheckResponse {
     temporal.server.api.enums.v1.HealthState state = 1;
+    // Per-check diagnostic results. Populated for all checks regardless of state.
+    repeated temporal.server.api.health.v1.HealthCheck checks = 2;
 }
 
 message SyncWorkflowStateRequest {

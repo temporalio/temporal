@@ -27,6 +27,7 @@ import (
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -68,7 +69,7 @@ import (
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -175,12 +176,8 @@ func NewAdminHandler(
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
 		args.Config.HistoryHostSelfErrorProportion,
-		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
-			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
-			if err != nil {
-				return enumsspb.HEALTH_STATE_NOT_SERVING, err
-			}
-			return resp.GetState(), nil
+		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
+			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 		},
 		args.Logger,
 	)
@@ -243,7 +240,7 @@ func (adh *AdminHandler) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
+		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthspb.HealthCheckResponse_SERVING)
 	}
 }
 
@@ -254,7 +251,7 @@ func (adh *AdminHandler) Stop() {
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
+		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthspb.HealthCheckResponse_NOT_SERVING)
 	}
 }
 
@@ -264,11 +261,20 @@ func (adh *AdminHandler) DeepHealthCheck(
 ) (_ *adminservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	healthStatus, err := adh.historyHealthChecker.Check(ctx)
+	result, err := adh.historyHealthChecker.Check(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
+
+	var services []*healthspb.ServiceHealthDetail
+	if result.ServiceDetail != nil {
+		services = append(services, result.ServiceDetail)
+	}
+
+	return &adminservice.DeepHealthCheckResponse{
+		State:    result.State,
+		Services: services,
+	}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
