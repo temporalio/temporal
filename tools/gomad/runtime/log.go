@@ -98,13 +98,6 @@ func LocTag(loc string) Tag {
 	return Tag{"src", loc}
 }
 
-func BufTag[T any](ch chan T) Tag {
-	if cap(ch) > 0 {
-		return Tag{"buf", fmt.Sprintf("%v/%v", len(ch), cap(ch))}
-	}
-	return emptyTag
-}
-
 func TimeTag(k string, v int64) Tag {
 	return Tag{k, time.UnixMilli(v).Format(time.RFC3339Nano)}
 }

@@ -29,25 +29,27 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
-	"unsafe"
 
 	"go.temporal.io/server/tools/gomad/util/verify"
 )
 
 type (
 	scheduler struct {
-		Drng         *rand.Rand
-		clock        clock
-		debug        bool
-		active       *goroutine // TODO: get rid of
-		synchronizer Synchronizer
-		doneCh       chan struct{}
-		tickCh       chan struct{}
-		goroutines   map[goroutineId]*goroutine
-		channels     map[unsafe.Pointer]Channel
-		stuckTimeout time.Duration
-		timerQueue   timerQueue
+		Drng            *rand.Rand
+		clock           clock
+		debug           bool
+		active          *goroutine // TODO: get rid of
+		synchronizer    Synchronizer
+		doneCh          chan struct{}
+		tickCh          chan struct{}
+		goroutines      map[goroutineId]*goroutine
+		channels        map[uintptr]Channel // keyed by uintptr so GC can collect hchans
+		deadChannelsMu  sync.Mutex
+		deadChannels    []uintptr // channels collected by GC; drained each tick
+		stuckTimeout    time.Duration
+		timerQueue      timerQueue
 	}
 )
 
@@ -61,7 +63,7 @@ func initScheduler(drng *rand.Rand, debug bool) *scheduler {
 		tickCh:       make(chan struct{}, 1),
 		synchronizer: newSynchronizer(drng),
 		goroutines:   map[goroutineId]*goroutine{},
-		channels:     make(map[unsafe.Pointer]Channel),
+		channels:     make(map[uintptr]Channel),
 		stuckTimeout: stuckTimeout * TimeoutMultiplier,
 		timerQueue:   newTimerQueue(drng, clock),
 	}
@@ -108,8 +110,23 @@ func (s *scheduler) time() time.Time {
 	return s.clock.Time()
 }
 
+// sweepDeadChannels removes map entries for channels that have been GC'd.
+// Called at the start of each tick so deletions happen on the scheduler goroutine,
+// avoiding concurrent map writes from the GC cleanup goroutine.
+func (s *scheduler) sweepDeadChannels() {
+	s.deadChannelsMu.Lock()
+	dead := s.deadChannels
+	s.deadChannels = nil
+	s.deadChannelsMu.Unlock()
+	for _, key := range dead {
+		delete(s.channels, key)
+	}
+}
+
 // tick resumes a goroutine until it's done or suspended.
 func (s *scheduler) tick() chan struct{} {
+	s.sweepDeadChannels()
+
 	// lookup current event queue
 	evtQ := s.currentEventQueue()
 	if evtQ == nil {
