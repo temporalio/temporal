@@ -66,3 +66,11 @@ func (wg *WaitGroup) Wait() {
 func (wg *WaitGroup) Counter() int {
 	return wg.todo
 }
+
+func (wg *WaitGroup) Go(fn func()) {
+	wg.Add(1)
+	SIMLANG.Go(func() {
+		defer wg.Done()
+		fn()
+	})
+}

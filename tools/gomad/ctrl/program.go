@@ -19,10 +19,9 @@ import (
 	"go.temporal.io/server/tools/gomad/util/verify"
 )
 
-const (
-	binaryName    = "./simprog"
-	golangVersion = "1.22.5" // TODO: pick up golang version dynamically
-)
+const binaryName = "./simprog"
+
+var golangVersion = strings.TrimPrefix(runtime.Version(), "go")
 
 type (
 	simProgram struct {
@@ -108,8 +107,7 @@ func (p *simProgram) generate(resetFiles bool) {
 	}
 
 	// create go.mod for tests
-	// TODO: pick up golang version dynamically
-	goMod := fmt.Sprintf("module %s\n\ngo %s", "mad-sim-test", "1.22.5")
+	goMod := fmt.Sprintf("module %s\n\ngo %s", "mad-sim-test", golangVersion)
 	if err = os.WriteFile(filepath.Join(p.workingDir, "go.mod"), []byte(goMod), os.ModePerm); err != nil {
 		panic(err)
 	}

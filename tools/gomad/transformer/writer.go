@@ -28,13 +28,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
 
-// TODO: pick up golang version dynamically
-const golangVersion = "1.22.5"
+var golangVersion = strings.TrimPrefix(runtime.Version(), "go")
 
 func CreateFileWriter(outDir string) func(pkg *packages.Package, files map[string]string) string {
 	fmt.Printf("writing output to: %v\n", outDir)

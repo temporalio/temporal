@@ -164,8 +164,7 @@ func Start(opts ...InitOption) {
 	// stop last simulator first, if running and requested
 	if sim != nil {
 		if newSimulator.stopFirstIfRunning {
-			// TODO: not working
-			//abort()
+			abort()
 		} else {
 			panic("previous simulator still running")
 		}
@@ -191,12 +190,11 @@ func loop(errChan chan interface{}) {
 		close(sim.done)
 	}()
 
-	// TODO
-	//defer func() {
-	//	if err := recover(); err != nil {
-	//		errChan <- err
-	//	}
-	//}()
+	defer func() {
+		if err := recover(); err != nil {
+			errChan <- err
+		}
+	}()
 
 	// listen for process shutdown signal
 	interruptCh := make(chan os.Signal, 2)
