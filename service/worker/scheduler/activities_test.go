@@ -46,7 +46,7 @@ func TestMigrateScheduleToChasm_Success(t *testing.T) {
 
 func TestMigrateScheduleToChasm_AlreadyExists(t *testing.T) {
 	client := &mockSchedulerClient{
-		migrateErr: serviceerror.NewWorkflowExecutionAlreadyStarted("already exists", "", ""),
+		migrateErr: serviceerror.NewAlreadyExistsf("schedule %q is already registered", "test-schedule"),
 	}
 	a := newTestActivities(client)
 

@@ -190,10 +190,9 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 	if err != nil {
 		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
 		if errors.As(err, &alreadyStartedErr) {
-			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
-				"CHASM schedule already exists",
-				"",
-				"",
+			return nil, serviceerror.NewAlreadyExistsf(
+				"schedule %q is already registered",
+				req.GetState().GetSchedulerState().GetScheduleId(),
 			)
 		}
 		return nil, err

@@ -378,7 +378,7 @@ func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerp
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
 		// Treat "already exists" as success (idempotency)
-		var alreadyExists *serviceerror.WorkflowExecutionAlreadyStarted
+		var alreadyExists *serviceerror.AlreadyExists
 		if errors.As(err, &alreadyExists) {
 			return nil
 		}

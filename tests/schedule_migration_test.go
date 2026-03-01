@@ -11,6 +11,7 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -80,6 +81,25 @@ func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+
+	// Directly calling CreateFromMigrationState when a CHASM schedule already
+	// exists should return AlreadyExists, matching CreateSchedule's behavior.
+	_, err = env.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State: &schedulerpb.SchedulerMigrationState{
+				SchedulerState: &schedulerpb.SchedulerState{
+					Namespace:   nsName,
+					NamespaceId: nsID,
+					ScheduleId:  sid,
+				},
+			},
+		},
+	)
+	var alreadyExists *serviceerror.AlreadyExists
+	require.ErrorAs(t, err, &alreadyExists)
+	require.Contains(t, alreadyExists.Error(), sid)
 
 	// Create the V1 (workflow-backed) scheduler directly
 	startArgs := &schedulespb.StartScheduleArgs{
