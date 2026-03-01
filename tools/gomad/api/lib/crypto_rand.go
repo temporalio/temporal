@@ -22,52 +22,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package transformer_test
+package lib
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
+	"io"
 
-	"github.com/stretchr/testify/require"
-	"golang.org/x/tools/go/packages"
-
-	"go.temporal.io/server/tools/gomad/transformer"
+	SIM "go.temporal.io/server/tools/gomad/runtime"
 )
 
-func TestTransform(t *testing.T) {
-	var testCount int
-	ignoreFunc := func(pkg *packages.Package) bool {
-		return !strings.HasSuffix(pkg.PkgPath, "/testdata")
-	}
-	dir, _ := filepath.Abs(filepath.Join("testdata"))
-	t.Log("fixtures: " + dir)
-	cfg := &transformer.Config{
-		Dir:        filepath.Join(dir, "test_inputs"),
-		BuildFlags: []string{"-tags=fixture"},
-		Skip:       ignoreFunc,
-		ResultFunc: func(pkg *packages.Package, files map[string]string) string {
-			if ignoreFunc(pkg) {
-				return ""
-			}
+// CryptoReader is a deterministic replacement for crypto/rand.Reader.
+// It reads from the simulator's DRNG so random byte output is reproducible
+// for a given seed.
+var CryptoReader io.Reader = &cryptoRandReader{}
 
-			for srcPath, transformed := range files {
-				name := filepath.Base(srcPath)
-				t.Run(name, func(t *testing.T) {
-					expected, err := os.ReadFile(filepath.Join(dir, "test_outputs", name))
-					if err != nil {
-						t.Fatal(err)
-					}
-					require.Equal(t, string(expected), transformed)
-				})
-				testCount += 1
-			}
+type cryptoRandReader struct{}
 
-			return ""
-		},
-	}
-	_, err := transformer.Run(cfg)
-	require.NoError(t, err)
-	require.Equal(t, 27, testCount)
+func (r *cryptoRandReader) Read(p []byte) (int, error) {
+	return SIM.CurrentSimulator().Drng.Read(p)
+}
+
+// CryptoRead is a deterministic replacement for crypto/rand.Read.
+func CryptoRead(p []byte) (int, error) {
+	return SIM.CurrentSimulator().Drng.Read(p)
 }

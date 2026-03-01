@@ -22,52 +22,23 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package transformer_test
+//go:build fixture
+
+package fixtures
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
+	"crypto/rand"
 
-	"github.com/stretchr/testify/require"
-	"golang.org/x/tools/go/packages"
-
-	"go.temporal.io/server/tools/gomad/transformer"
+	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "gomad.local/go.temporal.io/server/tools/gomad/api/lib"
 )
 
-func TestTransform(t *testing.T) {
-	var testCount int
-	ignoreFunc := func(pkg *packages.Package) bool {
-		return !strings.HasSuffix(pkg.PkgPath, "/testdata")
-	}
-	dir, _ := filepath.Abs(filepath.Join("testdata"))
-	t.Log("fixtures: " + dir)
-	cfg := &transformer.Config{
-		Dir:        filepath.Join(dir, "test_inputs"),
-		BuildFlags: []string{"-tags=fixture"},
-		Skip:       ignoreFunc,
-		ResultFunc: func(pkg *packages.Package, files map[string]string) string {
-			if ignoreFunc(pkg) {
-				return ""
-			}
-
-			for srcPath, transformed := range files {
-				name := filepath.Base(srcPath)
-				t.Run(name, func(t *testing.T) {
-					expected, err := os.ReadFile(filepath.Join(dir, "test_outputs", name))
-					if err != nil {
-						t.Fatal(err)
-					}
-					require.Equal(t, string(expected), transformed)
-				})
-				testCount += 1
-			}
-
-			return ""
-		},
-	}
-	_, err := transformer.Run(cfg)
-	require.NoError(t, err)
-	require.Equal(t, 27, testCount)
+func crypto_rand_fixture() {
+	SIMAPI.FuncStart()
+	buf := make([]byte, 16)
+	_, _ = SIMLIB.CryptoRead(buf)
+	_, _ = SIMLIB.CryptoReader.Read(buf)
 }
+
+var _ = rand.Read
+var _ = rand.Reader

@@ -126,6 +126,10 @@ var (
 			"RWMutex":    true,
 			"WaitGroup":  true,
 		},
+		"crypto/rand": {
+			"Read":   "CryptoRead",
+			"Reader": "CryptoReader",
+		},
 		"sync/atomic": {
 			"Bool":    true,
 			"Int32":   true,
@@ -1153,6 +1157,9 @@ func (tf *fileTransformer) transformSelExpr(t *ast.SelectorExpr, typeArgs []ast.
 	// TODO
 	if pkgName == "context" && (t.Sel.Name == "DeadlineExceeded" || t.Sel.Name == "Canceled") {
 		ref.isType = false
+	}
+	if pkgPath == "crypto/rand" && t.Sel.Name == "Reader" {
+		ref.isType = false // Reader is a var (io.Reader), not a type
 	}
 
 	// TODO: fix special case
