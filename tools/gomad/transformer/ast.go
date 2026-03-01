@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"go/ast"
 	"go/format"
+	"go/parser"
 	"go/token"
 	"go/types"
 	"runtime/debug"
@@ -46,171 +47,217 @@ import (
 
 // tip: use https://yuroyoro.github.io/goast-viewer/ to print the Go AST
 
-var (
+// TODO: remove once the packages below support generics:
+//   prometheus/client_golang uses "+build go1.17" / "go:build go1.17"
+//   go.opencensus.io/tag    uses "+build go1.9"  / "go:build go1.9"
+var scrubBuildConstraints = []string{
+	"+build go1.17",
+	"go:build go1.17",
+	"+build go1.9",
+	"go:build go1.9",
+}
+
+const (
 	simLangPkgName = "SIMAPI"
 	simLibPkgName  = "SIMLIB"
-	simPkgIdent    = ast.NewIdent(simLangPkgName)
-	simLibPkgIdent = ast.NewIdent(simLibPkgName)
+)
+
+var (
 	// NOTE: wildcards apply ONLY to functions, not var/const/type etc.
-	pkgReplacements = map[string]map[string]any{ // TODO: use dedicated packages instead
+	pkgReplacements = map[string]pkgConfig{ // TODO: use dedicated packages instead
 		"context": {
-			"*":         "signature,named",
-			"AfterFunc": "CtxAfterFunc",
-			// except:
-			"CancelFunc": false,
-			"Context":    false,
+			wildcardSig: true, wildcardNamed: true,
+			entries: map[string]pkgEntry{
+				"AfterFunc":  {name: "CtxAfterFunc"},
+				"CancelFunc": {disabled: true},
+				"Context":    {disabled: true},
+			},
 		},
 		"hash/maphash": {
-			"Hash":     true,
-			"MakeSeed": true,
+			entries: map[string]pkgEntry{
+				"Hash":     {},
+				"MakeSeed": {},
+			},
 		},
 		"math/rand": {
-			"*": "signature",
-			// except:
-			"Rand":   false,
-			"New":    false,
-			"Source": false,
+			wildcardSig: true,
+			entries: map[string]pkgEntry{
+				"Rand":   {disabled: true},
+				"New":    {disabled: true},
+				"Source": {disabled: true},
+			},
 		},
 		"log": {
-			"Printf": true,
+			entries: map[string]pkgEntry{
+				"Printf": {},
+			},
 		},
 		"net": {
-			"Dial":        true,
-			"Pipe":        true,
-			"Listen":      true,
-			"ListenTCP":   true,
-			"LookupAddr":  true,
-			"LookupCNAME": true,
-			"LookupHost":  true,
-			"LookupPort":  true,
-			"LookupTXT":   true,
+			entries: map[string]pkgEntry{
+				"Dial":        {},
+				"Pipe":        {},
+				"Listen":      {},
+				"ListenTCP":   {},
+				"LookupAddr":  {},
+				"LookupCNAME": {},
+				"LookupHost":  {},
+				"LookupPort":  {},
+				"LookupTXT":   {},
+			},
 		},
 		"os": {
-			"*":    "signature",
-			"File": true,
-			// except:
-			"Pipe":            false,
-			"Getpagesize":     false,
-			"Interrupt":       false,
-			"IsNotExist":      false,
-			"IsExist":         false,
-			"IsPermission":    false,
-			"IsTimeout":       false,
-			"IsPathSeparator": false,
-			"NewSyscallError": false,
-			"Signal":          false,
-			"SyscallError":    false,
-			"Exit":            false,
+			wildcardSig: true,
+			entries: map[string]pkgEntry{
+				"File":            {},
+				"Pipe":            {disabled: true},
+				"Getpagesize":     {disabled: true},
+				"Interrupt":       {disabled: true},
+				"IsNotExist":      {disabled: true},
+				"IsExist":         {disabled: true},
+				"IsPermission":    {disabled: true},
+				"IsTimeout":       {disabled: true},
+				"IsPathSeparator": {disabled: true},
+				"NewSyscallError": {disabled: true},
+				"Signal":          {disabled: true},
+				"SyscallError":    {disabled: true},
+				"Exit":            {disabled: true},
+			},
 		},
 		"os/signal": {
-			"Notify":        true,
-			"NotifyContext": true,
-			"Stop":          true,
-		},
-		// TODO: not supported yet
-		"reflect.Value": {
-			"MapKeys":     true,
-			"SetMapIndex": true,
+			entries: map[string]pkgEntry{
+				"Notify":        {},
+				"NotifyContext": {},
+				"Stop":          {},
+			},
 		},
 		"runtime": {
-			"ReadMemStats": true,
+			entries: map[string]pkgEntry{
+				"ReadMemStats": {},
+			},
 		},
 		"sync": {
-			"Cond":       true,
-			"NewCond":    true,
-			"Mutex":      true,
-			"Once":       true,
-			"OnceFunc":   true,
-			"OnceValue":  true,
-			"OnceValues": true,
-			"RWMutex":    true,
-			"WaitGroup":  true,
+			entries: map[string]pkgEntry{
+				"Cond":       {},
+				"NewCond":    {},
+				"Mutex":      {},
+				"Once":       {},
+				"OnceFunc":   {},
+				"OnceValue":  {},
+				"OnceValues": {},
+				"RWMutex":    {},
+				"WaitGroup":  {},
+			},
 		},
 		"crypto/rand": {
-			"Read":   "CryptoRead",
-			"Reader": "CryptoReader",
+			entries: map[string]pkgEntry{
+				"Read":   {name: "CryptoRead"},
+				"Reader": {name: "CryptoReader"},
+			},
 		},
 		"sync/atomic": {
-			"Bool":    true,
-			"Int32":   true,
-			"Int64":   true,
-			"Uint32":  "AtomicUint32", // avoids collision with math/rand.Uint32 in SIMLIB
-			"Uint64":  "AtomicUint64", // avoids collision with math/rand.Uint64 in SIMLIB
-			"Uintptr": true,
-			"Pointer": true,
-			"Value":   true,
+			entries: map[string]pkgEntry{
+				"Bool":    {},
+				"Int32":   {},
+				"Int64":   {},
+				"Uint32":  {name: "AtomicUint32"}, // avoids collision with math/rand.Uint32 in SIMLIB
+				"Uint64":  {name: "AtomicUint64"}, // avoids collision with math/rand.Uint64 in SIMLIB
+				"Uintptr": {},
+				"Pointer": {},
+				"Value":   {},
+			},
 		},
 		"syscall": {
-			"*":        "signature",
-			"Read":     "SysRead",
-			"Readlink": "SysReadlink",
-			"Getenv":   "SysGetenv",
-			"Unsetenv": "SysUnsetenv",
-			// except:
-			"Pipe":        false,
-			"Setrlimit":   false, // set maximum system resource consumption
-			"Getrlimit":   false, // get maximum system resource consumption
-			"Getpagesize": false, // get memory page size
+			wildcardSig: true,
+			entries: map[string]pkgEntry{
+				"Read":        {name: "SysRead"},
+				"Readlink":    {name: "SysReadlink"},
+				"Getenv":      {name: "SysGetenv"},
+				"Unsetenv":    {name: "SysUnsetenv"},
+				"Pipe":        {disabled: true},
+				"Setrlimit":   {disabled: true}, // set maximum system resource consumption
+				"Getrlimit":   {disabled: true}, // get maximum system resource consumption
+				"Getpagesize": {disabled: true}, // get memory page size
+			},
 		},
 		"time": {
-			"After":     true,
-			"AfterFunc": true,
-			"Sleep":     true,
-			"Now":       true,
-			"NewTicker": true,
-			"NewTimer":  true,
-			"Since":     true,
-			"Ticker":    true,
-			"Tick":      true,
-			"Timer":     true,
-			"Until":     true,
+			entries: map[string]pkgEntry{
+				"After":     {},
+				"AfterFunc": {},
+				"Sleep":     {},
+				"Now":       {},
+				"NewTicker": {},
+				"NewTimer":  {},
+				"Since":     {},
+				"Ticker":    {},
+				"Tick":      {},
+				"Timer":     {},
+				"Until":     {},
+			},
 		},
 		"google.golang.org/grpc": {
-			"ChainUnaryInterceptor":      true,
-			"ClientConn":                 true,
-			"DialOption":                 true,
-			"DialContext":                true,
-			"Dial":                       true,
-			"Server":                     true,
-			"NewClient":                  true,
-			"NewServer":                  true,
-			"ServerOption":               true,
-			"UnaryInvoker":               true,
-			"UnaryClientInterceptor":     true,
-			"WithChainUnaryInterceptor":  true,
-			"Creds":                      true,
-			"WithChainStreamInterceptor": true,
-			"ChainStreamInterceptor":     true,
-			"WithDefaultServiceConfig":   true,
-			"WithConnectParams":          true,
-			"WithReadBufferSize":         true,
-			"WithWriteBufferSize":        true,
-			"WithDisableServiceConfig":   true,
-			"KeepaliveEnforcementPolicy": true,
-			"SetTrailer":                 true,
-			"KeepaliveParams":            true,
-			"WithUserAgent":              true,
-			"WithTransportCredentials":   true,
-			"WithBlock":                  true,
-			"WithKeepaliveParams":        true,
-			"WithDefaultCallOptions":     true,
-			"WithAuthority":              true,
-			"StreamClientInterceptor":    true,
-			"Streamer":                   true,
-			"WithUnaryInterceptor":       true,
+			entries: map[string]pkgEntry{
+				"ChainUnaryInterceptor":      {},
+				"ClientConn":                 {},
+				"DialOption":                 {},
+				"DialContext":                {},
+				"Dial":                       {},
+				"Server":                     {},
+				"NewClient":                  {},
+				"NewServer":                  {},
+				"ServerOption":               {},
+				"UnaryInvoker":               {},
+				"UnaryClientInterceptor":     {},
+				"WithChainUnaryInterceptor":  {},
+				"Creds":                      {},
+				"WithChainStreamInterceptor": {},
+				"ChainStreamInterceptor":     {},
+				"WithDefaultServiceConfig":   {},
+				"WithConnectParams":          {},
+				"WithReadBufferSize":         {},
+				"WithWriteBufferSize":        {},
+				"WithDisableServiceConfig":   {},
+				"KeepaliveEnforcementPolicy": {},
+				"SetTrailer":                 {},
+				"KeepaliveParams":            {},
+				"WithUserAgent":              {},
+				"WithTransportCredentials":   {},
+				"WithBlock":                  {},
+				"WithKeepaliveParams":        {},
+				"WithDefaultCallOptions":     {},
+				"WithAuthority":              {},
+				"StreamClientInterceptor":    {},
+				"Streamer":                   {},
+				"WithUnaryInterceptor":       {},
+			},
 		},
 		"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc": {
-			"WithDialOption": true,
-			"WithGRPCConn":   true,
+			entries: map[string]pkgEntry{
+				"WithDialOption": {},
+				"WithGRPCConn":   {},
+			},
 		},
 		"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc": {
-			"WithDialOption": true,
-			"WithGRPCConn":   true,
+			entries: map[string]pkgEntry{
+				"WithDialOption": {},
+				"WithGRPCConn":   {},
+			},
 		},
 	}
 )
 
 type (
+	// pkgEntry describes how a single identifier from an external package is replaced.
+	pkgEntry struct {
+		disabled bool   // if true, do not replace (pass through as-is)
+		name     string // replacement identifier name; empty = keep original name
+	}
+	// pkgConfig describes all replacements for an external package.
+	// wildcardSig and wildcardNamed apply to identifiers not listed in entries.
+	pkgConfig struct {
+		wildcardSig   bool // replace Signature identifiers not in entries
+		wildcardNamed bool // replace Named type identifiers not in entries
+		entries       map[string]pkgEntry
+	}
 	fileTransformer struct {
 		// inputs
 		pkgPath            string
@@ -224,12 +271,11 @@ type (
 		mapForRanges int
 
 		// outputs
-		failpoints          []string          // discovered failpoint names
-		pkgNameByImportPath map[string]string // name of package behind import path
-		replacedPkgRefs     []pkgRef          // standard library package replacements
-		usedSimLangPackage  bool              // whether a simulator package is used
-		usedSimLibPackage   bool              // whether a simulator lib package is used
-		extraImports        map[string]string // TODO: collapse other 2 into here
+		failpoints         []string          // discovered failpoint names
+		replacedPkgRefs    []pkgRef          // standard library package replacements
+		usedSimLangPackage bool              // whether a simulator package is used
+		usedSimLibPackage  bool              // whether a simulator lib package is used
+		extraImports       map[string]string // TODO: collapse other 2 into here
 	}
 	pkgRef struct {
 		pkg, ident string
@@ -256,10 +302,9 @@ func newFileTransformer(file *ast.File, pkg *packages.Package, skipTransform boo
 		fset:                pkg.Fset,
 		file:                file,
 		info:                pkg.TypesInfo,
-		skipTransform:       skipTransform,
-		importsNamesByPath:  importsNamesByPath,
-		pkgNameByImportPath: make(map[string]string),
-		extraImports:        make(map[string]string),
+		skipTransform:      skipTransform,
+		importsNamesByPath: importsNamesByPath,
+		extraImports:       make(map[string]string),
 	}
 }
 
@@ -306,7 +351,7 @@ func (tf *fileTransformer) transform() (res string, retErr error) {
 // rewrite external import to point to transformed package instead
 func (tf *fileTransformer) transformImports(skipTransform bool) {
 	for _, imp := range tf.file.Imports {
-		path := strings.Trim(imp.Path.Value, "\"")
+		path, _ := strconv.Unquote(imp.Path.Value)
 		switch {
 		case !skipTransform && (strings.HasPrefix(path, "net/http") ||
 			strings.HasPrefix(path, "database/sql")):
@@ -323,20 +368,15 @@ func (tf *fileTransformer) transformAST() {
 	for _, commentGroup := range tf.file.Comments {
 		var newList []*ast.Comment
 		for _, comment := range commentGroup.List {
-			// TODO: remove once `prometheus/client_golang` works with generics
-			if strings.Contains(comment.Text, "+build go1.17") {
-				comment.Text = "//"
-			} else if strings.Contains(comment.Text, "go:build go1.17") {
-				comment.Text = "//"
-			} else if strings.Contains(comment.Text, "+build go1.9") {
-				// TODO: remove once `go.opencensus.io/tag` works with generics
-				comment.Text = "//"
-			} else if strings.Contains(comment.Text, "go:build go1.9") {
-				comment.Text = "//"
-			} else if strings.HasPrefix(comment.Text, "/*") {
-				// TODO: needed for SQLITE but breaks other packages
+			for _, pattern := range scrubBuildConstraints {
+				if strings.Contains(comment.Text, pattern) {
+					comment.Text = "//"
+					break
+				}
+			}
+			// TODO: needed for SQLITE but breaks other packages
+			if strings.HasPrefix(comment.Text, "/*") {
 				if tf.file.Name.Name == "sqlite3" || tf.file.Name.Name == "fixtures" {
-					// ignore block comment as it messes with our replacements
 					continue
 				}
 			}
@@ -371,7 +411,7 @@ func (tf *fileTransformer) transformAST() {
 		case *ast.IfStmt:
 			node.Cond = tf.transformExpr(node.Cond)
 		case *ast.SendStmt:
-			tf.transformChannelSend(c)
+			tf.transformChannelSend(c, node)
 		case *ast.CompositeLit:
 			tf.transformExpr(node.Type)
 			tf.transformExprs(node.Elts)
@@ -497,13 +537,12 @@ func (tf *fileTransformer) transformSelect(c *astutil.Cursor, selectStmt *ast.Se
 	var defaultCaseBody []ast.Stmt
 
 	// NOTE: default case can be at the top
-loop:
 	for _, stmt := range selectStmt.Body.List {
 		clause := stmt.(*ast.CommClause)
 		if clause.Comm == nil {
 			defaultCaseBody = clause.Body
 			hasDefaultCase = true
-			continue loop
+			continue
 		}
 
 		// switch case
@@ -583,7 +622,7 @@ loop:
 		// Selector args
 		if channelCallExpr != nil {
 			selExpr := channelCallExpr.Fun.(*ast.SelectorExpr)
-			assert.Assert(selExpr.X == simPkgIdent, "expected `gomad` package")
+			assert.Assert(selExpr.X.(*ast.Ident).Name == simLangPkgName, "expected `gomad` package")
 
 			// channel operation (rcv or snd)
 			var chanOp int
@@ -670,49 +709,11 @@ func (tf *fileTransformer) transformDecl(node *ast.GenDecl) {
 		return
 	}
 
-	newSpecs := make([]ast.Spec, len(node.Specs))
-	for i, spec := range node.Specs {
-		newSpecs[i] = spec
+	for _, spec := range node.Specs {
 		if valSpec, ok := spec.(*ast.ValueSpec); ok {
 			valSpec.Type = tf.transformExpr(valSpec.Type)
 			for j, val := range valSpec.Values {
-				valExpr := tf.transformExpr(val)
-
-				// wrap function calls
-				//if _, ok := valExpr.(*ast.CallExpr); ok {
-				//	var results []*ast.Field
-				//	valType := tf.info.TypeOf(val)
-				//	if tupleType, ok := valType.(*types.Tuple); ok {
-				//		for k := 0; k < tupleType.Len(); k += 1 {
-				//			results = append(results, &ast.Field{
-				//				Type: tf.typeToAstExpr(tupleType.At(k).Type()),
-				//			})
-				//		}
-				//	} else {
-				//		results = append(results, &ast.Field{
-				//			Type: tf.typeToAstExpr(valType),
-				//		})
-				//	}
-				//
-				//	valExpr = &ast.CallExpr{
-				//		Fun: tf.newSimExpr(fmt.Sprintf("VarInit%d", len(results))),
-				//		Args: []ast.Expr{
-				//			&ast.FuncLit{
-				//				Type: &ast.FuncType{
-				//					Params:  &ast.FieldList{},
-				//					Results: &ast.FieldList{List: results},
-				//				},
-				//				Body: &ast.BlockStmt{
-				//					List: []ast.Stmt{
-				//						&ast.ReturnStmt{Results: []ast.Expr{valExpr}},
-				//					},
-				//				},
-				//			},
-				//		},
-				//	}
-				//}
-
-				valSpec.Values[j] = valExpr
+				valSpec.Values[j] = tf.transformExpr(val)
 			}
 		}
 	}
@@ -723,18 +724,6 @@ func (tf *fileTransformer) transformRange(c *astutil.Cursor, node *ast.RangeStmt
 	if rangeExprType == nil {
 		panic(fmt.Sprintf("unknown type in for-range: %T", node.X))
 	}
-
-	// HACK: the range object was already re-written!
-	//	switch rangeObj := callExpr.Fun.(type) {
-	//	//case *ast.SelectorExpr:
-	//	//	if rangeObj.X.(*ast.Ident).Name == simLangPkgName && rangeObj.Sel.Name == "RandPerm" {
-	//	//		return
-	//	//	}
-	//	//case *ast.IndexListExpr:
-	//	//	if rangeObj.X.(*ast.Ident).Name == simLangPkgName && rangeObj. == "MapInit" {
-	//	//	return
-	//	//}
-	//}
 
 	keyIdent := node.Key
 
@@ -838,12 +827,7 @@ func (tf *fileTransformer) transformRange(c *astutil.Cursor, node *ast.RangeStmt
 	}
 }
 
-func (tf *fileTransformer) transformChannelSend(c *astutil.Cursor) {
-	send, ok := c.Node().(*ast.SendStmt)
-	if !ok {
-		return
-	}
-
+func (tf *fileTransformer) transformChannelSend(c *astutil.Cursor, send *ast.SendStmt) {
 	c.Replace(&ast.ExprStmt{
 		X: &ast.CallExpr{
 			Fun: tf.newSimExpr("ChanSend"),
@@ -947,19 +931,6 @@ func (tf *fileTransformer) transformExpr(node ast.Expr) ast.Expr {
 
 			if _, ok := typeOf.(*types.Named); ok {
 				switch typeOf.String() {
-				//case "net/http.Client":
-				//	fn.Sel.Name = "Client_" + fn.Sel.Name
-				//	if isPtr {
-				//		t.Args = append(
-				//			[]ast.Expr{fn.X},
-				//			t.Args...)
-				//	} else {
-				//		t.Args = append(
-				//			[]ast.Expr{&ast.UnaryExpr{Op: token.AND, X: fn.X}},
-				//			t.Args...)
-				//	}
-				//	fn.X = ast.NewIdent(simLibPkgName)
-				//	tf.usedSimLibPackage = true
 				case "net.Dialer":
 					fn.Sel.Name = "Dialer_" + fn.Sel.Name
 					if isPtr {
@@ -1109,60 +1080,63 @@ func (tf *fileTransformer) transformSelExpr(t *ast.SelectorExpr, typeArgs []ast.
 
 	pkgPath := pkgType.Imported().Path()
 	pkgName := pkgType.Name()
-	tf.pkgNameByImportPath[pkgPath] = pkgName
 
-	replacements, ok := pkgReplacements[pkgPath]
+	cfg, ok := pkgReplacements[pkgPath]
 	if !ok {
 		return t
 	}
 
 	// find reference replacement
 	identifier := t.Sel.Name
-	alias, defined := replacements[identifier]
-	if defined {
-		if alias == false {
+	if entry, defined := cfg.entries[identifier]; defined {
+		if entry.disabled {
 			return t // explicitly disabled
-		} else if s, ok := alias.(string); ok {
-			identifier = s
+		}
+		if entry.name != "" {
+			identifier = entry.name
 		}
 	} else {
-		if included, wildcard := replacements["*"]; wildcard {
-			includedStr := included.(string)
-			typeOf := tf.info.TypeOf(t.Sel)
-			switch typeOf.(type) {
-			case *types.Signature:
-				if !strings.Contains(includedStr, "signature") {
-					return t
-				}
-			case *types.Named:
-				if !strings.Contains(includedStr, "named") {
-					return t
-				}
-			default:
+		typeOf := tf.info.TypeOf(t.Sel)
+		switch typeOf.(type) {
+		case *types.Signature:
+			if !cfg.wildcardSig {
 				return t
 			}
-		} else {
-			return t // no wildcard -> ignore!
+		case *types.Named:
+			if !cfg.wildcardNamed {
+				return t
+			}
+		default:
+			return t
 		}
 	}
 
-	// record original reference
-	// TODO: can we omit this entirely?
+	// Record the original reference so the transformer can emit a
+	// "type _ = pkg.Ident" or "var _ = pkg.Ident" marker declaration at the
+	// end of the file. These markers keep the original import path in scope
+	// after all call-sites have been rewritten to SIMAPI/SIMLIB, preventing
+	// "imported and not used" compile errors.
 	ref := pkgRef{pkg: pkgName, ident: t.Sel.Name, typeArgs: typeArgs}
 	refType := tf.info.TypeOf(t)
 	switch refType.Underlying().(type) {
 	case *types.Interface, *types.Struct:
 		ref.isType = true
 	}
-	// TODO
+	// The generic type-detection above (Interface/Struct underlying) marks some
+	// vars as types: context.DeadlineExceeded and context.Canceled have
+	// interface-typed values (error), and crypto/rand.Reader has an
+	// interface-typed value (io.Reader). Override to emit "var _ = ..." instead
+	// of the wrong "type _ = ...".
 	if pkgName == "context" && (t.Sel.Name == "DeadlineExceeded" || t.Sel.Name == "Canceled") {
 		ref.isType = false
 	}
 	if pkgPath == "crypto/rand" && t.Sel.Name == "Reader" {
-		ref.isType = false // Reader is a var (io.Reader), not a type
+		ref.isType = false
 	}
 
-	// TODO: fix special case
+	// gRPC types are only rewritten when used inside Temporal or its known
+	// middleware packages; third-party libraries import grpc directly and must
+	// not be rewritten to fakegrpc (they would fail to compile).
 	var res ast.Expr
 	if pkgPath == "google.golang.org/grpc" {
 		if !strings.HasPrefix(tf.pkgPath, "go.temporal") &&
@@ -1171,7 +1145,10 @@ func (tf *fileTransformer) transformSelExpr(t *ast.SelectorExpr, typeArgs []ast.
 			// other libraries rely on these types
 			return t
 		}
-		// TODO: how do you check if sth is a type alias?
+		// These identifiers are type aliases in grpc; the type checker reports
+		// them as Named rather than Signature so the wildcard check above skips
+		// them. Hard-code the list until there is a better way to detect aliases
+		// via go/types.
 		if identifier == "UnaryClientInterceptor" || identifier == "UnaryInvoker" {
 			ref.isType = true
 		}
@@ -1274,50 +1251,6 @@ func (tf *fileTransformer) transformMapAssignment(c *astutil.Cursor, assign *ast
 					Args: []ast.Expr{mapKeyExpr},
 				},
 			})
-
-			//mapKeyExpr := indexExpr.Index
-			//mapKeyType := tf.typeToAstExpr(tf.info.TypeOf(mapKeyExpr))
-			//
-			//// TODO: remove these terrible hacks
-			//if ident, ok := indexExpr.X.(*ast.SelectorExpr); ok {
-			//	if ident.Sel.Name == "float64" {
-			//		mapKeyType = ast.NewIdent("observablID[float64]")
-			//	} else if ident.Sel.Name == "int64" {
-			//		mapKeyType = ast.NewIdent("observablID[int64]")
-			//	} else if ident.Sel.Name == "rateLimiters" {
-			//		return
-			//	} else if ident.Sel.Name == "byNum" {
-			//		return
-			//	}
-			//}
-			//if ident, ok := indexExpr.X.(*ast.IndexExpr); ok {
-			//	if ident, ok := ident.X.(*ast.SelectorExpr); ok {
-			//		if ident.Sel.Name == "extensionsByMessage" {
-			//			return
-			//		}
-			//	}
-			//}
-			//if ident, ok := indexExpr.X.(*ast.Ident); ok {
-			//	if ident.Name == "Number" {
-			//		return
-			//	}
-			//}
-			//
-			//// TODO: something like this?
-			////switch x := mapKeyExpr.(type) {
-			////case *ast.CompositeLit:
-			////	mapKeyType =
-			////default:
-			////	mapKeyType = tf.typeToAstExpr(tf.info.TypeOf(mapKeyExpr))
-			////}
-			//
-			//indexExpr.Index = &ast.CallExpr{
-			//	Fun: &ast.IndexExpr{
-			//		X:     tf.newSimExpr("MapKey"),
-			//		Index: mapKeyType,
-			//	},
-			//	Args: tf.transformExprs([]ast.Expr{mapKeyExpr}),
-			//}
 		}
 	}
 }
@@ -1348,7 +1281,7 @@ func (tf *fileTransformer) transformFieldList(fields *ast.FieldList) *ast.FieldL
 func (tf *fileTransformer) newSimExpr(funcName string) *ast.SelectorExpr {
 	tf.usedSimLangPackage = true
 	return &ast.SelectorExpr{
-		X:   simPkgIdent,
+		X:   ast.NewIdent(simLangPkgName),
 		Sel: ast.NewIdent(funcName),
 	}
 }
@@ -1356,129 +1289,30 @@ func (tf *fileTransformer) newSimExpr(funcName string) *ast.SelectorExpr {
 func (tf *fileTransformer) newSimLibExpr(funcName string) *ast.SelectorExpr {
 	tf.usedSimLibPackage = true
 	return &ast.SelectorExpr{
-		X:   simLibPkgIdent,
+		X:   ast.NewIdent(simLibPkgName),
 		Sel: ast.NewIdent(funcName),
 	}
 }
 
 func (tf *fileTransformer) typeToAstExpr(t types.Type) ast.Expr {
-	switch t := t.(type) {
-	case *types.Chan:
-		return &ast.ChanType{Dir: 3, Value: tf.typeToAstExpr(t.Elem())}
-	case *types.Basic:
-		return ast.NewIdent(t.String())
-	case *types.Signature:
-		var typeParamList *ast.FieldList
-		typeParams := make([]*ast.Field, t.TypeParams().Len())
-		for i := 0; i < t.TypeParams().Len(); i++ {
-			typeParam := t.TypeParams().At(i)
-			field := &ast.Field{
-				Names: []*ast.Ident{ast.NewIdent(typeParam.Obj().Name())},
-				Type:  tf.typeToAstExpr(typeParam.Obj().Type()),
-			}
-			typeParams[i] = field
-		}
-		if len(typeParams) > 0 {
-			typeParamList = &ast.FieldList{List: typeParams}
-		}
-
-		params := make([]*ast.Field, t.Params().Len())
-		for i := 0; i < t.Params().Len(); i++ {
-			param := t.Params().At(i)
-			field := &ast.Field{
-				Names: []*ast.Ident{ast.NewIdent(param.Name())},
-				Type:  tf.typeToAstExpr(param.Type()),
-			}
-			params[i] = field
-		}
-
-		var resultList *ast.FieldList
-		results := make([]*ast.Field, t.Results().Len())
-		for i := 0; i < t.Results().Len(); i++ {
-			result := t.Results().At(i)
-			field := &ast.Field{
-				Names: []*ast.Ident{ast.NewIdent(result.Name())},
-				Type:  tf.typeToAstExpr(result.Type()),
-			}
-			results[i] = field
-		}
-		if len(results) > 0 {
-			resultList = &ast.FieldList{List: results}
-		}
-
-		return &ast.FuncType{
-			TypeParams: typeParamList,
-			Params:     &ast.FieldList{List: params}, // never nil
-			Results:    resultList,
-		}
-	case *types.Struct:
-		fields := make([]*ast.Field, t.NumFields())
-		for i := 0; i < t.NumFields(); i++ {
-			field := &ast.Field{
-				Names: []*ast.Ident{ast.NewIdent(t.Field(i).Name())},
-				Type:  tf.typeToAstExpr(t.Field(i).Type()),
-			}
-			fields[i] = field
-		}
-		return &ast.StructType{Fields: &ast.FieldList{List: fields}}
-	case *types.Named:
-		objName := ast.NewIdent(t.Obj().Name())
-
-		// add type parameters, if defined
-		withTypeParams := func(expr ast.Expr) ast.Expr {
-			if t.TypeParams() == nil {
-				return expr
-			}
-
-			indices := make([]ast.Expr, t.TypeParams().Len())
-			for i := 0; i < t.TypeParams().Len(); i++ {
-				typeParam := t.TypeParams().At(i)
-				indices[i] = ast.NewIdent(typeParam.Obj().Name())
-			}
-
-			return &ast.IndexListExpr{
-				X:       expr,
-				Indices: indices,
-			}
-		}
-
-		// no package?
-		pkg := t.Obj().Pkg()
-		if pkg == nil {
-			return withTypeParams(objName)
-		}
-
-		var pkgIdentifier = pkg.Name()
+	qualifier := func(pkg *types.Package) string {
 		pkgName, imported := tf.importsNamesByPath[pkg.Path()]
 		if !imported {
-			return withTypeParams(objName) // prevents self-referential import
+			return "" // same package or excluded — use unqualified name
 		}
 		if pkgName != "" {
-			pkgIdentifier = pkgName // use custom import identifier, when provided
+			return pkgName // custom import alias
 		}
-
-		return withTypeParams(&ast.SelectorExpr{
-			X:   ast.NewIdent(pkgIdentifier),
-			Sel: objName,
-		})
-	case *types.Slice:
-		return &ast.ArrayType{Elt: tf.typeToAstExpr(t.Elem())}
-	case *types.Array:
-		return &ast.ArrayType{Elt: tf.typeToAstExpr(t.Elem())}
-	case *types.Pointer:
-		return &ast.StarExpr{X: tf.typeToAstExpr(t.Elem())}
-	case *types.Interface:
-		if t.NumMethods() == 0 {
-			return &ast.InterfaceType{Methods: &ast.FieldList{List: []*ast.Field{}}}
-		}
-		panic(fmt.Sprintf("unsupported interface type: %v", t))
-	case *types.Map:
-		return &ast.MapType{Key: tf.typeToAstExpr(t.Key()), Value: tf.typeToAstExpr(t.Elem())}
-	case *types.TypeParam:
-		return ast.NewIdent(t.Obj().Name())
-	default:
-		panic(fmt.Sprintf("unsupported var type: %v", t))
+		return pkg.Name()
 	}
+	// ParseExprFrom registers the synthetic snippet in tf.fset so its token
+	// positions are valid and on a single line, preventing go/format from
+	// inserting spurious newlines when these nodes are embedded in the file.
+	expr, err := parser.ParseExprFrom(tf.fset, "", []byte(types.TypeString(t, qualifier)), 0)
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse type %v: %v", t, err))
+	}
+	return expr
 }
 
 func nilOrWildcardIdent(expr ast.Expr) bool {
