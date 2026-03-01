@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -2304,35 +2305,70 @@ func (s *workflowSuite) TestMigrateSuccess() {
 }
 
 func (s *workflowSuite) TestMigrateFailure() {
-	// Mock MigrateSchedule activity to fail.
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().
-		Return(errors.New("migration failed"))
+	// Mock MigrateSchedule activity to always fail. Migration is retried
+	// each iteration since PendingMigration is persisted in State.
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return errors.New("migration failed")
+		})
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
 	}, 1*time.Second)
 
-	// After migration failure, the workflow should keep running (not return nil).
-	// CAN after 3 iterations proves the workflow continued past the failure.
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
-				Interval: durationpb.New(1 * time.Hour),
-			}},
-		},
-	}, 3)
+	// After ~5 iterations (5 hours of simulated time), the workflow should
+	// still be running -- migration failed but the scheduler continues.
+	stillRunning := false
+	s.env.RegisterDelayedCallback(func() {
+		stillRunning = !s.env.IsWorkflowCompleted()
+	}, 5*time.Hour)
 
-	s.True(s.env.IsWorkflowCompleted())
-	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.True(stillRunning, "workflow should still be running after migration failure")
+	// Migration is attempted every iteration after the signal. The first
+	// iteration runs before the signal, so total calls = iterations - 1.
+	s.Equal(99, migrateCalls, "migration should be retried each iteration")
+
+	// Verify PendingMigration is persisted in CAN state.
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	var canArgs schedulespb.StartScheduleArgs
+	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }
 
 func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 	// First attempt fails, second attempt succeeds (on next run loop iteration).
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().
-		Return(errors.New("migration failed"))
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().
-		Return(nil)
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			if migrateCalls == 1 {
+				return errors.New("migration failed")
+			}
+			return nil
+		})
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
@@ -2362,12 +2398,17 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 	// proving PendingMigration persists across run loop iterations.
 	s.True(s.env.IsWorkflowCompleted())
 	s.NoError(s.env.GetWorkflowError())
+	s.Equal(2, migrateCalls, "migration should fail once then succeed on retry")
 }
 
 func (s *workflowSuite) TestMigrateFailureThenSignal() {
-	// Mock MigrateSchedule activity to always fail (no retries, single attempt).
-	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).
-		Return(errors.New("migration failed"))
+	// Mock MigrateSchedule activity to always fail.
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return errors.New("migration failed")
+		})
 
 	// Send migrate signal after the first iteration.
 	s.env.RegisterDelayedCallback(func() {
@@ -2380,19 +2421,46 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 			Pause: "paused after failed migration",
 		})
 	}, 5*time.Second)
+
+	stillRunning := false
 	s.env.RegisterDelayedCallback(func() {
 		desc := s.describe()
 		s.True(desc.Schedule.State.Paused)
 		s.Equal("paused after failed migration", desc.Schedule.State.Notes)
+		stillRunning = !s.env.IsWorkflowCompleted()
 		// Send force-CAN to unblock the workflow (paused with no timer).
 		s.env.SignalWorkflow(SignalNameForceCAN, nil)
 	}, 10*time.Second)
 
-	s.run(&schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
-				Interval: durationpb.New(1 * time.Hour),
-			}},
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
 		},
-	}, 5)
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.True(stillRunning, "workflow should still be running after migration failure")
+	// 2 calls: the migrate signal (1s) and pause signal (5s) each trigger an
+	// iteration with PendingMigration=true. The force-CAN signal (10s) causes
+	// the loop to break before migration runs on that iteration.
+	s.Equal(2, migrateCalls, "migration should be retried on subsequent iterations")
+
+	// Verify PendingMigration is persisted in CAN state.
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	var canArgs schedulespb.StartScheduleArgs
+	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }

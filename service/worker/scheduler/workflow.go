@@ -272,7 +272,10 @@ func (s *scheduler) run() error {
 		info := workflow.GetInfo(s.ctx)
 		suggestContinueAsNew := info.GetCurrentHistoryLength() >= impossibleHistorySize
 		if s.tweakables.IterationsBeforeContinueAsNew > 0 {
-			suggestContinueAsNew = suggestContinueAsNew || iters <= 0
+			// forceCAN must be checked here too, not just in the else branch,
+			// so that the force-continue-as-new signal is honored regardless
+			// of whether IterationsBeforeContinueAsNew is set.
+			suggestContinueAsNew = suggestContinueAsNew || iters <= 0 || s.forceCAN
 			iters--
 		} else {
 			suggestContinueAsNew = suggestContinueAsNew || info.GetContinueAsNewSuggested() || s.forceCAN
