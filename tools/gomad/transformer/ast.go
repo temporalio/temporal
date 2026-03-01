@@ -126,6 +126,16 @@ var (
 			"RWMutex":    true,
 			"WaitGroup":  true,
 		},
+		"sync/atomic": {
+			"Bool":    true,
+			"Int32":   true,
+			"Int64":   true,
+			"Uint32":  "AtomicUint32", // avoids collision with math/rand.Uint32 in SIMLIB
+			"Uint64":  "AtomicUint64", // avoids collision with math/rand.Uint64 in SIMLIB
+			"Uintptr": true,
+			"Pointer": true,
+			"Value":   true,
+		},
 		"syscall": {
 			"*":        "signature",
 			"Read":     "SysRead",

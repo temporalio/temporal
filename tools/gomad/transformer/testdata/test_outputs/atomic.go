@@ -22,52 +22,48 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package transformer_test
+//go:build fixture
+
+package fixtures
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
+	"sync/atomic"
 
-	"github.com/stretchr/testify/require"
-	"golang.org/x/tools/go/packages"
-
-	"go.temporal.io/server/tools/gomad/transformer"
+	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "gomad.local/go.temporal.io/server/tools/gomad/api/lib"
 )
 
-func TestTransform(t *testing.T) {
-	var testCount int
-	ignoreFunc := func(pkg *packages.Package) bool {
-		return !strings.HasSuffix(pkg.PkgPath, "/testdata")
-	}
-	dir, _ := filepath.Abs(filepath.Join("testdata"))
-	t.Log("fixtures: " + dir)
-	cfg := &transformer.Config{
-		Dir:        filepath.Join(dir, "test_inputs"),
-		BuildFlags: []string{"-tags=fixture"},
-		Skip:       ignoreFunc,
-		ResultFunc: func(pkg *packages.Package, files map[string]string) string {
-			if ignoreFunc(pkg) {
-				return ""
-			}
+func atomic_fixture() {
+	SIMAPI.FuncStart()
+	var b SIMLIB.Bool
+	b.Store(true)
+	_ = b.Load()
 
-			for srcPath, transformed := range files {
-				name := filepath.Base(srcPath)
-				t.Run(name, func(t *testing.T) {
-					expected, err := os.ReadFile(filepath.Join(dir, "test_outputs", name))
-					if err != nil {
-						t.Fatal(err)
-					}
-					require.Equal(t, string(expected), transformed)
-				})
-				testCount += 1
-			}
+	var i SIMLIB.Int32
+	i.Store(1)
+	_ = i.Add(1)
 
-			return ""
-		},
-	}
-	_, err := transformer.Run(cfg)
-	require.NoError(t, err)
-	require.Equal(t, 26, testCount)
+	var u32 SIMLIB.AtomicUint32
+	u32.Store(1)
+	_ = u32.Add(1)
+
+	var u64 SIMLIB.AtomicUint64
+	u64.Store(1)
+	_ = u64.Add(1)
+
+	var p SIMLIB.Pointer[int]
+	x := 42
+	p.Store(&x)
+	_ = p.Load()
+
+	var v SIMLIB.Value
+	v.Store(42)
+	_ = v.Load()
 }
+
+type _ = atomic.Bool
+type _ = atomic.Int32
+type _ = atomic.Pointer
+type _ = atomic.Uint32
+type _ = atomic.Uint64
+type _ = atomic.Value

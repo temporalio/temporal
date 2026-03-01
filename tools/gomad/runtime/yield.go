@@ -22,52 +22,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package transformer_test
+package sim_runtime
 
-import (
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-
-	"github.com/stretchr/testify/require"
-	"golang.org/x/tools/go/packages"
-
-	"go.temporal.io/server/tools/gomad/transformer"
-)
-
-func TestTransform(t *testing.T) {
-	var testCount int
-	ignoreFunc := func(pkg *packages.Package) bool {
-		return !strings.HasSuffix(pkg.PkgPath, "/testdata")
-	}
-	dir, _ := filepath.Abs(filepath.Join("testdata"))
-	t.Log("fixtures: " + dir)
-	cfg := &transformer.Config{
-		Dir:        filepath.Join(dir, "test_inputs"),
-		BuildFlags: []string{"-tags=fixture"},
-		Skip:       ignoreFunc,
-		ResultFunc: func(pkg *packages.Package, files map[string]string) string {
-			if ignoreFunc(pkg) {
-				return ""
-			}
-
-			for srcPath, transformed := range files {
-				name := filepath.Base(srcPath)
-				t.Run(name, func(t *testing.T) {
-					expected, err := os.ReadFile(filepath.Join(dir, "test_outputs", name))
-					if err != nil {
-						t.Fatal(err)
-					}
-					require.Equal(t, string(expected), transformed)
-				})
-				testCount += 1
-			}
-
-			return ""
-		},
-	}
-	_, err := transformer.Run(cfg)
-	require.NoError(t, err)
-	require.Equal(t, 26, testCount)
+// Yield cooperatively suspends the current goroutine and immediately
+// re-enqueues it, allowing the scheduler to run other goroutines first.
+// It is a lightweight preemption point with no synchronisation semantics.
+func Yield() {
+	suspend(&syncBlock{})
 }
