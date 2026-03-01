@@ -98,14 +98,16 @@ func validateNamespace(ctx workflow.Context, nsInfo getNamespaceInfoResult) erro
 
 	var la *localActivities
 
-	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsInfo.Namespace).Get(ctx, nil)
-	if err != nil {
-		return err
+	if slices.Contains(nsInfo.Clusters, nsInfo.CurrentCluster) {
+		ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+		err := workflow.ExecuteLocalActivity(ctx1, la.ValidateProtectedNamespacesActivity, nsInfo.Namespace).Get(ctx, nil)
+		if err != nil {
+			return err
+		}
 	}
 
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsInfo.NamespaceID, nsInfo.Namespace).Get(ctx, nil)
+	err := workflow.ExecuteLocalActivity(ctx2, la.ValidateNexusEndpointsActivity, nsInfo.NamespaceID, nsInfo.Namespace).Get(ctx, nil)
 	if err != nil {
 		return err
 	}
