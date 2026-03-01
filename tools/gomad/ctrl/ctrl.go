@@ -158,7 +158,7 @@ func (c *Controller) sync(
 			startIdx := max(0, i-100)
 			endIdx := i + 1
 			fmt.Println("\nclient #0:\n\t", strings.Join(log0[startIdx:endIdx], "\n\t"))
-			fmt.Println("\nclient #1:\n\t", strings.Join(log1[startIdx:endIdx], "\n\t"), "\n")
+			fmt.Println("\nclient #1:\n\t", strings.Join(log1[startIdx:endIdx], "\n\t"))
 			panic("diff!")
 		}
 	}

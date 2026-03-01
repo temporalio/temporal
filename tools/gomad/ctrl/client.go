@@ -48,12 +48,12 @@ loop:
 		case line := <-logsCh:
 			switch line {
 			case sim_runtime.RemoteControlPauseCmd:
-				verify.T(!c.paused, "⚠️client #"+c.conf.remoteId+" is already paused")
+				verify.T(!c.paused, "⚠️client #%s is already paused", c.conf.remoteId)
 				fmt.Println("[ctrl]", "client #"+c.conf.remoteId+" paused now")
 				c.paused = true
 				pauseCh <- struct{}{}
 			case sim_runtime.RemoteControlContinueCmd:
-				verify.T(c.paused, "⚠️client #"+c.conf.remoteId+" is not paused")
+				verify.T(c.paused, "⚠️client #%s is not paused", c.conf.remoteId)
 				if len(c.logs) > logHistorySize {
 					c.logs = c.logs[len(c.logs)-logHistorySize:] // trim logs to keep them manageable
 				}

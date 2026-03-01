@@ -25,7 +25,6 @@
 package sim_runtime
 
 import (
-	"fmt"
 	"math/rand"
 	"os"
 	"os/signal"
@@ -119,7 +118,7 @@ func Start(opts ...InitOption) {
 	}
 	if seed, _ := os.LookupEnv(SeedEnvKey); seed != "" {
 		parsedSeed, err := strconv.ParseInt(seed, 10, 64)
-		verify.T(err == nil, fmt.Errorf("failed to parse seed from environment variable: %w", err).Error())
+		verify.T(err == nil, "failed to parse seed from environment variable: %v", err)
 		opts = append(opts, Seed(parsedSeed))
 	}
 	if remoteCtrlAddr, _ := os.LookupEnv(RemoteControlAddrEnvKey); remoteCtrlAddr != "" {

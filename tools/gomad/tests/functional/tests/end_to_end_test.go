@@ -87,7 +87,7 @@ func startServer() func() {
 		SIMLIB.LoadFileFromDisk(srcConfigDir, targetConfigDir, "dev.yaml")
 		SIMLIB.LoadFileFromDisk(srcConfigDir, targetConfigDir, "dynconfig.yaml")
 
-		cfg, err := config.LoadConfig("dev", targetConfigDir, "")
+		cfg, err := config.Load(config.WithEnv("dev"), config.WithConfigDir(targetConfigDir))
 		if err != nil {
 			panic(err)
 		}
