@@ -27,14 +27,22 @@ func (i *Invoker) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// NewInvoker returns an intialized Invoker component, which should
+// NewInvoker returns an initialized Invoker component, which should
 // be parented under a Scheduler root component.
 func NewInvoker(ctx chasm.MutableContext) *Invoker {
-	return &Invoker{
-		InvokerState: &schedulerpb.InvokerState{
-			BufferedStarts: []*schedulespb.BufferedStart{},
-		},
+	return newInvokerWithState(ctx, &schedulerpb.InvokerState{
+		BufferedStarts: []*schedulespb.BufferedStart{},
+	})
+}
+
+func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerState) *Invoker {
+	inv := &Invoker{
+		InvokerState: state,
 	}
+	if len(inv.BufferedStarts) > 0 {
+		inv.addTasks(ctx)
+	}
+	return inv
 }
 
 // EnqueueBufferedStarts adds new BufferedStarts to the invocation queue,

@@ -2415,6 +2415,7 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 	if request.GetTarget() == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED {
 		return nil, errMigrationTargetNotSet
 	}
+	// TODO: support SCHEDULER_TARGET_WORKFLOW for CHASM-to-V1 migration.
 	if request.GetTarget() != adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
 		return nil, serviceerror.NewUnimplemented("Only migration to CHASM is currently supported.")
 	}

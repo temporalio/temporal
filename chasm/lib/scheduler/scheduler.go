@@ -238,26 +238,11 @@ func CreateSchedulerFromMigration(
 	}
 	sched.setNullableFields()
 
-	invoker := &Invoker{
-		InvokerState: state.GetInvokerState(),
-	}
-	sched.Invoker = chasm.NewComponentField(ctx, invoker)
-	if len(invoker.BufferedStarts) > 0 {
-		invoker.addTasks(ctx)
-	}
-
-	generator := &Generator{
-		GeneratorState: state.GetGeneratorState(),
-	}
-	sched.Generator = chasm.NewComponentField(ctx, generator)
-	generator.Generate(ctx)
+	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
+	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
 
 	for backfillID, backfillerState := range state.GetBackfillers() {
-		backfiller := &Backfiller{
-			BackfillerState: backfillerState,
-		}
-		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, backfiller)
-		backfiller.scheduleTask(ctx, chasm.TaskScheduledTimeImmediate)
+		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, newBackfillerWithState(ctx, backfillerState))
 	}
 
 	visibility := chasm.NewVisibility(ctx)
