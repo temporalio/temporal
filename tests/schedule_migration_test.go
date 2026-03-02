@@ -93,7 +93,10 @@ func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
 					Namespace:   nsName,
 					NamespaceId: nsID,
 					ScheduleId:  sid,
+					Schedule:    sched,
 				},
+				GeneratorState: &schedulerpb.GeneratorState{},
+				InvokerState:   &schedulerpb.InvokerState{},
 			},
 		},
 	)

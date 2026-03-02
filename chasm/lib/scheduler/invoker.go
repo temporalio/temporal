@@ -36,13 +36,13 @@ func NewInvoker(ctx chasm.MutableContext) *Invoker {
 }
 
 func newInvokerWithState(ctx chasm.MutableContext, state *schedulerpb.InvokerState) *Invoker {
-	inv := &Invoker{
+	i := &Invoker{
 		InvokerState: state,
 	}
-	if len(inv.BufferedStarts) > 0 {
-		inv.addTasks(ctx)
+	if len(i.BufferedStarts) > 0 {
+		i.addTasks(ctx)
 	}
-	return inv
+	return i
 }
 
 // EnqueueBufferedStarts adds new BufferedStarts to the invocation queue,
