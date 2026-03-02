@@ -9,37 +9,6 @@ import (
 )
 
 func TestVisibilityValue(t *testing.T) {
-	t.Run("Int", func(t *testing.T) {
-		v := VisibilityValueInt(42)
-		p := v.MustEncode()
-		require.NotNil(t, p)
-
-		var out int
-		err := payload.Decode(p, &out)
-		require.NoError(t, err)
-		require.Equal(t, 42, out)
-
-		require.True(t, v.Equal(VisibilityValueInt(42)))
-		require.False(t, v.Equal(VisibilityValueInt(43)))
-		// Different underlying type should not be equal even if numerically same
-		require.False(t, v.Equal(VisibilityValueInt32(42)))
-	})
-
-	t.Run("Int32", func(t *testing.T) {
-		v := VisibilityValueInt32(123)
-		p := v.MustEncode()
-		require.NotNil(t, p)
-
-		var out int32
-		err := payload.Decode(p, &out)
-		require.NoError(t, err)
-		require.Equal(t, int32(123), out)
-
-		require.True(t, v.Equal(VisibilityValueInt32(123)))
-		require.False(t, v.Equal(VisibilityValueInt32(124)))
-		require.False(t, v.Equal(VisibilityValueInt64(123)))
-	})
-
 	t.Run("Int64", func(t *testing.T) {
 		v := VisibilityValueInt64(9876543210)
 		p := v.MustEncode()
@@ -52,7 +21,6 @@ func TestVisibilityValue(t *testing.T) {
 
 		require.True(t, v.Equal(VisibilityValueInt64(9876543210)))
 		require.False(t, v.Equal(VisibilityValueInt64(9876543211)))
-		require.False(t, v.Equal(VisibilityValueInt(9876543210)))
 	})
 
 	t.Run("String", func(t *testing.T) {
@@ -97,23 +65,6 @@ func TestVisibilityValue(t *testing.T) {
 
 		require.True(t, v.Equal(VisibilityValueFloat64(3.14159)))
 		require.False(t, v.Equal(VisibilityValueFloat64(2.71828)))
-		require.False(t, v.Equal(VisibilityValueInt(3)))
-	})
-
-	t.Run("ByteSlice", func(t *testing.T) {
-		v := VisibilityValueByteSlice([]byte{0x01, 0x02, 0x03})
-		p := v.MustEncode()
-		require.NotNil(t, p)
-
-		var out []byte
-		err := payload.Decode(p, &out)
-		require.NoError(t, err)
-		require.Equal(t, []byte{0x01, 0x02, 0x03}, out)
-
-		require.True(t, v.Equal(VisibilityValueByteSlice([]byte{0x01, 0x02, 0x03})))
-		require.False(t, v.Equal(VisibilityValueByteSlice([]byte{0x01, 0x02})))
-		require.False(t, v.Equal(VisibilityValueByteSlice([]byte{0x01, 0x03, 0x02})))
-		require.False(t, v.Equal(VisibilityValueString("\x01\x02\x03")))
 	})
 
 	t.Run("StringSlice", func(t *testing.T) {
@@ -156,14 +107,14 @@ func TestIsVisibilityValueEqual(t *testing.T) {
 	require.True(t, isVisibilityValueEqual(nil, nil))
 
 	// one nil
-	require.False(t, isVisibilityValueEqual(VisibilityValueInt(1), nil))
-	require.False(t, isVisibilityValueEqual(nil, VisibilityValueInt(1)))
+	require.False(t, isVisibilityValueEqual(VisibilityValueInt64(1), nil))
+	require.False(t, isVisibilityValueEqual(nil, VisibilityValueInt64(1)))
 
 	// equal values
 	require.True(t, isVisibilityValueEqual(VisibilityValueString("x"), VisibilityValueString("x")))
 	require.True(t, isVisibilityValueEqual(VisibilityValueInt64(5), VisibilityValueInt64(5)))
 
 	// not equal values
-	require.False(t, isVisibilityValueEqual(VisibilityValueInt(5), VisibilityValueInt(6)))
-	require.False(t, isVisibilityValueEqual(VisibilityValueInt(5), VisibilityValueInt64(5)))
+	require.False(t, isVisibilityValueEqual(VisibilityValueInt64(5), VisibilityValueInt64(6)))
+	require.False(t, isVisibilityValueEqual(VisibilityValueInt64(5), VisibilityValueFloat64(5)))
 }
