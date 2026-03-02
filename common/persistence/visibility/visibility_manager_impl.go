@@ -585,14 +585,8 @@ func aliasChasmSearchAttributes(
 // After Decode, the types should be correct, so simple type detection is sufficient.
 func convertToVisibilityValue(value any) chasm.VisibilityValue {
 	switch val := value.(type) {
-	case int:
-		return chasm.VisibilityValueInt64(int64(val))
-	case int32:
-		return chasm.VisibilityValueInt64(int64(val))
 	case int64:
 		return chasm.VisibilityValueInt64(val)
-	case float32:
-		return chasm.VisibilityValueFloat64(float64(val))
 	case float64:
 		return chasm.VisibilityValueFloat64(val)
 	case bool:
@@ -605,8 +599,6 @@ func convertToVisibilityValue(value any) chasm.VisibilityValue {
 			return chasm.VisibilityValueTime(parsedTime)
 		}
 		return chasm.VisibilityValueString(val)
-	case []byte:
-		return chasm.VisibilityValueByteSlice(val)
 	case []string:
 		return chasm.VisibilityValueStringSlice(val)
 	default:

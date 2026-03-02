@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -420,6 +421,36 @@ type SearchAttributesMap struct {
 // NewSearchAttributesMap creates a new SearchAttributeMap from raw values.
 func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesMap {
 	return SearchAttributesMap{values: values}
+}
+
+func NewSearchAttributesMapFromProto(
+	searchAttributes *commonpb.SearchAttributes,
+) (SearchAttributesMap, error) {
+	if searchAttributes == nil || searchAttributes.GetIndexedFields() == nil {
+		return NewSearchAttributesMap(nil), nil
+	}
+	values := make(map[string]VisibilityValue)
+	for k, p := range searchAttributes.IndexedFields {
+		value, err := VisibilityValueFromPayload(p)
+		if err != nil {
+			return NewSearchAttributesMap(nil), err
+		}
+		values[k] = value
+	}
+	return NewSearchAttributesMap(values), nil
+}
+
+func (m *SearchAttributesMap) ToProto() *commonpb.SearchAttributes {
+	if m == nil || m.values == nil {
+		return nil
+	}
+	res := &commonpb.SearchAttributes{
+		IndexedFields: make(map[string]*commonpb.Payload, len(m.values)),
+	}
+	for k, v := range m.values {
+		res.IndexedFields[k] = v.MustEncode()
+	}
+	return res
 }
 
 // SearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.
