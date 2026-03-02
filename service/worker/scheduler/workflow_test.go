@@ -2397,7 +2397,7 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 	// Migration should succeed on second attempt without a new signal,
 	// proving PendingMigration persists across run loop iterations.
 	s.True(s.env.IsWorkflowCompleted())
-	s.NoError(s.env.GetWorkflowError())
+	s.Require().NoError(s.env.GetWorkflowError())
 	s.Equal(2, migrateCalls, "migration should fail once then succeed on retry")
 }
 
