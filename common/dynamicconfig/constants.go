@@ -1434,9 +1434,9 @@ an optional feature and also requires a metrics collection system that can handl
 	)
 	MatchingStorageDriverMetricsAllowedTypes = NewGlobalTypedSetting(
 		"matching.storageDriverMetricsAllowedTypes",
-		[]string{"s3"},
-		`List of storage driver types that are published as-is in metrics. Any driver type not in this 
-list is reported as "other". Example: ["s3"].`,
+		([]string)(nil),
+		`List of storage driver types that are published as-is in metrics. Any driver type not in this
+list is reported as "other".`,
 	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",

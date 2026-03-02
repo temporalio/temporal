@@ -584,7 +584,7 @@ func TestActivitySlotsMetric(t *testing.T) {
 		MetricsHandler:                   captureHandler,
 		EnablePluginMetrics:              dynamicconfig.GetBoolPropertyFn(true),
 		ExternalPayloadsEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn([]string{}),
+		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn[[]string](nil),
 	})
 	defer m.Stop()
 
@@ -653,7 +653,7 @@ func TestPluginMetricsExported(t *testing.T) {
 		MetricsHandler:                   captureHandler,
 		EnablePluginMetrics:              dynamicconfig.GetBoolPropertyFn(true),
 		ExternalPayloadsEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn([]string{}),
+		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn[[]string](nil),
 	})
 	defer m.Stop()
 
@@ -733,7 +733,7 @@ func TestPluginMetricsDisabled(t *testing.T) {
 		MetricsHandler:                   captureHandler,
 		EnablePluginMetrics:              dynamicconfig.GetBoolPropertyFn(false),
 		ExternalPayloadsEnabled:          dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn([]string{}),
+		StorageDriverMetricsAllowedTypes: dynamicconfig.GetTypedPropertyFn[[]string](nil),
 	})
 	defer m.Stop()
 

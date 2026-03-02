@@ -399,6 +399,9 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 	m.recordStorageDriverMetric(nsName, workerHeartbeat)
 }
 
+// defaultStorageDriverAllowedTypes is the fallback when MatchingStorageDriverMetricsAllowedTypes is not configured.
+var defaultStorageDriverAllowedTypes = []string{"s3"}
+
 // recordStorageDriverMetric sets a value of 1 for each unique storage driver type present in the heartbeats.
 // Only emits when ExternalPayloadsEnabled is true for the namespace.
 // Driver types not in the allowed list are sanitized to "other".
@@ -408,9 +411,11 @@ func (m *registryImpl) recordStorageDriverMetric(nsName namespace.Name, heartbea
 	}
 
 	// Build set of allowed to log driver types based on dynamic config
-	var allowedSet map[string]struct{}
 	allowedTypes := m.storageDriverMetricsAllowedTypes()
-	allowedSet = make(map[string]struct{}, len(allowedTypes))
+	if allowedTypes == nil {
+		allowedTypes = defaultStorageDriverAllowedTypes
+	}
+	allowedSet := make(map[string]struct{}, len(allowedTypes))
 	for _, t := range allowedTypes {
 		allowedSet[t] = struct{}{}
 	}
