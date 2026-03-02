@@ -963,11 +963,11 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	s.Equal(int64(numWorkflows), resp.GetCount())
 	s.Len(resp.Groups, 2)
 
-	runningStatusPayload, _ := searchattribute.EncodeValue(
+	runningStatusPayload, _ := sadefs.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
-	terminatedStatusPayload, _ := searchattribute.EncodeValue(
+	terminatedStatusPayload, _ := sadefs.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
