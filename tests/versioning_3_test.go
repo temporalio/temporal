@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -4268,7 +4268,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
 				a.True(ok)
-				searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var searchAttr []string
 				if searchAttrAny != nil {
@@ -4283,7 +4283,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
 				a.True(ok)
-				versionAttrAny, err := searchattribute.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var versionAttr []string
 				if versionAttrAny != nil {
