@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/common/primitives"
 )
@@ -199,6 +200,14 @@ func TestNormalizeAndValidateUserDefined(t *testing.T) {
 			expectedError:    "cannot use internal per namespace task queue",
 		},
 		{
+			name:             "Internal per-ns task queue with non-internal parent",
+			taskQueue:        &taskqueuepb.TaskQueue{Name: "/_sys/my-task-queue"},
+			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "user-parent-tq"},
+			defaultVal:       "",
+			maxIDLengthLimit: 100,
+			expectedError:    "task queue name cannot start with reserved prefix /_sys/",
+		},
+		{
 			name:             "Internal per-ns task queue with internal per-ns parent",
 			taskQueue:        &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
 			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: perNsTaskQueue},
@@ -254,8 +263,9 @@ func TestNormalizeAndValidateUserDefined(t *testing.T) {
 					require.NotEqual(t, enumspb.TASK_QUEUE_KIND_UNSPECIFIED, tt.taskQueue.GetKind(), "Kind should be normalized")
 				}
 			} else {
-				require.Error(t, err)
-				require.Contains(t, err.Error(), tt.expectedError)
+				var invalidArgErr *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgErr)
+				require.Contains(t, invalidArgErr.Error(), tt.expectedError)
 			}
 
 			if tt.taskQueue != nil && tt.taskQueue.GetName() == "" && tt.defaultVal != "" && tt.expectedError == "" {

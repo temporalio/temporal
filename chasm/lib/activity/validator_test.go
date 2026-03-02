@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -70,6 +72,7 @@ func TestValidateFailures(t *testing.T) {
 		options                         *activitypb.ActivityOptions
 		priority                        *commonpb.Priority
 		runTimeout                      *durationpb.Duration
+		expectedErrMessage              string
 	}{
 		{
 			name:                            "Empty ActivityId",
@@ -81,6 +84,7 @@ func TestValidateFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
+			expectedErrMessage:              "ActivityId is not set",
 		},
 		{
 			name:                            "Empty ActivityType",
@@ -92,6 +96,7 @@ func TestValidateFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
+			expectedErrMessage:              "ActivityType is not set",
 		},
 		{
 			name:                            "ActivityId exceeds length limit",
@@ -103,6 +108,7 @@ func TestValidateFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
+			expectedErrMessage:              fmt.Sprintf("ActivityId exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
 		},
 		{
 			name:                            "ActivityType exceeds length limit",
@@ -114,9 +120,10 @@ func TestValidateFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
+			expectedErrMessage:              fmt.Sprintf("ActivityType exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
 		},
 		{
-			name:                            "Invalid TaskQueue",
+			name:                            "Empty TaskQueue",
 			activityID:                      defaultActivityID,
 			activityType:                    defaultActivityType,
 			getDefaultActivityRetrySettings: getDefaultRetrySettings,
@@ -126,8 +133,39 @@ func TestValidateFailures(t *testing.T) {
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: ""},
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 			},
-			priority:   &defaultPriority,
-			runTimeout: nil,
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "missing task queue name",
+		},
+		{
+			name:                            "Invalid Internal TaskQueue",
+			activityID:                      defaultActivityID,
+			activityType:                    defaultActivityType,
+			getDefaultActivityRetrySettings: getDefaultRetrySettings,
+			maxIDLengthLimit:                defaultMaxIDLengthLimit,
+			namespaceID:                     defaultNamespaceID,
+			options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			},
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: fmt.Sprintf("cannot use internal per namespace task queue:%s", primitives.PerNSWorkerTaskQueue),
+		},
+		{
+			name:                            "Invalid Internal TaskQueue Prefix",
+			activityID:                      defaultActivityID,
+			activityType:                    defaultActivityType,
+			getDefaultActivityRetrySettings: getDefaultRetrySettings,
+			maxIDLengthLimit:                defaultMaxIDLengthLimit,
+			namespaceID:                     defaultNamespaceID,
+			options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "/_sys/my-task-queue"},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			},
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "task queue name cannot start with reserved prefix /_sys/",
 		},
 		{
 			name:                            "Negative ScheduleToCloseTimeout",
@@ -140,8 +178,9 @@ func TestValidateFailures(t *testing.T) {
 				TaskQueue:              &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
 				ScheduleToCloseTimeout: durationpb.New(-1 * time.Second),
 			},
-			priority:   &defaultPriority,
-			runTimeout: nil,
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "Invalid ScheduleToCloseTimeout",
 		},
 		{
 			name:                            "Negative ScheduleToStartTimeout",
@@ -155,8 +194,9 @@ func TestValidateFailures(t *testing.T) {
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				ScheduleToStartTimeout: durationpb.New(-1 * time.Second),
 			},
-			priority:   &defaultPriority,
-			runTimeout: nil,
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "Invalid ScheduleToStartTimeout",
 		},
 		{
 			name:                            "Negative StartToCloseTimeout",
@@ -169,8 +209,9 @@ func TestValidateFailures(t *testing.T) {
 				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
 				StartToCloseTimeout: durationpb.New(-1 * time.Second),
 			},
-			priority:   &defaultPriority,
-			runTimeout: nil,
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "Invalid StartToCloseTimeout",
 		},
 		{
 			name:                            "Negative HeartbeatTimeout",
@@ -184,8 +225,9 @@ func TestValidateFailures(t *testing.T) {
 				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
 				HeartbeatTimeout:       durationpb.New(-1 * time.Second),
 			},
-			priority:   &defaultPriority,
-			runTimeout: nil,
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "Invalid HeartbeatTimeout",
 		},
 		{
 			name:                            "Invalid Priority",
@@ -197,6 +239,7 @@ func TestValidateFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &commonpb.Priority{FairnessKey: string(make([]byte, 1001))},
 			runTimeout:                      nil,
+			expectedErrMessage:              "Invalid Priorities",
 		},
 	}
 
@@ -213,6 +256,9 @@ func TestValidateFailures(t *testing.T) {
 				durationpb.New(0))
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
+			if tc.expectedErrMessage != "" {
+				require.Contains(t, invalidArgErr.Error(), tc.expectedErrMessage)
+			}
 		})
 	}
 }

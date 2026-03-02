@@ -77,7 +77,7 @@ func NormalizeAndValidateUserDefined(
 	parentTaskQueue string,
 	maxIDLengthLimit int,
 ) error {
-	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, false); err != nil {
+	if err := normalizeAndValidate(taskQueue, defaultName, maxIDLengthLimit, true); err != nil {
 		return err
 	}
 	// reminder: if this check goes first, taskQueue.GetName() is not ready to use directly
