@@ -7,6 +7,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	healthspb "go.temporal.io/server/api/health/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
@@ -45,16 +48,16 @@ func (s *healthCheckerSuite) SetupTest() {
 		func() float64 {
 			return 0.15
 		},
-		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			switch hostAddress {
 			case "1", "3":
-				return enumsspb.HEALTH_STATE_SERVING, nil
+				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 			case "2":
-				return enumsspb.HEALTH_STATE_UNSPECIFIED, errors.New("test")
+				return nil, errors.New("test")
 			case "4":
-				return enumsspb.HEALTH_STATE_DECLINED_SERVING, nil
+				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 			default:
-				return enumsspb.HEALTH_STATE_NOT_SERVING, nil
+				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 			}
 		},
 		log.NewNoopLogger(),
@@ -78,9 +81,9 @@ func (s *healthCheckerSuite) Test_Check_Serving() {
 		membership.NewHostInfoFromAddress("1"),
 	})
 
-	state, err := s.checker.Check(context.Background())
+	result, err := s.checker.Check(context.Background())
 	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_SERVING, state)
+	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
 }
 
 func (s *healthCheckerSuite) Test_Check_Not_Serving() {
@@ -92,9 +95,9 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 		membership.NewHostInfoFromAddress("5"),
 	})
 
-	state, err := s.checker.Check(context.Background())
+	result, err := s.checker.Check(context.Background())
 	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, state)
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
 }
 
 func (s *healthCheckerSuite) Test_Check_Declined_Serving() {
@@ -108,17 +111,19 @@ func (s *healthCheckerSuite) Test_Check_Declined_Serving() {
 		membership.NewHostInfoFromAddress("7"),
 	})
 
-	state, err := s.checker.Check(context.Background())
+	result, err := s.checker.Check(context.Background())
 	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, state)
+	s.Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, result.State)
 }
 
 func (s *healthCheckerSuite) Test_Check_No_Available_Hosts() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{})
 
-	state, err := s.checker.Check(context.Background())
+	result, err := s.checker.Check(context.Background())
 	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, state)
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
+	s.NotNil(result.ServiceDetail)
+	s.Equal("no available hosts in membership", result.ServiceDetail.Message)
 }
 
 func (s *healthCheckerSuite) Test_Check_GetResolver_Error() {
@@ -131,16 +136,19 @@ func (s *healthCheckerSuite) Test_Check_GetResolver_Error() {
 		membershipMonitor,
 		func() float64 { return 0.25 },
 		func() float64 { return 0.15 },
-		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
-			return enumsspb.HEALTH_STATE_SERVING, nil
+		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
+			return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 		},
 		log.NewNoopLogger(),
 	)
 
-	state, err := checker.Check(context.Background())
+	result, err := checker.Check(context.Background())
 	s.Error(err)
-	s.Equal(enumsspb.HEALTH_STATE_UNSPECIFIED, state)
+	s.Equal(enumsspb.HEALTH_STATE_INTERNAL_ERROR, result.State)
 	s.Contains(err.Error(), "resolver error")
+	s.NotNil(result.ServiceDetail)
+	s.Equal(enumsspb.HEALTH_STATE_INTERNAL_ERROR, result.ServiceDetail.State)
+	s.Contains(result.ServiceDetail.Message, "failed to get membership resolver")
 }
 
 func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Threshold() {
@@ -148,14 +156,14 @@ func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Thres
 	// With 4 hosts, 1 failed = 0.25 (25%), should return SERVING since it's not > threshold
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("1"), // SERVING
-		membership.NewHostInfoFromAddress("2"), // UNSPECIFIED (failed)
+		membership.NewHostInfoFromAddress("2"), // NOT_SERVING (failed)
 		membership.NewHostInfoFromAddress("3"), // SERVING
 		membership.NewHostInfoFromAddress("1"), // SERVING
 	})
 
-	state, err := s.checker.Check(context.Background())
+	result, err := s.checker.Check(context.Background())
 	s.NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_SERVING, state)
+	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
 }
 
 func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
@@ -171,7 +179,7 @@ func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
 		},
 		{
 			name:          "single host failed",
-			hostAddress:   "2", // UNSPECIFIED (failed)
+			hostAddress:   "2", // NOT_SERVING (failed)
 			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 		},
 		{
@@ -192,9 +200,9 @@ func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
 				membership.NewHostInfoFromAddress(tc.hostAddress),
 			})
 
-			state, err := s.checker.Check(context.Background())
+			result, err := s.checker.Check(context.Background())
 			s.NoError(err)
-			s.Equal(tc.expectedState, state)
+			s.Equal(tc.expectedState, result.State)
 		})
 	}
 }
@@ -215,20 +223,20 @@ func (s *healthCheckerSuite) Test_Check_Context_Cancellation() {
 		s.membershipMonitor,
 		func() float64 { return 0.25 },
 		func() float64 { return 0.15 },
-		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			select {
 			case <-ctx.Done():
-				return enumsspb.HEALTH_STATE_UNSPECIFIED, ctx.Err()
+				return nil, ctx.Err()
 			default:
-				return enumsspb.HEALTH_STATE_SERVING, nil
+				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 			}
 		},
 		log.NewNoopLogger(),
 	)
 
-	state, err := checker.Check(ctx)
-	s.NoError(err)                                    // Context cancellation in individual health checks should not fail the overall check
-	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, state) // All hosts will return UNSPECIFIED due to cancellation
+	result, err := checker.Check(ctx)
+	s.Require().NoError(err)                                 // Context cancellation in individual health checks should not fail the overall check
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State) // All hosts will return NOT_SERVING due to cancellation
 }
 
 func (s *healthCheckerSuite) Test_Check_Mixed_Host_States_Edge_Cases() {
@@ -278,11 +286,70 @@ func (s *healthCheckerSuite) Test_Check_Mixed_Host_States_Edge_Cases() {
 			}
 			s.resolver.EXPECT().AvailableMembers().Return(hostInfos)
 
-			state, err := s.checker.Check(context.Background())
+			result, err := s.checker.Check(context.Background())
 			s.NoError(err, tc.description)
-			s.Equal(tc.expectedState, state, tc.description)
+			s.Equal(tc.expectedState, result.State, tc.description)
 		})
 	}
+}
+
+func (s *healthCheckerSuite) Test_Check_ServiceDetail_Populated() {
+	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("1"),
+		membership.NewHostInfoFromAddress("2"),
+	})
+
+	result, err := s.checker.Check(context.Background())
+	s.Require().NoError(err)
+	s.NotNil(result.ServiceDetail)
+	s.Equal("history", result.ServiceDetail.Service)
+	s.Len(result.ServiceDetail.Hosts, 2)
+}
+
+func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
+	// Create a checker that returns checks in the response
+	membershipMonitor := membership.NewMockMonitor(s.controller)
+	resolver := membership.NewMockServiceResolver(s.controller)
+	membershipMonitor.EXPECT().GetResolver(gomock.Any()).Return(resolver, nil)
+	resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("host1"),
+	})
+
+	checks := []*healthspb.HealthCheck{
+		{
+			CheckType: health.CheckTypeRPCLatency,
+			State:     enumsspb.HEALTH_STATE_NOT_SERVING,
+			Value:     850.0,
+			Threshold: 500.0,
+			Message:   "RPC latency 850.00ms exceeded 500.00ms threshold",
+		},
+	}
+
+	checker := NewHealthChecker(
+		primitives.HistoryService,
+		membershipMonitor,
+		func() float64 { return 0.25 },
+		func() float64 { return 0.15 },
+		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
+			return &historyservice.DeepHealthCheckResponse{
+				State:  enumsspb.HEALTH_STATE_NOT_SERVING,
+				Checks: checks,
+			}, nil
+		},
+		log.NewNoopLogger(),
+	)
+
+	result, err := checker.Check(context.Background())
+	s.Require().NoError(err)
+	s.NotNil(result.ServiceDetail)
+	s.Require().Len(result.ServiceDetail.Hosts, 1)
+	host := result.ServiceDetail.Hosts[0]
+	s.Equal("host1", host.Address)
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, host.State)
+	s.Require().Len(host.Checks, 1)
+	s.Equal(health.CheckTypeRPCLatency, host.Checks[0].CheckType)
+	s.InDelta(850.0, host.Checks[0].Value, 0.01)
+	s.InDelta(500.0, host.Checks[0].Threshold, 0.01)
 }
 
 func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {

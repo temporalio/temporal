@@ -32,6 +32,7 @@ var (
 		"Serving":         1,
 		"NotServing":      2,
 		"DeclinedServing": 3,
+		"InternalError":   4,
 	}
 )
 

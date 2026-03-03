@@ -215,7 +215,7 @@ func (e *ExecutableTaskImpl) Abort() {
 		e.Abort() // retry abort
 	}
 
-	e.Logger.Debug(fmt.Sprintf(
+	e.ThrottledLogger.Debug(fmt.Sprintf(
 		"replication task: %v encountered abort event",
 		e.taskID,
 	))
@@ -230,7 +230,7 @@ func (e *ExecutableTaskImpl) Cancel() {
 		e.Cancel() // retry cancel
 	}
 
-	e.Logger.Debug(fmt.Sprintf(
+	e.ThrottledLogger.Debug(fmt.Sprintf(
 		"replication task: %v encountered cancellation event",
 		e.taskID,
 	))
@@ -243,7 +243,7 @@ func (e *ExecutableTaskImpl) Reschedule() {
 		return
 	}
 
-	e.Logger.Info(fmt.Sprintf(
+	e.ThrottledLogger.Info(fmt.Sprintf(
 		"replication task: %v scheduled for retry",
 		e.taskID,
 	))
@@ -338,7 +338,7 @@ func (e *ExecutableTaskImpl) emitFinishMetrics(
 			nsTag,
 		)
 		if processingLatency > 10*time.Second && e.replicationTask != nil && e.replicationTask.RawTaskInfo != nil {
-			e.Logger.Warn(fmt.Sprintf(
+			e.ThrottledLogger.Warn(fmt.Sprintf(
 				"replication task latency is too long: queue=%.2fs processing=%.2fs",
 				queueLatency.Seconds(),
 				processingLatency.Seconds(),
@@ -812,7 +812,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	case *serviceerror.NamespaceNotFound:
 		_, err = e.ProcessToolBox.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
-			e.Logger.Info("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
+			e.ThrottledLogger.Error("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
 			return "", false, nil
 		}
 	default:
