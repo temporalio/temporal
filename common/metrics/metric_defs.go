@@ -675,11 +675,15 @@ var (
 		"client_requests",
 		WithDescription("The number of requests sent by the client to an individual service, keyed by `service_role` and `operation`."),
 	)
-	ClientFailures                   = NewCounterDef("client_errors")
-	ClientLatency                    = NewTimerDef("client_latency")
-	ClientRedirectionRequests        = NewCounterDef("client_redirection_requests")
-	ClientRedirectionFailures        = NewCounterDef("client_redirection_errors")
-	ClientRedirectionLatency         = NewTimerDef("client_redirection_latency")
+	ClientFailures            = NewCounterDef("client_errors")
+	ClientLatency             = NewTimerDef("client_latency")
+	ClientRedirectionRequests = NewCounterDef("client_redirection_requests")
+	ClientRedirectionFailures = NewCounterDef("client_redirection_errors")
+	ClientRedirectionLatency  = NewTimerDef("client_redirection_latency")
+	ClientDuplicatedRedirects = NewCounterDef(
+		"client_duplicated_redirects",
+		WithDescription("The number of requests that would result in multiple redirect hops, indicating potential redirect loops or excessive redirection."),
+	)
 	StateTransitionCount             = NewDimensionlessHistogramDef("state_transition_count")
 	HistorySize                      = NewBytesHistogramDef("history_size")
 	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
