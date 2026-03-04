@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	oteltrace "go.opentelemetry.io/otel/trace"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -374,6 +376,63 @@ func annotateNexusRespondSpan(ctx context.Context, links []*nexuspb.Link) {
 	}
 }
 
+// annotateNexusSpanResponseLinks extracts handler workflow info from Nexus response
+// links and sets temporalNexusHandlerWorkflowID and temporalNexusLinks on the current span.
+func annotateNexusSpanResponseLinks(ctx context.Context, protoLinks []*nexuspb.Link) {
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	if wfID := extractWorkflowIDFromProtoLinks(protoLinks); wfID != "" {
+		span.SetAttributes(attribute.String(telemetry.NexusHandlerWorkflowIDKey, wfID))
+	}
+	var linkURLs []string
+	for _, link := range protoLinks {
+		if link.GetUrl() != "" {
+			linkURLs = append(linkURLs, link.GetUrl())
+		}
+	}
+	if len(linkURLs) > 0 {
+		if encoded, err := json.Marshal(linkURLs); err == nil {
+			span.SetAttributes(attribute.String(telemetry.NexusLinksKey, string(encoded)))
+		}
+	}
+}
+
+// annotateNexusSpanHTTPRequestPayload sets http.request.payload on the span from the Payload data.
+func annotateNexusSpanHTTPRequestPayload(ctx context.Context, payload *commonpb.Payload) {
+	if payload == nil || len(payload.GetData()) == 0 {
+		return
+	}
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(attribute.String("http.request.payload", string(payload.GetData())))
+}
+
+// annotateNexusSpanHTTPResponsePayload sets http.response.payload on the span from a sync response Payload.
+func annotateNexusSpanHTTPResponsePayload(ctx context.Context, payload *commonpb.Payload) {
+	if payload == nil || len(payload.GetData()) == 0 {
+		return
+	}
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(attribute.String("http.response.payload", string(payload.GetData())))
+}
+
+// annotateNexusSpanHTTPResponseAsync sets http.response.payload on the span for an async response.
+func annotateNexusSpanHTTPResponseAsync(ctx context.Context, token string) {
+	span := oteltrace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	span.SetAttributes(attribute.String("http.response.payload",
+		fmt.Sprintf(`{"token":%q,"state":"running"}`, token)))
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -463,10 +522,15 @@ func (h *nexusHandler) StartOperation(
 		return nil, err
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
-	// Set the caller's workflow ID on the DispatchNexusTask HTTP span so spandb
-	// can index this trace under the caller workflow. This trace is separate from
-	// History's OTEL trace (the executor context carries no span), so this is the
-	// only index path into it.
+	// Set Nexus operation attributes and caller workflow ID on the HTTP span.
+	if span := oteltrace.SpanFromContext(ctx); span.IsRecording() {
+		span.SetAttributes(
+			attribute.String(telemetry.NexusNamespaceKey, oc.namespaceName),
+			attribute.String(telemetry.NexusEndpointKey, oc.endpointName),
+			attribute.String(telemetry.NexusServiceKey, service),
+			attribute.String(telemetry.NexusOperationKey, operation),
+		)
+	}
 	for _, link := range options.Links {
 		if link.URL != nil {
 			if wfID := workflowIDFromTemporalURL(link.URL.String()); wfID != "" {
@@ -525,6 +589,9 @@ func (h *nexusHandler) StartOperation(
 		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
+	if telemetry.DebugMode() {
+		annotateNexusSpanHTTPRequestPayload(ctx, startOperationRequest.Payload)
+	}
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus
@@ -570,7 +637,12 @@ func (h *nexusHandler) StartOperation(
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
 			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
-			nexus.AddHandlerLinks(ctx, parseLinks(t.SyncSuccess.GetLinks(), oc.logger)...)
+			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
+			nexus.AddHandlerLinks(ctx, links...)
+			annotateNexusSpanResponseLinks(ctx, t.SyncSuccess.GetLinks())
+			if telemetry.DebugMode() {
+				annotateNexusSpanHTTPResponsePayload(ctx, t.SyncSuccess.GetPayload())
+			}
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, nil
@@ -581,16 +653,11 @@ func (h *nexusHandler) StartOperation(
 			if token == "" {
 				token = t.AsyncSuccess.GetOperationId()
 			}
-			nexus.AddHandlerLinks(ctx, parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)...)
-			// Stamp handler workflow ID on the DispatchNexusTask HTTP span so spandb
-			// can link caller and handler workflows. They are in separate OTEL traces
-			// (History creates no outgoing span), so callerWfID lives on the root span
-			// and handlerWfID uses a separate attribute to avoid overwriting it.
-			if wfID := extractWorkflowIDFromProtoLinks(t.AsyncSuccess.GetLinks()); wfID != "" {
-				span := oteltrace.SpanFromContext(ctx)
-				if span.IsRecording() {
-					span.SetAttributes(attribute.String(telemetry.NexusHandlerWorkflowIDKey, wfID))
-				}
+			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
+			nexus.AddHandlerLinks(ctx, links...)
+			annotateNexusSpanResponseLinks(ctx, t.AsyncSuccess.GetLinks())
+			if telemetry.DebugMode() {
+				annotateNexusSpanHTTPResponseAsync(ctx, token)
 			}
 			return &nexus.HandlerStartOperationResultAsync{
 				OperationToken: token,
