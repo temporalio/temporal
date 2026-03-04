@@ -20,6 +20,61 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// ValidateAndNormalizeStandaloneActivity validates and normalizes the attributes for a standalone activity.
+func ValidateAndNormalizeStandaloneActivity(
+	activityID string,
+	activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceID namespace.ID,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+	runTimeout *durationpb.Duration,
+) error {
+	// Standalone activities always use user defined task queues, so we can enforce user defined task queue validation
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", "", maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		getDefaultActivityRetrySettings,
+		maxIDLengthLimit,
+		namespaceID,
+		options,
+		priority,
+		runTimeout)
+}
+
+// ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
+func ValidateAndNormalizeEmbeddedActivity(
+	activityID string,
+	activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceID namespace.ID,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+	runTimeout *durationpb.Duration,
+) error {
+	// We cannot use NormalizeAndValidateUserDefined for embedded activity task queue because embedded activities can
+	// use reserved task queues, which are not considered user defined.
+	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		getDefaultActivityRetrySettings,
+		maxIDLengthLimit,
+		namespaceID,
+		options,
+		priority,
+		runTimeout)
+}
+
 // ValidateAndNormalizeActivityAttributes validates and normalizes the common activity request attributes.
 // This validation is shared by both standalone and embedded activities.
 // IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
@@ -31,7 +86,7 @@ import (
 // 3. If neither ScheduleToClose nor StartToClose is set, return error
 // 4. Ensure all timeouts do not exceed runTimeout if runTimeout is set (>0)
 // 5. Ensure HeartbeatTimeout does not exceed StartToClose
-func ValidateAndNormalizeActivityAttributes(
+func validateAndNormalizeActivityAttributes(
 	activityID string,
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
@@ -41,10 +96,6 @@ func ValidateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
-	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", "", maxIDLengthLimit); err != nil {
-		return err
-	}
-
 	if activityID == "" {
 		return serviceerror.NewInvalidArgument("ActivityId is not set")
 	}

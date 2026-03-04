@@ -49,19 +49,34 @@ var (
 )
 
 func TestValidateSuccess(t *testing.T) {
-	err := ValidateAndNormalizeActivityAttributes(
-		defaultActivityID,
-		defaultActivityType,
-		getDefaultRetrySettings,
-		defaultMaxIDLengthLimit,
-		defaultNamespaceID,
-		&defaultActivityOptions,
-		&defaultPriority,
-		durationpb.New(0))
-	require.NoError(t, err)
+	t.Run("StandaloneActivitySuccess", func(t *testing.T) {
+		err := ValidateAndNormalizeStandaloneActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			&defaultActivityOptions,
+			&defaultPriority,
+			durationpb.New(0))
+		require.NoError(t, err)
+	})
+
+	t.Run("EmbeddedActivitySuccess", func(t *testing.T) {
+		err := ValidateAndNormalizeEmbeddedActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			&defaultActivityOptions,
+			&defaultPriority,
+			durationpb.New(0))
+		require.NoError(t, err)
+	})
 }
 
-func TestValidateFailures(t *testing.T) {
+func TestValidateAllActivityFailures(t *testing.T) {
 	cases := []struct {
 		name                            string
 		activityID                      string
@@ -121,51 +136,6 @@ func TestValidateFailures(t *testing.T) {
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
 			expectedErrMessage:              fmt.Sprintf("ActivityType exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
-		},
-		{
-			name:                            "Empty TaskQueue",
-			activityID:                      defaultActivityID,
-			activityType:                    defaultActivityType,
-			getDefaultActivityRetrySettings: getDefaultRetrySettings,
-			maxIDLengthLimit:                defaultMaxIDLengthLimit,
-			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: ""},
-				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-			},
-			priority:           &defaultPriority,
-			runTimeout:         nil,
-			expectedErrMessage: "missing task queue name",
-		},
-		{
-			name:                            "Invalid Internal TaskQueue",
-			activityID:                      defaultActivityID,
-			activityType:                    defaultActivityType,
-			getDefaultActivityRetrySettings: getDefaultRetrySettings,
-			maxIDLengthLimit:                defaultMaxIDLengthLimit,
-			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-			},
-			priority:           &defaultPriority,
-			runTimeout:         nil,
-			expectedErrMessage: fmt.Sprintf("cannot use internal per namespace task queue:%s", primitives.PerNSWorkerTaskQueue),
-		},
-		{
-			name:                            "Invalid Internal TaskQueue Prefix",
-			activityID:                      defaultActivityID,
-			activityType:                    defaultActivityType,
-			getDefaultActivityRetrySettings: getDefaultRetrySettings,
-			maxIDLengthLimit:                defaultMaxIDLengthLimit,
-			namespaceID:                     defaultNamespaceID,
-			options: &activitypb.ActivityOptions{
-				TaskQueue:              &taskqueuepb.TaskQueue{Name: "/_sys/my-task-queue"},
-				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
-			},
-			priority:           &defaultPriority,
-			runTimeout:         nil,
-			expectedErrMessage: "task queue name cannot start with reserved prefix /_sys/",
 		},
 		{
 			name:                            "Negative ScheduleToCloseTimeout",
@@ -245,7 +215,7 @@ func TestValidateFailures(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateAndNormalizeActivityAttributes(
+			err := validateAndNormalizeActivityAttributes(
 				tc.activityID,
 				tc.activityType,
 				tc.getDefaultActivityRetrySettings,
@@ -261,6 +231,146 @@ func TestValidateFailures(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
+	cases := []struct {
+		name                            string
+		activityID                      string
+		activityType                    string
+		getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
+		maxIDLengthLimit                int
+		namespaceID                     namespace.ID
+		options                         *activitypb.ActivityOptions
+		priority                        *commonpb.Priority
+		runTimeout                      *durationpb.Duration
+		expectedErrMessage              string
+	}{
+		{
+			name:                            "Disallow PerNSWorkerTaskQueue TaskQueue",
+			activityID:                      defaultActivityID,
+			activityType:                    defaultActivityType,
+			getDefaultActivityRetrySettings: getDefaultRetrySettings,
+			maxIDLengthLimit:                defaultMaxIDLengthLimit,
+			namespaceID:                     defaultNamespaceID,
+			options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			},
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: fmt.Sprintf("cannot use internal per namespace task queue:%s", primitives.PerNSWorkerTaskQueue),
+		},
+		{
+			name:                            "Disallow Internal TaskQueue Prefix",
+			activityID:                      defaultActivityID,
+			activityType:                    defaultActivityType,
+			getDefaultActivityRetrySettings: getDefaultRetrySettings,
+			maxIDLengthLimit:                defaultMaxIDLengthLimit,
+			namespaceID:                     defaultNamespaceID,
+			options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "/_sys/my-task-queue"},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			},
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "task queue name cannot start with reserved prefix /_sys/",
+		},
+		{
+			name:                            "Disallow Empty TaskQueue",
+			activityID:                      defaultActivityID,
+			activityType:                    defaultActivityType,
+			getDefaultActivityRetrySettings: getDefaultRetrySettings,
+			maxIDLengthLimit:                defaultMaxIDLengthLimit,
+			namespaceID:                     defaultNamespaceID,
+			options: &activitypb.ActivityOptions{
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: ""},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+			},
+			priority:           &defaultPriority,
+			runTimeout:         nil,
+			expectedErrMessage: "missing task queue name",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateAndNormalizeStandaloneActivity(
+				tc.activityID,
+				tc.activityType,
+				tc.getDefaultActivityRetrySettings,
+				tc.maxIDLengthLimit,
+				tc.namespaceID,
+				tc.options,
+				tc.priority,
+				durationpb.New(0))
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Contains(t, invalidArgErr.Error(), tc.expectedErrMessage)
+		})
+	}
+}
+
+func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
+	t.Run("Allow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+		options := &activitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		}
+
+		err := ValidateAndNormalizeEmbeddedActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			options,
+			&defaultPriority,
+			durationpb.New(0))
+		require.NoError(t, err)
+	})
+
+	t.Run("Disallow Internal TaskQueue Prefix", func(t *testing.T) {
+		options := &activitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "/_sys/my-task-queue"},
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		}
+
+		err := ValidateAndNormalizeEmbeddedActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			options,
+			&defaultPriority,
+			durationpb.New(0))
+
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Error(), "task queue name cannot start with reserved prefix /_sys/")
+	})
+
+	t.Run("Disallow Empty TaskQueue", func(t *testing.T) {
+		options := &activitypb.ActivityOptions{
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: ""},
+			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		}
+
+		err := ValidateAndNormalizeEmbeddedActivity(
+			defaultActivityID,
+			defaultActivityType,
+			getDefaultRetrySettings,
+			defaultMaxIDLengthLimit,
+			defaultNamespaceID,
+			options,
+			&defaultPriority,
+			durationpb.New(0))
+
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Error(), "missing task queue name")
+	})
 }
 
 func newTestFrontendHandler(
@@ -483,7 +593,7 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateAndNormalizeActivityAttributes(
+			err := validateAndNormalizeActivityAttributes(
 				defaultActivityID,
 				defaultActivityType,
 				getDefaultRetrySettings,

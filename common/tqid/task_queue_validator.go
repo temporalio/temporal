@@ -67,7 +67,7 @@ func NormalizeAndValidate(
 // Parameters:
 //   - taskQueue: The TaskQueue to validate and normalize. If nil, returns an error.
 //   - defaultName: Default name to use if taskQueue name is empty.
-//   - parentTaskQueue: The TaskQueue of the parent component, if any. Can be nil.
+//   - parentTaskQueue: The TaskQueue of the parent component, if any. Can be empty.
 //   - maxIDLengthLimit: Maximum allowed length for the TaskQueue name.
 //
 // Returns an error if validation fails, nil otherwise.

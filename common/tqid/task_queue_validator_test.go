@@ -200,7 +200,7 @@ func TestNormalizeAndValidateUserDefined(t *testing.T) {
 			expectedError:    "cannot use internal per namespace task queue",
 		},
 		{
-			name:             "Internal per-ns task queue with non-internal parent",
+			name:             "Reserved /_sys/ prefix task queue with non-internal parent",
 			taskQueue:        &taskqueuepb.TaskQueue{Name: "/_sys/my-task-queue"},
 			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "user-parent-tq"},
 			defaultVal:       "",
