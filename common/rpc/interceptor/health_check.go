@@ -51,7 +51,8 @@ var excludedAPIsForHealthSignal = map[string]struct{}{
 	// not history node health. With no workers polling, queries block ~30s until
 	// context deadline, which can push AverageLatency() past the threshold
 	// and cause healthy nodes to report HEALTH_STATE_NOT_SERVING.
-	"QueryWorkflow": {},
+	"QueryWorkflow":         {},
+	"ExecuteMultiOperation": {},
 }
 
 var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
