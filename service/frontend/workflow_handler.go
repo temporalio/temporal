@@ -6556,3 +6556,8 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }
+
+func (wh *WorkflowHandler) CountSchedules(_ context.Context, request *workflowservice.CountSchedulesRequest,
+) (*workflowservice.CountSchedulesResponse, error) {
+	return nil, serviceerror.NewUnimplemented("CountSchedules command is not enabled.")
+}
