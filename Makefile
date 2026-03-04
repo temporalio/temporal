@@ -650,8 +650,8 @@ start: start-sqlite
 start-cass-es: temporal-server
 	./temporal-server --config-file config/development-cass-es.yaml --allow-no-auth start
 
-start-cass-archival-gcloud: temporal-server
-	./temporal-server --config-file config/development-cass-archival-gcloud.yaml --allow-no-auth start
+start-cass-archival: temporal-server
+	./temporal-server --config-file config/development-cass-archival.yaml --allow-no-auth start
 
 start-cass-es-dual: temporal-server
 	./temporal-server --config-file config/development-cass-es-dual.yaml --allow-no-auth start
