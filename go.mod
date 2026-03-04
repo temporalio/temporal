@@ -174,4 +174,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace go.temporal.io/sdk => go.temporal.io/sdk v1.40.1-0.20260303180305-7f9a88360fa0
+replace go.temporal.io/sdk => go.temporal.io/sdk v1.40.1-0.20260304221848-c8f4249b221e

@@ -108,4 +108,11 @@ func (i *instrumentation) stateChange(updateID string, from, to state) {
 		tag.Stringer("from-state", from),
 		tag.Stringer("to-state", to),
 	)
+	i.log.Warn(
+		"PREMATURE-EOS: update state change",
+		tag.ComponentWorkflowUpdate,
+		tag.String("update-id", updateID),
+		tag.Stringer("from-state", from),
+		tag.Stringer("to-state", to),
+	)
 }
