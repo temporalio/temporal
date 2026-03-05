@@ -7,7 +7,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	commonspb "go.temporal.io/server/api/common/v1"
-	historyservicepb "go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -58,7 +58,7 @@ func init() {
 	}
 
 	// Process HistoryService
-	processServiceFile(historyservicepb.File_temporal_server_api_historyservice_v1_service_proto, excludedCategories)
+	processServiceFile(historyservice.File_temporal_server_api_historyservice_v1_service_proto, excludedCategories)
 }
 
 // processServiceFile enumerates all methods in a service file and adds excluded categories to longPollAPIs
