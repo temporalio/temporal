@@ -14,12 +14,14 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -336,4 +338,121 @@ func (l *logCapture) contains(s string) bool {
 		}
 	}
 	return false
+}
+
+func Test_PrathyushRepro(t *testing.T) {
+	t.Run("SpeculativeWFTEventsLostAfterShardReloadMidHistoryPagination", func(t *testing.T) {
+		// This test reproduces a race condition that causes SDK workers to fail with
+		// "premature end of stream" after server restart or shard rebalancing,
+		// when a workflow update creates a speculative WFT.
+		//
+		// Root cause:
+		//   When a speculative WFT is active, RecordWorkflowTaskStarted creates a
+		//   continuation token with NextEventId = speculative_scheduled_event_id (e.g., 8).
+		//   The speculative WFT events (WFT_SCHEDULED, WFT_STARTED) exist only in memory.
+		//   If the shard reloads between page fetches, the in-memory update/WFT state is lost.
+		//   appendTransientTasks then finds no transient events and returns nothing.
+		//   The worker assembles incomplete history and fails with "premature end of stream".
+		//
+		// Scenario:
+		//   1. Workflow has 7 persisted events (requires 2 pages with HistoryMaxPageSize=5)
+		//   2. An update creates a speculative WFT at event 8 (in memory only)
+		//   3. Worker polls the WFT → first page (events 1..5) returned with NextPageToken
+		//      (NextEventId=8 in the token, pointing to in-memory speculative events)
+		//   4. Shard reloads → update and speculative WFT state lost
+		//   5. Worker fetches next page → gets events 6..7, no speculative events appended
+		//   6. Assembled history: events 1..7, but poll said StartedEventId=9 → "premature end of stream"
+		s := testcore.NewEnv(t,
+			testcore.WithDedicatedCluster(),
+			testcore.WithDynamicConfig(dynamicconfig.HistoryMaxPageSize, 5))
+		tv := s.Tv()
+		mustStartWorkflow(s, tv)
+
+		// Build 7 events in persistence so the speculative WFT poll response requires pagination
+		// (HistoryMaxPageSize=5 → first page has events 1..5, second page has 6..7):
+		//   1: WorkflowExecutionStarted
+		//   2: WorkflowTaskScheduled
+		//   3: WorkflowTaskStarted
+		//   4: WorkflowTaskCompleted  (ForceCreateNewWorkflowTask=true)
+		//   5: WorkflowTaskScheduled  (force-created)
+		//   6: WorkflowTaskStarted
+		//   7: WorkflowTaskCompleted
+
+		// WFT1: complete with ForceCreateNewWorkflowTask to schedule a second WFT.
+		_, err := s.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					ForceCreateNewWorkflowTask: true,
+				}, nil
+			})
+		s.NoError(err)
+
+		// WFT2: complete normally.
+		_, err = s.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+			})
+		s.NoError(err)
+
+		// Send an update to create a speculative WFT (events 8, 9 in memory only).
+		ctx, cancel := context.WithCancel(testcore.NewContext())
+		defer cancel()
+		updateCh := sendUpdate(ctx, s, tv)
+		defer func() { go func() { <-updateCh }() }()
+
+		// Poll the speculative WFT directly to get the raw NextPageToken before shard reload.
+		// RecordWorkflowTaskStarted adds WFT_STARTED(9) in memory.
+		// The poll response first page contains events 1..5; NextPageToken points to NextEventId=8.
+		pollResp, err := s.FrontendClient().PollWorkflowTaskQueue(testcore.NewContext(),
+			&workflowservice.PollWorkflowTaskQueueRequest{
+				Namespace: s.Namespace().String(),
+				TaskQueue: tv.TaskQueue(),
+			})
+		s.NoError(err)
+		s.NotEmpty(pollResp.GetTaskToken(), "expected a speculative workflow task to be available")
+
+		// With 7 persisted events and HistoryMaxPageSize=5, the first page has events 1..5
+		// and NextPageToken must be set to continue fetching events 6..7 and speculative 8..9.
+		s.NotNil(pollResp.NextPageToken,
+			"expected pagination: 7 persisted events with HistoryMaxPageSize=5 requires 2 pages")
+
+		// Speculative WFT_SCHEDULED=8, WFT_STARTED=9.
+		s.EqualValues(9, pollResp.StartedEventId)
+
+		wfExecution := pollResp.WorkflowExecution
+		firstPageEvents := pollResp.History.Events
+		staleNextPageToken := pollResp.NextPageToken
+
+		// Simulate shard reload between history page fetches (e.g., server restart or rebalancing).
+		// ShardFinalizerTimeout=0 prevents update registry persistence so the update and its
+		// in-memory speculative WFT are truly lost after reload.
+		loseUpdateRegistryAndAbandonPendingUpdates(s, tv)
+
+		// Simulate what a restarting SDK worker does: fetch remaining history pages using the
+		// stale NextPageToken obtained before the shard reload.
+		allEvents := make([]*historypb.HistoryEvent, len(firstPageEvents))
+		copy(allEvents, firstPageEvents)
+		for nextPageToken := staleNextPageToken; nextPageToken != nil; {
+			histResp, histErr := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(),
+				&workflowservice.GetWorkflowExecutionHistoryRequest{
+					Namespace:     s.Namespace().String(),
+					Execution:     wfExecution,
+					NextPageToken: nextPageToken,
+				})
+			s.NoError(histErr)
+			allEvents = append(allEvents, histResp.History.Events...)
+			nextPageToken = histResp.NextPageToken
+		}
+
+		// BUG: The assembled history is missing speculative events 8 (WFT_SCHEDULED) and
+		// 9 (WFT_STARTED) because appendTransientTasks found no transient events after the
+		// shard reload. A real SDK worker would fail with:
+		// "premature end of stream: expectedLastEventID=9 but no more events after eventID=7"
+		s.Len(allEvents, 7,
+			"assembled history should have 7 events; speculative WFT events 8 and 9 are missing after shard reload")
+		lastEventID := allEvents[len(allEvents)-1].GetEventId()
+		s.Greater(pollResp.StartedEventId, lastEventID,
+			"poll StartedEventId > last assembled eventID confirms the premature-end-of-stream bug")
+	},
+	)
 }

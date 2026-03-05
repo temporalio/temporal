@@ -441,6 +441,9 @@ func ValidateTransientWorkflowTaskEvents(
 	eventIDOffset int64,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
+	if transientWorkflowTaskInfo == nil {
+		// TODO seankane: ...
+	}
 	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
 		expectedEventID := eventIDOffset + int64(i)
 		if event.GetEventId() != expectedEventID {
