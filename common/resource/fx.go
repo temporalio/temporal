@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -121,6 +122,7 @@ var DefaultOptions = fx.Options(
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(DCRedirectionPolicyProvider),
+	fx.Invoke(RPCFactoryLifetimeHooks),
 )
 
 func DefaultSnTaggedLoggerProvider(logger log.Logger, sn primitives.ServiceName) log.SnTaggedLogger {
@@ -434,6 +436,28 @@ func FrontendHTTPClientCacheProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 ) *cluster.FrontendHTTPClientCache {
 	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
+}
+
+func RPCFactoryLifetimeHooks(
+	lc fx.Lifecycle,
+	rpcFactory common.RPCFactory,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				if f, ok := rpcFactory.(*rpc.RPCFactory); ok {
+					f.StartMembershipListener()
+				}
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				if f, ok := rpcFactory.(*rpc.RPCFactory); ok {
+					f.StopMembershipListener()
+				}
+				return nil
+			},
+		},
+	)
 }
 
 func getFrontendConnectionDetails(

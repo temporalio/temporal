@@ -30,6 +30,8 @@ import (
 
 var _ common.RPCFactory = (*RPCFactory)(nil)
 
+const membershipListenerName = "internode-grpc-connection-cache"
+
 // RPCFactory is an implementation of common.RPCFactory interface
 type RPCFactory struct {
 	config         *config.Config
@@ -50,6 +52,9 @@ type RPCFactory struct {
 	// A OnceValues wrapper for createLocalFrontendHTTPClient.
 	localFrontendClient      func() (*common.FrontendHTTPClient, error)
 	interNodeGrpcConnections cache.Cache
+
+	// membershipListenerStop is used to signal the membership listener goroutine to stop
+	membershipListenerStop chan struct{}
 
 	// TODO: Remove these flags once the keepalive settings are rolled out
 	EnableInternodeServerKeepalive bool
@@ -284,6 +289,89 @@ func (d *RPCFactory) getClientKeepAliveConfig(serviceName primitives.ServiceName
 
 func (d *RPCFactory) GetTLSConfigProvider() encryption.TLSConfigProvider {
 	return d.tlsFactory
+}
+
+// StartMembershipListener starts listening for membership changes to evict stale
+// gRPC connections from the cache. This should be called when the service starts.
+func (d *RPCFactory) StartMembershipListener() {
+	if d.monitor == nil {
+		return
+	}
+
+	d.membershipListenerStop = make(chan struct{})
+
+	go d.listenForMembershipChanges(primitives.FrontendService)
+	go d.listenForMembershipChanges(primitives.HistoryService)
+	go d.listenForMembershipChanges(primitives.MatchingService)
+}
+
+// StopMembershipListener stops the membership listener goroutines.
+func (d *RPCFactory) StopMembershipListener() {
+	if d.membershipListenerStop == nil {
+		return
+	}
+
+	close(d.membershipListenerStop)
+
+	if d.monitor != nil {
+		if resolver, err := d.monitor.GetResolver(primitives.FrontendService); err == nil {
+			_ = resolver.RemoveListener(membershipListenerName)
+		}
+		if resolver, err := d.monitor.GetResolver(primitives.HistoryService); err == nil {
+			_ = resolver.RemoveListener(membershipListenerName)
+		}
+		if resolver, err := d.monitor.GetResolver(primitives.MatchingService); err == nil {
+			_ = resolver.RemoveListener(membershipListenerName)
+		}
+	}
+}
+
+// listenForMembershipChanges listens for membership changes for a specific service
+// and evicts stale connections from the cache.
+func (d *RPCFactory) listenForMembershipChanges(serviceName primitives.ServiceName) {
+	resolver, err := d.monitor.GetResolver(serviceName)
+	if err != nil {
+		d.logger.Warn("Failed to get resolver for membership listener",
+			tag.Service(serviceName),
+			tag.Error(err))
+		return
+	}
+
+	ch := make(chan *membership.ChangedEvent, 10)
+	if err := resolver.AddListener(membershipListenerName, ch); err != nil {
+		d.logger.Warn("Failed to add membership listener",
+			tag.Service(serviceName),
+			tag.Error(err))
+		return
+	}
+
+	for {
+		select {
+		case <-d.membershipListenerStop:
+			return
+		case event := <-ch:
+			d.HandleMembershipChange(event)
+		}
+	}
+}
+
+// HandleMembershipChange processes membership change events and evicts
+// stale connections from the cache.
+func (d *RPCFactory) HandleMembershipChange(event *membership.ChangedEvent) {
+	if event == nil {
+		return
+	}
+
+	for _, host := range event.HostsRemoved {
+		address := host.GetAddress()
+		if conn, ok := d.interNodeGrpcConnections.Get(address).(*grpc.ClientConn); ok {
+			d.logger.Info("Closing cached gRPC connection for removed host", tag.Address(address))
+			if err := conn.Close(); err != nil {
+				d.logger.Warn("Failed to close gRPC connection", tag.Address(address), tag.Error(err))
+			}
+			d.interNodeGrpcConnections.Delete(address)
+		}
+	}
 }
 
 // CreateLocalFrontendHTTPClient gets or creates a cached frontend client.
