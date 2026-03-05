@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -25,11 +26,11 @@ var File_temporal_server_api_historyservice_v1_service_proto protoreflect.FileDe
 
 const file_temporal_server_api_historyservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/historyservice/v1/service.proto\x12%temporal.server.api.historyservice.v1\x1a<temporal/server/api/historyservice/v1/request_response.proto2\x95d\n" +
+	"3temporal/server/api/historyservice/v1/service.proto\x12%temporal.server.api.historyservice.v1\x1a<temporal/server/api/historyservice/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto2\xc5d\n" +
 	"\x0eHistoryService\x12\xa7\x01\n" +
 	"\x16StartWorkflowExecution\x12D.temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest\x1aE.temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse\"\x00\x12\x92\x01\n" +
-	"\x0fGetMutableState\x12=.temporal.server.api.historyservice.v1.GetMutableStateRequest\x1a>.temporal.server.api.historyservice.v1.GetMutableStateResponse\"\x00\x12\x95\x01\n" +
-	"\x10PollMutableState\x12>.temporal.server.api.historyservice.v1.PollMutableStateRequest\x1a?.temporal.server.api.historyservice.v1.PollMutableStateResponse\"\x00\x12\xa1\x01\n" +
+	"\x0fGetMutableState\x12=.temporal.server.api.historyservice.v1.GetMutableStateRequest\x1a>.temporal.server.api.historyservice.v1.GetMutableStateResponse\"\x00\x12\x9b\x01\n" +
+	"\x10PollMutableState\x12>.temporal.server.api.historyservice.v1.PollMutableStateRequest\x1a?.temporal.server.api.historyservice.v1.PollMutableStateResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xa1\x01\n" +
 	"\x14ResetStickyTaskQueue\x12B.temporal.server.api.historyservice.v1.ResetStickyTaskQueueRequest\x1aC.temporal.server.api.historyservice.v1.ResetStickyTaskQueueResponse\"\x00\x12\xb0\x01\n" +
 	"\x19RecordWorkflowTaskStarted\x12G.temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedRequest\x1aH.temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse\"\x00\x12\xb0\x01\n" +
 	"\x19RecordActivityTaskStarted\x12G.temporal.server.api.historyservice.v1.RecordActivityTaskStartedRequest\x1aH.temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse\"\x00\x12\xb9\x01\n" +
@@ -42,8 +43,8 @@ const file_temporal_server_api_historyservice_v1_service_proto_rawDesc = "" +
 	"\x1bRespondActivityTaskCanceled\x12I.temporal.server.api.historyservice.v1.RespondActivityTaskCanceledRequest\x1aJ.temporal.server.api.historyservice.v1.RespondActivityTaskCanceledResponse\"\x00\x12\x9e\x01\n" +
 	"\x13IsActivityTaskValid\x12A.temporal.server.api.historyservice.v1.IsActivityTaskValidRequest\x1aB.temporal.server.api.historyservice.v1.IsActivityTaskValidResponse\"\x00\x12\xaa\x01\n" +
 	"\x17SignalWorkflowExecution\x12E.temporal.server.api.historyservice.v1.SignalWorkflowExecutionRequest\x1aF.temporal.server.api.historyservice.v1.SignalWorkflowExecutionResponse\"\x00\x12\xc5\x01\n" +
-	" SignalWithStartWorkflowExecution\x12N.temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionRequest\x1aO.temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse\"\x00\x12\xa4\x01\n" +
-	"\x15ExecuteMultiOperation\x12C.temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest\x1aD.temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse\"\x00\x12\xad\x01\n" +
+	" SignalWithStartWorkflowExecution\x12N.temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionRequest\x1aO.temporal.server.api.historyservice.v1.SignalWithStartWorkflowExecutionResponse\"\x00\x12\xaa\x01\n" +
+	"\x15ExecuteMultiOperation\x12C.temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest\x1aD.temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xad\x01\n" +
 	"\x18RemoveSignalMutableState\x12F.temporal.server.api.historyservice.v1.RemoveSignalMutableStateRequest\x1aG.temporal.server.api.historyservice.v1.RemoveSignalMutableStateResponse\"\x00\x12\xb3\x01\n" +
 	"\x1aTerminateWorkflowExecution\x12H.temporal.server.api.historyservice.v1.TerminateWorkflowExecutionRequest\x1aI.temporal.server.api.historyservice.v1.TerminateWorkflowExecutionResponse\"\x00\x12\xaa\x01\n" +
 	"\x17DeleteWorkflowExecution\x12E.temporal.server.api.historyservice.v1.DeleteWorkflowExecutionRequest\x1aF.temporal.server.api.historyservice.v1.DeleteWorkflowExecutionResponse\"\x00\x12\xa7\x01\n" +
@@ -67,8 +68,8 @@ const file_temporal_server_api_historyservice_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"RemoveTask\x128.temporal.server.api.historyservice.v1.RemoveTaskRequest\x1a9.temporal.server.api.historyservice.v1.RemoveTaskResponse\"\x00\x12\xa7\x01\n" +
 	"\x16GetReplicationMessages\x12D.temporal.server.api.historyservice.v1.GetReplicationMessagesRequest\x1aE.temporal.server.api.historyservice.v1.GetReplicationMessagesResponse\"\x00\x12\xb0\x01\n" +
-	"\x19GetDLQReplicationMessages\x12G.temporal.server.api.historyservice.v1.GetDLQReplicationMessagesRequest\x1aH.temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse\"\x00\x12\x8c\x01\n" +
-	"\rQueryWorkflow\x12;.temporal.server.api.historyservice.v1.QueryWorkflowRequest\x1a<.temporal.server.api.historyservice.v1.QueryWorkflowResponse\"\x00\x12\x8c\x01\n" +
+	"\x19GetDLQReplicationMessages\x12G.temporal.server.api.historyservice.v1.GetDLQReplicationMessagesRequest\x1aH.temporal.server.api.historyservice.v1.GetDLQReplicationMessagesResponse\"\x00\x12\x92\x01\n" +
+	"\rQueryWorkflow\x12;.temporal.server.api.historyservice.v1.QueryWorkflowRequest\x1a<.temporal.server.api.historyservice.v1.QueryWorkflowResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\x8c\x01\n" +
 	"\rReapplyEvents\x12;.temporal.server.api.historyservice.v1.ReapplyEventsRequest\x1a<.temporal.server.api.historyservice.v1.ReapplyEventsResponse\"\x00\x12\x8f\x01\n" +
 	"\x0eGetDLQMessages\x12<.temporal.server.api.historyservice.v1.GetDLQMessagesRequest\x1a=.temporal.server.api.historyservice.v1.GetDLQMessagesResponse\"\x00\x12\x95\x01\n" +
 	"\x10PurgeDLQMessages\x12>.temporal.server.api.historyservice.v1.PurgeDLQMessagesRequest\x1a?.temporal.server.api.historyservice.v1.PurgeDLQMessagesResponse\"\x00\x12\x95\x01\n" +
@@ -78,25 +79,25 @@ const file_temporal_server_api_historyservice_v1_service_proto_rawDesc = "" +
 	"\x14GetReplicationStatus\x12B.temporal.server.api.historyservice.v1.GetReplicationStatusRequest\x1aC.temporal.server.api.historyservice.v1.GetReplicationStatusResponse\"\x00\x12\x9e\x01\n" +
 	"\x13RebuildMutableState\x12A.temporal.server.api.historyservice.v1.RebuildMutableStateRequest\x1aB.temporal.server.api.historyservice.v1.RebuildMutableStateResponse\"\x00\x12\xaa\x01\n" +
 	"\x17ImportWorkflowExecution\x12E.temporal.server.api.historyservice.v1.ImportWorkflowExecutionRequest\x1aF.temporal.server.api.historyservice.v1.ImportWorkflowExecutionResponse\"\x00\x12\xbf\x01\n" +
-	"\x1eDeleteWorkflowVisibilityRecord\x12L.temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest\x1aM.temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse\"\x00\x12\xaa\x01\n" +
-	"\x17UpdateWorkflowExecution\x12E.temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest\x1aF.temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse\"\x00\x12\xb6\x01\n" +
-	"\x1bPollWorkflowExecutionUpdate\x12I.temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest\x1aJ.temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse\"\x00\x12\xcc\x01\n" +
+	"\x1eDeleteWorkflowVisibilityRecord\x12L.temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordRequest\x1aM.temporal.server.api.historyservice.v1.DeleteWorkflowVisibilityRecordResponse\"\x00\x12\xb0\x01\n" +
+	"\x17UpdateWorkflowExecution\x12E.temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest\x1aF.temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xbc\x01\n" +
+	"\x1bPollWorkflowExecutionUpdate\x12I.temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateRequest\x1aJ.temporal.server.api.historyservice.v1.PollWorkflowExecutionUpdateResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xcc\x01\n" +
 	"!StreamWorkflowReplicationMessages\x12O.temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesRequest\x1aP.temporal.server.api.historyservice.v1.StreamWorkflowReplicationMessagesResponse\"\x00(\x010\x01\x12\xb6\x01\n" +
 	"\x1bGetWorkflowExecutionHistory\x12I.temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryRequest\x1aJ.temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryResponse\"\x00\x12\xcb\x01\n" +
 	"\"GetWorkflowExecutionHistoryReverse\x12P.temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseRequest\x1aQ.temporal.server.api.historyservice.v1.GetWorkflowExecutionHistoryReverseResponse\"\x00\x12\xc5\x01\n" +
 	" GetWorkflowExecutionRawHistoryV2\x12N.temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Request\x1aO.temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryV2Response\"\x00\x12\xbf\x01\n" +
 	"\x1eGetWorkflowExecutionRawHistory\x12L.temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryRequest\x1aM.temporal.server.api.historyservice.v1.GetWorkflowExecutionRawHistoryResponse\"\x00\x12\xb9\x01\n" +
-	"\x1cForceDeleteWorkflowExecution\x12J.temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest\x1aK.temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse\"\x00\x12\x86\x01\n" +
-	"\vGetDLQTasks\x129.temporal.server.api.historyservice.v1.GetDLQTasksRequest\x1a:.temporal.server.api.historyservice.v1.GetDLQTasksResponse\"\x00\x12\x8f\x01\n" +
-	"\x0eDeleteDLQTasks\x12<.temporal.server.api.historyservice.v1.DeleteDLQTasksRequest\x1a=.temporal.server.api.historyservice.v1.DeleteDLQTasksResponse\"\x00\x12\x83\x01\n" +
+	"\x1cForceDeleteWorkflowExecution\x12J.temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionRequest\x1aK.temporal.server.api.historyservice.v1.ForceDeleteWorkflowExecutionResponse\"\x00\x12\x8c\x01\n" +
+	"\vGetDLQTasks\x129.temporal.server.api.historyservice.v1.GetDLQTasksRequest\x1a:.temporal.server.api.historyservice.v1.GetDLQTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x95\x01\n" +
+	"\x0eDeleteDLQTasks\x12<.temporal.server.api.historyservice.v1.DeleteDLQTasksRequest\x1a=.temporal.server.api.historyservice.v1.DeleteDLQTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x83\x01\n" +
 	"\n" +
 	"ListQueues\x128.temporal.server.api.historyservice.v1.ListQueuesRequest\x1a9.temporal.server.api.historyservice.v1.ListQueuesResponse\"\x00\x12}\n" +
 	"\bAddTasks\x126.temporal.server.api.historyservice.v1.AddTasksRequest\x1a7.temporal.server.api.historyservice.v1.AddTasksResponse\"\x00\x12\x80\x01\n" +
 	"\tListTasks\x127.temporal.server.api.historyservice.v1.ListTasksRequest\x1a8.temporal.server.api.historyservice.v1.ListTasksResponse\"\x00\x12\xa7\x01\n" +
 	"\x16CompleteNexusOperation\x12D.temporal.server.api.historyservice.v1.CompleteNexusOperationRequest\x1aE.temporal.server.api.historyservice.v1.CompleteNexusOperationResponse\"\x00\x12\xb6\x01\n" +
 	"\x1bCompleteNexusOperationChasm\x12I.temporal.server.api.historyservice.v1.CompleteNexusOperationChasmRequest\x1aJ.temporal.server.api.historyservice.v1.CompleteNexusOperationChasmResponse\"\x00\x12\xad\x01\n" +
-	"\x18InvokeStateMachineMethod\x12F.temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest\x1aG.temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse\"\x00\x12\x92\x01\n" +
-	"\x0fDeepHealthCheck\x12=.temporal.server.api.historyservice.v1.DeepHealthCheckRequest\x1a>.temporal.server.api.historyservice.v1.DeepHealthCheckResponse\"\x00\x12\x98\x01\n" +
+	"\x18InvokeStateMachineMethod\x12F.temporal.server.api.historyservice.v1.InvokeStateMachineMethodRequest\x1aG.temporal.server.api.historyservice.v1.InvokeStateMachineMethodResponse\"\x00\x12\x98\x01\n" +
+	"\x0fDeepHealthCheck\x12=.temporal.server.api.historyservice.v1.DeepHealthCheckRequest\x1a>.temporal.server.api.historyservice.v1.DeepHealthCheckResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x98\x01\n" +
 	"\x11SyncWorkflowState\x12?.temporal.server.api.historyservice.v1.SyncWorkflowStateRequest\x1a@.temporal.server.api.historyservice.v1.SyncWorkflowStateResponse\"\x00\x12\xa4\x01\n" +
 	"\x15UpdateActivityOptions\x12C.temporal.server.api.historyservice.v1.UpdateActivityOptionsRequest\x1aD.temporal.server.api.historyservice.v1.UpdateActivityOptionsResponse\"\x00\x12\x8c\x01\n" +
 	"\rPauseActivity\x12;.temporal.server.api.historyservice.v1.PauseActivityRequest\x1a<.temporal.server.api.historyservice.v1.PauseActivityResponse\"\x00\x12\x92\x01\n" +

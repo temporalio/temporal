@@ -2,16 +2,20 @@ package interceptor
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/historyservice/v1"
+	commonspb "go.temporal.io/server/api/common/v1"
+	historyservicepb "go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
-	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 type (
@@ -41,21 +45,46 @@ type (
 	}
 )
 
-var excludedAPIsForHealthSignal = map[string]struct{}{
-	"DeepHealthCheck":              {},
-	"PollMutableState":             {},
-	"PollWorkflowExecutionUpdate":  {},
-	"PollWorkflowExecutionHistory": {},
-	"UpdateWorkflowExecution":      {},
-	// QueryWorkflow is excluded because its latency reflects worker availability,
-	// not history node health. With no workers polling, queries block ~30s until
-	// context deadline, which can push AverageLatency() past the threshold
-	// and cause healthy nodes to report HEALTH_STATE_NOT_SERVING.
-	"QueryWorkflow":         {},
-	"ExecuteMultiOperation": {},
+// longPollAPIs maps full method names to true if they should be excluded from health signals.
+// This includes both long-polling APIs and admin APIs.
+// Built at init time from proto method options.
+var excludedAPIs = make(map[string]bool)
+
+func init() {
+	// Categories to exclude from health signal tracking
+	excludedCategories := map[commonspb.ApiCategory]bool{
+		commonspb.API_CATEGORY_LONG_POLL: true,
+		commonspb.API_CATEGORY_SYSTEM:    true,
+	}
+
+	// Process HistoryService
+	processServiceFile(historyservicepb.File_temporal_server_api_historyservice_v1_service_proto, excludedCategories)
 }
 
-var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
+// processServiceFile enumerates all methods in a service file and adds excluded categories to longPollAPIs
+func processServiceFile(file protoreflect.FileDescriptor, excludedCategories map[commonspb.ApiCategory]bool) {
+	services := file.Services()
+	for i := 0; i < services.Len(); i++ {
+		service := services.Get(i)
+		methods := service.Methods()
+		for j := 0; j < methods.Len(); j++ {
+			method := methods.Get(j)
+			opts := method.Options().(*descriptorpb.MethodOptions)
+			if proto.HasExtension(opts, commonspb.E_ApiCategory) {
+				categoryOpts := proto.GetExtension(opts, commonspb.E_ApiCategory).(*commonspb.ApiCategoryOptions)
+				if categoryOpts != nil && excludedCategories[categoryOpts.GetCategory()] {
+					fullMethod := fmt.Sprintf("/%s/%s", service.FullName(), method.Name())
+					excludedAPIs[fullMethod] = true
+				}
+			}
+		}
+	}
+}
+
+// isExcludedAPI checks if an API is marked as a non-standard API via proto options
+func isExcludedAPI(fullMethod string) bool {
+	return excludedAPIs[fullMethod]
+}
 
 // NewHealthCheckInterceptor creates a new health check interceptor
 func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
@@ -75,21 +104,13 @@ func (h *HealthCheckInterceptor) UnaryIntercept(
 	resp, err := handler(ctx, req)
 	elapsed := time.Since(startTime)
 
-	// Skip health check recording for specific methods
-	methodName := api.MethodName(info.FullMethod)
-
-	// Skip GetWorkflowExecutionHistory polling request
-	if methodName == getWorkflowExecutionHistoryAPI {
-		if request, ok := req.(*historyservice.GetWorkflowExecutionHistoryRequest); ok {
-			if r := request.GetRequest(); r != nil && r.GetWaitNewEvent() {
-				return resp, err
-			}
-		}
+	// Skip health signal recording for non-standard APIs
+	if isExcludedAPI(info.FullMethod) {
+		return resp, err
 	}
 
-	if _, ok := excludedAPIsForHealthSignal[methodName]; !ok {
-		h.healthSignalAggregator.Record(elapsed, err)
-	}
+	// Record health signal for standard APIs
+	h.healthSignalAggregator.Record(elapsed, err)
 	return resp, err
 }
 

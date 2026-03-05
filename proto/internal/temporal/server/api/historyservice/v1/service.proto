@@ -4,6 +4,7 @@ package temporal.server.api.historyservice.v1;
 option go_package = "go.temporal.io/server/api/historyservice/v1;historyservice";
 
 import "temporal/server/api/historyservice/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
 
 // HistoryService provides API to start a new long running workflow instance, as well as query and update the history
 // of workflow instances already created.
@@ -25,6 +26,7 @@ service HistoryService {
     // It fails with 'EntityNotExistError' if specified workflow execution in unknown to the service.
     // It returns CurrentBranchChangedError if the workflow version branch has changed.
     rpc PollMutableState (PollMutableStateRequest) returns (PollMutableStateResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
     }
 
     // Reset the sticky task queue related information in mutable state of a given workflow.
@@ -118,6 +120,7 @@ service HistoryService {
 
     // ExecuteMultiOperation executes multiple operations within a single workflow.
     rpc ExecuteMultiOperation (ExecuteMultiOperationRequest) returns (ExecuteMultiOperationResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
     }
 
     // RemoveSignalMutableState is used to remove a signal request Id that was previously recorded.  This is currently
@@ -236,6 +239,7 @@ service HistoryService {
 
     // QueryWorkflow returns query result for a specified workflow execution.
     rpc QueryWorkflow (QueryWorkflowRequest) returns (QueryWorkflowResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
     }
 
     // ReapplyEvents applies stale events to the current workflow and current run.
@@ -286,11 +290,13 @@ service HistoryService {
     // (-- api-linter: core::0134=disabled
     //     aip.dev/not-precedent: This service does not follow the update method API --)
     rpc UpdateWorkflowExecution(UpdateWorkflowExecutionRequest) returns (UpdateWorkflowExecutionResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
     }
 
     // (-- api-linter: core::0134=disabled
     //     aip.dev/not-precedent: This service does not follow the update method API --)
     rpc PollWorkflowExecutionUpdate(PollWorkflowExecutionUpdateRequest) returns (PollWorkflowExecutionUpdateResponse){
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
     }
 
     rpc StreamWorkflowReplicationMessages(stream StreamWorkflowReplicationMessagesRequest) returns (stream StreamWorkflowReplicationMessagesResponse) {
@@ -312,9 +318,11 @@ service HistoryService {
     }
 
     rpc GetDLQTasks (GetDLQTasksRequest) returns (GetDLQTasksResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
     }
 
     rpc DeleteDLQTasks (DeleteDLQTasksRequest) returns (DeleteDLQTasksResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
     }
 
     rpc ListQueues (ListQueuesRequest) returns (ListQueuesResponse) {
@@ -351,6 +359,7 @@ service HistoryService {
 
     // Deep health check history service dependencies health status
     rpc DeepHealthCheck (DeepHealthCheckRequest) returns (DeepHealthCheckResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
     }
 
     rpc SyncWorkflowState(SyncWorkflowStateRequest) returns (SyncWorkflowStateResponse) {
