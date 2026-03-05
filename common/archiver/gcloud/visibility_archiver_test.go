@@ -368,7 +368,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	storageWrapper.EXPECT().QueryWithFilters(
 		gomock.Any(),
 		URI,
-		gomock.Any(),
+		constructVisibilityFilenamePrefix(testNamespaceID, indexKeyCloseTimeout),
 		1,
 		0,
 		gomock.Any(),
@@ -381,7 +381,7 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 	storageWrapper.EXPECT().QueryWithFilters(
 		gomock.Any(),
 		URI,
-		gomock.Any(),
+		constructVisibilityFilenamePrefix(testNamespaceID, indexKeyCloseTimeout),
 		1,
 		1,
 		gomock.Any(),
