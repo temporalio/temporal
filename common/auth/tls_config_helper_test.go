@@ -114,6 +114,19 @@ func Test_NewTLSConfig(t *testing.T) {
 			},
 			cfgErr: "only one of caData or caFile properties should be specified",
 		},
+		"cipherSuites_valid": {
+			cfg: &TLS{
+				Enabled:      true,
+				CipherSuites: []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+			},
+		},
+		"cipherSuites_unknown": {
+			cfg: &TLS{
+				Enabled:      true,
+				CipherSuites: []string{"UNKNOWN_SUITE"},
+			},
+			cfgErr: `unknown cipher suite "UNKNOWN_SUITE"`,
+		},
 	}
 
 	for name, tc := range tests {
@@ -129,6 +142,36 @@ func Test_NewTLSConfig(t *testing.T) {
 			ctrl.Finish()
 		})
 	}
+}
+
+func TestParseCipherSuites(t *testing.T) {
+	t.Run("empty returns nil", func(t *testing.T) {
+		ids, err := ParseCipherSuites(nil)
+		assert.NoError(t, err)
+		assert.Nil(t, ids)
+	})
+	t.Run("valid secure suite", func(t *testing.T) {
+		ids, err := ParseCipherSuites([]string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+	})
+	t.Run("valid insecure suite accepted", func(t *testing.T) {
+		ids, err := ParseCipherSuites([]string{"TLS_RSA_WITH_3DES_EDE_CBC_SHA"})
+		assert.NoError(t, err)
+		assert.Len(t, ids, 1)
+	})
+	t.Run("unknown suite returns error", func(t *testing.T) {
+		_, err := ParseCipherSuites([]string{"NOT_A_REAL_SUITE"})
+		assert.ErrorContains(t, err, `unknown cipher suite "NOT_A_REAL_SUITE"`)
+	})
+	t.Run("applied to tls.Config", func(t *testing.T) {
+		cfg, err := NewTLSConfig(&TLS{
+			Enabled:      true,
+			CipherSuites: []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+		})
+		assert.NoError(t, err)
+		assert.Len(t, cfg.CipherSuites, 2)
+	})
 }
 
 func Test_ConnectToTLSServerWithCA(t *testing.T) {

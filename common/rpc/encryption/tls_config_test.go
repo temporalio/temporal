@@ -218,3 +218,20 @@ func (s *tlsConfigTest) TestSystemWorkerTLSConfig() {
 	client.RootCAData = []string{""}
 	s.Error(validateRootTLS(cfg))
 }
+
+func (s *tlsConfigTest) TestCipherSuites() {
+	cfg := &config.RootTLS{}
+
+	cfg.Internode.Server.CipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"}
+	s.Nil(validateRootTLS(cfg))
+
+	cfg.Internode.Server.CipherSuites = []string{"INVALID_SUITE"}
+	s.Error(validateRootTLS(cfg))
+
+	cfg.Internode.Server.CipherSuites = nil
+	cfg.Internode.Client.CipherSuites = []string{"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"}
+	s.Nil(validateRootTLS(cfg))
+
+	cfg.Internode.Client.CipherSuites = []string{"INVALID_SUITE"}
+	s.Error(validateRootTLS(cfg))
+}
