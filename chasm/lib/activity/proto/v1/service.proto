@@ -6,6 +6,7 @@ option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;act
 
 import "chasm/lib/activity/proto/v1/request_response.proto";
 import "temporal/server/api/routing/v1/extension.proto";
+import "temporal/server/api/common/v1/api_category.proto";
 
 service ActivityService {
     rpc StartActivityExecution(StartActivityExecutionRequest) returns (StartActivityExecutionResponse) {
@@ -18,6 +19,7 @@ service ActivityService {
 
     rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
     }
 
     rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {

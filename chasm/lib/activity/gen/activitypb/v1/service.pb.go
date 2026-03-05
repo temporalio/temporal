@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	_ "go.temporal.io/server/api/routing/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -26,11 +27,11 @@ var File_temporal_server_chasm_lib_activity_proto_v1_service_proto protoreflect.
 
 const file_temporal_server_chasm_lib_activity_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/activity/proto/v1/service.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1aBtemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xf3\b\n" +
+	"9temporal/server/chasm/lib/activity/proto/v1/service.proto\x12+temporal.server.chasm.lib.activity.proto.v1\x1aBtemporal/server/chasm/lib/activity/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto\x1a0temporal/server/api/common/v1/api_category.proto2\xf9\b\n" +
 	"\x0fActivityService\x12\xd5\x01\n" +
 	"\x16StartActivityExecution\x12J.temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionRequest\x1aK.temporal.server.chasm.lib.activity.proto.v1.StartActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xde\x01\n" +
-	"\x19DescribeActivityExecution\x12M.temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest\x1aN.temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xd2\x01\n" +
-	"\x15PollActivityExecution\x12I.temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest\x1aJ.temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xe1\x01\n" +
+	"\x19DescribeActivityExecution\x12M.temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionRequest\x1aN.temporal.server.chasm.lib.activity.proto.v1.DescribeActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xd8\x01\n" +
+	"\x15PollActivityExecution\x12I.temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionRequest\x1aJ.temporal.server.chasm.lib.activity.proto.v1.PollActivityExecutionResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x8a\xb5\x18\x02\b\x02\x12\xe1\x01\n" +
 	"\x1aTerminateActivityExecution\x12N.temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionRequest\x1aO.temporal.server.chasm.lib.activity.proto.v1.TerminateActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_id\x12\xed\x01\n" +
 	"\x1eRequestCancelActivityExecution\x12R.temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionRequest\x1aS.temporal.server.chasm.lib.activity.proto.v1.RequestCancelActivityExecutionResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.activity_idBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
 
