@@ -69,10 +69,10 @@ func processServiceFile(file protoreflect.FileDescriptor, excludedCategories map
 		methods := service.Methods()
 		for j := 0; j < methods.Len(); j++ {
 			method := methods.Get(j)
-			opts := method.Options().(*descriptorpb.MethodOptions)
-			if proto.HasExtension(opts, commonspb.E_ApiCategory) {
-				categoryOpts := proto.GetExtension(opts, commonspb.E_ApiCategory).(*commonspb.ApiCategoryOptions)
-				if categoryOpts != nil && excludedCategories[categoryOpts.GetCategory()] {
+			opts, ok := method.Options().(*descriptorpb.MethodOptions)
+			if ok && proto.HasExtension(opts, commonspb.E_ApiCategory) {
+				categoryOpts, ok := proto.GetExtension(opts, commonspb.E_ApiCategory).(*commonspb.ApiCategoryOptions)
+				if ok && categoryOpts != nil && excludedCategories[categoryOpts.GetCategory()] {
 					fullMethod := fmt.Sprintf("/%s/%s", service.FullName(), method.Name())
 					excludedAPIs[fullMethod] = true
 				}
