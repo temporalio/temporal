@@ -26,7 +26,7 @@ func NewTestHooks() TestHooks {
 // false, which hopefully the compiler will inline and remove the hook as dead code.
 //
 // TestHooks should be used very sparingly, see comment on TestHooks.
-func Get[T any](_ TestHooks, _ Key) (T, bool) {
+func Get[T any, S any](_ TestHooks, _ Key[T, S], _ S) (T, bool) {
 	var zero T
 	return zero, false
 }
@@ -34,10 +34,24 @@ func Get[T any](_ TestHooks, _ Key) (T, bool) {
 // Call calls a func() hook if present.
 //
 // TestHooks should be used very sparingly, see comment on TestHooks.
-func Call(_ TestHooks, _ Key) {
+func Call[S any](_ TestHooks, _ Key[func(), S], _ S) {}
+
+// Hook is an empty stub in production mode. NewHook and its methods are only available with -tags=test_dep.
+type Hook struct{}
+
+func (h Hook) Scope() ScopeType {
+	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
+
+func (h Hook) Apply(_ TestHooks, _ any) func() {
+	panic("testhooks.Hook used but TestHooks are not enabled: use -tags=test_dep when running `go test`")
 }
 
 // Set is only to be used by test code together with the test_dep build tag.
-func Set[T any](_ TestHooks, _ Key, _ T) func() {
+func Set[T any, S any](_ TestHooks, _ Key[T, S], _ T, _ any) func() {
 	panic("testhooks.Set called but TestHooks are not enabled: use -tags=test_dep when running `go test`")
+}
+
+func newKey[T any, S any]() Key[T, S] {
+	return Key[T, S]{}
 }
