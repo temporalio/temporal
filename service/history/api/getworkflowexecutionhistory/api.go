@@ -94,15 +94,17 @@ func appendTransientTasks(
 			return
 		}
 		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
-		if transientWorkflowTask == nil && msResp.GetNextEventId() != nextEventID {
-			shardContext.GetLogger().Warn(
-				"PREMATURE-EOS: transient workflow task is unexpectedly nil when nextEventID indicates there should be transient tasks",
-				tag.NewStringTag("Namespace", namespaceID.String()),
-				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
-				tag.NewStringTag("RunID", execution.GetRunId()),
-				tag.NewInt64("ms-resp-next-event-id", msResp.GetNextEventId()),
-				tag.NewInt64("expected-next-event-id", nextEventID),
-			)
+		if transientWorkflowTask == nil {
+			if msResp.GetNextEventId() != nextEventID {
+				shardContext.GetLogger().Warn(
+					"PREMATURE-EOS: transient workflow task is unexpectedly nil when nextEventID indicates there should be transient tasks",
+					tag.NewStringTag("Namespace", namespaceID.String()),
+					tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+					tag.NewStringTag("RunID", execution.GetRunId()),
+					tag.NewInt64("ms-resp-next-event-id", msResp.GetNextEventId()),
+					tag.NewInt64("expected-next-event-id", nextEventID),
+				)
+			}
 			return
 		}
 

@@ -750,7 +750,6 @@ func (wh *WorkflowHandler) convertToMultiOperationResponse(
 // execution in unknown to the service.
 func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryRequest) (_ *workflowservice.GetWorkflowExecutionHistoryResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-	wh.logger.Info("CONFIRMING THAT SEANS CHANGES ARE ACTUALLY RUNNING")
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -863,7 +862,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 // application worker.
 func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *workflowservice.PollWorkflowTaskQueueRequest) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-	wh.logger.Info("CONFIRMING THAT SEANS CHANGES ARE ACTUALLY RUNNING")
 	if request == nil {
 		return nil, errRequestNotSet
 	}
@@ -1011,7 +1009,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	request *workflowservice.RespondWorkflowTaskCompletedRequest,
 ) (_ *workflowservice.RespondWorkflowTaskCompletedResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
-	wh.logger.Info("CONFIRMING THAT SEANS CHANGES ARE ACTUALLY RUNNING")
 
 	if request == nil {
 		return nil, errRequestNotSet
