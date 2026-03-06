@@ -341,3 +341,10 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	}
 	return processedTimers, nil
 }
+
+func getArchetypeTagForChasmTask(archetypeID chasm.ArchetypeID, chasmRegistry *chasm.Registry) metrics.Tag {
+	if name, ok := chasmRegistry.ArchetypeDisplayName(archetypeID); ok {
+		return metrics.ArchetypeTag(name)
+	}
+	return metrics.ArchetypeTag("")
+}

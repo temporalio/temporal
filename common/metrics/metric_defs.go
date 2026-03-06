@@ -30,6 +30,8 @@ const (
 	PersistenceDBKindTagName    = "db_kind"
 	WorkerPluginNameTagName     = "worker_plugin_name"
 	headerCallsiteTagName       = "header_callsite"
+	ArchetypeTagName            = "archetype"
+	ChasmTaskTypeTagName        = "chasm_task_type"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -857,7 +859,15 @@ var (
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
 	)
-	TaskCorruptionCounter       = NewCounterDef("task_errors_corruption")
+	TaskCorruptionCounter = NewCounterDef("task_errors_corruption")
+	ChasmPureTaskRequests = NewCounterDef(
+		"chasm_pure_task_requests",
+		WithDescription("The number of CHASM pure tasks executed."),
+	)
+	ChasmPureTaskErrors = NewCounterDef(
+		"chasm_pure_task_errors",
+		WithDescription("The number of errors during CHASM pure task execution."),
+	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
