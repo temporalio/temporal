@@ -46,27 +46,31 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets                   []*bucket                        // buckets for partitioning the keyspace
-		maxItemsFn                dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
-		ttlFn                     dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
-		minEvictAgeFn             dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
-		evictionIntervalFn        dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
-		total                     atomic.Int64                     // atomic counter of total entries
-		quit                      chan struct{}                    // channel to signal shutdown of the eviction loop
-		seed                      maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
-		metricsHandler            metrics.Handler                  // metrics handler for recording registry metrics
-		enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn     // dynamic config function to control plugin metrics export
+		buckets                          []*bucket                        // buckets for partitioning the keyspace
+		maxItemsFn                       dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
+		ttlFn                            dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
+		minEvictAgeFn                    dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
+		evictionIntervalFn               dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
+		total                            atomic.Int64                     // atomic counter of total entries
+		quit                             chan struct{}                    // channel to signal shutdown of the eviction loop
+		seed                             maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
+		metricsHandler                   metrics.Handler                  // metrics handler for recording registry metrics
+		enableWorkerPluginMetrics        dynamicconfig.BoolPropertyFn     // dynamic config function to control plugin metrics export
+		externalPayloadsEnabled          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		storageDriverMetricsAllowedTypes dynamicconfig.TypedPropertyFn[[]string]
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets          dynamicconfig.IntPropertyFn
-		TTL                 dynamicconfig.DurationPropertyFn
-		MinEvictAge         dynamicconfig.DurationPropertyFn
-		MaxItems            dynamicconfig.IntPropertyFn
-		EvictionInterval    dynamicconfig.DurationPropertyFn
-		MetricsHandler      metrics.Handler
-		EnablePluginMetrics dynamicconfig.BoolPropertyFn
+		NumBuckets                       dynamicconfig.IntPropertyFn
+		TTL                              dynamicconfig.DurationPropertyFn
+		MinEvictAge                      dynamicconfig.DurationPropertyFn
+		MaxItems                         dynamicconfig.IntPropertyFn
+		EvictionInterval                 dynamicconfig.DurationPropertyFn
+		MetricsHandler                   metrics.Handler
+		EnablePluginMetrics              dynamicconfig.BoolPropertyFn
+		ExternalPayloadsEnabled          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		StorageDriverMetricsAllowedTypes dynamicconfig.TypedPropertyFn[[]string]
 	}
 )
 
@@ -213,15 +217,17 @@ func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
 
 func newRegistryImpl(params RegistryParams) *registryImpl {
 	m := &registryImpl{
-		buckets:                   make([]*bucket, params.NumBuckets()),
-		maxItemsFn:                params.MaxItems,
-		ttlFn:                     params.TTL,
-		minEvictAgeFn:             params.MinEvictAge,
-		evictionIntervalFn:        params.EvictionInterval,
-		seed:                      maphash.MakeSeed(),
-		quit:                      make(chan struct{}),
-		metricsHandler:            params.MetricsHandler,
-		enableWorkerPluginMetrics: params.EnablePluginMetrics,
+		buckets:                          make([]*bucket, params.NumBuckets()),
+		maxItemsFn:                       params.MaxItems,
+		ttlFn:                            params.TTL,
+		minEvictAgeFn:                    params.MinEvictAge,
+		evictionIntervalFn:               params.EvictionInterval,
+		seed:                             maphash.MakeSeed(),
+		quit:                             make(chan struct{}),
+		metricsHandler:                   params.MetricsHandler,
+		enableWorkerPluginMetrics:        params.EnablePluginMetrics,
+		externalPayloadsEnabled:          params.ExternalPayloadsEnabled,
+		storageDriverMetricsAllowedTypes: params.StorageDriverMetricsAllowedTypes,
 	}
 
 	for i := range m.buckets {
@@ -390,6 +396,46 @@ func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespac
 	m.upsertHeartbeats(nsID, workerHeartbeat)
 	m.recordPluginMetric(nsName, workerHeartbeat)
 	m.recordActivitySlotsMetric(workerHeartbeat)
+	m.recordStorageDriverMetric(nsName, workerHeartbeat)
+}
+
+// defaultStorageDriverAllowedTypes is the fallback when MatchingStorageDriverMetricsAllowedTypes is not configured.
+var defaultStorageDriverAllowedTypes = []string{"s3"}
+
+// recordStorageDriverMetric sets a value of 1 for each unique storage driver type present in the heartbeats.
+// Only emits when ExternalPayloadsEnabled is true for the namespace.
+// Driver types not in the allowed list are sanitized to "other".
+func (m *registryImpl) recordStorageDriverMetric(nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
+	if !m.externalPayloadsEnabled(nsName.String()) {
+		return
+	}
+
+	// Build set of allowed to log driver types based on dynamic config
+	allowedTypes := m.storageDriverMetricsAllowedTypes()
+	if allowedTypes == nil {
+		allowedTypes = defaultStorageDriverAllowedTypes
+	}
+	allowedSet := make(map[string]struct{}, len(allowedTypes))
+	for _, t := range allowedTypes {
+		allowedSet[t] = struct{}{}
+	}
+
+	// Collect sanitized, deduplicated driver types
+	recorded := make(map[string]bool)
+	for _, hb := range heartbeats {
+		for _, driver := range hb.GetDrivers() {
+			driverType := driver.GetType()
+			if _, ok := allowedSet[driverType]; !ok {
+				driverType = "other"
+			}
+			if !recorded[driverType] {
+				metrics.WorkerStorageDriverTypeMetric.
+					With(m.metricsHandler).
+					Record(1, metrics.NamespaceTag(nsName.String()), metrics.WorkerStorageDriverTypeTag(driverType))
+				recorded[driverType] = true
+			}
+		}
+	}
 }
 
 // recordActivitySlotsMetric records the distribution of activity slots in use across workers.

@@ -204,7 +204,9 @@ func WorkersRegistryProvider(
 		MinEvictAge:         serviceConfig.WorkerRegistryMinEvictAge,
 		MaxItems:            serviceConfig.WorkerRegistryMaxEntries,
 		EvictionInterval:    serviceConfig.WorkerRegistryEvictionInterval,
-		MetricsHandler:      metricsHandler,
-		EnablePluginMetrics: serviceConfig.EnableWorkerPluginMetrics,
+		MetricsHandler:                   metricsHandler,
+		EnablePluginMetrics:              serviceConfig.EnableWorkerPluginMetrics,
+		ExternalPayloadsEnabled:          serviceConfig.ExternalPayloadsEnabled,
+		StorageDriverMetricsAllowedTypes: serviceConfig.StorageDriverMetricsAllowedTypes,
 	})
 }

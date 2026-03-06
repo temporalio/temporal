@@ -1432,6 +1432,12 @@ second per poller by one physical queue manager`,
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
+	MatchingStorageDriverMetricsAllowedTypes = NewGlobalTypedSetting(
+		"matching.storageDriverMetricsAllowedTypes",
+		([]string)(nil),
+		`List of storage driver types that are published as-is in metrics. Any driver type not in this
+list is reported as "other".`,
+	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
 		false,

@@ -2,34 +2,35 @@ package metrics
 
 // Common tags for all services
 const (
-	OperationTagName            = "operation"
-	ServiceRoleTagName          = "service_role"
-	CacheTypeTagName            = "cache_type"
-	FailureTagName              = "failure"
-	FailureSourceTagName        = "failure_source"
-	TaskCategoryTagName         = "task_category"
-	TaskTypeTagName             = "task_type"
-	TaskPriorityTagName         = "task_priority"
-	QueueReaderIDTagName        = "queue_reader_id"
-	QueueActionTagName          = "queue_action"
-	QueueTypeTagName            = "queue_type"
-	visibilityPluginNameTagName = "visibility_plugin_name"
-	visibilityIndexNameTagName  = "visibility_index_name"
-	ErrorTypeTagName            = "error_type"
-	httpStatusTagName           = "http_status"
-	nexusMethodTagName          = "method"
-	nexusEndpointTagName        = "nexus_endpoint"
-	nexusServiceTagName         = "nexus_service"
-	nexusOperationTagName       = "nexus_operation"
-	outcomeTagName              = "outcome"
-	versionedTagName            = "versioned"
-	resourceExhaustedTag        = "resource_exhausted_cause"
-	resourceExhaustedScopeTag   = "resource_exhausted_scope"
-	PartitionTagName            = "partition"
-	PriorityTagName             = "priority"
-	PersistenceDBKindTagName    = "db_kind"
-	WorkerPluginNameTagName     = "worker_plugin_name"
-	headerCallsiteTagName       = "header_callsite"
+	OperationTagName               = "operation"
+	ServiceRoleTagName             = "service_role"
+	CacheTypeTagName               = "cache_type"
+	FailureTagName                 = "failure"
+	FailureSourceTagName           = "failure_source"
+	TaskCategoryTagName            = "task_category"
+	TaskTypeTagName                = "task_type"
+	TaskPriorityTagName            = "task_priority"
+	QueueReaderIDTagName           = "queue_reader_id"
+	QueueActionTagName             = "queue_action"
+	QueueTypeTagName               = "queue_type"
+	visibilityPluginNameTagName    = "visibility_plugin_name"
+	visibilityIndexNameTagName     = "visibility_index_name"
+	ErrorTypeTagName               = "error_type"
+	httpStatusTagName              = "http_status"
+	nexusMethodTagName             = "method"
+	nexusEndpointTagName           = "nexus_endpoint"
+	nexusServiceTagName            = "nexus_service"
+	nexusOperationTagName          = "nexus_operation"
+	outcomeTagName                 = "outcome"
+	versionedTagName               = "versioned"
+	resourceExhaustedTag           = "resource_exhausted_cause"
+	resourceExhaustedScopeTag      = "resource_exhausted_scope"
+	PartitionTagName               = "partition"
+	PriorityTagName                = "priority"
+	PersistenceDBKindTagName       = "db_kind"
+	WorkerPluginNameTagName        = "worker_plugin_name"
+	WorkerStorageDriverTypeTagName = "worker_storage_driver_type"
+	headerCallsiteTagName          = "header_callsite"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1203,6 +1204,14 @@ var (
 		"worker_plugin_name",
 		WithDescription(
 			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
+	)
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand plugin adoption.
+	WorkerStorageDriverTypeMetric = NewGaugeDef(
+		"worker_storage_driver_type",
+		WithDescription(
+			"Set if the worker was configured with a storage driver. storage_driver_type is sanitized according to MatchingStorageDriverMetricsAllowedTypes. Dimensions: namespace, storage_driver_type."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
