@@ -20,6 +20,61 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// ValidateAndNormalizeStandaloneActivity validates and normalizes the attributes for a standalone activity.
+func ValidateAndNormalizeStandaloneActivity(
+	activityID string,
+	activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceID namespace.ID,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+	runTimeout *durationpb.Duration,
+) error {
+	// Standalone activities always use user defined task queues, so we can enforce user defined task queue validation
+	if err := tqid.NormalizeAndValidateUserDefined(options.TaskQueue, "", "", maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		getDefaultActivityRetrySettings,
+		maxIDLengthLimit,
+		namespaceID,
+		options,
+		priority,
+		runTimeout)
+}
+
+// ValidateAndNormalizeEmbeddedActivity validates and normalizes the attributes for an embedded activity.
+func ValidateAndNormalizeEmbeddedActivity(
+	activityID string,
+	activityType string,
+	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
+	maxIDLengthLimit int,
+	namespaceID namespace.ID,
+	options *activitypb.ActivityOptions,
+	priority *commonpb.Priority,
+	runTimeout *durationpb.Duration,
+) error {
+	// We cannot use NormalizeAndValidateUserDefined for embedded activity task queue because embedded activities can
+	// use reserved task queues, which are not considered user defined.
+	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
+		return err
+	}
+
+	return validateAndNormalizeActivityAttributes(
+		activityID,
+		activityType,
+		getDefaultActivityRetrySettings,
+		maxIDLengthLimit,
+		namespaceID,
+		options,
+		priority,
+		runTimeout)
+}
+
 // ValidateAndNormalizeActivityAttributes validates and normalizes the common activity request attributes.
 // This validation is shared by both standalone and embedded activities.
 // IMPORTANT: this method mutates the input params; in cases where it's critical to maintain immutability
@@ -31,7 +86,7 @@ import (
 // 3. If neither ScheduleToClose nor StartToClose is set, return error
 // 4. Ensure all timeouts do not exceed runTimeout if runTimeout is set (>0)
 // 5. Ensure HeartbeatTimeout does not exceed StartToClose
-func ValidateAndNormalizeActivityAttributes(
+func validateAndNormalizeActivityAttributes(
 	activityID string,
 	activityType string,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
@@ -41,15 +96,11 @@ func ValidateAndNormalizeActivityAttributes(
 	priority *commonpb.Priority,
 	runTimeout *durationpb.Duration,
 ) error {
-	if err := tqid.NormalizeAndValidate(options.TaskQueue, "", maxIDLengthLimit); err != nil {
-		return err
-	}
-
 	if activityID == "" {
-		return serviceerror.NewInvalidArgumentf("ActivityId is not set. ActivityType=%s", activityType)
+		return serviceerror.NewInvalidArgument("ActivityId is not set")
 	}
 	if activityType == "" {
-		return serviceerror.NewInvalidArgumentf("ActivityType is not set. ActivityID=%s", activityID)
+		return serviceerror.NewInvalidArgument("ActivityType is not set")
 	}
 
 	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
@@ -57,17 +108,16 @@ func ValidateAndNormalizeActivityAttributes(
 	}
 
 	if len(activityID) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("ActivityId exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
-			activityID, activityType, len(activityID), maxIDLengthLimit)
+		return serviceerror.NewInvalidArgumentf("ActivityId exceeds length limit. Length=%d Limit=%d",
+			len(activityID), maxIDLengthLimit)
 	}
 	if len(activityType) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("ActivityType exceeds length limit. ActivityId=%s ActivityType=%s Length=%d Limit=%d",
-			activityID, activityType, len(activityType), maxIDLengthLimit)
+		return serviceerror.NewInvalidArgumentf("ActivityType exceeds length limit. Length=%d Limit=%d",
+			len(activityType), maxIDLengthLimit)
 	}
 
 	if err := priorities.Validate(priority); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid Priorities: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("Invalid Priorities: %v", err)
 	}
 
 	return normalizeAndValidateTimeouts(activityID,
@@ -98,20 +148,16 @@ func normalizeAndValidateTimeouts(
 ) error {
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToCloseTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToStartTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetStartToCloseTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetHeartbeatTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout: %v ActivityId=%s ActivityType=%s",
-			err, activityID, activityType)
+		return serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout: %v", err)
 	}
 
 	scheduleToCloseSet := options.GetScheduleToCloseTimeout().AsDuration() > 0

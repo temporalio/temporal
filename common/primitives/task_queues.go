@@ -1,6 +1,8 @@
 package primitives
 
 import (
+	"fmt"
+
 	"go.temporal.io/api/serviceerror"
 )
 
@@ -33,11 +35,11 @@ func CheckInternalPerNsTaskQueueAllowed(targetTaskQueue, parentTaskQueue string)
 		return nil
 	}
 	if !IsInternalPerNsTaskQueue(parentTaskQueue) {
-		return serviceerror.NewInvalidArgumentf(
-			"cannot use internal per namespace task queue:%s (in parent component task queue: %s)",
-			targetTaskQueue,
-			parentTaskQueue,
-		)
+		errMessage := fmt.Sprintf("cannot use internal per namespace task queue:%s", targetTaskQueue)
+		if parentTaskQueue != "" {
+			errMessage += fmt.Sprintf(" (in parent component task queue: %s)", parentTaskQueue)
+		}
+		return serviceerror.NewInvalidArgument(errMessage)
 	}
 	return nil
 }
