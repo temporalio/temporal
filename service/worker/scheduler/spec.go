@@ -216,7 +216,7 @@ func validateStructuredCalendar(scs *schedulepb.StructuredCalendarSpec) error {
 	checkRanges(scs.Hour, "Hour", 0, 23)
 	checkRanges(scs.DayOfMonth, "DayOfMonth", 1, 31)
 	checkRanges(scs.Month, "Month", 1, 12)
-	checkRanges(scs.Year, "Year", minCalendarYear, maxCalendarYear)
+	checkRanges(scs.Year, "Year", minCalendarYear, maxSpecYear)
 	checkRanges(scs.DayOfWeek, "DayOfWeek", 0, 6)
 
 	if len(scs.Comment) > maxCommentLen {

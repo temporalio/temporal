@@ -30,9 +30,14 @@ type (
 const (
 	// minCalendarYear is the smallest year that can appear in a calendar spec.
 	minCalendarYear = 2000
-	// maxCalendarYear is the latest year that will be recognized for calendar dates.
-	// If you're still using Temporal in 2100 please change this constant and rebuild.
+	// maxCalendarYear is the latest year that will be calculated for calendar dates.
+	// This protects against DoS from calculating far into the future. Specs can reference
+	// years beyond this limit, but actual calculation will stop here. Future server versions
+	// can safely increase this limit.
 	maxCalendarYear = 2100
+	// maxSpecYear is the largest year allowed in a schedule spec. This is set to a very
+	// large value to effectively remove the restriction while still preventing absurd values.
+	maxSpecYear = 9999
 
 	// max length of one calendar comment field
 	maxCommentLen = 200
@@ -229,7 +234,7 @@ func parseCalendarToStructured(cal *schedulepb.CalendarSpec) (*schedulepb.Struct
 		DayOfWeek:  makeRangeOrNil(cal.DayOfWeek, "DayOfWeek", "*", 0, 7, parseModeDow),
 		DayOfMonth: makeRangeOrNil(cal.DayOfMonth, "DayOfMonth", "*", 1, 31, parseModeInt),
 		Month:      makeRangeOrNil(cal.Month, "Month", "*", 1, 12, parseModeMonth),
-		Year:       makeRangeOrNil(cal.Year, "Year", "*", minCalendarYear, maxCalendarYear, parseModeYear),
+		Year:       makeRangeOrNil(cal.Year, "Year", "*", minCalendarYear, maxSpecYear, parseModeYear),
 		Comment:    cal.Comment,
 	}
 	if len(errs) > 0 {
