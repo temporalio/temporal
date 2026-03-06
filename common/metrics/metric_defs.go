@@ -812,6 +812,15 @@ var (
 		"task_latency_processing",
 		WithDescription("Latency for processing a history task one time."),
 	)
+	// TaskPersistenceLatency is used only as a context key for accumulating persistence duration (ContextCounterAdd/Get); not emitted as a metric.
+	TaskPersistenceLatency = NewTimerDef(
+		"task_persistence_latency",
+		WithDescription("Context key for persistence duration; not emitted."),
+	)
+	TaskProcessingNoPersistenceLatency = NewTimerDef(
+		"task_processing_no_persistence_latency",
+		WithDescription("Latency for processing a history task one time excluding persistence."),
+	)
 	TaskLatency = NewTimerDef(
 		"task_latency",
 		WithDescription("Latency for procsssing and completing a history task. This latency is across all attempts but excludes any latencies related to workflow lock or user qutoa limit."),
