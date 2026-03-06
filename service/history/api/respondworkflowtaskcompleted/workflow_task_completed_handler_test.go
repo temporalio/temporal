@@ -186,8 +186,9 @@ func TestCommandProtocolMessage(t *testing.T) {
 			CompleteWorkflowExecutionCommandAttributes: completeWorkflowExecutionCommandAttributes,
 		}
 
-		// mock a failed event creation.
+		// mock a failed event creation (handler calls FlushPendingActivityEventsForCompletion before AddCompletedWorkflowEvent).
 		event := &historypb.HistoryEvent{}
+		tc.ms.EXPECT().FlushPendingActivityEventsForCompletion().Return(nil)
 		tc.ms.EXPECT().AddCompletedWorkflowEvent(tc.handler.workflowTaskCompletedID, completeWorkflowExecutionCommandAttributes, "").MaxTimes(1).Return(event, fmt.Errorf("FAIL"))
 		tc.ms.EXPECT().GetExecutionInfo().AnyTimes().Return(&persistencespb.WorkflowExecutionInfo{})
 		tc.ms.EXPECT().GetExecutionState().AnyTimes().Return(&persistencespb.WorkflowExecutionState{})

@@ -4051,6 +4051,71 @@ func (ms *MutableStateImpl) addStartedEventForTransientActivity(
 	return ms.ApplyActivityTaskStartedEvent(event)
 }
 
+// FlushPendingActivityEventsForCompletion records ActivityTaskStarted and (where applicable)
+// ActivityTaskFailed for pending activities that are in retry, so history is complete before
+// the workflow completes or continues-as-new. See issue #503.
+func (ms *MutableStateImpl) FlushPendingActivityEventsForCompletion() error {
+	opTag := tag.WorkflowActionWorkflowCompleted
+	if err := ms.checkMutability(opTag); err != nil {
+		return err
+	}
+
+	pending := ms.GetPendingActivityInfos()
+	if len(pending) == 0 {
+		return nil
+	}
+
+	scheduledEventIDs := make([]int64, 0, len(pending))
+	for id := range pending {
+		scheduledEventIDs = append(scheduledEventIDs, id)
+	}
+
+	for _, scheduledEventID := range scheduledEventIDs {
+		ai, ok := ms.GetActivityInfo(scheduledEventID)
+		if !ok || !ai.HasRetryPolicy {
+			continue
+		}
+
+		if ai.RetryLastFailure != nil && ai.StartedEventId != common.TransientEventID {
+			failedAttempt := ai.Attempt - 1
+			if failedAttempt < 1 {
+				failedAttempt = 1
+			}
+			startedEvent := ms.hBuilder.AddActivityTaskStartedEvent(
+				scheduledEventID,
+				failedAttempt,
+				"",
+				ai.RetryLastWorkerIdentity,
+				ai.RetryLastFailure,
+				nil,
+				0,
+			)
+			if err := ms.ApplyActivityTaskStartedEvent(startedEvent); err != nil {
+				return err
+			}
+			if _, err := ms.AddActivityTaskFailedEvent(
+				scheduledEventID,
+				startedEvent.GetEventId(),
+				ai.RetryLastFailure,
+				enumspb.RETRY_STATE_IN_PROGRESS,
+				ai.RetryLastWorkerIdentity,
+				nil,
+			); err != nil {
+				return err
+			}
+			continue
+		}
+
+		if ai.StartedEventId == common.TransientEventID {
+			if err := ms.addStartedEventForTransientActivity(scheduledEventID, nil); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 	ai *persistencespb.ActivityInfo,
 	scheduledEventID int64,
