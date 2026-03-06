@@ -383,6 +383,7 @@ func (a *activities) generateWorkflowReplicationTask(
 				RunId:      execution.RunID,
 			},
 			Archetype:      archetype,
+			ArchetypeId:    execution.ArchetypeID,
 			TargetClusters: targetClusters,
 		})
 		if err != nil {
@@ -781,6 +782,7 @@ func (a *activities) verifySingleReplicationTask(
 			RunId:      execution.RunID,
 		},
 		Archetype:       archetype,
+		ArchetypeId:     execution.ArchetypeID,
 		SkipForceReload: true,
 	})
 	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))

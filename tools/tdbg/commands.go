@@ -357,7 +357,8 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 			WorkflowId: bid,
 			RunId:      rid,
 		},
-		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+		Archetype:   getArchetype(c),
+		ArchetypeId: chasm.ArchetypeID(c.Uint(FlagArchetypeID)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("unable to get Mutable State: %s", err)
@@ -395,7 +396,8 @@ func AdminDeleteWorkflow(c *cli.Context, clientFactory ClientFactory, prompter *
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+		Archetype:   getArchetype(c),
+		ArchetypeId: chasm.ArchetypeID(c.Uint(FlagArchetypeID)),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to delete workflow execution: %s", err)
@@ -725,7 +727,8 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+		Archetype:   getArchetype(c),
+		ArchetypeId: chasm.ArchetypeID(c.Uint(FlagArchetypeID)),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to refresh Workflow Task: %s", err)
@@ -856,7 +859,8 @@ func AdminReplicateWorkflow(
 			WorkflowId: wid,
 			RunId:      rid,
 		},
-		Archetype: getArchetypeWithDefault(c, chasm.WorkflowArchetype),
+		Archetype:   getArchetype(c),
+		ArchetypeId: chasm.ArchetypeID(c.Uint(FlagArchetypeID)),
 	})
 	if err != nil {
 		return fmt.Errorf("unable to replicate workflow: %w", err)
