@@ -65,12 +65,14 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 		return nil, err
 	}
 
-	if (parsedQuery.closeTime.IsZero() && parsedQuery.startTime.IsZero()) || (!parsedQuery.closeTime.IsZero() && !parsedQuery.startTime.IsZero()) {
-		return nil, errors.New("requires a StartTime or CloseTime")
-	}
+	if parsedQuery.workflowID == nil {
+		if (parsedQuery.closeTime.IsZero() && parsedQuery.startTime.IsZero()) {
+			return nil, errors.New("requires a StartTime, CloseTime, or WorkflowId")
+		}
 
-	if parsedQuery.searchPrecision == nil {
-		return nil, errors.New("SearchPrecision is required when searching for a StartTime or CloseTime")
+		if parsedQuery.searchPrecision == nil {
+			return nil, errors.New("SearchPrecision is required when searching for a StartTime or CloseTime")
+		}
 	}
 
 	return parsedQuery, nil

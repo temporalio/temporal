@@ -3,6 +3,7 @@ package gcloud
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -154,7 +155,7 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	s.NoError(err)
 	storageWrapper := connector.NewMockClient(s.controller)
 	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
-	storageWrapper.EXPECT().Upload(gomock.Any(), URI, gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	storageWrapper.EXPECT().Upload(gomock.Any(), URI, gomock.Any(), gomock.Any()).Return(nil).Times(3)
 
 	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
 	s.NoError(err)
@@ -438,4 +439,41 @@ func (s *visibilityArchiverSuite) TestQuery_EmptyQuery_Pagination() {
 		}
 	}
 	s.Len(executions, 2, "there should be exactly 2 unique executions")
+}
+
+func (s *visibilityArchiverSuite) TestQuery_Success_WorkflowIDOnly() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+
+	// Expect query with WorkflowId prefix: namespace/workflowID_hash(workflowID)
+	expectedPrefix := constructVisibilityFilenamePrefix(testNamespaceID, indexKeyWorkflowID)
+	expectedPrefix = fmt.Sprintf("%s_%s", expectedPrefix, hash(testWorkflowID))
+
+	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, expectedPrefix, 10, 0, gomock.Any()).Return([]string{
+		"workflowID_" + hash(testWorkflowID) + "_2020-02-05T09:56:14Z_test-workflow-id_test-run-id.visibility",
+	}, true, 1, nil)
+	storageWrapper.EXPECT().Get(gomock.Any(), URI, testNamespaceID+"/"+"workflowID_"+hash(testWorkflowID)+"_2020-02-05T09:56:14Z_test-workflow-id_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+
+	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+	s.NoError(err)
+
+	// We don't need to mock the parser here if we want to test the real parser too,
+	// but the test suite seems to mock it for most Query tests.
+	// Let's use the real parser to be sure.
+	visibilityArchiver.queryParser = NewQueryParser()
+
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "WorkflowId = '" + testWorkflowID + "'",
+	}
+
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
+	s.NoError(err)
+	s.NotNil(response)
+	s.Len(response.Executions, 1)
+	s.Equal(testWorkflowID, response.Executions[0].Execution.GetWorkflowId())
 }
