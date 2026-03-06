@@ -345,6 +345,7 @@ clean-bins:
 	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
+	@rm -f fairsim
 	@rm -f temporal-sql-tool
 	@rm -f temporal-elasticsearch-tool
 
