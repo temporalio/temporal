@@ -24,6 +24,7 @@
 /temporal-*
 /tctl*
 /tdbg
+/fairsim
 
 # proto images
 /proto/image.bin
