@@ -631,6 +631,9 @@ message ActivityInfo {
     bool reset_heartbeats = 48;
 
     int64 start_version = 50;
+
+    // The task queue on which the server will send control tasks to the worker running this activity.
+    string worker_control_task_queue = 51;
 }
 
 // timer_map column

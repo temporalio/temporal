@@ -53,6 +53,7 @@ type (
 
 	workflowTaskCompletedHandler struct {
 		identity                string
+		workerControlTaskQueue  string
 		workflowTaskCompletedID int64
 
 		// internal state
@@ -104,6 +105,7 @@ type (
 
 func newWorkflowTaskCompletedHandler(
 	identity string,
+	workerControlTaskQueue string,
 	workflowTaskCompletedID int64,
 	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
@@ -123,6 +125,7 @@ func newWorkflowTaskCompletedHandler(
 ) *workflowTaskCompletedHandler {
 	return &workflowTaskCompletedHandler{
 		identity:                identity,
+		workerControlTaskQueue:  workerControlTaskQueue,
 		workflowTaskCompletedID: workflowTaskCompletedID,
 
 		// internal state
@@ -559,6 +562,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		stamp,
 		nil,
 		nil,
+		handler.workerControlTaskQueue,
 	); err != nil {
 		return nil, err
 	}

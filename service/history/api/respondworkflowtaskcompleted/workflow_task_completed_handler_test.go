@@ -84,6 +84,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		)
 		out.handler = newWorkflowTaskCompletedHandler( // 😲
 			t.Name(), // identity
+			"",       // workerControlTaskQueue
 			123,      // workflowTaskCompletedID
 			out.ms,
 			out.updates,
