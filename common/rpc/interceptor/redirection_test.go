@@ -679,3 +679,142 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_RemoteRoutin
 	s.Len(failureMetrics, 1)
 	s.Equal(int64(1), failureMetrics[0].Value)
 }
+
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_TooManyRedirects_EmitsMetric() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	// Create context with DCRedirectionApiHeaderName already present (indicating this is a second redirect)
+	ctx := metadata.NewIncomingContext(
+		context.Background(),
+		metadata.New(map[string]string{
+			DCRedirectionApiHeaderName: "true",
+		}),
+	)
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution",
+	}
+	namespaceName := namespace.Name("test-namespace")
+
+	// Setup namespace to be active in remote cluster (triggers redirect)
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName, // Active in remote cluster
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	// Setup mock remote client
+	grpcConn := &mockClientConnInterface{
+		Suite:          &s.Suite,
+		targetMethod:   info.FullMethod,
+		targetResponse: &workflowservice.SignalWithStartWorkflowExecutionResponse{},
+	}
+	s.clientBean.EXPECT().GetRemoteFrontendClient(cluster.TestAlternativeClusterName).Return(grpcConn, nil, nil).Times(1)
+
+	// Execute
+	_, err := redirector.handleRedirectAPIInvocation(
+		ctx, req, info, nil, methodName,
+		globalAPIResponses[methodName], namespaceName,
+	)
+	s.NoError(err)
+
+	// Verify too-many-redirects metric was emitted
+	snapshot := capture.Snapshot()
+	tooManyRedirectsMetrics := snapshot[metrics.ClientRedirectionTooManyRedirects.Name()]
+	s.NotEmpty(tooManyRedirectsMetrics, "ClientRedirectionTooManyRedirects should be emitted when redirect header is present")
+	s.Len(tooManyRedirectsMetrics, 1)
+	s.Equal(int64(1), tooManyRedirectsMetrics[0].Value)
+
+	// Verify normal redirection metrics are also emitted
+	s.NotEmpty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should still be emitted")
+	s.NotEmpty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should still be emitted")
+}
+
+func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NoRedirectHeader_NoTooManyRedirectsMetric() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	redirector := NewRedirection(
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		s.namespaceCache,
+		config.DCRedirectionPolicy{Policy: DCRedirectionPolicyAllAPIsForwarding},
+		log.NewNoopLogger(),
+		s.clientBean,
+		metricsHandler,
+		clock.NewRealTimeSource(),
+		s.clusterMetadata,
+	)
+
+	// Create context WITHOUT the redirect header (first redirect scenario)
+	ctx := context.Background()
+	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{}
+	info := &grpc.UnaryServerInfo{
+		FullMethod: "/temporal.api.workflowservice.v1.WorkflowService/SignalWithStartWorkflowExecution",
+	}
+	namespaceName := namespace.Name("test-namespace")
+
+	// Setup namespace to be active in remote cluster (triggers redirect)
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName, // Active in remote cluster
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil).AnyTimes()
+	methodName := "SignalWithStartWorkflowExecution"
+
+	// Setup mock remote client
+	grpcConn := &mockClientConnInterface{
+		Suite:          &s.Suite,
+		targetMethod:   info.FullMethod,
+		targetResponse: &workflowservice.SignalWithStartWorkflowExecutionResponse{},
+	}
+	s.clientBean.EXPECT().GetRemoteFrontendClient(cluster.TestAlternativeClusterName).Return(grpcConn, nil, nil).Times(1)
+
+	// Execute
+	_, err := redirector.handleRedirectAPIInvocation(
+		ctx, req, info, nil, methodName,
+		globalAPIResponses[methodName], namespaceName,
+	)
+	s.NoError(err)
+
+	// Verify too-many-redirects metric was NOT emitted
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ClientRedirectionTooManyRedirects.Name()],
+		"ClientRedirectionTooManyRedirects should NOT be emitted for first redirect")
+
+	// Verify normal redirection metrics ARE emitted
+	s.NotEmpty(snapshot[metrics.ClientRedirectionRequests.Name()], "ClientRedirectionRequests should be emitted")
+	s.NotEmpty(snapshot[metrics.ClientRedirectionLatency.Name()], "ClientRedirectionLatency should be emitted")
+}
