@@ -478,7 +478,11 @@ func Invoke(
 						continuationToken.VersionedTransition = freshVersionedTransition
 						// Provide fresh transient tasks to appendTransientTasks to avoid a redundant re-query.
 						cachedTransientTasks = freshTransientTasks
+					} else {
+						return nil, freshErr
 					}
+				} else if freshErr != nil {
+					return nil, freshErr
 				}
 
 				appendTransientTasks(

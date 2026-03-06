@@ -553,13 +553,20 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	s.NoError(err)
 	s.NotNil(histPage1.NextPageToken,
 		"NextPageToken must be set: with maxBatchesPerPage=3 and 5 total batches, page 1 must not be the last page")
+	t.Logf("NEXTPAGETOKEN: %s", histPage1.NextPageToken)
 
 	firstPageEvents := histPage1.History.Events
 	staleNextPageToken := histPage1.NextPageToken
 
-	// Send a signal while the speculative WFT is scheduled (not yet polled/started).
-	// This triggers convertSpeculativeWorkflowTaskToNormal, committing:
-	//   8: WorkflowTaskScheduled  (was speculative, now a normal scheduled WFT)
+	// Simulate shard movement before the signal to clear in-memory mutable state.
+	// This drops the speculative WFT from memory, but the pending update survives in the
+	// update registry (no ShardFinalizerTimeout=0 override). On the next mutable state
+	// load the pending update will cause a normal WFT_SCHEDULED to be written as event 8.
+	// closeShard(s, tv.WorkflowID())
+
+	// Send the signal. Since the speculative WFT was cleared by the shard reload, signal
+	// processing finds the pending update in the registry and schedules a normal WFT:
+	//   8: WorkflowTaskScheduled  (normal WFT scheduled to handle the pending update)
 	//   9: WorkflowExecutionSignaled  (flushed immediately: HasStartedWorkflowTask=false)
 	// After this transaction, freshNextEventId=10.
 	_, signalErr := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
@@ -570,7 +577,10 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 		})
 	s.NoError(signalErr)
 
-	time.Sleep(2 * time.Second)
+	// Simulate shard movement after the signal to clear mutable state again before page 2
+	// is fetched. This ensures the gap-detection fix works even when the shard is reloaded
+	// between the signal and the subsequent GetWorkflowExecutionHistory call.
+	// closeShard(s, tv.WorkflowID())
 
 	// Fetch remaining history pages using the stale token obtained before the signal.
 	allEvents := make([]*historypb.HistoryEvent, len(firstPageEvents))
@@ -595,10 +605,14 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	// Without the fix: DB range [6, 8) returns only events 6–7; appendTransientTasks finds
 	// no transient events (speculative was committed); assembled history = 7 events (N-2),
 	// causing premature EOS.
-	s.Len(allEvents, 9,
-		"gap-detection fix: assembled history must include event 8 (WFT_SCHEDULED) and "+
-			"event 9 (WorkflowExecutionSignaled) committed by the signal transaction")
-	for _, he := range allEvents {
-		t.Logf("history event: %+v", he)
-	}
+	s.EqualHistoryEvents(`
+  1 WorkflowExecutionStarted
+  2 WorkflowTaskScheduled
+  3 WorkflowTaskStarted
+  4 WorkflowTaskCompleted
+  5 WorkflowTaskScheduled
+  6 WorkflowTaskStarted
+  7 WorkflowTaskCompleted
+  8 WorkflowTaskScheduled
+  9 WorkflowExecutionSignaled`, allEvents)
 }
