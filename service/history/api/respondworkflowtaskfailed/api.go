@@ -2,6 +2,7 @@ package respondworkflowtaskfailed
 
 import (
 	"context"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -92,6 +93,14 @@ func Invoke(
 				tag.WorkflowTaskFailedCause(request.GetCause()),
 				tag.NewStringTag("failure-message", request.GetFailure().GetMessage()),
 			)
+
+			if strings.HasPrefix(request.GetFailure().GetMessage(), "PREMATURE-EOS") {
+				metrics.PrematureEOSWorkflowTaskFailuresCounter.With(shardContext.GetMetricsHandler()).Record(
+					1,
+					metrics.OperationTag(metrics.HistoryRespondWorkflowTaskFailedScope),
+					metrics.NamespaceTag(namespaceEntry.Name().String()),
+				)
+			}
 
 			if request.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE {
 				if err := workflow.TerminateWorkflow(

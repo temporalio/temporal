@@ -923,6 +923,7 @@ var (
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
+	PrematureEOSWorkflowTaskFailuresCounter       = NewCounterDef("premature_eos_workflow_task_failures", WithDescription("Number of workflow task failures caused by the worker receiving premature end-of-stream (incomplete history) from the server."))
 	WorkflowTaskAttempt                           = NewDimensionlessHistogramDef("workflow_task_attempt")
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
