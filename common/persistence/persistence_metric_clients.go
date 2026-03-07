@@ -309,6 +309,7 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 		}
 		p.recordRequestMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, time.Since(startTime), retErr)
 		p.recordDataLossMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, retErr, workflowID, runID)
+		p.recordCurrentRecordMissingMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, caller, retErr, workflowID, runID)
 	}()
 	return p.persistence.UpdateWorkflowExecution(ctx, request)
 }
@@ -321,8 +322,18 @@ func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(
 	startTime := time.Now().UTC()
 	defer func() {
 		p.healthSignals.Record(request.ShardID, time.Since(startTime), retErr)
+		var workflowID, runID string
+		if request != nil {
+			if request.ResetWorkflowSnapshot.ExecutionInfo != nil {
+				workflowID = request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
+			}
+			if request.ResetWorkflowSnapshot.ExecutionState != nil {
+				runID = request.ResetWorkflowSnapshot.ExecutionState.RunId
+			}
+		}
 		p.recordRequestMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, time.Since(startTime), retErr)
-		p.recordDataLossMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, retErr, "", "")
+		p.recordDataLossMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, retErr, workflowID, runID)
+		p.recordCurrentRecordMissingMetrics(metrics.PersistenceConflictResolveWorkflowExecutionScope, caller, retErr, workflowID, runID)
 	}()
 	return p.persistence.ConflictResolveWorkflowExecution(ctx, request)
 }
@@ -1430,6 +1441,12 @@ func (p *metricEmitter) recordDataLossMetrics(operation string, caller string, e
 		if p.enableDataLossMetrics() {
 			EmitDataLossMetric(p.metricsHandler, caller, workflowID, runID, operation, err)
 		}
+	}
+}
+
+func (p *executionPersistenceClient) recordCurrentRecordMissingMetrics(operation string, caller string, err error, workflowID, runID string) {
+	if IsMissingCurrentRecordError(err) && p.enableDataLossMetrics() {
+		EmitCurrentRecordMissingMetric(p.metricsHandler, caller, workflowID, runID, operation, err)
 	}
 }
 
