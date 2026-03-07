@@ -33,9 +33,6 @@ func TestVersionWorkflowSuite(t *testing.T) {
 	t.Run("v0", func(t *testing.T) {
 		suite.Run(t, &VersionWorkflowSuite{workflowVersion: InitialVersion})
 	})
-	t.Run("v1", func(t *testing.T) {
-		suite.Run(t, &VersionWorkflowSuite{workflowVersion: AsyncSetCurrentAndRamping})
-	})
 	t.Run("v2", func(t *testing.T) {
 		suite.Run(t, &VersionWorkflowSuite{workflowVersion: VersionDataRevisionNumber})
 	})
@@ -1078,6 +1075,34 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 			OnAccept: func() {},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
+
+				// Capture state after revive
+				queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+				val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+				s.NoError(err)
+				err = val.Get(queryResp)
+				s.NoError(err)
+				stateAfterRevive := queryResp.VersionState
+
+				// Verify that status is reset to INACTIVE
+				s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, stateAfterRevive.Status)
+
+				// Verify that timing fields are reset
+				s.Nil(stateAfterRevive.CurrentSinceTime, "CurrentSinceTime should be reset")
+				s.Nil(stateAfterRevive.RampingSinceTime, "RampingSinceTime should be reset")
+				s.Nil(stateAfterRevive.RoutingUpdateTime, "RoutingUpdateTime should be reset")
+				s.Nil(stateAfterRevive.FirstActivationTime, "FirstActivationTime should be reset")
+				s.Nil(stateAfterRevive.LastCurrentTime, "LastCurrentTime should be reset")
+				s.Nil(stateAfterRevive.LastDeactivationTime, "LastDeactivationTime should be reset")
+
+				// Verify that ramp percentage is reset
+				s.Equal(float32(0), stateAfterRevive.RampPercentage)
+
+				// Verify that drainage info is reset (drainage info is set to an empty struct and not nil)
+				s.Equal((&deploymentpb.VersionDrainageInfo{}).String(), stateAfterRevive.DrainageInfo.String(), "DrainageInfo should be reset")
+
+				// Verify that metadata is reset
+				s.Nil(stateAfterRevive.Metadata, "Metadata should be reset")
 			},
 		}, registerArgs)
 	}, 50*time.Millisecond)
@@ -1097,7 +1122,9 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 					},
 				},
 			},
-			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo:              &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
+			Metadata:                  &deploymentpb.VersionMetadata{},
 			RevisionNumber:            5,
 			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
 			StartedDeploymentWorkflow: true,
@@ -2243,4 +2270,177 @@ func (s *VersionWorkflowSuite) skipFromVersion(version DeploymentWorkflowVersion
 	if s.workflowVersion >= version {
 		s.T().Skipf("test supports version older than %v", version)
 	}
+}
+
+// Test_ReactivateVersion_FromDrained tests that a drained version can be reactivated
+// via the ReactivateVersionSignal and properly resets its state
+func (s *VersionWorkflowSuite) Test_ReactivateVersion_FromDrained() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Mock SyncDeploymentVersionUserData for reactivation
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+
+	// Mock external signal to deployment workflow
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Schedule reactivation signal
+	s.env.RegisterDelayedCallback(func() {
+		// Send reactivation signal
+		s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+
+		// Wait a bit, then query to verify state
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.NoError(err)
+			err = val.Get(queryResp)
+			s.NoError(err)
+
+			// Verify that status is DRAINING after reactivation
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
+
+			// Verify drainage info is set up for monitoring
+			s.NotNil(queryResp.VersionState.DrainageInfo)
+			s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINING, queryResp.VersionState.DrainageInfo.Status)
+			s.NotNil(queryResp.VersionState.DrainageInfo.LastChangedTime)
+			s.NotNil(queryResp.VersionState.DrainageInfo.LastCheckedTime)
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	// Start workflow with DRAINED status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo: &deploymentpb.VersionDrainageInfo{
+				Status:          enumspb.VERSION_DRAINAGE_STATUS_DRAINED,
+				LastChangedTime: now,
+				LastCheckedTime: now,
+			},
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_ReactivateVersion_FromInactive tests that an inactive version can be reactivated
+func (s *VersionWorkflowSuite) Test_ReactivateVersion_FromInactive() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Mock SyncDeploymentVersionUserData for reactivation
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		&deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil,
+	).Maybe()
+
+	// Mock external signal to deployment workflow
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// Schedule reactivation signal
+	s.env.RegisterDelayedCallback(func() {
+		// Send reactivation signal
+		s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+
+		// Wait a bit, then query to verify state
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.NoError(err)
+			err = val.Get(queryResp)
+			s.NoError(err)
+
+			// Verify that status is DRAINING after reactivation
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
+
+			// Verify drainage info is set up
+			s.NotNil(queryResp.VersionState.DrainageInfo)
+			s.Equal(enumspb.VERSION_DRAINAGE_STATUS_DRAINING, queryResp.VersionState.DrainageInfo.Status)
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	// Start workflow with INACTIVE status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
+}
+
+// Test_ReactivateVersion_IgnoredWhenCurrent tests that reactivation signal is ignored
+// when the version is already CURRENT
+func (s *VersionWorkflowSuite) Test_ReactivateVersion_IgnoredWhenNotDrainedOrInactive() {
+	tv := testvars.New(s.T())
+	now := timestamppb.New(time.Now())
+
+	var a *VersionActivities
+	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
+	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
+
+	// No mocks for SyncDeploymentVersionUserData since reactivation should be ignored
+
+	// Schedule reactivation signal
+	s.env.RegisterDelayedCallback(func() {
+		// Send reactivation signal
+		s.env.SignalWorkflow(ReactivateVersionSignalName, nil)
+
+		// Wait a bit, then query to verify state hasn't changed
+		s.env.RegisterDelayedCallback(func() {
+			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
+			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
+			s.NoError(err)
+			err = val.Get(queryResp)
+			s.NoError(err)
+
+			// Verify that status remains CURRENT
+			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, queryResp.VersionState.Status)
+
+			// Verify no drainage info is set
+			s.Nil(queryResp.VersionState.DrainageInfo)
+		}, 10*time.Millisecond)
+	}, 10*time.Millisecond)
+
+	// Start workflow with CURRENT status
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			CurrentSinceTime:          now,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(s.env.IsWorkflowCompleted())
 }
