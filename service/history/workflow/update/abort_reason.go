@@ -34,7 +34,7 @@ const (
 // Matrix of "abort reason/Update state" to "failure/error" pair. Only one value (failure or error) is allowed per pair.
 var reasonStateMatrix = map[reasonState]failureError{
 	// If the registry is cleared, then all Updates (no matter what state they are)
-	// are aborted with retryable registryClearedErr error.
+	// are aborted with SDK-retryable registryClearedErr error (converted to AbortedByServerErr).
 	reasonState{r: AbortReasonRegistryCleared, st: stateCreated}:                             {f: nil, err: registryClearedErr},
 	reasonState{r: AbortReasonRegistryCleared, st: stateProvisionallyAdmitted}:               {f: nil, err: registryClearedErr},
 	reasonState{r: AbortReasonRegistryCleared, st: stateAdmitted}:                            {f: nil, err: registryClearedErr},
@@ -67,8 +67,8 @@ var reasonStateMatrix = map[reasonState]failureError{
 	reasonState{r: AbortReasonWorkflowCompleted, st: stateProvisionallyAborted}: {f: nil, err: nil},
 	reasonState{r: AbortReasonWorkflowCompleted, st: stateAborted}:              {f: nil, err: nil},
 
-	// If Workflow is starting new run, then all Updates are aborted with retryable ErrWorkflowClosing error.
-	// Internal retries will send them to the new run.
+	// If Workflow is starting new run, then all Updates are aborted with ErrWorkflowClosing (SDK-retryable).
+	// The SDK will retry and send them to the new run.
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateCreated}:               {f: nil, err: consts.ErrWorkflowClosing},
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateProvisionallyAdmitted}: {f: nil, err: consts.ErrWorkflowClosing},
 	reasonState{r: AbortReasonWorkflowContinuing, st: stateAdmitted}:              {f: nil, err: consts.ErrWorkflowClosing},

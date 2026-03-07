@@ -331,7 +331,8 @@ func IsServiceHandlerRetryableError(err error) bool {
 
 	switch err := err.(type) {
 	case *serviceerror.Internal,
-		*serviceerror.Unavailable:
+		*serviceerror.Unavailable,
+		*serviceerrors.AbortedByServer:
 		return true
 	case *serviceerror.MultiOperationExecution:
 		for _, opErr := range err.OperationErrors() {
