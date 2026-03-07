@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"google.golang.org/grpc"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -57,6 +60,11 @@ type testEnv struct {
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
+
+	// SDK components (set by SetupSdk).
+	envSdkClient sdkclient.Client
+	envWorker    sdkworker.Worker
+	envTaskQueue string
 }
 
 type TestOption func(*testOptions)
@@ -204,6 +212,36 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		}
 	}
 
+	// Set up an SDK client and worker for the test's dedicated namespace.
+	clientOptions := sdkclient.Options{
+		HostPort:  env.FrontendGRPCAddress(),
+		Namespace: ns.String(),
+		Logger:    log.NewSdkLogger(env.Logger),
+	}
+	if provider := cluster.Host().TlsConfigProvider(); provider != nil {
+		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	}
+	if interceptor := cluster.Host().GetGrpcClientInterceptor(); interceptor != nil {
+		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
+			grpc.WithUnaryInterceptor(interceptor.Unary()),
+			grpc.WithStreamInterceptor(interceptor.Stream()),
+		}
+	}
+	var sdkErr error
+	env.envSdkClient, sdkErr = sdkclient.Dial(clientOptions)
+	if sdkErr != nil {
+		t.Fatalf("Failed to create SDK client: %v", sdkErr)
+	}
+	env.envTaskQueue = RandomizeStr("tq")
+	env.envWorker = sdkworker.New(env.envSdkClient, env.envTaskQueue, sdkworker.Options{})
+	if sdkErr = env.envWorker.Start(); sdkErr != nil {
+		t.Fatalf("Failed to start SDK worker: %v", sdkErr)
+	}
+	t.Cleanup(func() {
+		env.envWorker.Stop()
+		env.envSdkClient.Close()
+	})
+
 	return env
 }
 
@@ -247,6 +285,21 @@ func (e *testEnv) T() *testing.T {
 
 func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// SdkClient returns the SDK client for this test's namespace.
+func (e *testEnv) SdkClient() sdkclient.Client {
+	return e.envSdkClient
+}
+
+// Worker returns the SDK worker for this test's namespace.
+func (e *testEnv) Worker() sdkworker.Worker {
+	return e.envWorker
+}
+
+// TaskQueue returns the task queue for this test.
+func (e *testEnv) TaskQueue() string {
+	return e.envTaskQueue
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
