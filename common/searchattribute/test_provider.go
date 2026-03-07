@@ -11,9 +11,7 @@ import (
 )
 
 type (
-	TestProvider struct {
-		es bool
-	}
+	TestProvider struct{}
 
 	TestMapper struct {
 		Namespace            string
@@ -25,17 +23,8 @@ var _ Provider = (*TestProvider)(nil)
 var _ Mapper = (*TestMapper)(nil)
 
 var (
-	esCustomSearchAttributes = map[string]enumspb.IndexedValueType{
-		"CustomIntField":      enumspb.INDEXED_VALUE_TYPE_INT,
-		"CustomTextField":     enumspb.INDEXED_VALUE_TYPE_TEXT,
-		"CustomKeywordField":  enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		"CustomDatetimeField": enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		"CustomDoubleField":   enumspb.INDEXED_VALUE_TYPE_DOUBLE,
-		"CustomBoolField":     enumspb.INDEXED_VALUE_TYPE_BOOL,
-	}
-
-	// default custom search attributes definition for SQL databases
-	sqlCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
+	// testCustomSearchAttributes is the unified custom search attributes map for tests (DB index only).
+	testCustomSearchAttributes = sadefs.GetDBIndexSearchAttributes(nil).CustomSearchAttributes
 
 	// ScheduleId is mapped to Keyword10 for tests
 	TestScheduleIDFieldName = "Keyword10"
@@ -49,42 +38,38 @@ var (
 		"Bool01":        "CustomBoolField",
 		"KeywordList01": "CustomKeywordListField",
 	}
+
+	// testAliasToField maps alias name to storage field name (reverse of TestAliases).
+	testAliasToField = func() map[string]string {
+		out := make(map[string]string, len(TestAliases))
+		for field, alias := range TestAliases {
+			out[alias] = field
+		}
+		return out
+	}()
 )
 
 func TestNameTypeMap() NameTypeMap {
-	csa := maps.Clone(sqlCustomSearchAttributes)
 	return NameTypeMap{
-		customSearchAttributes: csa,
+		customSearchAttributes: maps.Clone(testCustomSearchAttributes),
 	}
 }
 
-func TestEsNameTypeMap() NameTypeMap {
-	csa := maps.Clone(esCustomSearchAttributes)
+// TestNameTypeMapWithScheduleID returns a type map that includes ScheduleID as a custom attribute.
+// Use only for tests that explicitly need "ScheduleID defined as custom search attribute" (e.g. schedule visibility with custom ScheduleId column).
+func TestNameTypeMapWithScheduleID() NameTypeMap {
+	csa := maps.Clone(testCustomSearchAttributes)
+	csa[sadefs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 	return NameTypeMap{
 		customSearchAttributes: csa,
 	}
-}
-
-func TestEsNameTypeMapWithScheduleID() NameTypeMap {
-	res := TestEsNameTypeMap()
-	res.customSearchAttributes[sadefs.ScheduleID] = enumspb.INDEXED_VALUE_TYPE_KEYWORD
-	return res
 }
 
 func NewTestProvider() *TestProvider {
 	return &TestProvider{}
 }
 
-func NewTestEsProvider() *TestProvider {
-	return &TestProvider{
-		es: true,
-	}
-}
-
 func (s *TestProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	if s.es {
-		return TestEsNameTypeMap(), nil
-	}
 	return TestNameTypeMap(), nil
 }
 
@@ -128,12 +113,18 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		if t.WithCustomScheduleID && alias == sadefs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
+		var resolved string
 		if strings.HasPrefix(alias, "AliasFor") {
-			return strings.TrimPrefix(alias, "AliasFor"), nil
+			resolved = strings.TrimPrefix(alias, "AliasFor")
 		} else if strings.HasPrefix(alias, "AliasWithHyphenFor-") {
-			return strings.TrimPrefix(alias, "AliasWithHyphenFor-"), nil
+			resolved = strings.TrimPrefix(alias, "AliasWithHyphenFor-")
+		} else {
+			resolved = alias
 		}
-		return "", serviceerror.NewInvalidArgument("mapper error")
+		if fieldName, ok := testAliasToField[resolved]; ok {
+			return fieldName, nil
+		}
+		return resolved, nil
 	}
 	return "", serviceerror.NewInvalidArgument("unknown namespace")
 }
@@ -143,7 +134,7 @@ func NewNoopMapper() Mapper {
 }
 
 func NewTestMapperProvider(customMapper Mapper) MapperProvider {
-	return NewMapperProvider(customMapper, nil, NewTestProvider(), false)
+	return NewMapperProvider(customMapper, nil, NewTestProvider())
 }
 
 func NewNameTypeMapStub(attributes map[string]enumspb.IndexedValueType) NameTypeMap {
