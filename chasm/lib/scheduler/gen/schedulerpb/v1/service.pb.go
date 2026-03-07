@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	_ "go.temporal.io/server/api/routing/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -26,14 +27,14 @@ var File_temporal_server_chasm_lib_scheduler_proto_v1_service_proto protoreflect
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/chasm/lib/scheduler/proto/v1/service.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1aCtemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xc2\t\n" +
-	"\x10SchedulerService\x12\xbf\x01\n" +
-	"\x0eCreateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xbf\x01\n" +
-	"\x0eUpdateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xbc\x01\n" +
-	"\rPatchSchedule\x12B.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest\x1aC.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xbf\x01\n" +
-	"\x0eDeleteSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xc5\x01\n" +
-	"\x10DescribeSchedule\x12E.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest\x1aF.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x12\xe0\x01\n" +
-	"\x19ListScheduleMatchingTimes\x12N.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest\x1aO.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse\"\"\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_idBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	":temporal/server/chasm/lib/scheduler/proto/v1/service.proto\x12,temporal.server.chasm.lib.scheduler.proto.v1\x1aCtemporal/server/chasm/lib/scheduler/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto\x1a0temporal/server/api/common/v1/api_category.proto2\xe6\t\n" +
+	"\x10SchedulerService\x12\xc5\x01\n" +
+	"\x0eCreateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x8a\xb5\x18\x02\b\x01\x12\xc5\x01\n" +
+	"\x0eUpdateSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.UpdateScheduleResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x8a\xb5\x18\x02\b\x01\x12\xc2\x01\n" +
+	"\rPatchSchedule\x12B.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleRequest\x1aC.temporal.server.chasm.lib.scheduler.proto.v1.PatchScheduleResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x8a\xb5\x18\x02\b\x01\x12\xc5\x01\n" +
+	"\x0eDeleteSchedule\x12C.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.DeleteScheduleResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x8a\xb5\x18\x02\b\x01\x12\xcb\x01\n" +
+	"\x10DescribeSchedule\x12E.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleRequest\x1aF.temporal.server.chasm.lib.scheduler.proto.v1.DescribeScheduleResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x8a\xb5\x18\x02\b\x01\x12\xe6\x01\n" +
+	"\x19ListScheduleMatchingTimes\x12N.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest\x1aO.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse\"(\x92\xc4\x03\x1e\x1a\x1cfrontend_request.schedule_id\x8a\xb5\x18\x02\b\x01BGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_goTypes = []any{
 	(*CreateScheduleRequest)(nil),             // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest
