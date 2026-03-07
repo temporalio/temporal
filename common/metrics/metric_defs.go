@@ -1341,6 +1341,18 @@ var (
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
 	)
+	ScheduleMigrationStarted = NewCounterDef(
+		"schedule_migration_started",
+		WithDescription("The number of times a V1 schedule starts migration to CHASM"),
+	)
+	ScheduleMigrationCompleted = NewCounterDef(
+		"schedule_migration_completed",
+		WithDescription("The number of times a V1 schedule successfully completes migration to CHASM"),
+	)
+	ScheduleMigrationFailed = NewCounterDef(
+		"schedule_migration_failed",
+		WithDescription("The number of times a V1 schedule fails migration to CHASM"),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
