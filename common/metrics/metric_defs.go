@@ -759,6 +759,10 @@ var (
 	HistoryEventNotificationInFlightMessageGauge = NewGaugeDef("history_event_notification_inflight_message_gauge")
 	HistoryEventNotificationFailDeliveryCount    = NewCounterDef("history_event_notification_fail_delivery_count")
 	HistoryHostHealthGauge                       = NewGaugeDef("host_health")
+	HistoryRPCP99LatencyGauge                    = NewGaugeDef(
+		"history_rpc_p99_latency_ms",
+		WithDescription("Moving window P99 RPC latency (milliseconds) as observed by the health signal aggregator. Emitted on each DeepHealthCheck call."),
+	)
 	// ArchivalTaskInvalidURI is emitted by the archival queue task executor when the history or visibility URI for an
 	// archival task is not a valid URI.
 	// We may emit this metric several times for a single task if the task is retried.

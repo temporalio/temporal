@@ -1,6 +1,8 @@
 package aggregate
 
 import (
+	"math"
+	"sort"
 	"sync"
 	"time"
 )
@@ -76,4 +78,28 @@ func (a *MovingWindowAvgImpl) expireOldValuesLocked() {
 		a.sum -= a.buffer[a.headIdx].value
 		a.count--
 	}
+}
+
+// Percentile returns the p-th percentile (e.g. 0.99 for P99) of values
+// currently in the moving window. Returns 0 if the window is empty.
+func (a *MovingWindowAvgImpl) Percentile(p float64) float64 {
+	a.Lock()
+	defer a.Unlock()
+
+	a.expireOldValuesLocked()
+	if a.count == 0 {
+		return 0
+	}
+
+	values := make([]int64, 0, a.count)
+	for i := a.headIdx; i != a.tailIdx; i = (i + 1) % a.maxBufferSize {
+		values = append(values, a.buffer[i].value)
+	}
+	sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+
+	idx := int(math.Ceil(p*float64(len(values)))) - 1
+	if idx < 0 {
+		idx = 0
+	}
+	return float64(values[idx])
 }
