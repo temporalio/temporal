@@ -154,10 +154,17 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.NotNil(resp)
 		s.Len(resp.GetWorkersInfo(), 1)
 
+		// Verify deprecated WorkersInfo field (backward compatibility)
 		workerHeartbeat := resp.GetWorkersInfo()[0].GetWorkerHeartbeat()
 		s.Equal(worker1Key, workerHeartbeat.WorkerInstanceKey)
 		s.Equal(sharedTaskQueue, workerHeartbeat.TaskQueue)
 		s.Equal(int32(1), workerHeartbeat.TotalStickyCacheHit)
+
+		// Verify new Workers field (WorkerListInfo)
+		s.Len(resp.GetWorkers(), 1)
+		workerListInfo := resp.GetWorkers()[0]
+		s.Equal(worker1Key, workerListInfo.GetWorkerInstanceKey())
+		s.Equal(sharedTaskQueue, workerListInfo.GetTaskQueue())
 	}
 	{
 		resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
@@ -167,28 +174,40 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		s.NoError(err)
 		s.NotNil(resp)
 
+		// Verify deprecated WorkersInfo field
 		workers := resp.GetWorkersInfo()
-		// Collect workers by their instance key
 		workersByKey := make(map[string]*workerpb.WorkerHeartbeat)
 		for _, workerInfo := range workers {
 			heartbeat := workerInfo.GetWorkerHeartbeat()
 			workersByKey[heartbeat.WorkerInstanceKey] = heartbeat
 		}
-
-		// Verify we have exactly the workers we expect
 		s.Len(workersByKey, 2)
 
-		// Verify worker1
 		worker1, exists := workersByKey[worker1Key]
 		s.True(exists, "worker1 should exist")
 		s.Equal(sharedTaskQueue, worker1.TaskQueue)
 		s.Equal(int32(1), worker1.TotalStickyCacheHit)
 
-		// Verify worker2
 		worker2, exists := workersByKey[worker2Key]
 		s.True(exists, "worker2 should exist")
 		s.Equal(sharedTaskQueue, worker2.TaskQueue)
 		s.Equal(int32(2), worker2.TotalStickyCacheHit)
+
+		// Verify new Workers field (WorkerListInfo)
+		listInfos := resp.GetWorkers()
+		s.Len(listInfos, 2)
+		listInfoByKey := make(map[string]*workerpb.WorkerListInfo)
+		for _, info := range listInfos {
+			listInfoByKey[info.GetWorkerInstanceKey()] = info
+		}
+
+		listInfo1, exists := listInfoByKey[worker1Key]
+		s.True(exists, "worker1 list info should exist")
+		s.Equal(sharedTaskQueue, listInfo1.GetTaskQueue())
+
+		listInfo2, exists := listInfoByKey[worker2Key]
+		s.True(exists, "worker2 list info should exist")
+		s.Equal(sharedTaskQueue, listInfo2.GetTaskQueue())
 	}
 	{
 		nonExistentWorkerKey := s.tv.WorkerIdentity() + "_nonexistent"
@@ -198,7 +217,8 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetWorkersInfo(), 0)
+		s.Empty(resp.GetWorkersInfo())
+		s.Empty(resp.GetWorkers())
 	}
 }
 
