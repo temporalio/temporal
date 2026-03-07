@@ -10,6 +10,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -25,6 +28,7 @@ import (
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -45,6 +49,8 @@ type NexusHTTPHandler struct {
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
 	enabled                              dynamicconfig.BoolPropertyFn
+	tracerProvider                       trace.TracerProvider
+	propagator                           propagation.TextMapPropagator
 }
 
 func NewNexusHTTPHandler(
@@ -65,6 +71,8 @@ func NewNexusHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
 ) *NexusHTTPHandler {
 	return &NexusHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -80,6 +88,8 @@ func NewNexusHTTPHandler(
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
 		enabled:                              serviceConfig.EnableNexusAPIs,
+		tracerProvider:                       tracerProvider,
+		propagator:                           propagator,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
@@ -99,6 +109,7 @@ func NewNexusHTTPHandler(
 				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
 				httpTraceProvider:             httpTraceProvider,
+				propagator:                    propagator,
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
@@ -108,10 +119,20 @@ func NewNexusHTTPHandler(
 }
 
 func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByEndpoint)
+	registerRoute := func(route, spanName string, handlerFunc http.HandlerFunc) {
+		var handler http.Handler = handlerFunc
+		if telemetry.IsTracingEnabled(h.tracerProvider) {
+			handler = otelhttp.NewHandler(
+				telemetry.DebugHTTPMiddleware(handlerFunc),
+				spanName,
+				otelhttp.WithTracerProvider(h.tracerProvider),
+				otelhttp.WithPropagators(h.propagator),
+			)
+		}
+		r.PathPrefix("/" + route + "/").Handler(handler)
+	}
+	registerRoute(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation(), "DispatchNexusTask", h.dispatchNexusTaskByNamespaceAndTaskQueue)
+	registerRoute(commonnexus.RouteDispatchNexusTaskByEndpoint.Representation(), "DispatchNexusTask", h.dispatchNexusTaskByEndpoint)
 }
 
 func (h *NexusHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {

@@ -81,6 +81,13 @@ func (c *memExporterClient) UploadTraces(
 	return nil
 }
 
+// Spans returns all collected resource spans.
+func (e *MemoryExporter) Spans() []*tracepb.ResourceSpans {
+	e.client.spansLock.Lock()
+	defer e.client.spansLock.Unlock()
+	return e.client.spans
+}
+
 func (c *memExporterClient) Write(filename string) (string, error) {
 	c.spansLock.Lock()
 	defer c.spansLock.Unlock()

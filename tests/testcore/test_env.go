@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"google.golang.org/grpc"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -51,12 +54,15 @@ type testEnv struct {
 
 	Logger log.Logger
 
-	cluster    *TestCluster
-	nsName     namespace.Name
-	nsID       namespace.ID
-	taskPoller *taskpoller.TaskPoller
-	t          *testing.T
-	tv         *testvars.TestVars
+	cluster         *TestCluster
+	nsName          namespace.Name
+	nsID            namespace.ID
+	taskPoller      *taskpoller.TaskPoller
+	t               *testing.T
+	tv              *testvars.TestVars
+	sdkClient       sdkclient.Client
+	worker          sdkworker.Worker
+	workerTaskQueue string
 }
 
 type TestOption func(*testOptions)
@@ -64,6 +70,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	sdkWorker             bool
 }
 
 type dynamicConfigOverride struct {
@@ -76,6 +83,15 @@ type dynamicConfigOverride struct {
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
+	}
+}
+
+// WithSdkWorker sets up an SDK client and worker for the test.
+// The client, worker, and task queue are accessible via SdkClient(), Worker(), and TaskQueue().
+// Cleanup is handled automatically via t.Cleanup().
+func WithSdkWorker() TestOption {
+	return func(o *testOptions) {
+		o.sdkWorker = true
 	}
 }
 
@@ -96,8 +112,19 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 
 // sequentialSuite holds state for a suite marked with MustRunSequential.
 // It manages a single dedicated cluster shared by all tests in the suite.
+// The cluster is created lazily on the first call to NewEnv, so that
+// any test-level setup (e.g. OTEL env vars) can complete first.
 type sequentialSuite struct {
-	cluster *FunctionalTestBase
+	clusterOnce sync.Once
+	cluster     *FunctionalTestBase
+	t           *testing.T
+}
+
+func (ss *sequentialSuite) getOrCreateCluster() *FunctionalTestBase {
+	ss.clusterOnce.Do(func() {
+		ss.cluster = testClusterPool.createCluster(ss.t, nil, false)
+	})
+	return ss.cluster
 }
 
 // MustRunSequential marks a test suite to run its tests sequentially instead
@@ -112,17 +139,18 @@ func MustRunSequential(t *testing.T, reason string) {
 		panic("MustRunSequential requires a reason")
 	}
 
-	// Create a dedicated cluster for this suite.
-	suite := &sequentialSuite{
-		cluster: testClusterPool.createCluster(t, nil, false),
-	}
+	// Defer cluster creation until the first NewEnv call, so that any test-level
+	// setup (e.g. OTEL env vars via SetupMemoryCollector) can complete first.
+	suite := &sequentialSuite{t: t}
 	sequentialSuites.Store(t.Name(), suite)
 
 	// Register cleanup to tear down the suite's cluster when the parent test completes.
 	t.Cleanup(func() {
 		sequentialSuites.Delete(t.Name())
-		if err := suite.cluster.testCluster.TearDownCluster(); err != nil {
-			t.Logf("Failed to tear down sequential suite cluster: %v", err)
+		if suite.cluster != nil {
+			if err := suite.cluster.testCluster.TearDownCluster(); err != nil {
+				t.Logf("Failed to tear down sequential suite cluster: %v", err)
+			}
 		}
 	})
 }
@@ -153,8 +181,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 	var base *FunctionalTestBase
 	if sequential {
 		// Sequential suites use a single dedicated cluster for all tests.
+		// getOrCreateCluster lazily initializes the cluster so that any
+		// test-level setup (e.g. OTEL env vars) can complete before startup.
 		suite := suiteVal.(*sequentialSuite)
-		base = suite.cluster
+		base = suite.getOrCreateCluster()
 		base.SetT(t)
 	} else {
 		// For dedicated clusters, pass all dynamic config settings at cluster creation.
@@ -204,6 +234,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		}
 	}
 
+	if options.sdkWorker {
+		env.setupSdk()
+	}
+
 	return env
 }
 
@@ -247,6 +281,51 @@ func (e *testEnv) T() *testing.T {
 
 func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+func (e *testEnv) SdkClient() sdkclient.Client {
+	return e.sdkClient
+}
+
+func (e *testEnv) Worker() sdkworker.Worker {
+	return e.worker
+}
+
+func (e *testEnv) TaskQueue() string {
+	return e.workerTaskQueue
+}
+
+func (e *testEnv) setupSdk() {
+	clientOptions := sdkclient.Options{
+		HostPort:  e.FrontendGRPCAddress(),
+		Namespace: e.nsName.String(),
+		Logger:    log.NewSdkLogger(e.Logger),
+	}
+
+	if provider := e.cluster.host.tlsConfigProvider; provider != nil {
+		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	}
+
+	if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
+		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
+			grpc.WithUnaryInterceptor(interceptor.Unary()),
+			grpc.WithStreamInterceptor(interceptor.Stream()),
+		}
+	}
+
+	var err error
+	e.sdkClient, err = sdkclient.Dial(clientOptions)
+	if err != nil {
+		e.t.Fatalf("Failed to create SDK client: %v", err)
+	}
+	e.t.Cleanup(func() { e.sdkClient.Close() })
+
+	e.workerTaskQueue = RandomizeStr(e.t.Name())
+	e.worker = sdkworker.New(e.sdkClient, e.workerTaskQueue, sdkworker.Options{})
+	if err = e.worker.Start(); err != nil {
+		e.t.Fatalf("Failed to start SDK worker: %v", err)
+	}
+	e.t.Cleanup(func() { e.worker.Stop() })
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.

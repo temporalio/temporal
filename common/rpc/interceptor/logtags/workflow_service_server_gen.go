@@ -259,7 +259,11 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.PollNexusTaskQueueRequest:
 		return nil
 	case *workflowservice.PollNexusTaskQueueResponse:
-		return wt.fromTaskToken(r.GetTaskToken())
+		// The task token in PollNexusTaskQueueResponse is a NexusTask token, not a
+		// workflow task token. NexusTask.task_queue sits at proto field 2 — the same
+		// field as Task.workflow_id — so calling fromTaskToken here would silently set
+		// temporalWorkflowID to the task queue name. Return nil to avoid that.
+		return nil
 	case *workflowservice.PollWorkflowExecutionUpdateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()),

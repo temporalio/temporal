@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -122,10 +124,16 @@ func ClientProviderFactory(
 			httpClient = &cl.Client
 			if clusterID != "" {
 				httpCaller = func(r *http.Request) (*http.Response, error) {
+					otel.GetTextMapPropagator().Inject(r.Context(), propagation.HeaderCarrier(r.Header))
 					r.Header.Set(NexusCallbackSourceHeader, clusterID)
 					resp, callErr := httpClient.Do(r)
 					commonnexus.SetFailureSourceOnContext(ctx, resp)
 					return resp, callErr
+				}
+			} else {
+				httpCaller = func(r *http.Request) (*http.Response, error) {
+					otel.GetTextMapPropagator().Inject(r.Context(), propagation.HeaderCarrier(r.Header))
+					return httpClient.Do(r)
 				}
 			}
 		default:
