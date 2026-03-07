@@ -2,10 +2,21 @@ package flakereport
 
 import (
 	"fmt"
+	"math"
 	"strings"
-
-	"github.com/dustin/go-humanize"
+	"time"
 )
+
+const boldFlakeRateThreshold = 5.0
+
+// hoursAgo formats a timestamp as "Xh ago" relative to now.
+func hoursAgo(t time.Time) string {
+	h := math.Round(time.Since(t).Hours())
+	if h < 1 {
+		h = 1
+	}
+	return fmt.Sprintf("%dh ago", int(h))
+}
 
 // formatReportLines returns a plain-text bullet line per report.
 func formatReportLines(reports []TestReport) []string {
@@ -47,10 +58,13 @@ func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
 	for _, sr := range suiteReports {
 		lastFailure := "-"
 		if sr.FailedRuns > 0 && !sr.LastFailure.IsZero() {
-			lastFailure = humanize.Time(sr.LastFailure)
+			lastFailure = hoursAgo(sr.LastFailure)
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %.1f%% (%d/%d) | %s |\n",
-			sr.SuiteName, sr.FlakeRate, sr.FailedRuns, sr.TotalRuns, lastFailure))
+		rate := fmt.Sprintf("%.1f%% (%d/%d)", sr.FlakeRate, sr.FailedRuns, sr.TotalRuns)
+		if sr.FlakeRate > boldFlakeRateThreshold {
+			rate = "**" + rate + "**"
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", sr.SuiteName, rate, lastFailure))
 	}
 
 	return sb.String()
@@ -74,11 +88,14 @@ func generateTestReportTable(reports []TestReport, maxLinks int) string {
 		links := formatLinks(report.GitHubURLs, maxLinks)
 		lastFailure := "N/A"
 		if !report.LastFailure.IsZero() {
-			lastFailure = humanize.Time(report.LastFailure)
+			lastFailure = hoursAgo(report.LastFailure)
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %.1f%% (%d/%d) | %s | %s |\n",
-			report.TestName, pct, report.FailureCount, report.TotalRuns,
-			lastFailure, links))
+		rate := fmt.Sprintf("%.1f%% (%d/%d)", pct, report.FailureCount, report.TotalRuns)
+		if pct > boldFlakeRateThreshold {
+			rate = "**" + rate + "**"
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
+			report.TestName, rate, lastFailure, links))
 	}
 
 	return sb.String()
@@ -98,7 +115,7 @@ func generateCIBreakerTable(reports []TestReport, maxLinks int) string {
 		links := formatLinks(report.GitHubURLs, maxLinks)
 		lastFailure := "N/A"
 		if !report.LastFailure.IsZero() {
-			lastFailure = humanize.Time(report.LastFailure)
+			lastFailure = hoursAgo(report.LastFailure)
 		}
 		sb.WriteString(fmt.Sprintf("| `%s` | %d | %d | %s | %s |\n",
 			report.TestName, report.CIRunsBroken, report.FailureCount,
