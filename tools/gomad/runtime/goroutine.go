@@ -17,6 +17,7 @@ type (
 	goroutineState int
 	goroutine      struct {
 		id             goroutineId
+		sim            *simulator // owning simulator
 		fn             func()
 		state          goroutineState
 		syncBlock      *syncBlock
@@ -43,14 +44,39 @@ const (
 )
 
 func NewGoroutine(fn func(), internal bool) {
-	CurrentSimulator().scheduler.add(&goroutine{
-		id:             goroutineId(nextId("go")),
+	s := tryAnySimulator()
+	if s == nil {
+		panic("NewGoroutine called outside of simulation")
+	}
+	g := &goroutine{
+		id:             goroutineId(nextId(s, "go")),
+		sim:            s,
 		fn:             fn,
 		internal:       internal,
 		syncCh:         make(chan struct{}),
 		suspendedCh:    make(chan struct{}),
 		sourceLocation: sourceLocation(2),
-	})
+	}
+	if tryCurrentGoroutine() != nil {
+		if internal {
+			// Internal goroutines (e.g. timers) are registered and queued but
+			// the caller is NOT suspended.  Suspending the caller here allows
+			// the scheduler to advance simulated time by the timer's duration
+			// in a single tick, which would expire the very context whose timer
+			// was just created — before the caller ever uses it.
+			s.scheduler.goroutines[g.id] = g
+			s.scheduler.enqueue(g)
+		} else {
+			// Caller is a cooperative goroutine managed by the scheduler: suspend
+			// the caller for fair scheduling before handing off to the new goroutine.
+			s.scheduler.add(g)
+		}
+	} else {
+		// Caller is not a cooperative goroutine (e.g. the main goroutine that
+		// called Start(), or a testing.tRunner goroutine).  Enqueue without
+		// suspending the caller.
+		s.scheduler.addFromNative(g)
+	}
 }
 
 func (g *goroutine) run() {
@@ -72,10 +98,9 @@ func (g *goroutine) run() {
 }
 
 func (g *goroutine) spawn() {
-	// once this goroutine completes ...
+	registerSimGoroutine(g.sim, g)
+	defer deregisterSim()
 	defer func() { g.done() }()
-
-	// execute the actual code inside the goroutine
 	g.fn()
 }
 

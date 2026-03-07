@@ -25,5 +25,9 @@
 package sim_runtime
 
 const (
-	TimeoutMultiplier = 1
+	// TimeoutMultiplier scales all simulator timeouts. Increase when running
+	// functional tests that perform SQLite CGO operations inside cooperative
+	// goroutines (e.g. test cluster initialization), which can take several
+	// seconds of real wall-clock time per operation.
+	TimeoutMultiplier = 600
 )

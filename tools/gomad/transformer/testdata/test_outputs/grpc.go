@@ -27,9 +27,9 @@
 package fixtures
 
 import (
-	fakegrpc "gomad.local/go.temporal.io/server/tools/gomad/api/ext-lib/fakegprc"
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
-	"gomad.local/google.golang.org/grpc"
+	fakegrpc "go.temporal.io/server/tools/gomad/api/ext-lib/fakegprc"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
+	"google.golang.org/grpc"
 )
 
 func grpc_fixture() {

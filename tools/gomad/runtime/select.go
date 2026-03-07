@@ -3,6 +3,7 @@ package sim_runtime
 import (
 	"reflect"
 
+	"github.com/petermattis/goid"
 	"go.temporal.io/server/tools/gomad/util/verify"
 )
 
@@ -21,6 +22,28 @@ type (
 
 func Select(values ...any) *Selector {
 	verify.T(len(values) > 0, "select with infinite loop")
+
+	// If called from outside the cooperative scheduler, delegate to a simulated goroutine
+	// so that the blocking select can be properly cooperative-scheduled.
+	if tryCurrentGoroutine() == nil {
+		s := tryAnySimulator()
+		verify.T(s != nil, "Select called outside of simulation")
+		nativeGid := goid.Get()
+		nativeDone := make(chan *Selector, 1)
+		g := &goroutine{
+			id:  goroutineId(nextId(s, "go")),
+			sim: s,
+			fn: func() {
+				result := Select(values...)
+				s.nativeTimes.Store(nativeGid, s.scheduler.clock.now)
+				nativeDone <- result
+			},
+			syncCh:      make(chan struct{}),
+			suspendedCh: make(chan struct{}),
+		}
+		s.scheduler.addFromNative(g)
+		return <-nativeDone
+	}
 
 	slct := &Selector{}
 

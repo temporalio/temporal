@@ -42,27 +42,47 @@ func CreateFileWriter(outDir string) func(pkg *packages.Package, files map[strin
 		panic(err)
 	}
 
+	// Track modules whose go.mod has already been written. ResultFunc is called
+	// sequentially so no mutex is needed.
+	writtenMods := make(map[string]bool)
+
 	return func(pkg *packages.Package, files map[string]string) string {
-		pkgIdParts := strings.Split(pkg.PkgPath, "/")
+		// Internal test packages share PkgPath with their base package but have
+		// an ID like "foo [foo.test]". Strip the bracket suffix so they are
+		// written into the same output directory as the regular package.
+		pkgPath := pkg.PkgPath
+		if idx := strings.Index(pkgPath, " ["); idx != -1 {
+			pkgPath = pkgPath[:idx]
+		}
+		pkgIdParts := strings.Split(pkgPath, "/")
 		pkgDir := pkgIdParts[len(pkgIdParts)-1]
 
 		for srcPath, content := range files {
 			relPath := filepath.Base(srcPath)
+			resolved := false
 			for {
 				parentDir := filepath.Base(filepath.Dir(strings.TrimSuffix(srcPath, relPath)))
 				if strings.Contains(parentDir, "@v") {
+					resolved = true
 					break // root of external module reached
 				}
 				if parentDir == strings.TrimSuffix(pkgDir, "_test") {
+					resolved = true
 					break // found the right parent folder for the package
 				}
 				if parentDir == "." {
-					panic("failed to find relative output path for " + srcPath)
+					// Build-cache or generated artifact with no traceable source
+					// path. The Go build system will regenerate it; skip here.
+					fmt.Printf("skipping unresolvable path for %s: %s\n", pkg.PkgPath, srcPath)
+					break
 				}
 				relPath = filepath.Join(parentDir, relPath)
 			}
+			if !resolved {
+				continue
+			}
 
-			dstPath := filepath.Join(outDir, simPkgPrefix, pkg.PkgPath, relPath)
+			dstPath := filepath.Join(outDir, simPkgPrefix, pkgPath, relPath)
 			if err := os.MkdirAll(filepath.Dir(dstPath), os.ModePerm); err != nil {
 				panic(err)
 			}
@@ -71,12 +91,28 @@ func CreateFileWriter(outDir string) func(pkg *packages.Package, files map[strin
 			}
 		}
 
-		dstPkgDir := filepath.Join(outDir, simPkgPrefix, pkg.PkgPath)
-		modPath := filepath.Join(simPkgPrefix, pkg.PkgPath)
+		// Derive the module path from the original module info so that all
+		// packages belonging to the same upstream module share one go.mod.
+		// This preserves the module boundary required by Go's internal-package
+		// rule (e.g. cloud.google.com/go/storage can import
+		// cloud.google.com/go/internal because both map to modules that keep
+		// their original parent-child relationship under the gomad.local/ prefix).
+		modulePkgPath := pkgPath
+		if pkg.Module != nil {
+			modulePkgPath = pkg.Module.Path
+		}
+		modPath := filepath.Join(simPkgPrefix, modulePkgPath)
 
-		goMod := fmt.Sprintf("module %s\n\ngo %s", modPath, golangVersion)
-		if err := os.WriteFile(filepath.Join(dstPkgDir, "go.mod"), []byte(goMod), os.ModePerm); err != nil {
-			panic(err)
+		if !writtenMods[modPath] {
+			writtenMods[modPath] = true
+			dstModDir := filepath.Join(outDir, modPath)
+			if err := os.MkdirAll(dstModDir, os.ModePerm); err != nil {
+				panic(err)
+			}
+			goMod := fmt.Sprintf("module %s\n\ngo %s", modPath, golangVersion)
+			if err := os.WriteFile(filepath.Join(dstModDir, "go.mod"), []byte(goMod), os.ModePerm); err != nil {
+				panic(err)
+			}
 		}
 
 		return modPath

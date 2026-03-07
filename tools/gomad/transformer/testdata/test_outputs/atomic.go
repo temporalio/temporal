@@ -29,8 +29,8 @@ package fixtures
 import (
 	"sync/atomic"
 
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
-	SIMLIB "gomad.local/go.temporal.io/server/tools/gomad/api/lib"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
 )
 
 func atomic_fixture() {
@@ -63,7 +63,7 @@ func atomic_fixture() {
 
 type _ = atomic.Bool
 type _ = atomic.Int32
-type _ = atomic.Pointer
+type _ = atomic.Pointer[any]
 type _ = atomic.Uint32
 type _ = atomic.Uint64
 type _ = atomic.Value

@@ -59,9 +59,9 @@ var (
 	simulatorLibPackage        = simulatorApiPackage + "/lib"
 	simPkgPrefix               = "gomad.local" // Go requires root to contain a dot
 	defaultSkipPackagePatterns = []string{
-		// to prevent import cycles
-		simulatorLangPackage,
-		simulatorLibPackage,
+		// Simulator API packages are written as-is (no import prefixing) so they
+		// resolve their own dependencies against the real source module.
+		simulatorApiPackage + "/.*",
 		simulatorPackage + "/runtime",
 		simulatorPackage + "/util",
 		"golang.org/x/text/.*",
@@ -73,6 +73,64 @@ var (
 		// to prevent ... issues?
 		"modernc.org/libc/.*",
 		"modernc.org/memory/.*",
+
+		// pure algorithmic library; uses inline block comments in conditions
+		// that trip the AST rewriter (bitreader.go:52)
+		"github.com/klauspost/compress/.*",
+
+		// generated protobuf code compiled into the build cache produces
+		// hash-named CompiledGoFiles that the writer cannot resolve
+		"go.opentelemetry.io/collector/.*",
+
+		// SQL driver packages implement stdlib database/sql/driver interfaces;
+		// remapping their database/sql imports to the ext-lib version causes type
+		// mismatches because the ext-lib sql.Register still expects stdlib types.
+		"github.com/go-sql-driver/mysql",
+		"github.com/lib/pq",
+		"github.com/jackc/pgx/v5/.*",
+		"modernc.org/sqlite",
+
+		// AWS SDK uses net/http/httputil (stdlib) alongside ext-lib net/http types,
+		// causing incompatible type errors.
+		"github.com/aws/aws-sdk-go/.*",
+
+
+		// olivere elastic uses net/http types alongside libraries
+		// that use stdlib net/http (AWS signer, golang.org/x/net/http2), causing
+		// incompatible type errors.
+		"github.com/olivere/elastic/.*",
+
+		// tally/v4/prometheus bridges the real-path prometheus ecosystem and net/http
+		// (via promhttp.HandlerFor). Skipping AST transform keeps its net/http usage
+		// consistent with stdlib, which matches promhttp's stdlib return types.
+		"github.com/uber-go/tally/v4/prometheus",
+
+		// The following packages all use stdlib net/http internally, and their
+		// sub-packages may use Go's 'internal' mechanism. Skipping AST transform
+		// (but still prefixing imports with gomad.local/) keeps types consistent
+		// with stdlib and satisfies Go's internal-package import rule because all
+		// sub-packages share the gomad.local/ prefix.
+		// Note: patterns without a trailing /  match both root and sub-packages
+		// because regexp.MatchString checks for a substring match.
+		"golang.org/x/net",
+		"golang.org/x/oauth2",
+
+		// otelhttp and httpsnoop wrap net/http types and are used by cloud.google.com
+		// packages (which are themselves skipped). Keeping them at stdlib net/http
+		// prevents type mismatches between the two.
+		"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
+		"github.com/felixge/httpsnoop",
+
+		// The elasticsearch client bridges olivere/elastic (skipped, stdlib net/http)
+		// and temporal server code. Skipping it keeps net/http consistent across
+		// the elastic library boundary.
+		"go.temporal.io/server/common/persistence/visibility/store/elasticsearch",
+
+
+		"cloud.google.com/.*",
+		"github.com/GoogleCloudPlatform/.*",
+		"google.golang.org/api/.*",
+		"github.com/googleapis/gax-go/.*",
 	}
 	DefaultSkip = func(pkg *packages.Package) bool {
 		for _, pattern := range defaultSkipPackagePatterns {
@@ -100,7 +158,7 @@ func Run(config *Config) ([]string, error) {
 		BuildFlags: config.BuildFlags,
 		Mode: packages.NeedName | packages.NeedFiles | packages.NeedCompiledGoFiles | packages.NeedImports |
 			packages.NeedTypes | packages.NeedTypesSizes | packages.NeedSyntax | packages.NeedTypesInfo |
-			packages.NeedDeps | packages.NeedEmbedFiles,
+			packages.NeedDeps | packages.NeedEmbedFiles | packages.NeedModule,
 		Tests: true,
 	}
 
@@ -118,8 +176,17 @@ func Run(config *Config) ([]string, error) {
 				continue
 			}
 
+			// Internal test packages (package foo, files ending in _test.go) share
+			// PkgPath with their regular package but have a distinct ID like
+			// "foo [foo.test]". Key by ID to ensure both are processed; the writer
+			// normalises the path back to the base package directory.
+			key := path
+			if strings.Contains(pkg.ID, " [") {
+				key = pkg.ID
+			}
+
 			// ignore previously added
-			if _, exists := todo[path]; exists {
+			if _, exists := todo[key]; exists {
 				continue
 			}
 
@@ -128,14 +195,17 @@ func Run(config *Config) ([]string, error) {
 				continue
 			}
 
-			todo[path] = pkg
+			todo[key] = pkg
 			collect(maps.Values(pkg.Imports))
 		}
 	}
 
 	pkgs, err := packages.Load(cfg,
 		"./...",
-		//simulatorLangPackage, // always need to include the Simulator itself - WHY?
+		// Always include the simulator API packages. Transformed packages gain
+		// imports of these (e.g. SIMAPI/SIMLIB/ext-lib), so they must appear as
+		// modules in the workspace even when the tested code doesn't import them.
+		simulatorApiPackage+"/...",
 	)
 	if err != nil {
 		panic(err)
@@ -198,6 +268,11 @@ func transformPackage(config *Config, pkg *packages.Package) map[string]string {
 	skipTransform := config.Skip(pkg)
 	files := make(map[string]string, len(pkg.CompiledGoFiles)+len(pkg.IgnoredFiles)+len(pkg.OtherFiles)+len(pkg.EmbedFiles))
 
+	// Test-variant packages (ID like "foo [foo.test]") share AST objects with
+	// the regular package for non-test files. Only include _test.go files here
+	// so non-test files are not transformed twice (which would corrupt the AST).
+	isTestVariant := strings.Contains(pkg.ID, " [")
+
 	copyFile := func(path string) {
 		source, err := os.ReadFile(path)
 		if err != nil {
@@ -208,6 +283,10 @@ func transformPackage(config *Config, pkg *packages.Package) map[string]string {
 
 	for i, file := range pkg.Syntax {
 		path := pkg.CompiledGoFiles[i]
+
+		if isTestVariant && !strings.HasSuffix(path, "_test.go") {
+			continue
+		}
 
 		var err error
 		tf := newFileTransformer(file, pkg, skipTransform)

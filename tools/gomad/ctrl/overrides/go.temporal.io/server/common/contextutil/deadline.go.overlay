@@ -1,0 +1,47 @@
+package contextutil
+
+import (
+	"context"
+	"time"
+
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
+)
+
+var noop = func() {}
+
+// WithDeadlineBuffer returns a child context with a deadline that ensures that at least buffer
+// amount of time remains after the child deadline expires and before the parent deadline expires.
+// The returned context timeout is therefore <= the requested timeout. If the parent deadline itself
+// does not allow buffer amount of time, then the returned context deadline expires immediately. Use
+// this method to create child context when the child cannot use all of parent's deadline but
+// instead there is a need to leave some time for parent to do some post-work.
+
+func WithDeadlineBuffer(parent context.Context,
+	timeout time.Duration,
+	buffer time.Duration) (context.Context, context.CancelFunc) {
+	SIMAPI.FuncStart()
+	if parent.Err() != nil {
+		return parent, noop
+	}
+
+	parentDeadline, parentHasDeadline := parent.Deadline()
+
+	if !parentHasDeadline || parent.Done() == nil {
+		// No parent deadline, or parent has a deadline but no Done channel (e.g. longPollCtx),
+		// so the parent deadline is informational only and cannot cancel via Done.
+		// Return parent directly: a child deadline is meaningless when the parent cannot cancel.
+		return parent, noop
+	}
+
+	// If parent deadline itself does not allow buffer then set child timeout to zero. Otherwise
+	// compute child deadline such that at least buffer remains after it and before parent deadline.
+	remaining := SIMLIB.Until(parentDeadline) - buffer
+	if remaining < timeout {
+		timeout = max(0, remaining)
+	}
+	return SIMLIB.WithTimeout(parent, timeout)
+}
+
+var _ = context.WithTimeout
+var _ = time.Until

@@ -29,7 +29,7 @@ package fixtures
 import (
 	"path/filepath"
 
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 )
 
 func noop_fixture() {

@@ -29,7 +29,7 @@ package fixtures
 import (
 	"fmt"
 
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 	"gomad.local/go.temporal.io/server/tools/gomad/transformer/testdata/external"
 	custom "gomad.local/go.temporal.io/server/tools/gomad/transformer/testdata/external"
 )

@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"net"
 
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 )
 
 type chan_type chan bool

@@ -33,11 +33,16 @@ import (
 )
 
 type Mutex struct {
+	real   sync.Mutex
 	locked bool
 	lockCh chan struct{}
 }
 
 func (m *Mutex) Lock() {
+	if SIM.TryAnySimulator() == nil {
+		m.real.Lock()
+		return
+	}
 	if m.lockCh == nil {
 		// no lock yet; initialize new channel to represent lock
 		m.lockCh = make(chan struct{}, 1)
@@ -49,6 +54,10 @@ func (m *Mutex) Lock() {
 }
 
 func (m *Mutex) Unlock() {
+	if SIM.TryAnySimulator() == nil {
+		m.real.Unlock()
+		return
+	}
 	verify.T(m.lockCh != nil, "unlock of (never) locked mutex")
 	verify.T(m.locked, "unlock of unlocked mutex")
 
@@ -58,6 +67,9 @@ func (m *Mutex) Unlock() {
 }
 
 func (m *Mutex) TryLock() bool {
+	if SIM.TryAnySimulator() == nil {
+		return m.real.TryLock()
+	}
 	if m.locked {
 		return false
 	}
@@ -65,38 +77,69 @@ func (m *Mutex) TryLock() bool {
 	return true
 }
 
+// RWMutex is a reader/writer mutex for the cooperative simulator.
+//
+// mode encodes lock state: 0 = unlocked, N > 0 = N active readers, -1 = write-locked.
+// A Cond on the embedded Mutex serializes all state changes and wakes waiters on
+// transitions that may unblock them (readers when mode returns to 0 from write-locked,
+// writers when mode reaches 0 from any reader/writer state).
+//
+// pendingWriters prevents writer starvation: RLock blocks while any writer is waiting,
+// ensuring that once a writer starts waiting it will eventually acquire the lock.
 type RWMutex struct {
-	readLock  Mutex
-	readers   WaitGroup
-	writeLock Mutex
-	writers   WaitGroup
+	real           sync.RWMutex
+	mu             Mutex
+	cond           *Cond
+	mode           int // 0=unlocked, N>0=N readers, -1=write-locked
+	pendingWriters int // writers waiting for the lock
+}
+
+func (m *RWMutex) ensureInit() {
+	if m.cond == nil {
+		m.cond = NewCond(&m.mu)
+	}
 }
 
 func (m *RWMutex) RLock() {
-	// make sure all writers are done first
-	m.writers.Wait()
-
-	// if first reader, grab lock
-	if m.readers.Counter() == 0 {
-		m.readLock.Lock()
+	if SIM.TryAnySimulator() == nil {
+		m.real.RLock()
+		return
 	}
-
-	m.readers.Add(1)
+	m.ensureInit()
+	m.mu.Lock()
+	for m.mode < 0 || m.pendingWriters > 0 {
+		m.cond.Wait()
+	}
+	m.mode++
+	m.mu.Unlock()
 }
 
 func (m *RWMutex) TryRLock() bool {
-	if m.writers.Counter() > 0 {
+	if SIM.TryAnySimulator() == nil {
+		return m.real.TryRLock()
+	}
+	m.ensureInit()
+	m.mu.Lock()
+	if m.mode < 0 {
+		m.mu.Unlock()
 		return false
 	}
-	m.RLock()
+	m.mode++
+	m.mu.Unlock()
 	return true
 }
 
 func (m *RWMutex) RUnlock() {
-	if m.readers.Counter() == 1 {
-		m.readLock.Unlock()
+	if SIM.TryAnySimulator() == nil {
+		m.real.RUnlock()
+		return
 	}
-	m.readers.Done()
+	m.mu.Lock()
+	m.mode--
+	if m.mode == 0 {
+		m.cond.Broadcast()
+	}
+	m.mu.Unlock()
 }
 
 func (m *RWMutex) RLocker() sync.Locker {
@@ -104,25 +147,46 @@ func (m *RWMutex) RLocker() sync.Locker {
 }
 
 func (m *RWMutex) Lock() {
-	// make sure all readers and writers are done first
-	m.readers.Wait()
-	m.writers.Wait()
-
-	m.writers.Add(1)
-	m.writeLock.Lock()
+	if SIM.TryAnySimulator() == nil {
+		m.real.Lock()
+		return
+	}
+	m.ensureInit()
+	m.mu.Lock()
+	m.pendingWriters++
+	for m.mode != 0 {
+		m.cond.Wait()
+	}
+	m.pendingWriters--
+	m.mode = -1
+	m.mu.Unlock()
 }
 
 func (m *RWMutex) TryLock() bool {
-	if m.readers.Counter() > 0 || m.writers.Counter() > 0 {
+	if SIM.TryAnySimulator() == nil {
+		return m.real.TryLock()
+	}
+	m.ensureInit()
+	m.mu.Lock()
+	if m.mode != 0 {
+		m.mu.Unlock()
 		return false
 	}
-	m.Lock()
+	m.mode = -1
+	m.mu.Unlock()
 	return true
 }
 
 func (m *RWMutex) Unlock() {
-	m.writeLock.Unlock()
-	m.writers.Done()
+	if SIM.TryAnySimulator() == nil {
+		m.real.Unlock()
+		return
+	}
+	m.mu.Lock()
+	verify.T(m.mode == -1, "unlock of (never) locked mutex")
+	m.mode = 0
+	m.cond.Broadcast()
+	m.mu.Unlock()
 }
 
 type readerMutex struct {
@@ -168,15 +232,45 @@ func (c *Cond) Broadcast() {
 	c.ch = make(chan struct{})
 }
 
+// Once is a SIMLIB-aware equivalent of sync.Once. It guarantees f() runs
+// exactly once even if f() yields to the cooperative scheduler mid-execution.
+//
+// Concurrent callers (SIMLIB goroutines or native goroutines interacting with
+// the simulation) that arrive while f() is in progress block cooperatively via
+// a SIMLIB channel until f() completes, then return without calling f() again.
 type Once struct {
-	done bool
+	mu      sync.Mutex
+	running bool
+	done    bool
+	waiters chan struct{} // closed by the first caller after f() completes
 }
 
 func (o *Once) Do(f func()) {
-	if !o.done {
-		f()
-		o.done = true
+	o.mu.Lock()
+	if o.done {
+		o.mu.Unlock()
+		return
 	}
+	if o.running {
+		// Another goroutine is running f(); wait cooperatively for it to finish.
+		waiters := o.waiters
+		o.mu.Unlock()
+		SIMLANG.ChanRcv((<-chan struct{})(waiters))
+		return
+	}
+	o.running = true
+	o.waiters = make(chan struct{})
+	o.mu.Unlock()
+
+	f()
+
+	o.mu.Lock()
+	o.done = true
+	waiters := o.waiters
+	o.mu.Unlock()
+
+	// Wake all goroutines blocked in ChanRcv(waiters).
+	SIMLANG.ChanClose(waiters)
 }
 
 func OnceFunc(f func()) func() {

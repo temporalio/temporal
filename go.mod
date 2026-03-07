@@ -43,6 +43,7 @@ require (
 	github.com/nexus-rpc/sdk-go v0.6.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/olivere/elastic/v7 v7.0.32
+	github.com/petermattis/goid v0.0.0-20260226131333-17d1149c6ac6
 	github.com/pingcap/failpoint v0.0.0-20251231045439-91d91e123837
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.21.0

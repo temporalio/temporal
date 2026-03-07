@@ -52,7 +52,7 @@ func SingleRun(
 		defer close(done)
 
 		// start new simulator
-		allOpts := []SIM.InitOption{SIM.Seed(seed), SIM.DebugMode, SIM.StopFirstIfRunning}
+		allOpts := []SIM.InitOption{SIM.Seed(seed), SIM.DebugMode}
 		allOpts = append(allOpts, opts...)
 		SIM.Start(allOpts...)
 

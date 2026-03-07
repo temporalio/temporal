@@ -12,44 +12,50 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
-var testClusterPool *clusterPool
+var (
+	testClusterPoolOnce sync.Once
+	testClusterPool     *clusterPool
+)
 
-func init() {
-	sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
-	if v := os.Getenv("TEMPORAL_TEST_SHARED_CLUSTERS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			panic("TEMPORAL_TEST_SHARED_CLUSTERS must be a positive integer")
+func getTestClusterPool() *clusterPool {
+	testClusterPoolOnce.Do(func() {
+		sharedSize := max(1, runtime.GOMAXPROCS(0)/2)
+		if v := os.Getenv("TEMPORAL_TEST_SHARED_CLUSTERS"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n <= 0 {
+				panic("TEMPORAL_TEST_SHARED_CLUSTERS must be a positive integer")
+			}
+			sharedSize = n
 		}
-		sharedSize = n
-	}
 
-	dedicatedSize := runtime.GOMAXPROCS(0)
-	if v := os.Getenv("TEMPORAL_TEST_DEDICATED_CLUSTERS"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil || n <= 0 {
-			panic("TEMPORAL_TEST_DEDICATED_CLUSTERS must be a positive integer")
+		dedicatedSize := runtime.GOMAXPROCS(0)
+		if v := os.Getenv("TEMPORAL_TEST_DEDICATED_CLUSTERS"); v != "" {
+			n, err := strconv.Atoi(v)
+			if err != nil || n <= 0 {
+				panic("TEMPORAL_TEST_DEDICATED_CLUSTERS must be a positive integer")
+			}
+			dedicatedSize = n
 		}
-		dedicatedSize = n
-	}
 
-	// In CI, recreate clusters after 50 tests to prevent resource accumulation.
-	// Locally, clusters are reused indefinitely for faster iteration.
-	var maxUsage int
-	if os.Getenv("CI") != "" {
-		maxUsage = 50
-	}
+		// In CI, recreate clusters after 50 tests to prevent resource accumulation.
+		// Locally, clusters are reused indefinitely for faster iteration.
+		var maxUsage int
+		if os.Getenv("CI") != "" {
+			maxUsage = 50
+		}
 
-	sharedPool := newPool(sharedSize, false)
-	sharedPool.maxUsage = maxUsage
+		sharedPool := newPool(sharedSize, false)
+		sharedPool.maxUsage = maxUsage
 
-	dedicatedPool := newPool(dedicatedSize, true)
-	dedicatedPool.maxUsage = maxUsage
+		dedicatedPool := newPool(dedicatedSize, true)
+		dedicatedPool.maxUsage = maxUsage
 
-	testClusterPool = &clusterPool{
-		shared:    sharedPool,
-		dedicated: dedicatedPool,
-	}
+		testClusterPool = &clusterPool{
+			shared:    sharedPool,
+			dedicated: dedicatedPool,
+		}
+	})
+	return testClusterPool
 }
 
 // pool manages a fixed number of test clusters with lazy initialization.
@@ -154,10 +160,10 @@ func UseSuiteScopedCluster(t *testing.T) {
 	if t.Name() != rootName {
 		t.Fatalf("UseSuiteScopedCluster must be called from a top-level test, got %q", t.Name())
 	}
-	testClusterPool.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
+	getTestClusterPool().suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 
 	t.Cleanup(func() {
-		suiteClusterAny, ok := testClusterPool.suiteScoped.Load(rootName)
+		suiteClusterAny, ok := getTestClusterPool().suiteScoped.Load(rootName)
 		if ok {
 			suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 			if suiteCluster.cluster != nil {
@@ -166,7 +172,7 @@ func UseSuiteScopedCluster(t *testing.T) {
 				}
 			}
 		}
-		testClusterPool.suiteScoped.Delete(rootName)
+		getTestClusterPool().suiteScoped.Delete(rootName)
 	})
 }
 

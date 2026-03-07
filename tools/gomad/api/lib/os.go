@@ -34,12 +34,23 @@ import (
 	SIM "go.temporal.io/server/tools/gomad/runtime"
 )
 
-var vfsStateKey = "vfsState"
+var (
+	vfsStateKey = "vfsState"
+	globalVFS   = afero.NewMemMapFs() // fallback when no simulator is active
+)
 
 type File struct{ afero.File }
 
 func Open(name string) (*File, error) {
 	f, err := getOrCreateVFS().Open(name)
+	if err != nil && os.IsNotExist(err) {
+		// Fall back to real filesystem for read-only files not present in VFS
+		// (e.g. schema SQL files loaded during test cluster initialization).
+		realF, realErr := os.Open(name)
+		if realErr == nil {
+			return &File{realF}, nil
+		}
+	}
 	return wrapFile(f, err)
 }
 
@@ -77,6 +88,10 @@ func MkdirTemp(dir, pattern string) (string, error) {
 	return afero.TempDir(getOrCreateVFS(), dir, pattern)
 }
 
+func TempDir() string {
+	return "/tmp"
+}
+
 func Environ() []string {
 	return []string{}
 }
@@ -98,7 +113,7 @@ func Rename(oldpath, newpath string) error {
 }
 
 func Getenv(key string) string {
-	return ""
+	return os.Getenv(key)
 }
 
 func MkdirAll(path string, perm os.FileMode) error {
@@ -187,11 +202,12 @@ func LoadFileFromDisk(srcDir, dstDir, filename string) {
 // ==== UTIL
 
 func getOrCreateVFS() afero.Fs {
-	var memfs afero.Fs
-	sim := SIM.CurrentSimulator()
+	sim := SIM.TryAnySimulator()
+	if sim == nil {
+		return globalVFS
+	}
 	if _, exists := sim.State[vfsStateKey]; !exists {
-		memfs = afero.NewMemMapFs()
-		sim.State[vfsStateKey] = memfs
+		sim.State[vfsStateKey] = afero.NewMemMapFs()
 	}
 	return sim.State[vfsStateKey].(afero.Fs)
 }

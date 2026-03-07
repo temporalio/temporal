@@ -193,19 +193,29 @@ func TestChannel(t *testing.T) {
 			ch := make(chan string)
 
 			var res []int
-			SIMLANG.Go(func() {
-				SIMLANG.ChanRcvOk(ch)
-				res = append(res, 0)
+			// All goroutine spawning and the close must run cooperatively so
+			// that scheduling is fully seed-deterministic. If spawned via
+			// addFromNative, the delegation goroutine for ChanClose can race
+			// with the receiver goroutines in the event queue, breaking
+			// determinism across otherwise identical runs.
+			ready := make(chan struct{})
+			SIMLANG.InternalGo(func() {
+				SIMLANG.Go(func() {
+					SIMLANG.ChanRcvOk(ch)
+					res = append(res, 0)
+				})
+				SIMLANG.Go(func() {
+					SIMLANG.ChanRcvOk(ch)
+					res = append(res, 1)
+				})
+				SIMLANG.Go(func() {
+					SIMLANG.ChanRcvOk(ch)
+					res = append(res, 2)
+				})
+				SIMLANG.ChanClose(ch)
+				close(ready)
 			})
-			SIMLANG.Go(func() {
-				SIMLANG.ChanRcvOk(ch)
-				res = append(res, 1)
-			})
-			SIMLANG.Go(func() {
-				SIMLANG.ChanRcvOk(ch)
-				res = append(res, 2)
-			})
-			SIMLANG.ChanClose(ch)
+			<-ready
 
 			SIM.Join()
 

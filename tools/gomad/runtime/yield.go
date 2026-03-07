@@ -28,5 +28,8 @@ package sim_runtime
 // re-enqueues it, allowing the scheduler to run other goroutines first.
 // It is a lightweight preemption point with no synchronisation semantics.
 func Yield() {
+	if trySim() == nil {
+		return // no-op before simulator starts (e.g., package init)
+	}
 	suspend(&syncBlock{})
 }

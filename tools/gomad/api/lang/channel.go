@@ -34,7 +34,13 @@ import (
 func ChanSend[T any](ch chan<- T, msg any) {
 	verify.T(ch != nil, "sending to a nil channel") // blocks forever and is most likely a bug
 
-	SIM.GetOrCreateChan[T](*(*chan T)(unsafe.Pointer(&ch))).Snd(msg)
+	cs := SIM.GetOrCreateChan[T](*(*chan T)(unsafe.Pointer(&ch)))
+	if cs == nil {
+		// Not a simulated goroutine (e.g. testing framework goroutine); use native send.
+		ch <- msg.(T)
+		return
+	}
+	cs.Snd(msg)
 }
 
 func ChanRcv[T any](ch <-chan T) T {
@@ -45,7 +51,13 @@ func ChanRcv[T any](ch <-chan T) T {
 func ChanRcvOk[T any](ch <-chan T) (T, bool) {
 	verify.T(ch != nil, "receiving from a nil channel") // blocks forever and is most likely a bug
 
-	msg, ok := SIM.GetOrCreateChan[T](*(*chan T)(unsafe.Pointer(&ch))).RcvOk()
+	cs := SIM.GetOrCreateChan[T](*(*chan T)(unsafe.Pointer(&ch)))
+	if cs == nil {
+		// Not a simulated goroutine (e.g. testing framework goroutine); use native receive.
+		v, ok := <-(*(*chan T)(unsafe.Pointer(&ch)))
+		return v, ok
+	}
+	msg, ok := cs.RcvOk()
 
 	var typedMsg T
 	if msg != nil { // casting nil panics
@@ -55,11 +67,28 @@ func ChanRcvOk[T any](ch <-chan T) (T, bool) {
 }
 
 func ChanClose[T any](ch chan<- T) {
-	SIM.GetOrCreateChan(*(*chan T)(unsafe.Pointer(&ch))).Cls()
+	cs := SIM.GetOrCreateChan(*(*chan T)(unsafe.Pointer(&ch)))
+	if cs == nil {
+		// No simulation active (e.g. called from package init()); use native close.
+		close(*(*chan T)(unsafe.Pointer(&ch)))
+		return
+	}
+	cs.Cls()
 }
 
 func RcvChan[T any](ch <-chan T) SIM.Channel {
 	return SIM.GetOrCreateChan(*(*chan T)(unsafe.Pointer(&ch)))
+}
+
+// ChanIsClosed reports whether the channel has been closed without suspending.
+// Safe to call from a cooperative goroutine — reads cooperative scheduler state
+// directly, bypassing the normal suspend/resume cycle.
+func ChanIsClosed[T any](ch <-chan T) bool {
+	cs := SIM.GetOrCreateChan(*(*chan T)(unsafe.Pointer(&ch)))
+	if cs == nil {
+		return false
+	}
+	return cs.IsClosed()
 }
 
 func SndChan[T any](ch chan<- T) SIM.Channel {

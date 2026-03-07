@@ -26,6 +26,7 @@ package lib
 
 import (
 	"fmt"
+	"sync"
 
 	SIMLANG "go.temporal.io/server/tools/gomad/api/lang"
 	SIM "go.temporal.io/server/tools/gomad/runtime"
@@ -33,11 +34,16 @@ import (
 )
 
 type WaitGroup struct {
+	real sync.WaitGroup
 	todo int
 	done chan struct{}
 }
 
 func (wg *WaitGroup) Add(delta int) {
+	if SIM.TryAnySimulator() == nil {
+		wg.real.Add(delta)
+		return
+	}
 	SIM.Dbg("🚥", fmt.Sprintf("add %+d", delta))
 
 	if wg.todo == 0 {
@@ -53,10 +59,18 @@ func (wg *WaitGroup) Add(delta int) {
 }
 
 func (wg *WaitGroup) Done() {
+	if SIM.TryAnySimulator() == nil {
+		wg.real.Done()
+		return
+	}
 	wg.Add(-1)
 }
 
 func (wg *WaitGroup) Wait() {
+	if SIM.TryAnySimulator() == nil {
+		wg.real.Wait()
+		return
+	}
 	if wg.done != nil {
 		_ = SIMLANG.ChanRcv(wg.done) // will not block if already closed
 	}

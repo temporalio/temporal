@@ -90,14 +90,6 @@ import (
 	"github.com/google/pprof/profile"
 )
 
-func init() {
-	http.HandleFunc("/debug/pprof/", Index)
-	http.HandleFunc("/debug/pprof/cmdline", Cmdline)
-	http.HandleFunc("/debug/pprof/profile", Profile)
-	http.HandleFunc("/debug/pprof/symbol", Symbol)
-	http.HandleFunc("/debug/pprof/trace", Trace)
-}
-
 // Cmdline responds with the running program's
 // command line, with arguments separated by NUL bytes.
 // The package initialization registers it as /debug/pprof/cmdline.

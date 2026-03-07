@@ -30,8 +30,8 @@ import (
 	"os"
 	"os/signal"
 
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
-	SIMLIB "gomad.local/go.temporal.io/server/tools/gomad/api/lib"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
 )
 
 func signal_fixture() {

@@ -35,13 +35,23 @@ func GetOrCreateChan[T any](ch chan T) *ChanState[T] {
 		return nil
 	}
 
-	key := chanKey(ch)
-	sim := CurrentSimulator()
-	if simCh, ok := sim.scheduler.channels[key]; ok {
-		return simCh.(*ChanState[T])
+	// If no simulation is active (e.g. called from a package init() before Start()),
+	// return nil. Callers must fall back to native channel operations in this case.
+	sim := tryAnySimulator()
+	if sim == nil {
+		return nil
 	}
 
-	id := ChannelId(nextId("chan"))
+	key := chanKey(ch)
+
+	sim.scheduler.channelsMu.Lock()
+	if simCh, ok := sim.scheduler.channels[key]; ok {
+		sim.scheduler.channelsMu.Unlock()
+		return simCh.(*ChanState[T])
+	}
+	sim.scheduler.channelsMu.Unlock()
+
+	id := ChannelId(nextId(sim, "chan"))
 	Dbg("📭🆕", "open", ChanTag(id), AnyTag("src", sourceLocation(2)))
 	bufCap := cap(ch)
 	simCh := &ChanState[T]{
@@ -49,27 +59,77 @@ func GetOrCreateChan[T any](ch chan T) *ChanState[T] {
 		buf: make([]T, 0, bufCap),
 		cap: bufCap,
 	}
-	sim.scheduler.channels[key] = simCh
 
-	// Register a cleanup to remove the map entry when ch's underlying hchan is
+	// Absorb any pre-existing state from the native channel (e.g. values buffered or
+	// closed before the simulation started). This lets package-level channels that were
+	// closed in an init() function appear correctly closed inside the simulation.
+	for {
+		select {
+		case v, ok := <-ch:
+			if !ok {
+				simCh.closed = true
+			} else {
+				simCh.buf = append(simCh.buf, v)
+			}
+		default:
+			goto drained
+		}
+		if simCh.closed {
+			break
+		}
+	}
+drained:
+	sim.scheduler.channelsMu.Lock()
+	// Re-check in case another goroutine created the entry while we were initializing.
+	if existing, ok := sim.scheduler.channels[key]; ok {
+		sim.scheduler.channelsMu.Unlock()
+		return existing.(*ChanState[T])
+	}
+	sim.scheduler.channels[key] = simCh
+	sim.scheduler.channelsMu.Unlock()
+
+	// Register a finalizer to remove the map entry when ch's underlying hchan is
 	// collected by the GC. We must NOT store ch in ChanState for this to fire:
 	// any strong reference to ch (or hchan) in ChanState would prevent collection.
 	//
-	// The arg is uintptr (not unsafe.Pointer) so the GC does not trace it as a
-	// live pointer — satisfying runtime.AddCleanup's "arg must not reference ptr"
-	// constraint. The cleanup appends to deadChannels (mutex-protected) and the
-	// scheduler drains it at the start of each tick on the single scheduler goroutine.
+	// SetFinalizer (not AddCleanup) is used intentionally: SetFinalizer guarantees
+	// the GC does not recycle the hchan's memory before the finalizer runs. This
+	// prevents a new channel allocated at the same address from being matched to a
+	// stale, already-closed ChanState before the map entry is removed.
+	// AddCleanup does NOT provide this guarantee — it allows memory recycling before
+	// the cleanup fires, which creates a race that causes "closing already closed
+	// channel" panics.
 	hchan := (*byte)(unsafe.Pointer(reflect.ValueOf(ch).Pointer()))
-	runtime.AddCleanup(hchan, func(k uintptr) {
-		sim.scheduler.deadChannelsMu.Lock()
-		sim.scheduler.deadChannels = append(sim.scheduler.deadChannels, k)
-		sim.scheduler.deadChannelsMu.Unlock()
-	}, key)
+	runtime.SetFinalizer(hchan, func(*byte) {
+		sim.scheduler.channelsMu.Lock()
+		delete(sim.scheduler.channels, key)
+		sim.scheduler.channelsMu.Unlock()
+	})
 
 	return simCh
 }
 
 func (c *ChanState[T]) RcvOk() (msg any, ok bool) {
+	// If called from outside the cooperative scheduler, delegate to a simulated goroutine.
+	if tryCurrentGoroutine() == nil {
+		s := tryAnySimulator()
+		type result struct {
+			msg any
+			ok  bool
+		}
+		nativeDone := make(chan result, 1)
+		g := &goroutine{
+			id:          goroutineId(nextId(s, "go")),
+			sim:         s,
+			fn:          func() { m, o := c.RcvOk(); nativeDone <- result{m, o} },
+			syncCh:      make(chan struct{}),
+			suspendedCh: make(chan struct{}),
+		}
+		s.scheduler.addFromNative(g)
+		r := <-nativeDone
+		return r.msg, r.ok
+	}
+
 	// first, attempt to fulfill the operation without requiring a sync
 
 	if c.canRcvBuffered() {
@@ -138,7 +198,28 @@ func (c *ChanState[T]) readFromClosed() (msg any, ok bool) {
 }
 
 func (c *ChanState[T]) Snd(msg any) {
+	// Check for closed channel before delegation so the panic propagates
+	// synchronously to the caller even from non-cooperative goroutines.
 	verify.T(!c.closed, "sending to closed channel #%v", c.id)
+
+	// If called from outside the cooperative scheduler, always delegate to a simulated
+	// goroutine. Multiple non-cooperative goroutines (e.g. FX lifecycle goroutines) may
+	// call Snd concurrently; serializing through the scheduler prevents data races on
+	// ChanState even for buffered channels that currently have available capacity.
+	if tryCurrentGoroutine() == nil {
+		s := tryAnySimulator()
+		nativeDone := make(chan struct{}, 1)
+		g := &goroutine{
+			id:          goroutineId(nextId(s, "go")),
+			sim:         s,
+			fn:          func() { c.Snd(msg); nativeDone <- struct{}{} },
+			syncCh:      make(chan struct{}),
+			suspendedCh: make(chan struct{}),
+		}
+		s.scheduler.addFromNative(g)
+		<-nativeDone
+		return
+	}
 
 	// first, attempt to fulfill the operation without requiring a sync
 
@@ -201,6 +282,23 @@ func (c *ChanState[T]) writeToInFlight(msg T) {
 func (c *ChanState[T]) Cls() {
 	verify.T(!c.closed, "closing already closed channel #%v", c.id)
 
+	// If called from outside the cooperative scheduler, delegate to a simulated goroutine
+	// so the close runs at the correct simulated time and properly wakes blocked receivers.
+	if tryCurrentGoroutine() == nil {
+		s := tryAnySimulator()
+		nativeDone := make(chan struct{}, 1)
+		g := &goroutine{
+			id:          goroutineId(nextId(s, "go")),
+			sim:         s,
+			fn:          func() { c.Cls(); nativeDone <- struct{}{} },
+			syncCh:      make(chan struct{}),
+			suspendedCh: make(chan struct{}),
+		}
+		s.scheduler.addFromNative(g)
+		<-nativeDone
+		return
+	}
+
 	c.closed = true
 	// Note: the native channel is not closed here; buffer state and close
 	// semantics are managed entirely through ChanState.buf and ChanState.closed.
@@ -235,6 +333,12 @@ func (c *ChanState[T]) canSndBuffered() bool {
 
 func (c *ChanState[T]) canRcvBuffered() bool {
 	return len(c.buf) > 0
+}
+
+// IsClosed reports whether the channel has been closed.
+// Safe to call from a cooperative goroutine without suspending.
+func (c *ChanState[T]) IsClosed() bool {
+	return c.closed
 }
 
 func (c *ChanState[T]) bufferedChannel() bool {

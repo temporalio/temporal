@@ -82,9 +82,11 @@ var (
 		"math/rand": {
 			wildcardSig: true,
 			entries: map[string]pkgEntry{
-				"Rand":   {disabled: true},
-				"New":    {disabled: true},
-				"Source": {disabled: true},
+				"Rand":    {disabled: true},
+				"New":     {disabled: true},
+				"Source":  {disabled: true},
+				"NewZipf": {disabled: true},
+				"Zipf":    {disabled: true},
 			},
 		},
 		"log": {
@@ -204,6 +206,7 @@ var (
 				"Server":                     {},
 				"NewClient":                  {},
 				"NewServer":                  {},
+				"StatsHandler":               {},
 				"ServerOption":               {},
 				"UnaryInvoker":               {},
 				"UnaryClientInterceptor":     {},
@@ -222,12 +225,15 @@ var (
 				"WithUserAgent":              {},
 				"WithTransportCredentials":   {},
 				"WithBlock":                  {},
+				"WithContextDialer":          {},
+				"WithStatsHandler":           {},
 				"WithKeepaliveParams":        {},
 				"WithDefaultCallOptions":     {},
 				"WithAuthority":              {},
 				"StreamClientInterceptor":    {},
 				"Streamer":                   {},
 				"WithUnaryInterceptor":       {},
+				"WithStreamInterceptor":      {},
 			},
 		},
 		"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc": {
@@ -326,7 +332,21 @@ func (tf *fileTransformer) transform() (res string, retErr error) {
 	// render and format source code
 	var buf bytes.Buffer
 	if err := format.Node(&buf, tf.fset, tf.file); err != nil {
-		panic(errors.Wrap(err, "error parsing transformed source for formatting"))
+		// Inline block comments (e.g. /* paramName */ arg) can cause position
+		// conflicts after AST rewriting. Strip them and retry.
+		for _, cg := range tf.file.Comments {
+			var kept []*ast.Comment
+			for _, c := range cg.List {
+				if !strings.HasPrefix(c.Text, "/*") {
+					kept = append(kept, c)
+				}
+			}
+			cg.List = kept
+		}
+		buf.Reset()
+		if err2 := format.Node(&buf, tf.fset, tf.file); err2 != nil {
+			panic(errors.Wrap(err, "error parsing transformed source for formatting"))
+		}
 	}
 	source, err := format.Source(buf.Bytes())
 	if err != nil {
@@ -350,12 +370,72 @@ func (tf *fileTransformer) transform() (res string, retErr error) {
 
 // rewrite external import to point to transformed package instead
 func (tf *fileTransformer) transformImports(skipTransform bool) {
+	if skipTransform && isSimulatorPackage(tf.pkgPath) {
+		// Simulator API packages (api/lang, api/lib, ext-lib, runtime, util) are
+		// written as-is so their internal imports (e.g. gomad/runtime) stay
+		// unmangled and resolve against the real source module in the workspace.
+		return
+	}
 	for _, imp := range tf.file.Imports {
 		path, _ := strconv.Unquote(imp.Path.Value)
+		// packages.Load with Tests:true returns packages that share the same
+		// *ast.File between the regular package and its test variant. The
+		// first transform already prefixed these imports in-place; skip to
+		// avoid double-prefixing when the test variant is processed.
+		if strings.HasPrefix(path, simPkgPrefix+"/") {
+			continue
+		}
 		switch {
-		case !skipTransform && (strings.HasPrefix(path, "net/http") ||
-			strings.HasPrefix(path, "database/sql")):
-			imp.Path.Value = fmt.Sprintf("\"%v/%v/%v\"", simPkgPrefix, simulatorApiPackage+"/ext-lib", path)
+		case !skipTransform &&
+			// These packages bridge real-path libraries (stdlib net/http) with their own
+			// net/http usage; keeping net/http at stdlib avoids type mismatches.
+			// - metrics: uses promhttp (real-path, stdlib) alongside net/http
+			// - temporal: elasticsearchHttpClient option is stdlib *http.Client
+			!strings.HasPrefix(tf.pkgPath, "go.temporal.io/server/common/metrics") &&
+			!strings.HasPrefix(tf.pkgPath, "go.temporal.io/server/temporal") &&
+			(strings.HasPrefix(path, "net/http") ||
+			path == "database/sql"):
+			// Use the real (non-prefixed) ext-lib path so that types from this
+			// import are identical to those used inside the ext-lib packages
+			// themselves. A prefixed copy (gomad.local/...) would be a separate
+			// Go package with incompatible types even though the source is the same.
+			imp.Path.Value = fmt.Sprintf("\"%v/%v\"", simulatorApiPackage+"/ext-lib", path)
+		case strings.HasPrefix(path, simulatorApiPackage+"/"):
+			// Simulator API imports (ext-lib, lang, lib, etc.) already use their
+			// real paths (injected by transformAST or present in the source).
+			// Prefixing them with gomad.local/ would create an incompatible copy.
+		case path == "google.golang.org/grpc" || strings.HasPrefix(path, "google.golang.org/grpc/"),
+			path == "google.golang.org/genproto" || strings.HasPrefix(path, "google.golang.org/genproto/"),
+			path == "google.golang.org/protobuf" || strings.HasPrefix(path, "google.golang.org/protobuf/"):
+			// fakegrpc uses real google.golang.org/grpc/genproto/protobuf types.
+			// Prefixing these would create incompatible types that can't satisfy
+			// fakegrpc's function signatures or proto interface implementations.
+			// The workspace resolves them transitively from the real temporal module.
+		case path == "github.com/google/go-cmp" || strings.HasPrefix(path, "github.com/google/go-cmp/"):
+			// protocmp.Transform() (from google.golang.org/protobuf) returns a real
+			// cmp.Option; a prefixed copy would be an incompatible type.
+		case path == "golang.org/x/oauth2" || strings.HasPrefix(path, "golang.org/x/oauth2/"):
+			// OAuth2 types (TokenSource, Token) are passed to/from real grpc
+			// credentials packages; a prefixed copy creates incompatible types.
+		case path == "golang.org/x/net" || strings.HasPrefix(path, "golang.org/x/net/"):
+			// golang.org/x/net uses stdlib net/http internally (and via internal/
+			// sub-packages). Using the real module avoids having two independent
+			// copies of golang.org/x/net/trace in the binary, which would cause
+			// a panic in trace.init when both try to register /debug/requests.
+		case strings.HasPrefix(path, "go.opentelemetry.io/"):
+			// otel types are used by real grpc (grpc/stats/opentelemetry) and
+			// returned by fakeotlptrace/fakeotlpmetric; all otel packages must
+			// share one consistent type universe at their real import paths.
+		case path == "github.com/prometheus/client_golang/prometheus" ||
+			strings.HasPrefix(path, "github.com/prometheus/client_golang/prometheus/") ||
+			path == "github.com/prometheus/client_model/go" ||
+			strings.HasPrefix(path, "github.com/prometheus/client_model/") ||
+			path == "github.com/prometheus/common/expfmt" ||
+			strings.HasPrefix(path, "github.com/prometheus/common/"):
+			// The Prometheus ecosystem (client_golang, client_model, common/expfmt) must
+			// stay at real import paths. These types are passed to real-path otel exporters
+			// and used internally across the prometheus sub-packages; mixing prefixed and
+			// real-path copies produces incompatible types.
 		case isStandardImportPath(path):
 			// ignore
 		default:
@@ -363,6 +443,18 @@ func (tf *fileTransformer) transformImports(skipTransform bool) {
 		}
 	}
 }
+
+func isSimulatorPackage(pkgPath string) bool {
+	return strings.HasPrefix(pkgPath, simulatorApiPackage+"/") ||
+		pkgPath == simulatorPackage+"/runtime" ||
+		pkgPath == simulatorPackage+"/util"
+}
+
+// isPassthroughPackage reports whether pkgPath belongs to a family of packages
+// that should be written verbatim (no AST transform, no import prefixing).
+// These packages interact with stdlib and real-path libraries (e.g. real grpc,
+// real oauth2); bridging them into the ext-lib type system causes irresolvable
+// type mismatches because their net/http types come from multiple sources.
 
 func (tf *fileTransformer) transformAST() {
 	for _, commentGroup := range tf.file.Comments {
@@ -722,7 +814,9 @@ func (tf *fileTransformer) transformDecl(node *ast.GenDecl) {
 func (tf *fileTransformer) transformRange(c *astutil.Cursor, node *ast.RangeStmt) {
 	rangeExprType := tf.info.TypeOf(node.X)
 	if rangeExprType == nil {
-		panic(fmt.Sprintf("unknown type in for-range: %T", node.X))
+		// Type info unavailable (e.g. test-variant package, range-over-func).
+		// Neither channel nor map transformation applies; leave unchanged.
+		return
 	}
 
 	keyIdent := node.Key
@@ -1116,11 +1210,37 @@ func (tf *fileTransformer) transformSelExpr(t *ast.SelectorExpr, typeArgs []ast.
 	// end of the file. These markers keep the original import path in scope
 	// after all call-sites have been rewritten to SIMAPI/SIMLIB, preventing
 	// "imported and not used" compile errors.
+
+	// For generic types referenced without type arguments (e.g. atomic.Pointer
+	// used as a struct-field type inside a generic struct where the enclosing
+	// type parameter is in scope), the generated marker "var _ = atomic.Pointer"
+	// would fail with "cannot use generic type without instantiation". Detect
+	// the number of type parameters from the type info and substitute `any`
+	// so the declaration compiles.
+	if len(typeArgs) == 0 {
+		if obj, ok := tf.info.Uses[t.Sel].(*types.TypeName); ok {
+			if named, ok := obj.Type().(*types.Named); ok {
+				if tp := named.TypeParams(); tp != nil && tp.Len() > 0 {
+					typeArgs = make([]ast.Expr, tp.Len())
+					for i := range typeArgs {
+						typeArgs[i] = ast.NewIdent("any")
+					}
+				}
+			}
+		}
+	}
+
 	ref := pkgRef{pkg: pkgName, ident: t.Sel.Name, typeArgs: typeArgs}
 	refType := tf.info.TypeOf(t)
 	switch refType.Underlying().(type) {
 	case *types.Interface, *types.Struct:
 		ref.isType = true
+	case *types.Signature:
+		// Named function types (e.g. context.CancelCauseFunc) are type declarations,
+		// not callable values; emit "type _ = pkg.Ident" rather than "var _ = pkg.Ident".
+		if _, ok := tf.info.Uses[t.Sel].(*types.TypeName); ok {
+			ref.isType = true
+		}
 	}
 	// The generic type-detection above (Interface/Struct underlying) marks some
 	// vars as types: context.DeadlineExceeded and context.Canceled have
@@ -1140,7 +1260,7 @@ func (tf *fileTransformer) transformSelExpr(t *ast.SelectorExpr, typeArgs []ast.
 	var res ast.Expr
 	if pkgPath == "google.golang.org/grpc" {
 		if !strings.HasPrefix(tf.pkgPath, "go.temporal") &&
-			!strings.HasPrefix(tf.pkgPath, "github.com/grpc-ecosystem/go-grpc-middleware/retry") &&
+			!strings.HasPrefix(tf.pkgPath, "github.com/grpc-ecosystem/") &&
 			!strings.HasPrefix(tf.pkgPath, "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc") {
 			// other libraries rely on these types
 			return t
@@ -1197,6 +1317,19 @@ func (tf *fileTransformer) transformMapLiteral(c *astutil.Cursor, node *ast.Comp
 			switch t := typeExpr.(type) {
 			case *ast.InterfaceType:
 				// ignore
+			case *ast.Ident:
+				// "any" and other named interface types cannot be composite literal types.
+				isIface := t.Name == "any"
+				if !isIface {
+					if obj, ok := tf.info.Uses[t]; ok {
+						if tn, ok := obj.(*types.TypeName); ok {
+							_, isIface = tn.Type().Underlying().(*types.Interface)
+						}
+					}
+				}
+				if !isIface {
+					n.Type = typeExpr
+				}
 			case *ast.StarExpr:
 				expr = &ast.UnaryExpr{X: n, Op: token.AND}
 				n.Type = t.X

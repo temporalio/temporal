@@ -11,9 +11,6 @@ import (
 )
 
 var (
-	testDirName = "tests"
-	testPkgName = "tests_test"
-
 	DebugMode = func(c *Controller) {
 		c.conf.debug = true
 	}
@@ -28,12 +25,20 @@ var (
 	VerificationMode = func(c *Controller) {
 		c.verificationMode = true
 	}
+	WithSourceDir = func(dir string) func(*Controller) {
+		return func(c *Controller) { c.sourceDir = dir }
+	}
+	WithTest = func(name string) func(*Controller) {
+		return func(c *Controller) { c.testFilter = name }
+	}
 )
 
 type (
 	Controller struct {
 		resetFiles       bool
 		verificationMode bool
+		sourceDir        string
+		testFilter       string
 		conf             simConfig
 		simProgram       *simProgram
 	}
@@ -52,7 +57,7 @@ func NewController(options ...Option) *Controller {
 func (c *Controller) RunTests(outDir string) {
 	// create simulation
 	if c.simProgram == nil {
-		c.simProgram = createNewSimProgram(outDir, c.resetFiles)
+		c.simProgram = createNewSimProgram(outDir, c.sourceDir, c.testFilter, c.resetFiles)
 	}
 
 	switch {

@@ -292,6 +292,27 @@ type Transport struct {
 	// To use a custom dialer or TLS config and still attempt HTTP/2
 	// upgrades, set this to true.
 	ForceAttemptHTTP2 bool
+
+	// HTTP2 configures HTTP/2 on the transport.
+	// Added in Go 1.24; present here for golang.org/x/net/http2 compatibility.
+	HTTP2 *HTTP2Config
+}
+
+// HTTP2Config defines HTTP/2 configuration parameters common to both Transport
+// and Server. It mirrors net/http.HTTP2Config added in Go 1.24.
+type HTTP2Config struct {
+	MaxConcurrentStreams           int
+	StrictMaxConcurrentRequests   bool
+	MaxDecoderHeaderTableSize     int
+	MaxEncoderHeaderTableSize     int
+	MaxReadFrameSize              int
+	MaxReceiveBufferPerConnection int
+	MaxReceiveBufferPerStream     int
+	SendPingTimeout               time.Duration
+	PingTimeout                   time.Duration
+	WriteByteTimeout              time.Duration
+	PermitProhibitedCipherSuites  bool
+	CountError                    func(errType string)
 }
 
 // A cancelKey is the key of the reqCanceler map.

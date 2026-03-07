@@ -2885,6 +2885,10 @@ type Server struct {
 	// automatically.
 	TLSNextProto map[string]func(*Server, *tls.Conn, Handler)
 
+	// HTTP2 configures HTTP/2 on the server.
+	// Added in Go 1.24; present here for golang.org/x/net/http2 compatibility.
+	HTTP2 *HTTP2Config
+
 	// ConnState specifies an optional callback function that is
 	// called when a client connection changes state. See the
 	// ConnState type and associated constants for details.
@@ -3178,7 +3182,7 @@ func (srv *Server) ListenAndServe() error {
 	if addr == "" {
 		addr = ":http"
 	}
-	ln, err := net.Listen("tcp", addr)
+	ln, err := ListenFunc("tcp", addr)
 	if err != nil {
 		return err
 	}
@@ -3186,6 +3190,10 @@ func (srv *Server) ListenAndServe() error {
 }
 
 var testHookServerServe func(*Server, net.Listener) // used if non-nil
+
+// ListenFunc is used by ListenAndServe to create the TCP listener.
+// Override to inject a simulated listener (e.g. api/lib.Listen) in test environments.
+var ListenFunc func(network, address string) (net.Listener, error) = net.Listen
 
 // shouldConfigureHTTP2ForServe reports whether Server.Serve should configure
 // automatic HTTP/2. (which sets up the srv.TLSNextProto map)

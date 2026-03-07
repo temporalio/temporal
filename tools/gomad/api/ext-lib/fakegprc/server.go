@@ -9,6 +9,7 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/stats"
 
 	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
@@ -134,6 +135,12 @@ func KeepaliveParams(kp keepalive.ServerParameters) ServerOption {
 }
 
 func KeepaliveEnforcementPolicy(kep keepalive.EnforcementPolicy) ServerOption {
+	return func(s *Server) {
+		// ignore
+	}
+}
+
+func StatsHandler(h stats.Handler) ServerOption {
 	return func(s *Server) {
 		// ignore
 	}

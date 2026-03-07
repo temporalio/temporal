@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -38,7 +39,9 @@ import (
 )
 
 var (
-	listenersStateKey = "listenersByAddress"
+	listenersStateKey  = "listenersByAddress"
+	nextEphemeralPort  = "nextEphemeralPort"
+	ephemeralPortStart = 20000
 )
 
 type listenersStateType = map[string]*Listener
@@ -49,6 +52,13 @@ func Listen(network, address string) (net.Listener, error) {
 	}
 
 	normalizedAddr := NormalizeAddr(address)
+
+	// Handle port 0 (ephemeral port assignment).
+	host, port, _ := net.SplitHostPort(normalizedAddr)
+	if port == "0" {
+		normalizedAddr = assignEphemeralPort(host)
+	}
+
 	if _, found := getListener(normalizedAddr); found {
 		SIM.Dbg("🌐️➡️❌", "net:listen", SIM.AnyTag("addr", normalizedAddr))
 		return nil, errors.New("connection failed: address already taken")
@@ -65,6 +75,26 @@ func Listen(network, address string) (net.Listener, error) {
 	return l, nil
 }
 
+// assignEphemeralPort allocates an unused virtual port for the given host.
+func assignEphemeralPort(host string) string {
+	s := SIM.TryAnySimulator()
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	initListeners_locked(s)
+	listeners := s.State[listenersStateKey].(listenersStateType)
+	if _, ok := s.State[nextEphemeralPort]; !ok {
+		s.State[nextEphemeralPort] = ephemeralPortStart
+	}
+	for {
+		p := s.State[nextEphemeralPort].(int)
+		s.State[nextEphemeralPort] = p + 1
+		addr := fmt.Sprintf("%s:%d", host, p)
+		if _, taken := listeners[addr]; !taken {
+			return addr
+		}
+	}
+}
+
 func Dial(network, address string) (net.Conn, error) {
 	var d net.Dialer
 	return Dialer_Dial(&d, network, address)
@@ -77,9 +107,6 @@ func DialTimeout(network, address string, timeout time.Duration) (net.Conn, erro
 
 func ListenTCP(network string, tcpAddr *net.TCPAddr) (*TCPListener, error) {
 	ip, port := tcpAddr.IP, tcpAddr.Port
-	if port == 0 {
-		panic("ListenTCP automatic port assignment not implemented")
-	}
 	if ip == nil {
 		ip = net.IPv4(127, 0, 0, 1)
 	}
@@ -111,21 +138,68 @@ func NormalizeAddr(address string) string {
 }
 
 func addListener(addr string, l *Listener) {
-	initListeners()
-	listeners := SIM.CurrentSimulator().State[listenersStateKey].(listenersStateType)
-	listeners[addr] = l
+	s := SIM.TryAnySimulator()
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	initListeners_locked(s)
+	s.State[listenersStateKey].(listenersStateType)[addr] = l
+}
+
+func removeListener(addr string) {
+	s := SIM.TryAnySimulator()
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	initListeners_locked(s)
+	delete(s.State[listenersStateKey].(listenersStateType), addr)
 }
 
 func getListener(addr string) (l *Listener, ok bool) {
-	initListeners()
-	listeners := SIM.CurrentSimulator().State[listenersStateKey].(listenersStateType)
-	l, ok = listeners[addr]
+	s := SIM.TryAnySimulator()
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	initListeners_locked(s)
+	l, ok = s.State[listenersStateKey].(listenersStateType)[addr]
 	return
 }
 
 func initListeners() {
-	if _, exists := SIM.CurrentSimulator().State[listenersStateKey]; !exists {
-		SIM.CurrentSimulator().State[listenersStateKey] = make(listenersStateType)
+	s := SIM.TryAnySimulator()
+	if s == nil {
+		panic("net.Listen/Dial called outside of simulation")
+	}
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	initListeners_locked(s)
+}
+
+// initListeners_locked initializes the listeners map. Caller must hold s.StateMu.
+func initListeners_locked(s *SIM.Simulator) {
+	if _, exists := s.State[listenersStateKey]; !exists {
+		s.State[listenersStateKey] = make(listenersStateType)
+	}
+}
+
+// CloseAllListeners closes every open simulated listener, unblocking any
+// cooperative goroutines blocked in Accept. Call this before SIM.Join() to
+// allow long-running server goroutines (e.g. pprof HTTP server) to exit cleanly.
+func CloseAllListeners() {
+	s := SIM.TryAnySimulator()
+	if s == nil {
+		return
+	}
+	s.StateMu.Lock()
+	initListeners_locked(s)
+	listeners := s.State[listenersStateKey].(listenersStateType)
+	addrs := make([]string, 0, len(listeners))
+	for addr := range listeners {
+		addrs = append(addrs, addr)
+	}
+	s.StateMu.Unlock()
+
+	for _, addr := range addrs {
+		if l, ok := getListener(addr); ok {
+			_ = l.Close()
+		}
 	}
 }
 
@@ -143,13 +217,13 @@ func Dialer_DialContext(d *net.Dialer, ctx context.Context, network, address str
 		panic("not implemented: Dialer.Cancel")
 	}
 
-	fullAddress := network + ":" + NormalizeAddr(address)
-	l, found := getListener(fullAddress)
+	normalizedAddr := NormalizeAddr(address)
+	l, found := getListener(normalizedAddr)
 	if !found {
-		SIM.Dbg("🌐️⬅️❌", "net:dial", SIM.AnyTag("addr", fullAddress))
+		SIM.Dbg("🌐️⬅️❌", "net:dial", SIM.AnyTag("addr", normalizedAddr))
 		return nil, errors.New("connection failed: no listener found")
 	}
-	SIM.Dbg("🌐️⬅️️", "net:dial", SIM.AnyTag("addr", fullAddress))
+	SIM.Dbg("🌐️⬅️️", "net:dial", SIM.AnyTag("addr", normalizedAddr))
 
 	clientConn, serverConn := Pipe()
 	l.connections[serverConn] = clientConn
@@ -166,6 +240,8 @@ type Listener struct {
 	Address     string
 	newConn     chan net.Conn
 	connections map[net.Conn]net.Conn
+	closeOnce   Once // SIMLIB Once: safe to use across cooperative suspensions
+	closeErr    error
 }
 
 func (l *Listener) Accept() (net.Conn, error) {
@@ -177,20 +253,27 @@ func (l *Listener) Accept() (net.Conn, error) {
 }
 
 func (l *Listener) Close() error {
-	SIMLANG.ChanClose(l.newConn)
-	for serverConn, clientConn := range l.connections {
-		if err := clientConn.Close(); err != nil {
-			return err
+	l.closeOnce.Do(func() {
+		removeListener(l.Address)
+		SIMLANG.ChanClose(l.newConn)
+		for serverConn, clientConn := range l.connections {
+			if err := clientConn.Close(); err != nil {
+				l.closeErr = err
+				return
+			}
+			if err := serverConn.Close(); err != nil {
+				l.closeErr = err
+				return
+			}
 		}
-		if err := serverConn.Close(); err != nil {
-			return err
-		}
-	}
-	return nil
+	})
+	return l.closeErr
 }
 
 func (l *Listener) Addr() net.Addr {
-	return &net.TCPAddr{}
+	host, portStr, _ := net.SplitHostPort(l.Address)
+	port, _ := strconv.Atoi(portStr)
+	return &net.TCPAddr{IP: net.ParseIP(host), Port: port}
 }
 
 // ==== TCP LISTENER

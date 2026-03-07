@@ -39,11 +39,26 @@ type Timer struct {
 	f       func()
 	firesAt time.Time
 	stopped bool
+	real    *time.Timer // used in real (non-sim) mode
 }
 
 // NewTimer creates a new Timer that will send the current time on its channel after at least duration d.
 func NewTimer(d time.Duration) *Timer {
-	t := &Timer{C: make(chan time.Time)}
+	t := &Timer{C: make(chan time.Time, 1)}
+	if SIM.TryAnySimulator() == nil {
+		t.real = time.NewTimer(d)
+		go func() {
+			tm, ok := <-t.real.C
+			if !ok || t.stopped {
+				return
+			}
+			select {
+			case t.C <- tm:
+			default:
+			}
+		}()
+		return t
+	}
 	t.start(d)
 	return t
 }
@@ -83,6 +98,10 @@ func (t *Timer) start(d time.Duration) {
 // Stop does not close the channel, to prevent a read from the channel succeeding incorrectly.
 // To ensure the channel is empty after a call to Stop, check the return value and drain the channel.
 func (t *Timer) Stop() bool {
+	if t.real != nil {
+		t.stopped = true
+		return t.real.Stop()
+	}
 	SIM.Dbg("⏱️🛑", "timer stop")
 	if t.stopped || t.expired() {
 		return false
@@ -111,6 +130,10 @@ func (t *Timer) Stop() bool {
 //
 // TODO: introduce some jitter to simulate overlapping function calls
 func (t *Timer) Reset(d time.Duration) bool {
+	if t.real != nil {
+		t.stopped = false
+		return t.real.Reset(d)
+	}
 	SIM.Dbg("⏱️🔃", "timer reset")
 
 	if t.stopped || t.expired() {
@@ -135,6 +158,15 @@ func (t *Timer) expired() bool {
 // It returns a Timer that can be used to cancel the call using its Stop method.
 // The returned Timer's C field is not used and will be nil.
 func AfterFunc(d time.Duration, f func()) *Timer {
+	if SIM.TryAnySimulator() == nil {
+		t := &Timer{f: f}
+		t.real = time.AfterFunc(d, func() {
+			if !t.stopped {
+				f()
+			}
+		})
+		return t
+	}
 	t := &Timer{f: f}
 	t.start(d)
 	return t

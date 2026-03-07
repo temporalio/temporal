@@ -27,8 +27,8 @@
 package fixtures
 
 import (
-	"gomad.local/go.temporal.io/server/tools/gomad/api/ext-lib/net/http"
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	"go.temporal.io/server/tools/gomad/api/ext-lib/net/http"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 )
 
 func http_fixture() {

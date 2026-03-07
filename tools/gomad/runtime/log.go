@@ -40,22 +40,25 @@ func Dbg(symbol string, msg string, tags ...Tag) {
 	logMutex.Lock()
 	defer func() { logMutex.Unlock() }()
 
-	if CurrentSimulator().scheduler != nil && CurrentSimulator().scheduler.debug {
-		var ctx string
-		if g := CurrentSimulator().scheduler.active; g != nil {
-			ctx = fmt.Sprintf("[#%v]", g.id)
-		} else {
-			ctx = ""
-		}
-
-		Logger.Printf("%v%v%v%v%v\n",
-			pad(fmt.Sprintf("[%d]", logLine), 9, false),
-			pad(ctx, 9, false),
-			pad(strings.TrimSpace(symbol), 10, true),
-			pad(strings.TrimSpace(msg), 12, false),
-			strings.Join(renderTags(tags), " "))
-		logLine += 1
+	s := trySim()
+	if s == nil || s.scheduler == nil || !s.scheduler.debug {
+		return
 	}
+
+	var ctx string
+	if g := s.scheduler.active; g != nil {
+		ctx = fmt.Sprintf("[#%v]", g.id)
+	} else {
+		ctx = ""
+	}
+
+	Logger.Printf("%v%v%v%v%v\n",
+		pad(fmt.Sprintf("[%d]", logLine), 9, false),
+		pad(ctx, 9, false),
+		pad(strings.TrimSpace(symbol), 10, true),
+		pad(strings.TrimSpace(msg), 12, false),
+		strings.Join(renderTags(tags), " "))
+	logLine += 1
 }
 
 func renderTags(tags []Tag) []string {
@@ -87,7 +90,7 @@ func ChanTag(id ChannelId) Tag {
 
 func CurLocTag() Tag {
 	var loc string
-	if CurrentSimulator().debug {
+	if s := trySim(); s != nil && s.debug {
 		// this is expensive
 		loc = currentSourceLocation()
 	}

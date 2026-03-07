@@ -27,6 +27,7 @@ package sim_runtime
 import (
 	"fmt"
 	"math/rand"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -45,36 +46,67 @@ type (
 		doneCh          chan struct{}
 		tickCh          chan struct{}
 		goroutines      map[goroutineId]*goroutine
-		channels        map[uintptr]Channel // keyed by uintptr so GC can collect hchans
-		deadChannelsMu  sync.Mutex
-		deadChannels    []uintptr // channels collected by GC; drained each tick
+		channels   map[uintptr]Channel // keyed by uintptr so GC can collect hchans
+		channelsMu sync.Mutex         // protects channels from concurrent non-coop goroutine access
 		stuckTimeout    time.Duration
 		timerQueue      timerQueue
+
+		// keepAliveCh is closed by Join() to signal that no new work is expected;
+		// the scheduler exits cleanly once all in-flight goroutines finish.
+		keepAliveCh chan struct{}
+
+		// wakeUpCh is signaled by addFromNative() to wake the scheduler when it
+		// is idle (no goroutines in the event queue) but keepAliveCh is still open.
+		wakeUpCh chan struct{}
+
+		// blockedGoroutines holds the description of goroutines that are all blocked
+		// when currentEventQueue() yields to wakeUpCh instead of panicking immediately.
+		// This allows non-coop goroutines a chance to add new work before we give up.
+		blockedGoroutines []string
+
+		// incomingGoroutines receives goroutines added from non-scheduler goroutines
+		// (e.g. testing.tRunner).  Drained at the start of each tick to avoid
+		// concurrent map writes.
+		incomingGoroutines chan *goroutine
 	}
 )
 
-func initScheduler(drng *rand.Rand, debug bool) *scheduler {
+func initScheduler(drng *rand.Rand, debug bool, keepAliveCh chan struct{}) *scheduler {
 	clock := newClock()
 	return &scheduler{
-		debug:        debug,
-		clock:        clock,
-		Drng:         drng,
-		doneCh:       make(chan struct{}),
-		tickCh:       make(chan struct{}, 1),
-		synchronizer: newSynchronizer(drng),
-		goroutines:   map[goroutineId]*goroutine{},
-		channels:     make(map[uintptr]Channel),
-		stuckTimeout: stuckTimeout * TimeoutMultiplier,
-		timerQueue:   newTimerQueue(drng, clock),
+		debug:              debug,
+		clock:              clock,
+		Drng:               drng,
+		doneCh:             make(chan struct{}),
+		tickCh:             make(chan struct{}, 1),
+		synchronizer:       newSynchronizer(drng),
+		goroutines:         map[goroutineId]*goroutine{},
+		channels:           make(map[uintptr]Channel),
+		stuckTimeout:       stuckTimeout * TimeoutMultiplier,
+		timerQueue:         newTimerQueue(drng, clock),
+		keepAliveCh:        keepAliveCh,
+		wakeUpCh:           make(chan struct{}, 1),
+		incomingGoroutines: make(chan *goroutine, 256),
 	}
 }
 
-// suspend pauses the active goroutine's execution.
+// suspend pauses the active cooperative goroutine's execution.
+// For goroutines not owned by the cooperative scheduler (the calling-goroutine
+// from Start(), testing.tRunner goroutines, …), non-blocking suspends are
+// silently skipped; blocking operations are not supported and will panic.
 func suspend(b *syncBlock, tags ...Tag) {
-	CurrentSimulator().scheduler.active.suspended(b, tags...)
+	g := tryCurrentGoroutine()
+	if g == nil {
+		if b.requireSyncMatch || b.delay != 0 {
+			panic("blocking simulation operation called from unregistered goroutine")
+		}
+		return
+	}
+	g.suspended(b, tags...)
 }
 
 // add a new goroutine to the scheduler.
+// Must be called from a cooperative goroutine (tryCurrentGoroutine() != nil).
 func (s *scheduler) add(g *goroutine) {
 	// index goroutine by id; this allows quick lookup later
 	s.goroutines[g.id] = g
@@ -84,6 +116,33 @@ func (s *scheduler) add(g *goroutine) {
 
 	// suspend the current goroutine (for fair scheduling)
 	suspend(&syncBlock{})
+}
+
+// addFromNative enqueues g for the scheduler to pick up on its next tick.
+// Safe to call from any goroutine (the incomingGoroutines channel is the
+// only cross-goroutine write path into the scheduler state).
+func (s *scheduler) addFromNative(g *goroutine) {
+	s.incomingGoroutines <- g
+	// Wake the scheduler if it is currently idle (waiting on wakeUpCh).
+	select {
+	case s.wakeUpCh <- struct{}{}:
+	default:
+	}
+}
+
+// drainIncoming moves all goroutines queued via addFromNative into the
+// scheduler's own goroutines map and event queue.  Must be called only
+// from the scheduler loop goroutine.
+func (s *scheduler) drainIncoming() {
+	for {
+		select {
+		case g := <-s.incomingGoroutines:
+			s.goroutines[g.id] = g
+			s.enqueue(g)
+		default:
+			return
+		}
+	}
 }
 
 // enqueue adds the given goroutine to the scheduler's event queue to be resumed later.
@@ -110,29 +169,28 @@ func (s *scheduler) time() time.Time {
 	return s.clock.Time()
 }
 
-// sweepDeadChannels removes map entries for channels that have been GC'd.
-// Called at the start of each tick so deletions happen on the scheduler goroutine,
-// avoiding concurrent map writes from the GC cleanup goroutine.
-func (s *scheduler) sweepDeadChannels() {
-	s.deadChannelsMu.Lock()
-	dead := s.deadChannels
-	s.deadChannels = nil
-	s.deadChannelsMu.Unlock()
-	for _, key := range dead {
-		delete(s.channels, key)
-	}
-}
-
 // tick resumes a goroutine until it's done or suspended.
 func (s *scheduler) tick() chan struct{} {
-	s.sweepDeadChannels()
+	// Incorporate goroutines that arrived from non-scheduler goroutines since
+	// the last tick.  This must happen before currentEventQueue() so that
+	// newly arrived goroutines are visible to the deadlock detector.
+	s.drainIncoming()
 
 	// lookup current event queue
 	evtQ := s.currentEventQueue()
 	if evtQ == nil {
-		// exit if there are no more queues
-		close(s.doneCh)
-		return s.tickCh
+		// No runnable goroutines. Check whether Join() has been called.
+		select {
+		case <-s.keepAliveCh:
+			// Caller signalled that no more work will arrive — truly done.
+			close(s.doneCh)
+			return s.tickCh
+		default:
+		}
+		// More work may still arrive via addFromNative; yield to wakeUpCh so
+		// the loop blocks cheaply until a new goroutine (or Join) wakes it.
+		// If blockedGoroutines is set, loop() will apply a deadlock timeout.
+		return s.wakeUpCh
 	}
 
 	// choose next goroutine to resume
@@ -143,8 +201,18 @@ func (s *scheduler) tick() chan struct{} {
 
 	// resume chosen goroutine
 	s.active = g
-	g.run()              // continue goroutine execution
+	g.run() // continue goroutine execution
+
+	// Detect cooperative goroutines that block on native operations (e.g. native
+	// channels or select) instead of calling suspend().  Use a real time.AfterFunc
+	// so the timer fires even when simulated time is frozen.
+	stuckTimer := time.AfterFunc(s.stuckTimeout, func() {
+		buf := make([]byte, 64<<20)
+		n := runtime.Stack(buf, true)
+		panic(fmt.Sprintf("💥simulator stuck waiting for goroutine #%d\n%s", g.id, buf[:n]))
+	})
 	g.waitUntilStopped() // wait until goroutine is suspended or done
+	stuckTimer.Stop()
 	s.active = nil
 
 	// process new goroutine state
@@ -221,8 +289,22 @@ func (s *scheduler) currentEventQueue() *eventQueue {
 					}
 				}
 				sort.Strings(unresolved)
-				verify.T(len(unresolved) == 0,
-					"deadlock: all goroutines are blocked\n\t%v", strings.Join(unresolved, "\n\t"))
+				if len(unresolved) > 0 {
+					// Check if Join() has been called (no more native work expected).
+					select {
+					case <-s.keepAliveCh:
+						// Truly done: no new work will arrive.
+						verify.T(false,
+							"deadlock: all goroutines are blocked\n\t%v", strings.Join(unresolved, "\n\t"))
+					default:
+						// Non-coop goroutines may still be running and about to add
+						// new work via addFromNative. Signal tick() to yield to wakeUpCh
+						// with a timeout instead of panicking immediately.
+						s.blockedGoroutines = unresolved
+					}
+				}
+			} else {
+				s.blockedGoroutines = nil
 			}
 			return nil
 		}

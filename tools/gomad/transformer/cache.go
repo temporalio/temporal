@@ -30,6 +30,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"golang.org/x/tools/go/packages"
 )
@@ -43,8 +44,19 @@ func CreateCacheWriter(outDir string) func(*packages.Package, func()) {
 		// generate hash
 		hash := hashDirectory(pkg.CompiledGoFiles)
 
-		// path to hash file
-		hashFilePath := filepath.Join(outDir, simPkgPrefix, pkg.PkgPath, ".hash")
+		// Normalise internal test package paths (e.g. "foo [foo.test]" → "foo").
+		pkgPath := pkg.PkgPath
+		if idx := strings.Index(pkgPath, " ["); idx != -1 {
+			pkgPath = pkgPath[:idx]
+		}
+
+		// path to hash file — use the package ID suffix to keep test variants
+		// separate from the regular package cache entry.
+		hashSuffix := ".hash"
+		if strings.Contains(pkg.ID, " [") {
+			hashSuffix = ".hash.test"
+		}
+		hashFilePath := filepath.Join(outDir, simPkgPrefix, pkgPath, hashSuffix)
 		if err := os.MkdirAll(filepath.Dir(hashFilePath), os.ModePerm); err != nil {
 			panic(err)
 		}

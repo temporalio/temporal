@@ -28,6 +28,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	SIM "go.temporal.io/server/tools/gomad/runtime"
 )
 
 var (
@@ -1307,17 +1309,19 @@ func (db *DB) nextRequestKeyLocked() uint64 {
 
 // conn returns a newly-opened or cached *driverConn.
 func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn, error) {
+	// Check if the context is expired before acquiring db.mu. This must happen
+	// before the mutex to avoid suspending a cooperative goroutine (via ctx.Done()
+	// acquiring a simulation mutex) while holding the native db.mu, which would
+	// deadlock the cooperative scheduler.
+	select {
+	default:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	db.mu.Lock()
 	if db.closed {
 		db.mu.Unlock()
 		return nil, errDBClosed
-	}
-	// Check if the context is expired.
-	select {
-	default:
-	case <-ctx.Done():
-		db.mu.Unlock()
-		return nil, ctx.Err()
 	}
 	lifetime := db.maxLifetime
 
@@ -1359,54 +1363,65 @@ func (db *DB) conn(ctx context.Context, strategy connReuseStrategy) (*driverConn
 
 		waitStart := nowFunc()
 
-		// Timeout the connection request with the context.
-		select {
-		case <-ctx.Done():
-			// Remove the connection request and ensure no value has been sent
-			// on it after removing.
-			db.mu.Lock()
-			delete(db.connRequests, reqKey)
-			db.mu.Unlock()
-
-			db.waitDuration.Add(int64(time.Since(waitStart)))
-
+		// Poll for the connection cooperatively so that a simulated goroutine
+		// yields to the scheduler instead of blocking on a native channel.
+		for {
 			select {
-			default:
+			case <-ctx.Done():
+				// Remove the connection request and ensure no value has been sent
+				// on it after removing.
+				db.mu.Lock()
+				delete(db.connRequests, reqKey)
+				db.mu.Unlock()
+
+				db.waitDuration.Add(int64(time.Since(waitStart)))
+
+				select {
+				default:
+				case ret, ok := <-req:
+					if ok && ret.conn != nil {
+						db.putConn(ret.conn, ret.err, false)
+					}
+				}
+				return nil, ctx.Err()
 			case ret, ok := <-req:
-				if ok && ret.conn != nil {
-					db.putConn(ret.conn, ret.err, false)
+				db.waitDuration.Add(int64(time.Since(waitStart)))
+
+				if !ok {
+					return nil, errDBClosed
+				}
+				// Only check if the connection is expired if the strategy is cachedOrNewConns.
+				// If we require a new connection, just re-use the connection without looking
+				// at the expiry time. If it is expired, it will be checked when it is placed
+				// back into the connection pool.
+				// This prioritizes giving a valid connection to a client over the exact connection
+				// lifetime, which could expire exactly after this point anyway.
+				if strategy == cachedOrNewConn && ret.err == nil && ret.conn.expired(lifetime) {
+					db.mu.Lock()
+					db.maxLifetimeClosed++
+					db.mu.Unlock()
+					ret.conn.Close()
+					return nil, driver.ErrBadConn
+				}
+				if ret.conn == nil {
+					return nil, ret.err
+				}
+
+				// Reset the session if required.
+				if err := ret.conn.resetSession(ctx); errors.Is(err, driver.ErrBadConn) {
+					ret.conn.Close()
+					return nil, err
+				}
+				return ret.conn, ret.err
+			default:
+				// Connection not yet available. Yield to the cooperative scheduler
+				// so other goroutines can run and eventually release the connection.
+				if SIM.TryCurrentSimulator() != nil {
+					SIM.Sleep(time.Millisecond)
+				} else {
+					runtime.Gosched()
 				}
 			}
-			return nil, ctx.Err()
-		case ret, ok := <-req:
-			db.waitDuration.Add(int64(time.Since(waitStart)))
-
-			if !ok {
-				return nil, errDBClosed
-			}
-			// Only check if the connection is expired if the strategy is cachedOrNewConns.
-			// If we require a new connection, just re-use the connection without looking
-			// at the expiry time. If it is expired, it will be checked when it is placed
-			// back into the connection pool.
-			// This prioritizes giving a valid connection to a client over the exact connection
-			// lifetime, which could expire exactly after this point anyway.
-			if strategy == cachedOrNewConn && ret.err == nil && ret.conn.expired(lifetime) {
-				db.mu.Lock()
-				db.maxLifetimeClosed++
-				db.mu.Unlock()
-				ret.conn.Close()
-				return nil, driver.ErrBadConn
-			}
-			if ret.conn == nil {
-				return nil, ret.err
-			}
-
-			// Reset the session if required.
-			if err := ret.conn.resetSession(ctx); errors.Is(err, driver.ErrBadConn) {
-				ret.conn.Close()
-				return nil, err
-			}
-			return ret.conn, ret.err
 		}
 	}
 

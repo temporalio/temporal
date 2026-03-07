@@ -29,7 +29,7 @@ package fixtures
 import (
 	"net"
 
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
 )
 
 type alias = string

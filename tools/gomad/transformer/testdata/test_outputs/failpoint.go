@@ -27,9 +27,9 @@
 package fixtures
 
 import (
+	SIMAPI "go.temporal.io/server/tools/gomad/api/lang"
+	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
 	"gomad.local/github.com/pingcap/failpoint"
-	SIMAPI "gomad.local/go.temporal.io/server/tools/gomad/api/lang"
-	SIMLIB "gomad.local/go.temporal.io/server/tools/gomad/api/lib"
 )
 
 var otherVar = "other-var"
