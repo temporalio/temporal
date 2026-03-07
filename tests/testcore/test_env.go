@@ -249,6 +249,17 @@ func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
+// InjectRPCFault registers a fault injection scoped to this test's namespace.
+// Both namespace ID and name filters are applied automatically.
+// Returns a cleanup function that disables the fault.
+func (e *testEnv) InjectRPCFault(fault RPCFault, opts ...RPCFaultOption) func() {
+	opts = append([]RPCFaultOption{
+		WithNamespaceID(e.nsID.String()),
+		WithNamespaceName(e.nsName.String()),
+	}, opts...)
+	return InjectRPCFault(e.t, e.GetTestCluster(), fault, opts...)
+}
+
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.
 // For settings that can be namespace-scoped, a namespace constraint is applied.
 // All others cannot be applied to a shared cluster and require `WithDedicatedCluster`.
