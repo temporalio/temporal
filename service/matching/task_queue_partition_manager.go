@@ -3,12 +3,14 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"math"
 	"math/bits"
 	"sync"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -685,6 +687,9 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	taskID string,
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
+	task := newInternalQueryTask(taskID, request)
+	pm.config.setDefaultPriority(task)
+
 reredirectTask:
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		request.VersionDirective,
@@ -711,7 +716,7 @@ reredirectTask:
 		dbq.MarkAlive()
 	}
 
-	res, err := syncMatchQueue.DispatchQueryTask(ctx, taskID, request)
+	res, err := syncMatchQueue.DispatchQueryTask(ctx, task)
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchQueryTask
 		goto reredirectTask
@@ -724,6 +729,23 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	taskId string,
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
+	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
+	var opDeadline time.Time
+	if header := nexus.Header(request.GetRequest().GetHeader()); header != nil {
+		if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeoutHeader != "" {
+			opTimeout, err := time.ParseDuration(opTimeoutHeader)
+			if err != nil {
+				// Operation-Timeout header is not required so don't fail request on parsing errors.
+				pm.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.NamespaceId))
+			} else {
+				opDeadline = time.Now().Add(opTimeout)
+			}
+		}
+	}
+
+	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
+	pm.config.setDefaultPriority(task)
+
 reredirectTask:
 	_, syncMatchQueue, _, _, _, err := pm.getPhysicalQueuesForAdd(ctx,
 		worker_versioning.MakeUseAssignmentRulesDirective(),
@@ -749,7 +771,7 @@ reredirectTask:
 		dbq.MarkAlive()
 	}
 
-	res, err := syncMatchQueue.DispatchNexusTask(ctx, taskId, request)
+	res, err := syncMatchQueue.DispatchNexusTask(ctx, task)
 	if errors.Is(err, errReprocessTask) {
 		// We get this if userdata changed while the task was blocked in DispatchNexusTask
 		goto reredirectTask

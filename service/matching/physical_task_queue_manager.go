@@ -9,7 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -197,7 +196,7 @@ func newPhysicalTaskQueueManager(
 		var err error
 		if queue.Partition().IsChild() {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
-			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
 			if err != nil {
 				return nil, err
 			}
@@ -236,7 +235,7 @@ func newPhysicalTaskQueueManager(
 		var err error
 		if queue.Partition().IsChild() {
 			// Every DB Queue needs its own forwarder so that the throttles do not interfere
-			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
+			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
 			if err != nil {
 				return nil, err
 			}
@@ -573,37 +572,18 @@ func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
 // if dispatched to local poller then nil and nil is returned.
 func (c *physicalTaskQueueManagerImpl) DispatchQueryTask(
 	ctx context.Context,
-	taskId string,
-	request *matchingservice.QueryWorkflowRequest,
+	task *internalTask,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	task := newInternalQueryTask(taskId, request)
-	c.config.setDefaultPriority(task)
 	if !task.isForwarded() {
-		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(request.GetPriority().GetPriorityKey())).incrementTaskCount()
+		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey())).incrementTaskCount()
 	}
 	return c.matcher.OfferQuery(ctx, task)
 }
 
 func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 	ctx context.Context,
-	taskId string,
-	request *matchingservice.DispatchNexusTaskRequest,
+	task *internalTask,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
-	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
-	var opDeadline time.Time
-	if header := nexus.Header(request.GetRequest().GetHeader()); header != nil {
-		if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeoutHeader != "" {
-			opTimeout, err := time.ParseDuration(opTimeoutHeader)
-			if err != nil {
-				// Operation-Timeout header is not required so don't fail request on parsing errors.
-				c.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.NamespaceId))
-			} else {
-				opDeadline = time.Now().Add(opTimeout)
-			}
-		}
-	}
-	task := newInternalNexusTask(taskId, deadline, opDeadline, request)
-	c.config.setDefaultPriority(task)
 	if !task.isForwarded() {
 		c.getOrCreateTaskTracker(c.tasksAdded, priorityKey(0)).incrementTaskCount() // Nexus has no priorities
 	}
