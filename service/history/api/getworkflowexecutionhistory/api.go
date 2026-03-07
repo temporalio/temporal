@@ -3,6 +3,7 @@ package getworkflowexecutionhistory
 import (
 	"context"
 	"errors"
+	"math"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -50,6 +51,7 @@ func appendTransientTasks(
 	// Check this FIRST before doing any work
 	clientName, _ := headers.GetClientNameAndVersion(ctx)
 	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
+		shardContext.GetLogger().Warn("skipping transient tasks for CLI or UI")
 		return
 	}
 
@@ -60,6 +62,12 @@ func appendTransientTasks(
 		// Validate cached tasks are still valid (not stale)
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, cachedTransientTasks); err == nil {
 			transientWorkflowTask = cachedTransientTasks
+		} else {
+			shardContext.GetLogger().Warn("PREMATURE-EOS: cached transient workflow task is invalid",
+				tag.NewStringTag("Namespace", namespaceID.String()),
+				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+				tag.NewStringTag("RunID", execution.GetRunId()),
+				tag.Error(err))
 		}
 	}
 
@@ -75,25 +83,41 @@ func appendTransientTasks(
 			workflowConsistencyChecker,
 			eventNotifier,
 		)
-		if err != nil || msResp.GetTransientOrSpeculativeTasks() == nil {
+		if err != nil {
 			// Transient events don't exist or are already committed - this is OK
 			// Just return without appending (events are in persisted history)
-			if err != nil {
-				shardContext.GetLogger().Warn("Failed to refetch transient events",
-					tag.WorkflowNamespaceID(namespaceID.String()),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.Error(err))
-			}
+			shardContext.GetLogger().Warn("PREMATURE-EOS: failed to refetch transient events",
+				tag.NewStringTag("Namespace", namespaceID.String()),
+				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+				tag.NewStringTag("RunID", execution.GetRunId()),
+				tag.Error(err))
 			return
 		}
 		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
+		if transientWorkflowTask == nil {
+			if msResp.GetNextEventId() != nextEventID {
+				shardContext.GetLogger().Warn(
+					"PREMATURE-EOS: transient workflow task is unexpectedly nil when nextEventID indicates there should be transient tasks",
+					tag.NewStringTag("Namespace", namespaceID.String()),
+					tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+					tag.NewStringTag("RunID", execution.GetRunId()),
+					tag.NewInt64("ms-resp-next-event-id", msResp.GetNextEventId()),
+					tag.NewInt64("expected-next-event-id", nextEventID),
+				)
+			}
+			return
+		}
 
 		if msResp.GetWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			return
 		}
 
 		if err := api.ValidateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTask); err != nil {
+			shardContext.GetLogger().Warn("PREMATURE-EOS: transient workflow task validation failed in appendTransientTasks",
+				tag.NewStringTag("Namespace", namespaceID.String()),
+				tag.NewStringTag("WorkflowID", execution.GetWorkflowId()),
+				tag.NewStringTag("RunID", execution.GetRunId()),
+				tag.Error(err))
 			return
 		}
 	}
@@ -420,6 +444,47 @@ func Invoke(
 
 			// Query and append transient/speculative tasks if on last page
 			if len(continuationToken.PersistenceToken) == 0 {
+				// Re-query mutable state to detect events committed to DB during pagination (race condition fix).
+				// When a speculative/transient WFT times out or fails between the first and last DB page fetches,
+				// those events are committed to DB with IDs < continuationToken.NextEventId but were excluded
+				// because the DB fetch was capped at the original boundary. Fetch the gap now, then update
+				// the nextEventID boundary so appendTransientTasks validates against the correct ID.
+				_, _, _, freshNextEventID, freshIsRunning, freshVersionHistoryItem, freshVersionedTransition, freshTransientTasks, freshErr :=
+					queryMutableState(namespaceID, execution, common.EmptyEventID,
+						continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
+				if freshErr == nil && freshNextEventID > continuationToken.NextEventId {
+					// Events were committed to DB during pagination — fetch the gap.
+					if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
+						var gapBlob []*commonpb.DataBlob
+						gapBlob, _, freshErr = api.GetRawHistory(ctx, shardContext, namespaceName, namespaceID, execution,
+							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil, continuationToken.BranchToken)
+						if freshErr == nil {
+							historyBlob = append(historyBlob, gapBlob...)
+						}
+					} else {
+						var gapHistory *historypb.History
+						gapHistory, _, freshErr = api.GetHistory(ctx, shardContext, namespaceName, namespaceID, execution,
+							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil,
+							continuationToken.BranchToken, persistenceVisibilityMgr)
+						if freshErr == nil && gapHistory != nil {
+							history.Events = append(history.Events, gapHistory.Events...)
+						}
+					}
+					if freshErr == nil {
+						// Update the event boundary so appendTransientTasks validates against the correct nextEventID.
+						continuationToken.NextEventId = freshNextEventID
+						continuationToken.IsWorkflowRunning = freshIsRunning
+						continuationToken.VersionHistoryItem = freshVersionHistoryItem
+						continuationToken.VersionedTransition = freshVersionedTransition
+						// Provide fresh transient tasks to appendTransientTasks to avoid a redundant re-query.
+						cachedTransientTasks = freshTransientTasks
+					} else {
+						return nil, freshErr
+					}
+				} else if freshErr != nil {
+					return nil, freshErr
+				}
+
 				appendTransientTasks(
 					ctx,
 					shardContext,

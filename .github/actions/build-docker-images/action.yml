@@ -129,7 +129,15 @@ runs:
         ALPINE_TAG: ${{ inputs.alpine-tag }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
       run: |
-        docker buildx bake \
-          --push \
-          -f docker/docker-bake.hcl \
-          server admin-tools
+        if [ -n "${{ inputs.platform }}" ]; then
+          docker buildx bake \
+            --push \
+            --set "*.platform=${{ inputs.platform }}" \
+            -f docker/docker-bake.hcl \
+            server admin-tools
+        else
+          docker buildx bake \
+            --push \
+            -f docker/docker-bake.hcl \
+            server admin-tools
+        fi

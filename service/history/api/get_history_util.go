@@ -58,6 +58,7 @@ func GetRawHistory(
 	}()
 
 	logger := shardContext.GetLogger()
+	logger.Info("PREMATURE-EOS: pageSize", tag.Int32("pageSize", pageSize))
 	rawHistory, size, nextToken, err := persistence.ReadFullPageRawEvents(
 		ctx, shardContext.GetExecutionManager(),
 		&persistence.ReadHistoryBranchRequest{
@@ -201,6 +202,9 @@ func GetHistory(
 	}
 
 	logger := shardContext.GetLogger()
+
+	logger.Info("PREMATURE-EOS: pageSize", tag.Int32("pageSize", pageSize))
+
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
 
@@ -441,14 +445,16 @@ func ValidateTransientWorkflowTaskEvents(
 	eventIDOffset int64,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 ) error {
-	for i, event := range transientWorkflowTaskInfo.HistorySuffix {
-		expectedEventID := eventIDOffset + int64(i)
-		if event.GetEventId() != expectedEventID {
-			return serviceerror.NewInternalf(
-				"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
-				i,
-				expectedEventID,
-				event.GetEventId())
+	if transientWorkflowTaskInfo != nil {
+		for i, event := range transientWorkflowTaskInfo.HistorySuffix {
+			expectedEventID := eventIDOffset + int64(i)
+			if event.GetEventId() != expectedEventID {
+				return serviceerror.NewInternalf(
+					"invalid transient workflow task at position %v; expected event ID %v, found event ID %v",
+					i,
+					expectedEventID,
+					event.GetEventId())
+			}
 		}
 	}
 
