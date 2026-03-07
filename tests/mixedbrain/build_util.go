@@ -18,8 +18,6 @@ import (
 const (
 	retryTimeout = 30 * time.Second
 	temporalRepo = "https://github.com/temporalio/temporal.git"
-	omesRepo     = "https://github.com/temporalio/omes"
-	omesCommit   = "8e4c1f54f3b0fb5e39d131f859c56fb2236395b1"
 )
 
 func sourceRoot() string {
@@ -111,20 +109,15 @@ func downloadAndBuildReleaseServer(t *testing.T, outputPath string) string {
 	return tag
 }
 
-func downloadAndBuildOmes(t *testing.T, workDir string) {
+func buildOmes(t *testing.T, outputPath string) {
 	t.Helper()
-
-	repoDir := filepath.Join(workDir, "omes")
-	cloneRepo(t, omesRepo, repoDir, omesCommit)
-
 	t.Log("Building Omes...")
-	omesBinary := filepath.Join(workDir, "omes-bin")
-	buildCmd := exec.CommandContext(t.Context(), "go",
+	cmd := exec.CommandContext(t.Context(), "go",
 		"build",
-		"-o", omesBinary,
-		"./cmd",
+		"-o", outputPath,
+		"github.com/temporalio/omes/cmd",
 	)
-	buildCmd.Dir = repoDir
-	out, err := buildCmd.CombinedOutput()
+	cmd.Dir = sourceRoot()
+	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "build Omes failed:\n%s", out)
 }
