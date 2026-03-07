@@ -179,6 +179,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 	redirectCounter int64,
 	suggestContinueAsNewReasons []enumspb.SuggestContinueAsNewReason,
 	targetWorkerDeploymentVersionChanged bool,
+	targetWorkerDeploymentVersionOnStart *deploymentpb.WorkerDeploymentVersion,
 ) (*historyi.WorkflowTaskInfo, error) {
 	// When this function is called from ApplyEvents, workflowTask is nil.
 	// It is safe to look up the workflow task as it does not have to deal with transient workflow task case.
@@ -202,6 +203,16 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		workflowTask.Attempt = 1
 	}
 
+	// Set target_worker_deployment_version_on_start on versioning info from the event.
+	// During rebuild, this restores the field so the next active-side AddWorkflowTaskStartedEvent
+	// can correctly compute targetDeploymentVersionChanged.
+	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo == nil {
+		versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+		m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+	}
+	versioningInfo.TargetWorkerDeploymentVersionOnStart = targetWorkerDeploymentVersionOnStart
+
 	workflowTask = &historyi.WorkflowTaskInfo{
 		Version:                     version,
 		ScheduledEventID:            scheduledEventID,
@@ -222,6 +233,7 @@ func (m *workflowTaskStateMachine) ApplyWorkflowTaskStartedEvent(
 		Stamp:                       m.ms.GetExecutionInfo().GetWorkflowTaskStamp(),
 
 		TargetWorkerDeploymentVersionChanged: targetWorkerDeploymentVersionChanged,
+		TargetWorkerDeploymentVersionOnStart: versioningInfo.GetTargetWorkerDeploymentVersionOnStart(),
 	}
 
 	if buildId := worker_versioning.BuildIdIfUsingVersioning(versioningStamp); buildId != "" {
@@ -491,18 +503,39 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	// checking whether targetDeploymentVersion == nil means that we won't send the targetDeploymentVersionChanged=true
-	// to workflows that are about to transition to the target version. This is good because if their transition succeeds,
-	// they don't need to CaN-with-upgrade to start using the new version.
+	// Record the target deployment version from matching on the first WFT of this run (set-once).
+	// This anchors the comparison so that targetDeploymentVersionChanged reflects a real routing
+	// change since this run started.
+	versioningInfo := m.ms.GetExecutionInfo().GetVersioningInfo()
+	if versioningInfo.GetTargetWorkerDeploymentVersionOnStart() == nil &&
+		!m.ms.HasCompletedAnyWorkflowTask() &&
+		targetDeploymentVersion != nil {
+		if versioningInfo == nil {
+			versioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
+			m.ms.GetExecutionInfo().VersioningInfo = versioningInfo
+		}
+		versioningInfo.TargetWorkerDeploymentVersionOnStart = &deploymentpb.WorkerDeploymentVersion{
+			BuildId:        targetDeploymentVersion.BuildId,
+			DeploymentName: targetDeploymentVersion.DeploymentName,
+		}
+	}
+
+	// Compute whether the routing target has changed since this run started, used to set the
+	// target_worker_deployment_version_changed flag that tells pinned workflows to CAN onto the
+	// latest current version.
+	// - Skip when targetDeploymentVersion is nil: matching only sends it when the poller's
+	//   version differs from the routing target, so nil means no change can be detected.
+	// - Skip when a versioning override is active: the operator explicitly controls the
+	//   workflow's version, so routing changes are irrelevant.
 	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
+		versioningInfo.GetVersioningOverride() == nil &&
 		targetDeploymentVersion != nil {
-		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
-			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
-				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
-			targetDeploymentVersionChanged = true
-		}
+		initialTarget := versioningInfo.GetTargetWorkerDeploymentVersionOnStart()
+		targetDeploymentVersionChanged =
+			initialTarget.GetBuildId() != targetDeploymentVersion.GetBuildId() ||
+				initialTarget.GetDeploymentName() != targetDeploymentVersion.GetDeploymentName()
 	}
 	// emit metric
 	if targetDeploymentVersionChanged {
@@ -566,6 +599,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 			redirectCounter,
 			suggestContinueAsNewReasons,
 			targetDeploymentVersionChanged,
+			versioningInfo.GetTargetWorkerDeploymentVersionOnStart(),
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		startedEventID = startedEvent.GetEventId()
@@ -584,6 +618,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		redirectCounter,
 		suggestContinueAsNewReasons,
 		targetDeploymentVersionChanged,
+		versioningInfo.GetTargetWorkerDeploymentVersionOnStart(),
 	)
 	if err != nil {
 		return nil, nil, err
@@ -761,6 +796,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			workflowTask.TargetWorkerDeploymentVersionChanged,
+			workflowTask.TargetWorkerDeploymentVersionOnStart,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -852,6 +888,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskFailedEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			workflowTask.TargetWorkerDeploymentVersionChanged,
+			workflowTask.TargetWorkerDeploymentVersionOnStart,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -925,6 +962,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskTimedOutEvent(
 			workflowTask.BuildIdRedirectCounter,
 			workflowTask.SuggestContinueAsNewReasons,
 			workflowTask.TargetWorkerDeploymentVersionChanged,
+			workflowTask.TargetWorkerDeploymentVersionOnStart,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 		workflowTask.StartedEventID = startedEvent.GetEventId()
@@ -1238,6 +1276,12 @@ func (m *workflowTaskStateMachine) getWorkflowTaskInfo() *historyi.WorkflowTaskI
 		Stamp:                       m.ms.executionInfo.WorkflowTaskStamp,
 
 		TargetWorkerDeploymentVersionChanged: m.ms.executionInfo.WorkflowTaskTargetWorkerDeploymentVersionChanged,
+		// TargetWorkerDeploymentVersionOnStart is a per-run anchor (not a per-WFT field), so it
+		// lives on VersioningInfo rather than being round-tripped through UpdateWorkflowTask like
+		// the other WorkflowTask* fields on executionInfo. We read it here so that callers that
+		// retroactively create WFT started events (speculative-to-normal conversion, transient
+		// WFT paths in completed/failed/timed-out) include the correct value in history.
+		TargetWorkerDeploymentVersionOnStart: m.ms.executionInfo.GetVersioningInfo().GetTargetWorkerDeploymentVersionOnStart(),
 	}
 
 	return wft
@@ -1485,6 +1529,7 @@ func (m *workflowTaskStateMachine) convertSpeculativeWorkflowTaskToNormal() erro
 			wt.BuildIdRedirectCounter,
 			wt.SuggestContinueAsNewReasons,
 			wt.TargetWorkerDeploymentVersionChanged,
+			wt.TargetWorkerDeploymentVersionOnStart,
 		)
 		m.ms.hBuilder.FlushAndCreateNewBatch()
 
