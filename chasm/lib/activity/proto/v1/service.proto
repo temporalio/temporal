@@ -11,10 +11,12 @@ import "temporal/server/api/common/v1/api_category.proto";
 service ActivityService {
     rpc StartActivityExecution(StartActivityExecutionRequest) returns (StartActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
     rpc DescribeActivityExecution(DescribeActivityExecutionRequest) returns (DescribeActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
     rpc PollActivityExecution(PollActivityExecutionRequest) returns (PollActivityExecutionResponse) {
@@ -24,9 +26,11 @@ service ActivityService {
 
     rpc TerminateActivityExecution(TerminateActivityExecutionRequest) returns (TerminateActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
     rpc RequestCancelActivityExecution(RequestCancelActivityExecutionRequest) returns (RequestCancelActivityExecutionResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 }
