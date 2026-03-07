@@ -25,7 +25,7 @@ inputs:
   cli-version:
     description: "Temporal CLI version to download"
     required: false
-    default: "1.5.1"
+    default: "1.6.1"
   alpine-tag:
     description: "Alpine base image tag"
     required: false
