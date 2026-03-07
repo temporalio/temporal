@@ -18,16 +18,14 @@ import (
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
-	batchspb "go.temporal.io/server/api/batch/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
+	dynamicconfigspb "go.temporal.io/server/api/dynamicconfig/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -43,6 +41,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -50,8 +49,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -65,10 +62,10 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/addsearchattributes"
-	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
 	"google.golang.org/grpc/health"
-	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -113,6 +110,7 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
+		dynamicClient              dynamicconfig.Client
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -148,6 +146,7 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
+		dynamicClient                       dynamicconfig.Client
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -175,8 +174,12 @@ func NewAdminHandler(
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
 		args.Config.HistoryHostSelfErrorProportion,
-		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
-			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+		func(ctx context.Context, hostAddress string) (enumsspb.HealthState, error) {
+			resp, err := args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
+			if err != nil {
+				return enumsspb.HEALTH_STATE_NOT_SERVING, err
+			}
+			return resp.GetState(), nil
 		},
 		args.Logger,
 	)
@@ -227,6 +230,7 @@ func NewAdminHandler(
 		healthServer:         args.HealthServer,
 		historyHealthChecker: historyHealthChecker,
 		taskCategoryRegistry: args.CategoryRegistry,
+		dynamicClient:        args.dynamicClient,
 		matchingClient:       args.matchingClient,
 		chasmRegistry:        args.ChasmRegistry,
 	}
@@ -239,7 +243,7 @@ func (adh *AdminHandler) Start() {
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthspb.HealthCheckResponse_SERVING)
+		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
 }
 
@@ -250,7 +254,7 @@ func (adh *AdminHandler) Stop() {
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		adh.healthServer.SetServingStatus(AdminServiceName, grpchealthspb.HealthCheckResponse_NOT_SERVING)
+		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
 }
 
@@ -260,20 +264,11 @@ func (adh *AdminHandler) DeepHealthCheck(
 ) (_ *adminservice.DeepHealthCheckResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	result, err := adh.historyHealthChecker.Check(ctx)
+	healthStatus, err := adh.historyHealthChecker.Check(ctx)
 	if err != nil {
 		return nil, err
 	}
-
-	var services []*healthspb.ServiceHealthDetail
-	if result.ServiceDetail != nil {
-		services = append(services, result.ServiceDetail)
-	}
-
-	return &adminservice.DeepHealthCheckResponse{
-		State:    result.State,
-		Services: services,
-	}, nil
+	return &adminservice.DeepHealthCheckResponse{State: healthStatus}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
@@ -1246,7 +1241,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
 			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
 			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
-			IsReplicationEnabled:     request.GetEnableReplication(),
+			IsReplicationEnabled:     request.GetIsReplicationEnabled(),
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
@@ -1577,130 +1572,6 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 	return &adminservice.RefreshWorkflowTasksResponse{}, nil
-}
-
-// StartAdminBatchOperation starts an admin batch operation.
-func (adh *AdminHandler) StartAdminBatchOperation(
-	ctx context.Context,
-	request *adminservice.StartAdminBatchOperationRequest,
-) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := validateAdminBatchOperation(request); err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	// Validate concurrent batch operation
-	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
-	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace.Name(request.GetNamespace()),
-		Query:       batcher.OpenAdminBatchOperationQuery,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	openAdminBatchOperationCount := int(countResp.Count)
-	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
-		return nil, &serviceerror.ResourceExhausted{
-			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			Message: "Max concurrent admin batch operations is reached",
-		}
-	}
-
-	input := &batchspb.BatchOperationInput{
-		AdminRequest: request,
-		NamespaceId:  namespaceID.String(),
-	}
-
-	identity := request.GetIdentity()
-	var batchTypeMemo string
-	switch op := request.Operation.(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		batchTypeMemo = "refresh_tasks"
-	default:
-		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
-	}
-
-	inputPayload, err := payloads.Encode(input)
-	if err != nil {
-		return nil, err
-	}
-
-	memo := &commonpb.Memo{
-		Fields: map[string]*commonpb.Payload{
-			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
-			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
-		},
-	}
-
-	var searchAttributes *commonpb.SearchAttributes
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.BatcherUser, payload.EncodeString(identity))
-	searchattribute.AddSearchAttribute(&searchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(batcher.AdminNamespaceDivision))
-
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
-		WorkflowId:               request.GetJobId(),
-		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayload,
-		Identity:                 identity,
-		RequestId:                uuid.NewString(),
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE,
-		Memo:                     memo,
-		SearchAttributes:         searchAttributes,
-	}
-
-	_, err = adh.historyClient.StartWorkflowExecution(
-		ctx,
-		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
-			startReq,
-			nil,
-			nil,
-			time.Now().UTC(),
-		),
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &adminservice.StartAdminBatchOperationResponse{}, nil
-}
-
-func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
-	if params.GetOperation() == nil ||
-		params.GetReason() == "" ||
-		params.GetNamespace() == "" ||
-		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: Operation/Reason/Namespace/Query or Executions")
-	}
-
-	if len(params.GetJobId()) == 0 {
-		return serviceerror.NewInvalidArgument("JobId is not set on request.")
-	}
-	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
-		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
-	}
-
-	switch op := params.GetOperation().(type) {
-	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		// No additional validation needed
-		return nil
-	default:
-		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
-	}
 }
 
 // ResendReplicationTasks requests replication task from remote cluster
@@ -2363,6 +2234,65 @@ func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.Arc
 		return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf("unknown archetype: %s", archetype)
 	}
 	return archetypeID, nil
+}
+
+func (adh *AdminHandler) GetDynamicConfigurations(
+	ctx context.Context,
+	req *adminservice.GetDynamicConfigurationsRequest,
+) (*adminservice.GetDynamicConfigurationsResponse, error) {
+	requestedKeys := req.GetDynamicConfigKeys()
+	dynamicConfig := make(map[string]*dynamicconfigspb.ConstrainedValues, len(requestedKeys))
+
+	for _, key := range requestedKeys {
+		var dcEntry []dynamicconfig.ConstrainedValue
+		k := dynamicconfig.Key(key)
+		dcEntry = adh.dynamicClient.GetValue(k)
+
+		// get global default value
+		if dcEntry == nil {
+			dcEntry = dynamicconfig.GetDefaultValues(k)
+		}
+
+		protoValues := make([]*dynamicconfigspb.ConstrainedValue, 0, len(dcEntry))
+		for _, cv := range dcEntry {
+			s, err := structpb.NewValue(normalizeValue(cv.Value))
+			if err != nil {
+				adh.logger.Error("Failed to convert dynamic config value to structpb.Value", tag.Error(err), tag.Key(key))
+				continue
+			}
+			protoValues = append(protoValues, &dynamicconfigspb.ConstrainedValue{
+				Value: s,
+				Constraints: &dynamicconfigspb.Constraints{
+					Namespace:     cv.Constraints.Namespace,
+					NamespaceId:   cv.Constraints.NamespaceID,
+					TaskQueueName: cv.Constraints.TaskQueueName,
+					TaskQueueType: int32(cv.Constraints.TaskQueueType),
+					ShardId:       cv.Constraints.ShardID,
+					TaskType:      int32(cv.Constraints.TaskType),
+					Destination:   cv.Constraints.Destination,
+				},
+			})
+		}
+		dynamicConfig[key] = &dynamicconfigspb.ConstrainedValues{Items: protoValues}
+	}
+
+	hostConfig := &adminservice.HostConfig{
+		Hostname:      adh.hostInfoProvider.HostInfo().Identity(),
+		DynamicConfig: dynamicConfig,
+	}
+
+	return &adminservice.GetDynamicConfigurationsResponse{
+		HostConfig: []*adminservice.HostConfig{hostConfig},
+	}, nil
+}
+
+func normalizeValue(v interface{}) interface{} {
+	switch val := v.(type) {
+	case time.Duration:
+		return val.String()
+	default:
+		return val
+	}
 }
 
 func validateHistoryDLQKey(
