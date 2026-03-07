@@ -419,6 +419,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) UserDataChanged() *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserDataChanged", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UserDataChanged))
 }
 
+// WaitForDrainingInitialized mocks base method.
+func (m *MockphysicalTaskQueueManager) WaitForDrainingInitialized(arg0 context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WaitForDrainingInitialized", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WaitForDrainingInitialized indicates an expected call of WaitForDrainingInitialized.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) WaitForDrainingInitialized(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForDrainingInitialized", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).WaitForDrainingInitialized), arg0)
+}
+
 // WaitUntilInitialized mocks base method.
 func (m *MockphysicalTaskQueueManager) WaitUntilInitialized(arg0 context.Context) error {
 	m.ctrl.T.Helper()
