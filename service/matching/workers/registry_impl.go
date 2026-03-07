@@ -46,27 +46,27 @@ type (
 	// It partitions the keyspace into buckets and enforces TTL and capacity.
 	// Eviction runs in the background.
 	registryImpl struct {
-		buckets                   []*bucket                        // buckets for partitioning the keyspace
-		maxItemsFn                dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
-		ttlFn                     dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
-		minEvictAgeFn             dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
-		evictionIntervalFn        dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
-		total                     atomic.Int64                     // atomic counter of total entries
-		quit                      chan struct{}                    // channel to signal shutdown of the eviction loop
-		seed                      maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
-		metricsHandler            metrics.Handler                  // metrics handler for recording registry metrics
-		enableWorkerPluginMetrics dynamicconfig.BoolPropertyFn     // dynamic config function to control plugin metrics export
+		buckets            []*bucket                        // buckets for partitioning the keyspace
+		maxItemsFn         dynamicconfig.IntPropertyFn      // dynamic config for maximum entries
+		ttlFn              dynamicconfig.DurationPropertyFn // dynamic config for entry TTL
+		minEvictAgeFn      dynamicconfig.DurationPropertyFn // dynamic config for minimum evict age
+		evictionIntervalFn dynamicconfig.DurationPropertyFn // dynamic config for eviction interval
+		total              atomic.Int64                     // atomic counter of total entries
+		quit               chan struct{}                    // channel to signal shutdown of the eviction loop
+		seed               maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
+		metricsHandler     metrics.Handler                  // metrics handler for recording registry metrics
+		metricsEmitter     *workerMetricsEmitter            // emitter for heartbeat-derived metrics
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
 	RegistryParams struct {
-		NumBuckets          dynamicconfig.IntPropertyFn
-		TTL                 dynamicconfig.DurationPropertyFn
-		MinEvictAge         dynamicconfig.DurationPropertyFn
-		MaxItems            dynamicconfig.IntPropertyFn
-		EvictionInterval    dynamicconfig.DurationPropertyFn
-		MetricsHandler      metrics.Handler
-		EnablePluginMetrics dynamicconfig.BoolPropertyFn
+		NumBuckets       dynamicconfig.IntPropertyFn
+		TTL              dynamicconfig.DurationPropertyFn
+		MinEvictAge      dynamicconfig.DurationPropertyFn
+		MaxItems         dynamicconfig.IntPropertyFn
+		EvictionInterval dynamicconfig.DurationPropertyFn
+		MetricsHandler   metrics.Handler
+		MetricsConfig    WorkerMetricsConfig
 	}
 )
 
@@ -213,15 +213,18 @@ func NewRegistry(lc fx.Lifecycle, params RegistryParams) Registry {
 
 func newRegistryImpl(params RegistryParams) *registryImpl {
 	m := &registryImpl{
-		buckets:                   make([]*bucket, params.NumBuckets()),
-		maxItemsFn:                params.MaxItems,
-		ttlFn:                     params.TTL,
-		minEvictAgeFn:             params.MinEvictAge,
-		evictionIntervalFn:        params.EvictionInterval,
-		seed:                      maphash.MakeSeed(),
-		quit:                      make(chan struct{}),
-		metricsHandler:            params.MetricsHandler,
-		enableWorkerPluginMetrics: params.EnablePluginMetrics,
+		buckets:            make([]*bucket, params.NumBuckets()),
+		maxItemsFn:         params.MaxItems,
+		ttlFn:              params.TTL,
+		minEvictAgeFn:      params.MinEvictAge,
+		evictionIntervalFn: params.EvictionInterval,
+		seed:               maphash.MakeSeed(),
+		quit:               make(chan struct{}),
+		metricsHandler:     params.MetricsHandler,
+		metricsEmitter: &workerMetricsEmitter{
+			handler: params.MetricsHandler,
+			config:  params.MetricsConfig,
+		},
 	}
 
 	for i := range m.buckets {
@@ -273,33 +276,6 @@ func (m *registryImpl) recordEvictionMetric() {
 	} else {
 		// Back under capacity - clear the issue
 		metrics.WorkerRegistryEvictionBlockedByAgeMetric.With(m.metricsHandler).Record(0)
-	}
-}
-
-// recordPluginMetric sets a value of 1 for each unique plugin name present in the heartbeats.
-func (m *registryImpl) recordPluginMetric(nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
-	// Check if plugin metrics are enabled via dynamic config
-	if !m.enableWorkerPluginMetrics() {
-		return
-	}
-
-	// Track which plugins we've already recorded
-	recordedPlugins := make(map[string]bool)
-
-	for _, hb := range heartbeats {
-		for _, pluginInfo := range hb.Plugins {
-			pluginName := pluginInfo.Name
-			if !recordedPlugins[pluginName] {
-				metrics.WorkerPluginNameMetric.
-					With(m.metricsHandler).
-					Record(
-						1,
-						metrics.NamespaceIDTag(nsName.String()),
-						metrics.WorkerPluginNameTag(pluginName),
-					)
-				recordedPlugins[pluginName] = true
-			}
-		}
 	}
 }
 
@@ -388,17 +364,7 @@ func (m *registryImpl) Stop() {
 
 func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
 	m.upsertHeartbeats(nsID, workerHeartbeat)
-	m.recordPluginMetric(nsName, workerHeartbeat)
-	m.recordActivitySlotsMetric(workerHeartbeat)
-}
-
-// recordActivitySlotsMetric records the distribution of activity slots in use across workers.
-func (m *registryImpl) recordActivitySlotsMetric(heartbeats []*workerpb.WorkerHeartbeat) {
-	for _, hb := range heartbeats {
-		if hb.ActivityTaskSlotsInfo != nil {
-			metrics.WorkerRegistryActivitySlotsUsed.With(m.metricsHandler).Record(int64(hb.ActivityTaskSlotsInfo.CurrentUsedSlots))
-		}
-	}
+	m.metricsEmitter.emit(nsName, workerHeartbeat)
 }
 
 func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {
