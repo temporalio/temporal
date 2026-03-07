@@ -37,6 +37,14 @@ inputs:
     description: "Docker Hub token"
     required: false
 
+outputs:
+  branch-tag:
+    description: "Docker-safe branch tag (e.g., branch-main, branch-release-v1.30.0)"
+    value: ${{ steps.image-tags.outputs.tag }}
+  sha-tag:
+    description: "Docker SHA tag (e.g., sha-abc1234)"
+    value: ${{ steps.image-tags.outputs.sha }}
+
 runs:
   using: composite
   steps:
@@ -46,10 +54,25 @@ runs:
       run: |
         go build -o docker-build-helper .
 
+    - name: Resolve git ref and SHA
+      id: git-info
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        # Use the symbolic ref (branch name) if available, otherwise fall back
+        # to a tag name or the raw SHA. This is more reliable than GITHUB_REF
+        # which points to the dispatch branch for workflow_dispatch events.
+        REF=$(git symbolic-ref HEAD 2>/dev/null || git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse HEAD)
+        echo "ref=${REF}" >> "$GITHUB_OUTPUT"
+
     - name: Set image tags
       id: image-tags
       shell: bash
       working-directory: ${{ github.workspace }}
+      env:
+        GIT_REF: ${{ steps.git-info.outputs.ref }}
+        GIT_SHA: ${{ steps.git-info.outputs.sha }}
       run: .github/actions/build-docker-images/scripts/docker-build-helper set-image-tags
 
     - name: Organize binaries for Docker
@@ -98,7 +121,7 @@ runs:
         IMAGE_REPO: temporaliotest
         IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
         IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
-        TEMPORAL_SHA: ${{ github.sha }}
+        TEMPORAL_SHA: ${{ steps.git-info.outputs.sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
@@ -124,7 +147,7 @@ runs:
         IMAGE_REPO: temporaliotest
         IMAGE_SHA_TAG: ${{ steps.image-tags.outputs.sha }}
         IMAGE_BRANCH_TAG: ${{ steps.image-tags.outputs.tag }}
-        TEMPORAL_SHA: ${{ github.sha }}
+        TEMPORAL_SHA: ${{ steps.git-info.outputs.sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}

@@ -58,16 +58,14 @@ func main() {
 
 // setImageTags generates Docker image tags from branch name and commit SHA
 func setImageTags() error {
-	// Get GITHUB_REF from environment
-	ref := os.Getenv("GITHUB_REF")
+	ref := os.Getenv("GIT_REF")
 	if ref == "" {
-		return fmt.Errorf("GITHUB_REF environment variable not set")
+		return fmt.Errorf("GIT_REF environment variable not set")
 	}
 
-	// Get GITHUB_SHA from environment
-	sha := os.Getenv("GITHUB_SHA")
+	sha := os.Getenv("GIT_SHA")
 	if sha == "" {
-		return fmt.Errorf("GITHUB_SHA environment variable not set")
+		return fmt.Errorf("GIT_SHA environment variable not set")
 	}
 
 	// Remove refs/heads/ or refs/tags/ prefix

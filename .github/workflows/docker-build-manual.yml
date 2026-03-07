@@ -66,6 +66,7 @@ jobs:
           single-arch: ${{ steps.arch-param.outputs.single-arch }}
 
       - name: Build Docker images
+        id: build-docker
         if: ${{ !inputs.push }}
         uses: ./.github/actions/build-docker-images
         with:
@@ -77,6 +78,7 @@ jobs:
           load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
 
       - name: Build and push Docker images
+        id: push-docker
         if: ${{ inputs.push }}
         uses: ./.github/actions/build-docker-images
         with:
@@ -89,17 +91,24 @@ jobs:
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Output image tags
+        env:
+          SHA_TAG: ${{ steps.build-docker.outputs.sha-tag || steps.push-docker.outputs.sha-tag }}
+          BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag || steps.push-docker.outputs.branch-tag }}
         run: |
           {
             echo "### Docker Images Built"
             echo ""
             echo "**Git Ref:** ${{ inputs.ref }}"
+            echo "**SHA Tag:** ${SHA_TAG}"
+            echo "**Branch Tag:** ${BRANCH_TAG}"
             echo "**CLI Version:** ${{ inputs.cli-version }}"
             echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}"
             echo "**Pushed to Docker Hub:** ${{ inputs.push }}"
             echo "**Tagged as latest:** ${{ inputs.tag-latest }}"
             echo ""
             echo "**Image Tags:**"
-            echo "- temporaliotest/server:sha-${GITHUB_SHA:0:7}"
-            echo "- temporaliotest/admin-tools:sha-${GITHUB_SHA:0:7}"
+            echo "- temporaliotest/server:${SHA_TAG}"
+            echo "- temporaliotest/admin-tools:${SHA_TAG}"
+            echo "- temporaliotest/server:${BRANCH_TAG}"
+            echo "- temporaliotest/admin-tools:${BRANCH_TAG}"
           } >> "$GITHUB_STEP_SUMMARY"
