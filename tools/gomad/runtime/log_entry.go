@@ -9,8 +9,6 @@ const (
 	logSelect                    // result: selectResult{caseIdx int, msg any, ok bool}
 	logSleep                     // result: struct{}
 	logNewGoroutine              // result: goroutineId
-	logMapKeys                   // result: []any (key ordering)
-	logDrng                      // result: int64
 )
 
 type logEntry struct {
@@ -38,16 +36,19 @@ type goroutineSnap struct {
 
 // Checkpoint captures the simulation state at a point in time, enabling
 // replay-based branching without re-executing from step 0.
+//
+// Timer queue and synchronizer state are NOT captured: replay reconstructs
+// them naturally as goroutines re-execute their SIMAPI calls after log
+// exhaustion.
 type Checkpoint struct {
 	// per-goroutine operation log up to this point
 	log map[goroutineId][]logEntry
 
 	// scheduler state
-	clock      int64                  // scheduler.clock.now
-	drngState  drngSnapshot           // serialised DRNG state
+	clock       int64                       // scheduler.clock.now
+	drngState   drngSnapshot                // DRNG seed + call count
 	channelBufs map[uintptr]channelSnapshot // buffered messages per channel
-	timerQueue []timerEntry           // pending timer events
-	goroutines []goroutineSnap
+	goroutines  []goroutineSnap
 
 	// closure registry: goroutineId → original fn (populated at spawn)
 	fns map[goroutineId]func()
@@ -64,10 +65,4 @@ type channelSnapshot struct {
 	buf    []any
 	cap    int
 	closed bool
-}
-
-// timerEntry captures a pending event in the timer queue.
-type timerEntry struct {
-	id      goroutineId
-	readyAt int64
 }

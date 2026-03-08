@@ -596,14 +596,6 @@ func TakeCheckpoint() *Checkpoint {
 	}
 	s.scheduler.channelsMu.Unlock()
 
-	// snapshot timer queue
-	var timers []timerEntry
-	for _, eq := range s.scheduler.timerQueue.eventQueues {
-		for _, evt := range eq.events {
-			timers = append(timers, timerEntry{id: evt.id, readyAt: evt.readyAt})
-		}
-	}
-
 	// snapshot goroutines
 	var snaps []goroutineSnap
 	for id, sg := range s.scheduler.goroutines {
@@ -619,7 +611,6 @@ func TakeCheckpoint() *Checkpoint {
 		clock:       s.scheduler.clock.now,
 		drngState:   drngSnap,
 		channelBufs: chanBufs,
-		timerQueue:  timers,
 		goroutines:  snaps,
 		fns:         fnsCopy,
 		idSeq:       idSeqCopy,
