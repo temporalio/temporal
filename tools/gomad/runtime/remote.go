@@ -45,15 +45,22 @@ func newRemoteCtrl(addr, clientId string) *remoteCtrl {
 }
 
 func (h *remoteCtrl) hook(_ *Info) {
-	// tell remote controller that client is waiting
-	fmt.Println(RemoteControlPauseCmd)
+	// tell remote controller that client is waiting (via TCP, not stdout)
+	_, err := h.conn.Write([]byte(RemoteControlPauseCmd + "\n"))
+	if err != nil {
+		panic(fmt.Sprintf("failed to send pause to controller: %v", err))
+	}
 
 	// wait for next command
 	command := <-h.commandCh
 
 	switch command {
 	case RemoteControlContinueCmd:
-		fmt.Println(command) // controller picks this up
+		// acknowledge via TCP so controller can track state
+		_, err := h.conn.Write([]byte(RemoteControlContinueCmd + "\n"))
+		if err != nil {
+			panic(fmt.Sprintf("failed to send continue ack to controller: %v", err))
+		}
 	default:
 		panic(fmt.Sprintf("Unknown command: %v", command))
 	}

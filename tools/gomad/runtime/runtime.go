@@ -66,9 +66,11 @@ var (
 	// registry maps OS goroutine ID → *goroutineRegistration for all registered goroutines.
 	registry sync.Map
 
-	// globalSim is a fallback for goroutines not explicitly registered (e.g. goroutines
-	// spawned by the Go testing framework for parallel subtests). Set by Start().
-	globalSim atomic.Pointer[simulator]
+	// activeSimulators tracks all running simulators. Used as a fallback for
+	// goroutines not explicitly registered (e.g. testing framework goroutines).
+	// When exactly one simulator is active, tryAnySimulator() returns it.
+	// When multiple are active, the goroutine must be registered explicitly.
+	activeSimulators sync.Map // *simulator → struct{}
 
 	DebugMode = initOptionFunc(func(s *simulator) {
 		s.debug = true
@@ -139,7 +141,22 @@ func tryAnySimulator() *simulator {
 	if s := trySim(); s != nil {
 		return s
 	}
-	return globalSim.Load()
+	// Fallback: return the active simulator if exactly one is running.
+	// This covers testing framework goroutines not explicitly registered.
+	var found *simulator
+	var count int
+	activeSimulators.Range(func(k, _ any) bool {
+		found = k.(*simulator)
+		count++
+		return count < 2 // stop early if more than one
+	})
+	if count == 1 {
+		return found
+	}
+	if count > 1 {
+		panic("multiple simulators active; goroutine must be registered via Start()")
+	}
+	return nil
 }
 
 // registerSim records s for the calling goroutine without associating a
@@ -258,8 +275,8 @@ func Start(opts ...InitOption) {
 	// called from this goroutine go through the delegation path in channel.go / select.go.
 	registerSim(s)
 
-	// expose as global fallback for goroutines not explicitly registered (e.g. testing framework)
-	globalSim.Store(s)
+	// track as active for tryAnySimulator() fallback (e.g. testing framework goroutines)
+	activeSimulators.Store(s, struct{}{})
 
 	// setup remote ctrl after registration (newRemoteCtrl may call Dbg())
 	if remoteCtrlAddr != "" {
@@ -395,7 +412,7 @@ func Join() {
 	// wait for simulator loop to finish, then deregister
 	<-s.done
 	deregisterSim()
-	globalSim.Store(nil)
+	activeSimulators.Delete(s)
 }
 
 func (f initOptionFunc) apply(s *simulator) {

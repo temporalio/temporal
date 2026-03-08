@@ -207,9 +207,27 @@ func (s *scheduler) tick() chan struct{} {
 	// channels or select) instead of calling suspend().  Use a real time.AfterFunc
 	// so the timer fires even when simulated time is frozen.
 	stuckTimer := time.AfterFunc(s.stuckTimeout, func() {
+		var diag strings.Builder
+		fmt.Fprintf(&diag, "💥simulator stuck waiting for goroutine #%d\n", g.id)
+		fmt.Fprintf(&diag, "\n--- simulated goroutines ---\n")
+		for _, sg := range s.goroutines {
+			fmt.Fprintf(&diag, "  goroutine #%d: %s", sg.id, sg.describeState())
+			if sg.sourceLocation != "" {
+				fmt.Fprintf(&diag, " (spawned at %s)", sg.sourceLocation)
+			}
+			if sg.syncBlock != nil {
+				fmt.Fprintf(&diag, " blocked on %s", sg.syncBlock.op.string())
+				if sg.syncBlock.loc != "" {
+					fmt.Fprintf(&diag, " at %s", sg.syncBlock.loc)
+				}
+			}
+			fmt.Fprintf(&diag, "\n")
+		}
+		fmt.Fprintf(&diag, "\n--- native goroutine stacks ---\n")
 		buf := make([]byte, 64<<20)
 		n := runtime.Stack(buf, true)
-		panic(fmt.Sprintf("💥simulator stuck waiting for goroutine #%d\n%s", g.id, buf[:n]))
+		diag.Write(buf[:n])
+		panic(diag.String())
 	})
 	g.waitUntilStopped() // wait until goroutine is suspended or done
 	stuckTimer.Stop()

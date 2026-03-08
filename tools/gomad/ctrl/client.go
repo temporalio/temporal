@@ -31,7 +31,7 @@ func newSimClient(
 	}
 }
 
-func (c *simClient) start(pauseCh chan any) {
+func (c *simClient) start(pauseCh chan any, tcpMsgCh chan string) {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("\n\n💥crash")
@@ -45,8 +45,9 @@ func (c *simClient) start(pauseCh chan any) {
 loop:
 	for {
 		select {
-		case line := <-logsCh:
-			switch line {
+		case msg := <-tcpMsgCh:
+			// pause/continue protocol messages arrive via TCP, not stdout
+			switch msg {
 			case sim_runtime.RemoteControlPauseCmd:
 				verify.T(!c.paused, "⚠️client #%s is already paused", c.conf.remoteId)
 				fmt.Println("[ctrl]", "client #"+c.conf.remoteId+" paused now")
@@ -59,9 +60,12 @@ loop:
 				}
 				c.paused = false
 			default:
-				verify.T(!c.paused, "⚠️client #"+c.conf.remoteId+" is paused but received log: %v", line)
-				c.logs = append(c.logs, line)
+				verify.T(!c.paused, "⚠️client #"+c.conf.remoteId+" received unexpected TCP message: %v", msg)
 			}
+
+		case line := <-logsCh:
+			// stdout/stderr output is always regular log lines now
+			c.logs = append(c.logs, line)
 
 		case status := <-statusCh:
 			verify.T(status.Error == nil, "⚠️client #"+c.conf.remoteId+" died: %v", status.Error)

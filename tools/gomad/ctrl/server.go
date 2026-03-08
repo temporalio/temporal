@@ -17,11 +17,15 @@ type server struct {
 	shutdownCh   chan struct{}
 	clientCh     chan struct{}
 	connByClient map[string]net.Conn
+	// msgByClient receives messages read from each client's TCP connection.
+	// Key is client ID, value is a channel of message strings.
+	msgByClient map[string]chan string
 }
 
 func newServer() *server {
 	return &server{
 		connByClient: map[string]net.Conn{},
+		msgByClient:  map[string]chan string{},
 		shutdownCh:   make(chan struct{}),
 		clientCh:     make(chan struct{}),
 		addr:         fmt.Sprintf("localhost:8888"),
@@ -66,11 +70,33 @@ func (s *server) handleConnection(conn net.Conn) {
 
 	fmt.Println("[ctrl]", "connected client #"+clientId)
 
+	msgCh := make(chan string, 64)
+
 	s.m.Lock()
 	verify.T(len(s.connByClient) < 2, "server already has 2 clients connected")
 	s.connByClient[clientId] = conn
+	s.msgByClient[clientId] = msgCh
 	s.m.Unlock()
+
+	// read messages from client over TCP
+	go func() {
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			msgCh <- strings.TrimSpace(line)
+		}
+	}()
+
 	s.clientCh <- struct{}{}
+}
+
+// clientMsgCh returns the message channel for the given client ID.
+func (s *server) clientMsgCh(clientId string) chan string {
+	s.m.Lock()
+	defer s.m.Unlock()
+	return s.msgByClient[clientId]
 }
 
 func (s *server) stop() {
