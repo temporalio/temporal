@@ -38,10 +38,11 @@ type (
 		realModRoot string // absolute path of the source module root (for TEMPORAL_ROOT)
 	}
 	simConfig struct {
-		debug      bool
-		seed       int64
-		remoteAddr string
-		remoteId   string
+		debug          bool
+		seed           int64
+		remoteAddr     string
+		remoteId       string
+		extraTestFlags []string
 	}
 )
 
@@ -376,7 +377,11 @@ func (p *simProgram) compile() {
 }
 
 func (p *simProgram) start(conf simConfig) (<-chan cmd.Status, <-chan string) {
+	fmt.Printf("=== GOMAD seed=%d (replay: go test -tags gomad -gomad.seed=%d ./...)\n",
+		conf.seed, conf.seed)
+
 	args := []string{"-test.v", "-test.count=1"}
+	args = append(args, conf.extraTestFlags...)
 	if p.testFilter != "" {
 		args = append(args, "-test.run="+p.testFilter, "-test.parallel=1")
 	}

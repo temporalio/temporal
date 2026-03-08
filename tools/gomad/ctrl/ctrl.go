@@ -54,7 +54,7 @@ func NewController(options ...Option) *Controller {
 	return controller
 }
 
-func (c *Controller) RunTests(outDir string) {
+func (c *Controller) RunTests(outDir string) int {
 	// create simulation
 	if c.simProgram == nil {
 		c.simProgram = createNewSimProgram(outDir, c.sourceDir, c.testFilter, c.resetFiles)
@@ -63,18 +63,26 @@ func (c *Controller) RunTests(outDir string) {
 	switch {
 	case c.verificationMode:
 		c.verify(c.conf)
+		return 0
 
 	default:
+		var exitCode int
 		statusCh, logsCh := c.simProgram.start(c.conf)
 	loop:
 		for {
 			select {
 			case line := <-logsCh:
 				fmt.Println(line)
-			case <-statusCh:
+			case status := <-statusCh:
+				if status.Error != nil {
+					exitCode = 1
+				} else {
+					exitCode = status.Exit
+				}
 				break loop
 			}
 		}
+		return exitCode
 	}
 }
 
@@ -99,21 +107,24 @@ func (c *Controller) verify(baseConf simConfig) {
 		clients = append(clients, newClient)
 
 		go func(client *simClient) {
-			// start
-			go func() {
-				client.start(pauseCh)
-				exitCh <- struct{}{}
-			}()
-
-			// make sure it started
+			// make sure it connected (TCP)
 			select {
 			case <-srv.clientCh:
-				wg.Done()
 			case <-time.After(10 * time.Second):
 				fmt.Println("client #" + client.conf.remoteId + " connection timeout")
 				client.printRecentLogs()
 				panic("client #" + client.conf.remoteId + " never connected")
 			}
+
+			tcpMsgCh := srv.clientMsgCh(client.conf.remoteId)
+
+			// start
+			go func() {
+				client.start(pauseCh, tcpMsgCh)
+				exitCh <- struct{}{}
+			}()
+
+			wg.Done()
 		}(newClient)
 	}
 	wg.Wait()

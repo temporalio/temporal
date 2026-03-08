@@ -1,6 +1,7 @@
 .tmp/
 .bin/
 .stamp/
+tests/.gomad-run/
 
 .idea/
 .vscode/settings.json
