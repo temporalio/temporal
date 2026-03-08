@@ -530,24 +530,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
-	if newWorkflowTaskType != enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED {
-		reason := "outgoing-updates" // speculative path
-		if newWorkflowTaskType == enumsspb.WORKFLOW_TASK_TYPE_NORMAL {
-			switch {
-			case request.GetForceCreateNewWorkflowTask():
-				reason = "heartbeat"
-			case wtFailedShouldCreateNewTask:
-				reason = "wft-failed"
-			case hasBufferedEventsOrMessages:
-				reason = "buffered-events"
-			case activityNotStartedCancelled:
-				reason = "activity-not-started-cancelled"
-			case ms.GetDeploymentTransition() != nil:
-				reason = "deployment-transition"
-			}
-		}
-	}
-
 	bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
 	// TODO (alex-update): All current SDKs always set ReturnNewWorkflowTask to true
 	//  which means that server always bypass task generation if WFT didn't fail.
@@ -622,7 +604,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		}
 	}
 
-
 	var updateErr error
 	if newMutableState != nil {
 		newWorkflowExecutionInfo := newMutableState.GetExecutionInfo()
@@ -652,7 +633,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shardContext)
 		}
 	}
-
 
 	if updateErr != nil {
 		effects.Cancel(ctx)
@@ -747,7 +727,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, err
 		}
 	}
-
 
 	handler.handleBufferedQueries(ms, req.GetCompleteRequest().GetQueryResults(), newWorkflowTask != nil, namespaceEntry)
 

@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
@@ -83,14 +82,6 @@ func Invoke(
 				metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()),
 				metrics.FailureTag(request.GetCause().String()),
 				metrics.FirstAttemptTag(workflowTask.Attempt),
-			)
-
-			shardContext.GetLogger().Info("WorkflowTaskFailed",
-				tag.WorkflowNamespaceID(token.NamespaceId),
-				tag.WorkflowID(token.WorkflowId),
-				tag.WorkflowRunID(token.RunId),
-				tag.WorkflowTaskFailedCause(request.GetCause()),
-				tag.NewStringTag("failure-message", request.GetFailure().GetMessage()),
 			)
 
 			if request.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_GRPC_MESSAGE_TOO_LARGE {

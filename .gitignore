@@ -1,9 +1,3 @@
-bench-throughput-stress-*
-config-driven-throughputstress-*
-logs*.json
-workflow*.json
-trace.txt
-
 .tmp/
 .bin/
 .stamp/
@@ -50,3 +44,6 @@ trace.txt
 
 **/.venv/
 **/.ruff_cache/
+
+# Ignoring AI agent files
+.agents/

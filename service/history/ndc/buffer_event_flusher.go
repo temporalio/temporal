@@ -7,7 +7,6 @@ import (
 
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 )
@@ -55,7 +54,7 @@ func (r *BufferEventFlusherImpl) flush(
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {
 		if r.mutableState.HasStartedWorkflowTask() && r.mutableState.IsTransientWorkflowTask() {
-				if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
+			if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
 				return nil, nil, err
 			}
 			// now transient task is gone
