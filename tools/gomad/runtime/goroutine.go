@@ -48,6 +48,36 @@ func NewGoroutine(fn func(), internal bool) {
 	if s == nil {
 		panic("NewGoroutine called outside of simulation")
 	}
+
+	// during replay, consume the log entry to get the pre-assigned goroutine ID
+	callerG := tryCurrentGoroutine()
+	if callerG != nil && s.isReplaying(callerG.id) {
+		entry, ok := s.nextReplayEntry(callerG.id)
+		if ok && entry.op == logNewGoroutine {
+			// replayed: the child goroutine ID was pre-determined
+			childId := entry.result.(goroutineId)
+			g := &goroutine{
+				id:             childId,
+				sim:            s,
+				fn:             fn,
+				internal:       internal,
+				syncCh:         make(chan struct{}),
+				suspendedCh:    make(chan struct{}),
+				sourceLocation: sourceLocation(2),
+			}
+			if s.goroutineFns != nil {
+				s.goroutineFns[g.id] = fn
+			}
+			if internal {
+				s.scheduler.goroutines[g.id] = g
+				s.scheduler.enqueue(g)
+			} else {
+				s.scheduler.add(g)
+			}
+			return
+		}
+	}
+
 	g := &goroutine{
 		id:             goroutineId(nextId(s, "go")),
 		sim:            s,
@@ -57,7 +87,18 @@ func NewGoroutine(fn func(), internal bool) {
 		suspendedCh:    make(chan struct{}),
 		sourceLocation: sourceLocation(2),
 	}
-	if tryCurrentGoroutine() != nil {
+
+	// register closure for checkpoint support
+	if s.goroutineFns != nil {
+		s.goroutineFns[g.id] = fn
+	}
+
+	// record the spawned goroutine ID for replay
+	if s.recording && callerG != nil {
+		s.appendLog(callerG.id, logEntry{op: logNewGoroutine, result: g.id})
+	}
+
+	if callerG != nil {
 		if internal {
 			// Internal goroutines (e.g. timers) are registered and queued but
 			// the caller is NOT suspended.  Suspending the caller here allows

@@ -45,6 +45,17 @@ func Select(values ...any) *Selector {
 		return <-nativeDone
 	}
 
+	s := currentSim()
+	g := tryCurrentGoroutine()
+
+	// replay: return recorded result without suspending
+	if g != nil && s.isReplaying(g.id) {
+		if entry, ok := s.nextReplayEntry(g.id); ok && entry.op == logSelect {
+			r := entry.result.(selectResult)
+			return &Selector{Case: r.CaseIdx, Value: r.Msg, Ok: r.Ok}
+		}
+	}
+
 	slct := &Selector{}
 
 	// collect channels
@@ -96,6 +107,15 @@ func Select(values ...any) *Selector {
 		Dbg("🌀🔀️", "select", AnyTag("case", "default"), CurLocTag())
 	} else {
 		Dbg("🌀🔀️", "select", AnyTag("case", slct.Case), CurLocTag())
+	}
+
+	// record for checkpoint replay
+	if s.recording && g != nil {
+		s.appendLog(g.id, logEntry{op: logSelect, result: selectResult{
+			CaseIdx: slct.Case,
+			Msg:     slct.Value,
+			Ok:      slct.Ok,
+		}})
 	}
 
 	return slct

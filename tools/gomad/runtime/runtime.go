@@ -187,6 +187,7 @@ type (
 		hookCh    chan struct{}
 		scheduler *scheduler
 		Drng      *rand.Rand
+		drngSrc   *countingSource // backing source for Drng; enables state snapshots
 
 		panicErr string
 		idSeq    map[string]uint64 // used to generate goroutine/channel ids
@@ -206,6 +207,18 @@ type (
 		abortCh     chan struct{}
 		keepAliveCh chan struct{} // closed by Join() to signal that no more work is expected
 		stopped     atomic.Bool
+
+		// checkpoint/replay support
+		recording    bool
+		opLog        map[goroutineId][]logEntry
+		replayLog    map[goroutineId][]logEntry
+		replayIdx    map[goroutineId]int // current replay position per goroutine
+		goroutineFns map[goroutineId]func()
+
+		// pendingChanRestores holds channel buffer snapshots from a checkpoint,
+		// keyed by native channel pointer. Applied lazily in GetOrCreateChan
+		// when the channel is first accessed after a restore.
+		pendingChanRestores map[uintptr]channelSnapshot
 	}
 	InitOption interface {
 		apply(*simulator)
@@ -265,7 +278,7 @@ func Start(opts ...InitOption) {
 	// This pseudo-random number generator produces all random factors in the system,
 	// including random numbers, delays, and errors introduced by the simulator.
 	// With the same random seed, the same execution sequence can be produced.
-	s.Drng = rand.New(rand.NewSource(s.seed))
+	s.Drng, s.drngSrc = newDrng(s.seed)
 
 	// create new scheduler
 	s.scheduler = initScheduler(s.Drng, s.debug, keepAliveCh)
@@ -447,7 +460,21 @@ func Time() time.Time {
 }
 
 func Sleep(d time.Duration) {
-	CurrentSimulator().scheduler.sleep(d)
+	s := CurrentSimulator()
+	g := tryCurrentGoroutine()
+
+	// replay: skip the actual sleep
+	if g != nil && s.isReplaying(g.id) {
+		if entry, ok := s.nextReplayEntry(g.id); ok && entry.op == logSleep {
+			return
+		}
+	}
+
+	s.scheduler.sleep(d)
+
+	if s.recording && g != nil {
+		s.appendLog(g.id, logEntry{op: logSleep, result: struct{}{}})
+	}
 }
 
 func CurrentSimulator() *simulator {
@@ -466,4 +493,258 @@ func TryCurrentSimulator() *simulator {
 // Callers MUST NOT yield or suspend the scheduler.
 func TryAnySimulator() *simulator {
 	return tryAnySimulator()
+}
+
+// StartRecording enables operation logging for checkpoint support.
+// Must be called from outside the cooperative scheduler (e.g. from the test goroutine).
+func StartRecording() {
+	s := currentSim()
+	s.recording = true
+	s.opLog = make(map[goroutineId][]logEntry)
+	s.goroutineFns = make(map[goroutineId]func())
+}
+
+// appendLog records an operation result for the given goroutine.
+func (s *simulator) appendLog(id goroutineId, e logEntry) {
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	s.opLog[id] = append(s.opLog[id], e)
+}
+
+// nextReplayEntry returns the next log entry for replay, or false if the
+// goroutine's log is exhausted (transition to normal evaluation).
+func (s *simulator) nextReplayEntry(id goroutineId) (logEntry, bool) {
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	log := s.replayLog[id]
+	idx := s.replayIdx[id]
+	if idx >= len(log) {
+		return logEntry{}, false
+	}
+	e := log[idx]
+	s.replayIdx[id] = idx + 1
+	// also append to opLog so that future checkpoints include replayed entries
+	if s.recording {
+		s.opLog[id] = append(s.opLog[id], e)
+	}
+	return e, true
+}
+
+// isReplaying reports whether the given goroutine still has log entries to replay.
+func (s *simulator) isReplaying(id goroutineId) bool {
+	if s.replayLog == nil {
+		return false
+	}
+	s.StateMu.Lock()
+	defer s.StateMu.Unlock()
+	log := s.replayLog[id]
+	idx := s.replayIdx[id]
+	return idx < len(log)
+}
+
+// TakeCheckpoint captures the current simulation state. Must be called from a
+// cooperative goroutine. The simulation continues normally after this call.
+func TakeCheckpoint() *Checkpoint {
+	s := currentSim()
+	g := tryCurrentGoroutine()
+	if g == nil {
+		panic("TakeCheckpoint must be called from a cooperative goroutine")
+	}
+	if !s.recording {
+		panic("TakeCheckpoint requires recording to be enabled (call StartRecording first)")
+	}
+
+	s.StateMu.Lock()
+
+	// deep-copy the operation log
+	logCopy := make(map[goroutineId][]logEntry, len(s.opLog))
+	for id, entries := range s.opLog {
+		cp := make([]logEntry, len(entries))
+		copy(cp, entries)
+		logCopy[id] = cp
+	}
+
+	// deep-copy goroutine fns
+	fnsCopy := make(map[goroutineId]func(), len(s.goroutineFns))
+	for id, fn := range s.goroutineFns {
+		fnsCopy[id] = fn
+	}
+
+	// deep-copy idSeq
+	idSeqCopy := make(map[string]uint64, len(s.idSeq))
+	for k, v := range s.idSeq {
+		idSeqCopy[k] = v
+	}
+
+	// shallow-copy state (callers needing deep semantics must handle it)
+	stateCopy := make(map[string]any, len(s.State))
+	for k, v := range s.State {
+		stateCopy[k] = v
+	}
+
+	s.StateMu.Unlock()
+
+	// snapshot DRNG state
+	drngSnap := s.drngSrc.snapshot()
+	drngSnap.seed = s.seed
+
+	// snapshot channel buffers
+	s.scheduler.channelsMu.Lock()
+	chanBufs := make(map[uintptr]channelSnapshot, len(s.scheduler.channels))
+	for key, ch := range s.scheduler.channels {
+		chanBufs[key] = snapshotChannel(ch)
+	}
+	s.scheduler.channelsMu.Unlock()
+
+	// snapshot timer queue
+	var timers []timerEntry
+	for _, eq := range s.scheduler.timerQueue.eventQueues {
+		for _, evt := range eq.events {
+			timers = append(timers, timerEntry{id: evt.id, readyAt: evt.readyAt})
+		}
+	}
+
+	// snapshot goroutines
+	var snaps []goroutineSnap
+	for id, sg := range s.scheduler.goroutines {
+		snaps = append(snaps, goroutineSnap{
+			id:       id,
+			internal: sg.internal,
+			logLen:   len(logCopy[id]),
+		})
+	}
+
+	return &Checkpoint{
+		log:         logCopy,
+		clock:       s.scheduler.clock.now,
+		drngState:   drngSnap,
+		channelBufs: chanBufs,
+		timerQueue:  timers,
+		goroutines:  snaps,
+		fns:         fnsCopy,
+		idSeq:       idSeqCopy,
+		state:       stateCopy,
+	}
+}
+
+// snapshotChannel extracts the buffered messages from a Channel interface.
+func snapshotChannel(ch Channel) channelSnapshot {
+	type bufferAccessor interface {
+		SnapshotBuf() (buf []any, capacity int, closed bool)
+	}
+	if ba, ok := ch.(bufferAccessor); ok {
+		buf, cap, closed := ba.SnapshotBuf()
+		return channelSnapshot{buf: buf, cap: cap, closed: closed}
+	}
+	return channelSnapshot{}
+}
+
+// RestoreFrom stops the current simulation (if any) and creates a fresh one
+// from the checkpoint. Goroutines are re-spawned and replay their operation
+// logs at full speed (no suspend/scheduling). Once a goroutine exhausts its
+// log it transitions to normal cooperative evaluation.
+//
+// Must be called from the goroutine that called Start() (the "main" goroutine).
+func RestoreFrom(cp *Checkpoint) {
+	// stop current simulation if one is active
+	if s := trySim(); s != nil {
+		if !s.stopped.Load() {
+			select {
+			case s.abortCh <- struct{}{}:
+			default:
+			}
+			<-s.done
+		}
+		deregisterSim()
+		activeSimulators.Delete(s)
+	}
+
+	keepAliveCh := make(chan struct{})
+
+	// restore DRNG
+	drng, drngSrc := restoreDrng(cp.drngState.seed, cp.drngState)
+
+	// create a fresh simulator with checkpoint state
+	s := &simulator{
+		seed:         cp.drngState.seed,
+		done:         make(chan struct{}),
+		abortCh:      make(chan struct{}),
+		keepAliveCh:  keepAliveCh,
+		info:         Info{Stop: make(chan struct{})},
+		hook:         func(info *Info) {},
+		hookCh:       make(chan struct{}, 1),
+		Drng:         drng,
+		drngSrc:      drngSrc,
+		recording:    true,
+		goroutineFns: make(map[goroutineId]func(), len(cp.fns)),
+	}
+
+	// restore idSeq
+	s.idSeq = make(map[string]uint64, len(cp.idSeq))
+	for k, v := range cp.idSeq {
+		s.idSeq[k] = v
+	}
+
+	// restore state
+	s.State = make(map[string]any, len(cp.state))
+	for k, v := range cp.state {
+		s.State[k] = v
+	}
+
+	// restore goroutine fns
+	for id, fn := range cp.fns {
+		s.goroutineFns[id] = fn
+	}
+
+	// set up replay log
+	s.replayLog = make(map[goroutineId][]logEntry, len(cp.log))
+	s.replayIdx = make(map[goroutineId]int, len(cp.log))
+	s.opLog = make(map[goroutineId][]logEntry, len(cp.log))
+	for id, entries := range cp.log {
+		logCopy := make([]logEntry, len(entries))
+		copy(logCopy, entries)
+		s.replayLog[id] = logCopy
+		s.replayIdx[id] = 0
+	}
+
+	// store channel snapshots for lazy restoration in GetOrCreateChan
+	s.pendingChanRestores = make(map[uintptr]channelSnapshot, len(cp.channelBufs))
+	for key, snap := range cp.channelBufs {
+		s.pendingChanRestores[key] = snap
+	}
+
+	// create scheduler with restored clock
+	s.scheduler = initScheduler(s.Drng, s.debug, keepAliveCh)
+	s.scheduler.clock.now = cp.clock
+
+	// register simulator
+	registerSim(s)
+	activeSimulators.Store(s, struct{}{})
+
+	Print("🔄", "restore", AnyTag("seed", s.seed), AnyTag("clock", cp.clock))
+
+	// re-spawn goroutines from checkpoint
+	for _, snap := range cp.goroutines {
+		fn, ok := cp.fns[snap.id]
+		if !ok {
+			continue
+		}
+		g := &goroutine{
+			id:          snap.id,
+			sim:         s,
+			fn:          fn,
+			internal:    snap.internal,
+			syncCh:      make(chan struct{}),
+			suspendedCh: make(chan struct{}),
+		}
+		s.scheduler.goroutines[g.id] = g
+		s.scheduler.enqueue(g)
+	}
+
+	// start the main loop
+	errChan := make(chan interface{}, 1)
+	go func() {
+		registerSim(s)
+		loop(s, errChan)
+	}()
 }

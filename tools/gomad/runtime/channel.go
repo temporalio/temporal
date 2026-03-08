@@ -86,6 +86,13 @@ drained:
 		return existing.(*ChanState[T])
 	}
 	sim.scheduler.channels[key] = simCh
+
+	// Apply pending channel restore from checkpoint, if any.
+	if snap, ok := sim.pendingChanRestores[key]; ok {
+		simCh.RestoreBuf(snap.buf, snap.closed)
+		delete(sim.pendingChanRestores, key)
+	}
+
 	sim.scheduler.channelsMu.Unlock()
 
 	// Register a finalizer to remove the map entry when ch's underlying hchan is
@@ -100,6 +107,9 @@ drained:
 	// the cleanup fires, which creates a race that causes "closing already closed
 	// channel" panics.
 	hchan := (*byte)(unsafe.Pointer(reflect.ValueOf(ch).Pointer()))
+	// Clear any existing finalizer (e.g. from a previous simulation that used the
+	// same native channel) before setting the new one.
+	runtime.SetFinalizer(hchan, nil)
 	runtime.SetFinalizer(hchan, func(*byte) {
 		sim.scheduler.channelsMu.Lock()
 		delete(sim.scheduler.channels, key)
@@ -130,6 +140,17 @@ func (c *ChanState[T]) RcvOk() (msg any, ok bool) {
 		return r.msg, r.ok
 	}
 
+	s := currentSim()
+	g := tryCurrentGoroutine()
+
+	// replay: return recorded result without suspending
+	if g != nil && s.isReplaying(g.id) {
+		if entry, ok := s.nextReplayEntry(g.id); ok && entry.op == logChanRcv {
+			r := entry.result.(rcvResult)
+			return r.Msg, r.Ok
+		}
+	}
+
 	// first, attempt to fulfill the operation without requiring a sync
 
 	if c.canRcvBuffered() {
@@ -143,12 +164,18 @@ func (c *ChanState[T]) RcvOk() (msg any, ok bool) {
 			requireSyncMatch: false,
 		}, ChanTag(c.id))
 
+		if s.recording && g != nil {
+			s.appendLog(g.id, logEntry{op: logChanRcv, result: rcvResult{msg, ok}})
+		}
 		return
 	}
 
 	if c.closed {
 		// no need to wait for sync match, already closed
 		msg, ok = c.readFromClosed()
+		if s.recording && g != nil {
+			s.appendLog(g.id, logEntry{op: logChanRcv, result: rcvResult{msg, ok}})
+		}
 		return
 	}
 
@@ -159,6 +186,10 @@ func (c *ChanState[T]) RcvOk() (msg any, ok bool) {
 		requireSyncMatch: true,
 		onSync:           func() { msg, ok = c.read() },
 	}, ChanTag(c.id))
+
+	if s.recording && g != nil {
+		s.appendLog(g.id, logEntry{op: logChanRcv, result: rcvResult{msg, ok}})
+	}
 	return
 }
 
@@ -221,6 +252,16 @@ func (c *ChanState[T]) Snd(msg any) {
 		return
 	}
 
+	s := currentSim()
+	g := tryCurrentGoroutine()
+
+	// replay: skip the actual send, just consume the log entry
+	if g != nil && s.isReplaying(g.id) {
+		if entry, ok := s.nextReplayEntry(g.id); ok && entry.op == logChanSnd {
+			return
+		}
+	}
+
 	// first, attempt to fulfill the operation without requiring a sync
 
 	if c.closed {
@@ -239,6 +280,9 @@ func (c *ChanState[T]) Snd(msg any) {
 			requireSyncMatch: false,
 		}, ChanTag(c.id))
 
+		if s.recording && g != nil {
+			s.appendLog(g.id, logEntry{op: logChanSnd, result: struct{}{}})
+		}
 		return
 	}
 
@@ -249,6 +293,10 @@ func (c *ChanState[T]) Snd(msg any) {
 		requireSyncMatch: true,
 		onSync:           func() { c.write(msg) },
 	}, ChanTag(c.id))
+
+	if s.recording && g != nil {
+		s.appendLog(g.id, logEntry{op: logChanSnd, result: struct{}{}})
+	}
 }
 
 func (c *ChanState[T]) write(msg any) {
@@ -361,4 +409,25 @@ func ChanId[T any](ch chan T) ChannelId {
 // hchan to be collected when all chan T references are gone.
 func chanKey(ch any) uintptr {
 	return reflect.ValueOf(ch).Pointer()
+}
+
+// SnapshotBuf returns the channel's buffered messages, capacity, and closed state
+// for checkpoint support.
+func (c *ChanState[T]) SnapshotBuf() (buf []any, capacity int, closed bool) {
+	buf = make([]any, len(c.buf))
+	for i, v := range c.buf {
+		buf[i] = v
+	}
+	return buf, c.cap, c.closed
+}
+
+// RestoreBuf replaces the channel's buffer and closed state from a checkpoint snapshot.
+func (c *ChanState[T]) RestoreBuf(buf []any, closed bool) {
+	c.buf = make([]T, len(buf))
+	for i, v := range buf {
+		c.buf[i] = v.(T)
+	}
+	c.inflight = nil
+	c.hasInflight = false
+	c.closed = closed
 }
