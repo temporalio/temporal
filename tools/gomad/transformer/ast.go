@@ -266,12 +266,14 @@ type (
 	}
 	fileTransformer struct {
 		// inputs
-		pkgPath            string
-		fset               *token.FileSet
-		file               *ast.File
-		info               *types.Info
-		skipTransform      bool
-		importsNamesByPath map[string]string // file's imported package paths (for fast lookup)
+		pkgPath                string
+		fset                   *token.FileSet
+		file                   *ast.File
+		info                   *types.Info
+		skipTransform          bool
+		grpcRewritePkgPrefixes []string
+		nativeHTTPPkgPrefixes  []string
+		importsNamesByPath     map[string]string // file's imported package paths (for fast lookup)
 
 		// temp
 		mapForRanges int
@@ -290,7 +292,7 @@ type (
 	}
 )
 
-func newFileTransformer(file *ast.File, pkg *packages.Package, skipTransform bool) *fileTransformer {
+func newFileTransformer(file *ast.File, pkg *packages.Package, skipTransform bool, config *Config) *fileTransformer {
 	importsNamesByPath := make(map[string]string, len(file.Imports))
 	for _, i := range file.Imports {
 		// Technically, a package can be imported with multiple names,
@@ -304,13 +306,15 @@ func newFileTransformer(file *ast.File, pkg *packages.Package, skipTransform boo
 	}
 
 	return &fileTransformer{
-		pkgPath:             pkg.PkgPath,
-		fset:                pkg.Fset,
-		file:                file,
-		info:                pkg.TypesInfo,
-		skipTransform:      skipTransform,
-		importsNamesByPath: importsNamesByPath,
-		extraImports:       make(map[string]string),
+		pkgPath:                pkg.PkgPath,
+		fset:                   pkg.Fset,
+		file:                   file,
+		info:                   pkg.TypesInfo,
+		skipTransform:          skipTransform,
+		grpcRewritePkgPrefixes: config.GRPCRewritePkgPrefixes,
+		nativeHTTPPkgPrefixes:  config.NativeHTTPPkgPrefixes,
+		importsNamesByPath:     importsNamesByPath,
+		extraImports:           make(map[string]string),
 	}
 }
 
@@ -389,10 +393,7 @@ func (tf *fileTransformer) transformImports(skipTransform bool) {
 		case !skipTransform &&
 			// These packages bridge real-path libraries (stdlib net/http) with their own
 			// net/http usage; keeping net/http at stdlib avoids type mismatches.
-			// - metrics: uses promhttp (real-path, stdlib) alongside net/http
-			// - temporal: elasticsearchHttpClient option is stdlib *http.Client
-			!strings.HasPrefix(tf.pkgPath, "go.temporal.io/server/common/metrics") &&
-			!strings.HasPrefix(tf.pkgPath, "go.temporal.io/server/temporal") &&
+			!matchesAnyPrefix(tf.pkgPath, tf.nativeHTTPPkgPrefixes) &&
 			(strings.HasPrefix(path, "net/http") ||
 			path == "database/sql"):
 			// Use the real (non-prefixed) ext-lib path so that types from this
@@ -448,6 +449,15 @@ func isSimulatorPackage(pkgPath string) bool {
 	return strings.HasPrefix(pkgPath, simulatorApiPackage+"/") ||
 		pkgPath == simulatorPackage+"/runtime" ||
 		pkgPath == simulatorPackage+"/util"
+}
+
+func matchesAnyPrefix(s string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(s, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // isPassthroughPackage reports whether pkgPath belongs to a family of packages
@@ -1254,14 +1264,12 @@ func (tf *fileTransformer) transformSelExpr(t *ast.SelectorExpr, typeArgs []ast.
 		ref.isType = false
 	}
 
-	// gRPC types are only rewritten when used inside Temporal or its known
-	// middleware packages; third-party libraries import grpc directly and must
-	// not be rewritten to fakegrpc (they would fail to compile).
+	// gRPC types are only rewritten when used inside packages listed in
+	// GRPCRewritePkgPrefixes; third-party libraries import grpc directly and
+	// must not be rewritten to fakegrpc (they would fail to compile).
 	var res ast.Expr
 	if pkgPath == "google.golang.org/grpc" {
-		if !strings.HasPrefix(tf.pkgPath, "go.temporal") &&
-			!strings.HasPrefix(tf.pkgPath, "github.com/grpc-ecosystem/") &&
-			!strings.HasPrefix(tf.pkgPath, "go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc") {
+		if !matchesAnyPrefix(tf.pkgPath, tf.grpcRewritePkgPrefixes) {
 			// other libraries rely on these types
 			return t
 		}

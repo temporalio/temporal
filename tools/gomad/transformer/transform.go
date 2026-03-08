@@ -43,8 +43,15 @@ type (
 		Dir        string
 		BuildFlags []string
 		Skip       func(pkg *packages.Package) bool
-		CacheFunc  func(*packages.Package, func())
-		ResultFunc func(*packages.Package, map[string]string) string
+		// GRPCRewritePkgPrefixes lists package path prefixes whose
+		// google.golang.org/grpc type references are rewritten to the fakegrpc
+		// implementation. Packages not matching any prefix keep real grpc types.
+		GRPCRewritePkgPrefixes []string
+		// NativeHTTPPkgPrefixes lists package path prefixes that should keep the
+		// stdlib net/http package rather than the ext-lib net/http replacement.
+		NativeHTTPPkgPrefixes []string
+		CacheFunc             func(*packages.Package, func())
+		ResultFunc            func(*packages.Package, map[string]string) string
 	}
 	transformResult struct {
 		pkgPath string
@@ -121,12 +128,6 @@ var (
 		"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp",
 		"github.com/felixge/httpsnoop",
 
-		// The elasticsearch client bridges olivere/elastic (skipped, stdlib net/http)
-		// and temporal server code. Skipping it keeps net/http consistent across
-		// the elastic library boundary.
-		"go.temporal.io/server/common/persistence/visibility/store/elasticsearch",
-
-
 		"cloud.google.com/.*",
 		"github.com/GoogleCloudPlatform/.*",
 		"google.golang.org/api/.*",
@@ -140,6 +141,47 @@ var (
 			}
 		}
 		return false
+	}
+
+	// temporalSkipPackagePatterns extends defaultSkipPackagePatterns with entries
+	// specific to the Temporal server module.
+	temporalSkipPackagePatterns = []string{
+		// The elasticsearch client bridges olivere/elastic (skipped, stdlib net/http)
+		// and temporal server code. Skipping it keeps net/http consistent across
+		// the elastic library boundary.
+		"go.temporal.io/server/common/persistence/visibility/store/elasticsearch",
+	}
+
+	// TemporalDefaultSkip is the recommended Skip function for Temporal server builds.
+	// It extends DefaultSkip with Temporal-specific packages that must not be transformed.
+	TemporalDefaultSkip = func(pkg *packages.Package) bool {
+		if DefaultSkip(pkg) {
+			return true
+		}
+		for _, pattern := range temporalSkipPackagePatterns {
+			if match, _ := regexp.MatchString(pattern, pkg.PkgPath); match {
+				fmt.Println("skipping package", pkg.PkgPath)
+				return true
+			}
+		}
+		return false
+	}
+
+	// TemporalGRPCRewritePkgPrefixes is the set of package path prefixes for
+	// Temporal server builds where google.golang.org/grpc references should be
+	// rewritten to the fakegrpc implementation.
+	TemporalGRPCRewritePkgPrefixes = []string{
+		"go.temporal",
+		"github.com/grpc-ecosystem/",
+		"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc",
+	}
+
+	// TemporalNativeHTTPPkgPrefixes is the set of Temporal-specific package path
+	// prefixes that bridge real-path net/http with non-ext-lib code and must keep
+	// stdlib net/http rather than the ext-lib replacement.
+	TemporalNativeHTTPPkgPrefixes = []string{
+		"go.temporal.io/server/common/metrics",
+		"go.temporal.io/server/temporal",
 	}
 )
 
@@ -289,7 +331,7 @@ func transformPackage(config *Config, pkg *packages.Package) map[string]string {
 		}
 
 		var err error
-		tf := newFileTransformer(file, pkg, skipTransform)
+		tf := newFileTransformer(file, pkg, skipTransform, config)
 		files[path], err = tf.transform()
 		if err != nil {
 			panic(errors.Wrap(err, "failed to transform "+path))

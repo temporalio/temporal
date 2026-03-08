@@ -114,23 +114,24 @@ func (g *goroutine) suspended(b *syncBlock, tags ...Tag) {
 	}
 
 	if CurrentSimulator().debug {
+		locTag := LocTag(b.loc)
 		switch {
 		case b.requireSyncMatch:
 			switch b.op {
 			case cls:
-				Dbg("🛑📭❌", "cls block", tags...)
+				Dbg("🛑📭❌", "cls block", append(tags, locTag)...)
 			case rcv:
-				Dbg("🛑📭➡️️", "rcv block", tags...)
+				Dbg("🛑📭➡️️", "rcv block", append(tags, locTag)...)
 			case snd:
-				Dbg("🛑📭⬅️️", "snd block", tags...)
+				Dbg("🛑📭⬅️️", "snd block", append(tags, locTag)...)
 			case slc:
-				Dbg("🛑🌀", "slc block", tags...)
+				Dbg("🛑🌀", "slc block", append(tags, locTag)...)
 			}
 		case b.delay != 0:
-			Dbg("⏸️⏳", "suspend", append(tags, AnyTag("t", b.delay))...)
+			Dbg("⏸️⏳", "suspend", append(tags, AnyTag("t", b.delay), locTag)...)
 		default:
 			// TODO: don't always suspend right away here, instead accumulate syncBlocks and continue
-			Dbg("⏸️", "suspend")
+			Dbg("⏸️", "suspend", locTag)
 		}
 	}
 

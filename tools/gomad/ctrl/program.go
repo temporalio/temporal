@@ -75,10 +75,13 @@ func (p *simProgram) generate(resetFiles bool) {
 	// generate simulation
 	mods, err := transformer.Run(
 		&transformer.Config{
-			Dir:        srcTestDir,
-			BuildFlags: []string{"-tags=test_dep"},
-			CacheFunc:  transformer.CreateCacheWriter(p.workingDir),
-			ResultFunc: transformer.CreateFileWriter(p.workingDir),
+			Dir:                    srcTestDir,
+			BuildFlags:             []string{"-tags=test_dep"},
+			Skip:                   transformer.TemporalDefaultSkip,
+			GRPCRewritePkgPrefixes: transformer.TemporalGRPCRewritePkgPrefixes,
+			NativeHTTPPkgPrefixes:  transformer.TemporalNativeHTTPPkgPrefixes,
+			CacheFunc:              transformer.CreateCacheWriter(p.workingDir),
+			ResultFunc:             transformer.CreateFileWriter(p.workingDir),
 		},
 	)
 	if err != nil {
