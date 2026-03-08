@@ -1,6 +1,7 @@
 .tmp/
 .bin/
 .stamp/
+.gomad/
 tests/.gomad-run/
 
 .idea/
@@ -49,5 +50,3 @@ tests/.gomad-run/
 
 # Ignoring AI agent files
 .agents/
-
-/tools/gomad/tests/gomad-run/

@@ -75,28 +75,32 @@ func TestNewTimer(t *testing.T) {
 
 	t.Run("Stop", func(t *testing.T) {
 		testutil.StressRun(func(seed int64) {
-			timer := SIMLIB.NewTimer(0)
-			require.False(t, timer.Stop()) // was fired immediately
-			require.EqualValues(t, 0, SIMLANG.ChanRcv(timer.C).UnixMilli())
+			SIMLANG.Go(func() {
+				timer := SIMLIB.NewTimer(0)
+				require.False(t, timer.Stop()) // was fired immediately
+				require.EqualValues(t, 0, SIMLANG.ChanRcv(timer.C).UnixMilli())
 
-			timer = SIMLIB.NewTimer(-1)
-			require.False(t, timer.Stop()) // was fired immediately
-			require.EqualValues(t, 0, SIMLANG.ChanRcv(timer.C).UnixMilli())
+				timer = SIMLIB.NewTimer(-1)
+				require.False(t, timer.Stop()) // was fired immediately
+				require.EqualValues(t, 0, SIMLANG.ChanRcv(timer.C).UnixMilli())
 
-			timer = SIMLIB.NewTimer(time.Second)
-			require.True(t, timer.Stop())  // hasn't fired yet
-			require.False(t, timer.Stop()) // already stopped
+				timer = SIMLIB.NewTimer(time.Second)
+				require.True(t, timer.Stop())  // hasn't fired yet
+				require.False(t, timer.Stop()) // already stopped
 
-			timeout := SIMLIB.NewTimer(time.Minute)
-			for {
-				selector := SIMLANG.Select(0, SIMLANG.RcvChan(timer.C), nil, 0, SIMLANG.RcvChan(timeout.C), nil)
-				switch selector.Case {
-				case 0: // timer
-					panic("never fires because it was stopped")
-				case 1: // timeout
-					return
+				timeout := SIMLIB.NewTimer(time.Minute)
+				for {
+					selector := SIMLANG.Select(0, SIMLANG.RcvChan(timer.C), nil, 0, SIMLANG.RcvChan(timeout.C), nil)
+					switch selector.Case {
+					case 0: // timer
+						panic("never fires because it was stopped")
+					case 1: // timeout
+						return
+					}
 				}
-			}
+			})
+
+			SIM.Join()
 		})
 	})
 

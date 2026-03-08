@@ -25,7 +25,6 @@
 package lib
 
 import (
-	"crypto/rand"
 	"io"
 
 	SIM "go.temporal.io/server/tools/gomad/runtime"
@@ -39,16 +38,10 @@ var CryptoReader io.Reader = &cryptoRandReader{}
 type cryptoRandReader struct{}
 
 func (r *cryptoRandReader) Read(p []byte) (int, error) {
-	if s := SIM.TryAnySimulator(); s != nil {
-		return s.Drng.Read(p)
-	}
-	return rand.Read(p) //nolint:staticcheck
+	return SIM.TryAnySimulator().Drng.Read(p)
 }
 
 // CryptoRead is a deterministic replacement for crypto/rand.Read.
 func CryptoRead(p []byte) (int, error) {
-	if s := SIM.TryAnySimulator(); s != nil {
-		return s.Drng.Read(p)
-	}
-	return rand.Read(p) //nolint:staticcheck
+	return SIM.TryAnySimulator().Drng.Read(p)
 }

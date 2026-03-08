@@ -260,15 +260,32 @@ func isBuildIgnore(path string) bool {
 }
 
 // hasTestMain reports whether any of the given *_test.go files contains "func TestMain".
+// Files with a "gomad" build constraint are ignored because the inner binary is
+// compiled without that tag, so their TestMain won't be included.
 func hasTestMain(paths []string) bool {
 	fset := token.NewFileSet()
 	for _, path := range paths {
-		f, err := parser.ParseFile(fset, path, nil, 0)
+		f, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
 		if err != nil {
+			continue
+		}
+		if hasBuildConstraint(f, "gomad") {
 			continue
 		}
 		for _, decl := range f.Decls {
 			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "TestMain" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// hasBuildConstraint reports whether f has a //go:build line containing the given tag.
+func hasBuildConstraint(f *ast.File, tag string) bool {
+	for _, cg := range f.Comments {
+		for _, c := range cg.List {
+			if strings.HasPrefix(c.Text, "//go:build ") && strings.Contains(c.Text, tag) {
 				return true
 			}
 		}

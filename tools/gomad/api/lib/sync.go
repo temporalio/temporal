@@ -33,16 +33,11 @@ import (
 )
 
 type Mutex struct {
-	real   sync.Mutex
 	locked bool
 	lockCh chan struct{}
 }
 
 func (m *Mutex) Lock() {
-	if SIM.TryAnySimulator() == nil {
-		m.real.Lock()
-		return
-	}
 	if m.lockCh == nil {
 		// no lock yet; initialize new channel to represent lock
 		m.lockCh = make(chan struct{}, 1)
@@ -54,10 +49,6 @@ func (m *Mutex) Lock() {
 }
 
 func (m *Mutex) Unlock() {
-	if SIM.TryAnySimulator() == nil {
-		m.real.Unlock()
-		return
-	}
 	verify.T(m.lockCh != nil, "unlock of (never) locked mutex")
 	verify.T(m.locked, "unlock of unlocked mutex")
 
@@ -67,9 +58,6 @@ func (m *Mutex) Unlock() {
 }
 
 func (m *Mutex) TryLock() bool {
-	if SIM.TryAnySimulator() == nil {
-		return m.real.TryLock()
-	}
 	if m.locked {
 		return false
 	}
@@ -87,7 +75,6 @@ func (m *Mutex) TryLock() bool {
 // pendingWriters prevents writer starvation: RLock blocks while any writer is waiting,
 // ensuring that once a writer starts waiting it will eventually acquire the lock.
 type RWMutex struct {
-	real           sync.RWMutex
 	mu             Mutex
 	cond           *Cond
 	mode           int // 0=unlocked, N>0=N readers, -1=write-locked
@@ -101,10 +88,6 @@ func (m *RWMutex) ensureInit() {
 }
 
 func (m *RWMutex) RLock() {
-	if SIM.TryAnySimulator() == nil {
-		m.real.RLock()
-		return
-	}
 	m.ensureInit()
 	m.mu.Lock()
 	for m.mode < 0 || m.pendingWriters > 0 {
@@ -115,9 +98,6 @@ func (m *RWMutex) RLock() {
 }
 
 func (m *RWMutex) TryRLock() bool {
-	if SIM.TryAnySimulator() == nil {
-		return m.real.TryRLock()
-	}
 	m.ensureInit()
 	m.mu.Lock()
 	if m.mode < 0 {
@@ -130,10 +110,6 @@ func (m *RWMutex) TryRLock() bool {
 }
 
 func (m *RWMutex) RUnlock() {
-	if SIM.TryAnySimulator() == nil {
-		m.real.RUnlock()
-		return
-	}
 	m.mu.Lock()
 	m.mode--
 	if m.mode == 0 {
@@ -147,10 +123,6 @@ func (m *RWMutex) RLocker() sync.Locker {
 }
 
 func (m *RWMutex) Lock() {
-	if SIM.TryAnySimulator() == nil {
-		m.real.Lock()
-		return
-	}
 	m.ensureInit()
 	m.mu.Lock()
 	m.pendingWriters++
@@ -163,9 +135,6 @@ func (m *RWMutex) Lock() {
 }
 
 func (m *RWMutex) TryLock() bool {
-	if SIM.TryAnySimulator() == nil {
-		return m.real.TryLock()
-	}
 	m.ensureInit()
 	m.mu.Lock()
 	if m.mode != 0 {
@@ -178,10 +147,6 @@ func (m *RWMutex) TryLock() bool {
 }
 
 func (m *RWMutex) Unlock() {
-	if SIM.TryAnySimulator() == nil {
-		m.real.Unlock()
-		return
-	}
 	m.mu.Lock()
 	verify.T(m.mode == -1, "unlock of (never) locked mutex")
 	m.mode = 0

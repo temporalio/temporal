@@ -32,31 +32,12 @@ import (
 )
 
 type Ticker struct {
-	C       chan time.Time
-	stopped bool         // used only in real (non-sim) mode
-	stopCh  chan struct{} // sim mode: cooperative stop signal; closed by Stop()/Reset()
-	doneCh  chan struct{} // sim mode: closed by ticker goroutine on stop; Stop()/Reset() waits on it
-	real    *time.Ticker // used in real (non-sim) mode
+	C      chan time.Time
+	stopCh chan struct{} // cooperative stop signal; closed by Stop()/Reset()
+	doneCh chan struct{} // closed by ticker goroutine on stop; Stop()/Reset() waits on it
 }
 
 func NewTicker(d time.Duration) *Ticker {
-	if SIM.TryAnySimulator() == nil {
-		t := &Ticker{C: make(chan time.Time, 1)}
-		t.real = time.NewTicker(d)
-		go func() {
-			for tm := range t.real.C {
-				if t.stopped {
-					return
-				}
-				select {
-				case t.C <- tm:
-				default:
-				}
-			}
-		}()
-		return t
-	}
-	// Sim mode: unbuffered C so a tick can only be delivered when a receiver is present.
 	t := &Ticker{
 		C:      make(chan time.Time),
 		stopCh: make(chan struct{}),
@@ -67,11 +48,6 @@ func NewTicker(d time.Duration) *Ticker {
 }
 
 func (t *Ticker) Stop() {
-	if t.real != nil {
-		t.stopped = true
-		t.real.Stop()
-		return
-	}
 	// Close stopCh cooperatively, then wait for the ticker goroutine to
 	// acknowledge by closing doneCh. This ensures ticker.Stop() returns only
 	// after the last cooperative interaction completes at the current simulated
@@ -81,10 +57,6 @@ func (t *Ticker) Stop() {
 }
 
 func (t *Ticker) Reset(d time.Duration) {
-	if t.real != nil {
-		t.real.Reset(d)
-		return
-	}
 	// Capture the old channels and replace them so t.start(d) below uses fresh
 	// ones. This must happen before the goroutine runs.
 	oldStopCh := t.stopCh

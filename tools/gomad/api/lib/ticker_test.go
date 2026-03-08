@@ -32,6 +32,7 @@ import (
 
 	SIMLANG "go.temporal.io/server/tools/gomad/api/lang"
 	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
+	SIM "go.temporal.io/server/tools/gomad/runtime"
 	"go.temporal.io/server/tools/gomad/runtime/testutil"
 )
 
@@ -40,9 +41,13 @@ func TestTicker(t *testing.T) {
 		testutil.StressRun(func(seed int64) {
 			var res []int64
 
-			tick := SIMLIB.NewTicker(time.Minute)
-			res = append(res, SIMLANG.ChanRcv(tick.C).UnixMilli())
-			res = append(res, SIMLANG.ChanRcv(tick.C).UnixMilli())
+			SIMLANG.Go(func() {
+				tick := SIMLIB.NewTicker(time.Minute)
+				res = append(res, SIMLANG.ChanRcv(tick.C).UnixMilli())
+				res = append(res, SIMLANG.ChanRcv(tick.C).UnixMilli())
+			})
+
+			SIM.Join()
 
 			require.Equal(t, []int64{
 				(1 * time.Minute).Milliseconds(),
@@ -53,21 +58,25 @@ func TestTicker(t *testing.T) {
 	t.Run("Stop", func(t *testing.T) {
 		testutil.StressRun(func(seed int64) {
 			var res []int64
-			ticker := SIMLIB.NewTicker(1 * time.Second)
-			timeout := SIMLIB.NewTimer(1 * time.Minute)
 
-		loop:
-			for {
-				selector := SIMLANG.Select(0, SIMLANG.RcvChan(ticker.C), nil, 0, SIMLANG.RcvChan(timeout.C), nil)
-				switch selector.Case {
-				case 0: // ticker
-					ticker.Stop()
-					res = append(res, SIMLIB.Now().UnixMilli())
-				case 1: // timeout
-					res = append(res, SIMLIB.Now().UnixMilli())
-					break loop
+			SIMLANG.Go(func() {
+				ticker := SIMLIB.NewTicker(1 * time.Second)
+				timeout := SIMLIB.NewTimer(1 * time.Minute)
+
+				for {
+					selector := SIMLANG.Select(0, SIMLANG.RcvChan(ticker.C), nil, 0, SIMLANG.RcvChan(timeout.C), nil)
+					switch selector.Case {
+					case 0: // ticker
+						ticker.Stop()
+						res = append(res, SIMLIB.Now().UnixMilli())
+					case 1: // timeout
+						res = append(res, SIMLIB.Now().UnixMilli())
+						return
+					}
 				}
-			}
+			})
+
+			SIM.Join()
 
 			require.Equal(t, []int64{
 				(1 * time.Second).Milliseconds(),
@@ -79,26 +88,29 @@ func TestTicker(t *testing.T) {
 		testutil.StressRun(func(seed int64) {
 			var res []int64
 
-			reset := false
-			ticker := SIMLIB.NewTicker(1 * time.Second)
-			timeout2s := SIMLIB.NewTimer(2*time.Second + 1*time.Millisecond) // +1ms to ensure it fires after ticker
-			timeout3m := SIMLIB.NewTimer(3 * time.Minute)
+			SIMLANG.Go(func() {
+				reset := false
+				ticker := SIMLIB.NewTicker(1 * time.Second)
+				timeout2s := SIMLIB.NewTimer(2*time.Second + 1*time.Millisecond) // +1ms to ensure it fires after ticker
+				timeout3m := SIMLIB.NewTimer(3 * time.Minute)
 
-		loop:
-			for {
-				selector := SIMLANG.Select(0, SIMLANG.RcvChan(ticker.C), nil, 0, SIMLANG.RcvChan(timeout2s.C), nil, 0, SIMLANG.RcvChan(timeout3m.C), nil)
-				switch selector.Case {
-				case 0: // ticker
-					res = append(res, SIMLIB.Now().UnixMilli())
-				case 1: // timeout2s
-					if !reset {
-						ticker.Reset(1 * time.Minute)
-						reset = true
+				for {
+					selector := SIMLANG.Select(0, SIMLANG.RcvChan(ticker.C), nil, 0, SIMLANG.RcvChan(timeout2s.C), nil, 0, SIMLANG.RcvChan(timeout3m.C), nil)
+					switch selector.Case {
+					case 0: // ticker
+						res = append(res, SIMLIB.Now().UnixMilli())
+					case 1: // timeout2s
+						if !reset {
+							ticker.Reset(1 * time.Minute)
+							reset = true
+						}
+					case 2: // timeout3m
+						return
 					}
-				case 2: // timeout3m
-					break loop
 				}
-			}
+			})
+
+			SIM.Join()
 
 			require.Equal(t, []int64{
 				(1 * time.Second).Milliseconds(),
@@ -113,9 +125,13 @@ func TestTick(t *testing.T) {
 	testutil.StressRun(func(seed int64) {
 		var res []int64
 
-		c := SIMLIB.Tick(time.Minute)
-		res = append(res, SIMLANG.ChanRcv(c).UnixMilli())
-		res = append(res, SIMLANG.ChanRcv(c).UnixMilli())
+		SIMLANG.Go(func() {
+			c := SIMLIB.Tick(time.Minute)
+			res = append(res, SIMLANG.ChanRcv(c).UnixMilli())
+			res = append(res, SIMLANG.ChanRcv(c).UnixMilli())
+		})
+
+		SIM.Join()
 
 		require.Equal(t, []int64{
 			(1 * time.Minute).Milliseconds(),

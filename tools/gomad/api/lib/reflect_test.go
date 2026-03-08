@@ -8,7 +8,6 @@ import (
 
 	SIMLANG "go.temporal.io/server/tools/gomad/api/lang"
 	SIMLIB "go.temporal.io/server/tools/gomad/api/lib"
-	SIM "go.temporal.io/server/tools/gomad/runtime"
 	"go.temporal.io/server/tools/gomad/runtime/testutil"
 )
 
@@ -16,7 +15,6 @@ func TestValueOf(t *testing.T) {
 	t.Run("MapKeys", func(t *testing.T) {
 		fn := func() []string {
 			m := SIMLANG.MapInit[string, int]("A", 0, "B", 1, "C", 2)
-			SIM.Join()
 
 			var keys []string
 			for _, k := range SIMLIB.MapKeys(reflect.ValueOf(m)) {
