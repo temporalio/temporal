@@ -13,7 +13,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
@@ -103,11 +102,6 @@ func (s *bufferEventFlusherSuite) TestClearTransientWorkflowTask() {
 	s.mockMutableState.EXPECT().HasStartedWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().IsTransientWorkflowTask().Return(true).AnyTimes()
 	s.mockMutableState.EXPECT().ClearTransientWorkflowTask().Return(nil).AnyTimes()
-	s.mockContext.EXPECT().GetWorkflowKey().Return(definition.WorkflowKey{
-		NamespaceID: s.namespaceID,
-		WorkflowID:  s.workflowID,
-		RunID:       s.runID,
-	}).AnyTimes()
 
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      s.namespaceID,
