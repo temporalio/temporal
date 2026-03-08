@@ -84,8 +84,6 @@ func appendTransientTasks(
 		}
 		transientWorkflowTask = msResp.GetTransientOrSpeculativeTasks()
 		if transientWorkflowTask == nil {
-			if msResp.GetNextEventId() != nextEventID {
-			}
 			return
 		}
 
