@@ -1717,11 +1717,17 @@ func (s *Versioning3Suite) TestEagerActivity() {
 			s.verifyWorkflowVersioning(s.Assertions, tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
 			resp := respondWftWithActivities(tv, tv, true, vbUnpinned, "5")
 			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
+			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().Priority = &commonpb.Priority{
+				FairnessKey: "fairness-key",
+				PriorityKey: 2,
+			}
 			return resp, nil
 		})
 	s.verifyWorkflowVersioning(s.Assertions, tv, vbUnpinned, tv.Deployment(), nil, nil)
 
 	s.NotEmpty(resp.GetActivityTasks())
+	s.Equal("fairness-key", resp.GetActivityTasks()[0].GetPriority().GetFairnessKey())
+	s.EqualValues(2, resp.GetActivityTasks()[0].GetPriority().GetPriorityKey())
 
 	_, err := poller.HandleActivityTask(tv, resp.GetActivityTasks()[0],
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {

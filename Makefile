@@ -345,6 +345,7 @@ clean-bins:
 	@rm -f temporal-server-debug
 	@rm -f temporal-cassandra-tool
 	@rm -f tdbg
+	@rm -f fairsim
 	@rm -f temporal-sql-tool
 	@rm -f temporal-elasticsearch-tool
 
@@ -649,6 +650,9 @@ start: start-sqlite
 
 start-cass-es: temporal-server
 	./temporal-server --config-file config/development-cass-es.yaml --allow-no-auth start
+
+start-cass-archival: temporal-server
+	./temporal-server --config-file config/development-cass-archival.yaml --allow-no-auth start
 
 start-cass-es-dual: temporal-server
 	./temporal-server --config-file config/development-cass-es-dual.yaml --allow-no-auth start
