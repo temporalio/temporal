@@ -31,25 +31,104 @@ import (
 )
 
 func drng() *rand.Rand {
-	return SIM.TryAnySimulator().Drng
+	if s := SIM.TryAnySimulator(); s != nil {
+		return s.Drng
+	}
+	return nil
 }
 
-func ExpFloat64() float64                { return drng().ExpFloat64() }
-func Float32() float32                   { return drng().Float32() }
-func Float64() float64                   { return drng().Float64() }
-func Int() int                           { return drng().Int() }
-func Int31() int32                       { return drng().Int31() }
-func Int31n(n int32) int32               { return drng().Int31n(n) }
-func Int63() int64                       { return drng().Int63() }
-func Int63n(n int64) int64               { return drng().Int63n(n) }
-func Intn(n int) int                     { return drng().Intn(n) }
-func NormFloat64() float64               { return drng().NormFloat64() }
-func Perm(n int) []int                   { return drng().Perm(n) }
-func Read(p []byte) (n int, err error)   { return drng().Read(p) }
+func ExpFloat64() float64 {
+	if r := drng(); r != nil {
+		return r.ExpFloat64()
+	}
+	return rand.ExpFloat64()
+}
+func Float32() float32 {
+	if r := drng(); r != nil {
+		return r.Float32()
+	}
+	return rand.Float32()
+}
+func Float64() float64 {
+	if r := drng(); r != nil {
+		return r.Float64()
+	}
+	return rand.Float64()
+}
+func Int() int {
+	if r := drng(); r != nil {
+		return r.Int()
+	}
+	return rand.Int()
+}
+func Int31() int32 {
+	if r := drng(); r != nil {
+		return r.Int31()
+	}
+	return rand.Int31()
+}
+func Int31n(n int32) int32 {
+	if r := drng(); r != nil {
+		return r.Int31n(n)
+	}
+	return rand.Int31n(n)
+}
+func Int63() int64 {
+	if r := drng(); r != nil {
+		return r.Int63()
+	}
+	return rand.Int63()
+}
+func Int63n(n int64) int64 {
+	if r := drng(); r != nil {
+		return r.Int63n(n)
+	}
+	return rand.Int63n(n)
+}
+func Intn(n int) int {
+	if r := drng(); r != nil {
+		return r.Intn(n)
+	}
+	return rand.Intn(n)
+}
+func NormFloat64() float64 {
+	if r := drng(); r != nil {
+		return r.NormFloat64()
+	}
+	return rand.NormFloat64()
+}
+func Perm(n int) []int {
+	if r := drng(); r != nil {
+		return r.Perm(n)
+	}
+	return rand.Perm(n)
+}
+func Read(p []byte) (n int, err error) {
+	if r := drng(); r != nil {
+		return r.Read(p)
+	}
+	return rand.Read(p) //nolint:staticcheck
+}
 func Seed(seed int64)                    { /* ignore */ }
-func Shuffle(n int, swap func(i, j int)) { drng().Shuffle(n, swap) }
-func Uint32() uint32                     { return drng().Uint32() }
-func Uint64() uint64                     { return drng().Uint64() }
+func Shuffle(n int, swap func(i, j int)) {
+	if r := drng(); r != nil {
+		r.Shuffle(n, swap)
+		return
+	}
+	rand.Shuffle(n, swap)
+}
+func Uint32() uint32 {
+	if r := drng(); r != nil {
+		return r.Uint32()
+	}
+	return rand.Uint32()
+}
+func Uint64() uint64 {
+	if r := drng(); r != nil {
+		return r.Uint64()
+	}
+	return rand.Uint64()
+}
 
 type source struct{}
 

@@ -53,18 +53,26 @@ func MapInitPtr[K comparable, V any](values ...any) *map[K]V {
 }
 
 func MapKey(key any) {
+	sim := SIM.TryAnySimulator()
+	if sim == nil {
+		return // no simulator yet; order will be assigned lazily when iterated
+	}
 	if _, exists := getMapKeySortOrder(key); !exists {
 		addMapKeySortOrder(key)
 	}
 }
 
 func MapKeys[K comparable, V any](m map[K]V) []K {
-	sim := SIM.TryAnySimulator()
-
 	// init
 	keys := make([]K, 0, len(m))
 	for key := range m {
 		keys = append(keys, key)
+	}
+
+	sim := SIM.TryAnySimulator()
+	if sim == nil {
+		// No simulator running (e.g., during package init); return keys as-is.
+		return keys
 	}
 
 	// sort keys
@@ -96,6 +104,13 @@ func MapKeys[K comparable, V any](m map[K]V) []K {
 func ReflectMapKeys(v reflect.Value) []reflect.Value {
 	keys := v.MapKeys()
 
+	if SIM.TryAnySimulator() == nil {
+		sort.Slice(keys, func(i, j int) bool {
+			return fmt.Sprintf("%v", keys[i]) < fmt.Sprintf("%v", keys[j])
+		})
+		return keys
+	}
+
 	sort.Slice(keys, func(left, right int) bool {
 		keyLeft := keys[left].Interface()
 		order1, ok := getMapKeySortOrder(keyLeft)
@@ -119,6 +134,9 @@ func ReflectMapKeys(v reflect.Value) []reflect.Value {
 
 func addMapKeySortOrder(key any) {
 	sim := SIM.TryAnySimulator()
+	if sim == nil {
+		return // no simulator yet; key will get an order when first iterated
+	}
 	sim.StateMu.Lock()
 	defer sim.StateMu.Unlock()
 	if _, exists := sim.State[mapKeySortOrderStateKey]; !exists {
@@ -129,6 +147,9 @@ func addMapKeySortOrder(key any) {
 
 func getMapKeySortOrder(key any) (v int64, ok bool) {
 	sim := SIM.TryAnySimulator()
+	if sim == nil {
+		return 0, false
+	}
 	sim.StateMu.Lock()
 	defer sim.StateMu.Unlock()
 	if _, exists := sim.State[mapKeySortOrderStateKey]; !exists {

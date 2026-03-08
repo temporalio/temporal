@@ -62,6 +62,13 @@ type goroutineRegistration struct {
 	g *goroutine
 }
 
+func init() {
+	// Start the simulator during init so it is available to all downstream
+	// packages whose init() functions use transformed code (e.g. map literals,
+	// mutexes, crypto/rand, tickers created by third-party libraries).
+	Start()
+}
+
 var (
 	// registry maps OS goroutine ID → *goroutineRegistration for all registered goroutines.
 	registry sync.Map

@@ -321,7 +321,6 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	SIM.Start()
 	m.Run()
 	SIMLIB.CloseAllListeners()
 	SIM.Join()

@@ -36,6 +36,7 @@ import (
 
 var (
 	vfsStateKey = "vfsState"
+	globalVFS   = afero.NewMemMapFs() // fallback when no simulator is active
 )
 
 type File struct{ afero.File }
@@ -202,6 +203,9 @@ func LoadFileFromDisk(srcDir, dstDir, filename string) {
 
 func getOrCreateVFS() afero.Fs {
 	sim := SIM.TryAnySimulator()
+	if sim == nil {
+		return globalVFS
+	}
 	if _, exists := sim.State[vfsStateKey]; !exists {
 		sim.State[vfsStateKey] = afero.NewMemMapFs()
 	}

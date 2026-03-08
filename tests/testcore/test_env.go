@@ -205,6 +205,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
+	// Wait until the namespace is visible through the frontend API.
+	// Under GoMaD the namespace registry's background polling timer may not
+	// fire between creation and the first test RPC.
+	require.Eventually(t, func() bool {
+		resp, err := cluster.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+			Id: nsID.String(),
+		})
+		return err == nil && resp != nil
+	}, 10*time.Second, 100*time.Millisecond)
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),

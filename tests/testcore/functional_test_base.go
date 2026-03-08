@@ -525,6 +525,20 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		return namespace.EmptyID, err
 	}
 
+	// Eagerly refresh namespace registries so the new namespace is visible
+	// immediately, without waiting for the background polling timer to fire.
+	// Under GoMaD the background polling timer may not fire between namespace
+	// creation and the first test RPC.
+	for i, reg := range s.testCluster.host.NamespaceRegistries() {
+		if _, refreshErr := reg.RefreshNamespaceById(nsID); refreshErr != nil {
+			s.Logger.Error("Failed to refresh namespace registry",
+				tag.WorkflowNamespaceID(nsID.String()),
+				tag.NewAnyTag("registry_index", i),
+				tag.Error(refreshErr),
+			)
+		}
+	}
+
 	namespaceCacheDeadline := time.Now().Add(5 * NamespaceCacheRefreshInterval)
 	ticker := time.NewTicker(NamespaceCacheRefreshInterval / 2)
 	defer ticker.Stop()
