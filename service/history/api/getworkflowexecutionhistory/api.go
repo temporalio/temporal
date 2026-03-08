@@ -432,29 +432,29 @@ func Invoke(
 						var gapBlob []*commonpb.DataBlob
 						gapBlob, _, freshErr = api.GetRawHistory(ctx, shardContext, namespaceName, namespaceID, execution,
 							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil, continuationToken.BranchToken)
-						if freshErr == nil {
-							historyBlob = append(historyBlob, gapBlob...)
+						if freshErr != nil {
+							return nil, freshErr
 						}
+						historyBlob = append(historyBlob, gapBlob...)
 					} else {
 						var gapHistory *historypb.History
 						gapHistory, _, freshErr = api.GetHistory(ctx, shardContext, namespaceName, namespaceID, execution,
 							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil,
 							continuationToken.BranchToken, persistenceVisibilityMgr)
-						if freshErr == nil && gapHistory != nil {
+						if freshErr != nil {
+							return nil, freshErr
+						}
+						if gapHistory != nil {
 							history.Events = append(history.Events, gapHistory.Events...)
 						}
 					}
-					if freshErr == nil {
-						// Update the event boundary so appendTransientTasks validates against the correct nextEventID.
-						continuationToken.NextEventId = freshNextEventID
-						continuationToken.IsWorkflowRunning = freshIsRunning
-						continuationToken.VersionHistoryItem = freshVersionHistoryItem
-						continuationToken.VersionedTransition = freshVersionedTransition
-						// Provide fresh transient tasks to appendTransientTasks to avoid a redundant re-query.
-						cachedTransientTasks = freshTransientTasks
-					} else {
-						return nil, freshErr
-					}
+					// Update the event boundary so appendTransientTasks validates against the correct nextEventID.
+					continuationToken.NextEventId = freshNextEventID
+					continuationToken.IsWorkflowRunning = freshIsRunning
+					continuationToken.VersionHistoryItem = freshVersionHistoryItem
+					continuationToken.VersionedTransition = freshVersionedTransition
+					// Provide fresh transient tasks to appendTransientTasks to avoid a redundant re-query.
+					cachedTransientTasks = freshTransientTasks
 				} else if freshErr != nil {
 					return nil, freshErr
 				}
