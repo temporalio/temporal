@@ -59,22 +59,6 @@ jobs:
             echo "single-arch=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Compute push parameters
-        id: push-params
-        run: |
-          REF="${{ inputs.ref }}"
-          if [[ "$REF" == "spk/update-premature-eos" ]] || [[ "${{ inputs.push }}" == "true" ]]; then
-            echo "should-push=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should-push=false" >> "$GITHUB_OUTPUT"
-          fi
-          # Never tag as latest for the branch push
-          if [[ "$REF" == "spk/update-premature-eos" ]]; then
-            echo "effective-tag-latest=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "effective-tag-latest=${{ inputs.tag-latest }}" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build binaries
         uses: ./.github/actions/build-binaries
         with:
@@ -82,22 +66,22 @@ jobs:
           single-arch: ${{ steps.arch-param.outputs.single-arch }}
 
       - name: Build Docker images
-        if: ${{ steps.push-params.outputs.should-push != 'true' }}
+        if: ${{ !inputs.push }}
         uses: ./.github/actions/build-docker-images
         with:
           push: false
-          tag-latest: ${{ steps.push-params.outputs.effective-tag-latest }}
+          tag-latest: ${{ inputs.tag-latest }}
           platform: ${{ inputs.platform }}
           cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}
           load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
 
       - name: Build and push Docker images
-        if: ${{ steps.push-params.outputs.should-push == 'true' }}
+        if: ${{ inputs.push }}
         uses: ./.github/actions/build-docker-images
         with:
           push: true
-          tag-latest: ${{ steps.push-params.outputs.effective-tag-latest }}
+          tag-latest: ${{ inputs.tag-latest }}
           platform: ${{ inputs.platform }}
           cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}

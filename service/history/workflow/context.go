@@ -102,22 +102,6 @@ func (c *ContextImpl) IsDirty() bool {
 func (c *ContextImpl) Clear() {
 	metrics.WorkflowContextCleared.With(c.metricsHandler).Record(1)
 	if c.MutableState != nil {
-		var pendingWFTType, startedWFTType string
-		var pendingScheduledEventID, startedEventID int64
-		if wft := c.MutableState.GetPendingWorkflowTask(); wft != nil {
-			pendingWFTType = wft.Type.String()
-			pendingScheduledEventID = wft.ScheduledEventID
-		}
-		if wft := c.MutableState.GetStartedWorkflowTask(); wft != nil {
-			startedWFTType = wft.Type.String()
-			startedEventID = wft.StartedEventID
-		}
-		c.throttledLogger.Warn("PREMATURE-EOS: workflow context cleared with live mutable state",
-			tag.WorkflowTaskType(pendingWFTType),
-			tag.NewInt64("wft-scheduled-event-id", pendingScheduledEventID),
-			tag.NewStringTag("wft-started-type", startedWFTType),
-			tag.NewInt64("wft-started-event-id", startedEventID),
-		)
 		c.MutableState.GetQueryRegistry().Clear()
 		c.MutableState.RemoveSpeculativeWorkflowTaskTimeoutTask()
 		c.MutableState = nil
@@ -614,22 +598,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
-	var pendingWFTInfo string
-	if wft := c.MutableState.GetPendingWorkflowTask(); wft != nil {
-		pendingWFTInfo = wft.Type.String()
-	}
-	totalEvents := 0
-	for _, we := range updateWorkflowEventsSeq {
-		totalEvents += len(we.Events)
-	}
-	c.logger.Warn("PREMATURE-EOS: persisting workflow execution mutation",
-		tag.NewStringTag("pending-wft-type", pendingWFTInfo),
-		tag.NewInt64("next-event-id", c.MutableState.GetNextEventID()),
-		tag.NewInt64("events-in-batch", int64(totalEvents)),
-		tag.NewInt64("event-batches", int64(len(updateWorkflowEventsSeq))),
-		tag.NewStringTag("WorkflowID", c.workflowKey.WorkflowID),
-		tag.NewStringTag("RunID", c.workflowKey.RunID),
-	)
 
 	if _, _, err := NewTransaction(shardContext).UpdateWorkflowExecution(
 		ctx,
@@ -646,11 +614,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		return err
 	}
 
-	c.logger.Warn("PREMATURE-EOS: workflow execution mutation persisted successfully",
-		tag.NewInt64("next-event-id", c.MutableState.GetNextEventID()),
-		tag.NewStringTag("WorkflowID", c.workflowKey.WorkflowID),
-		tag.NewStringTag("RunID", c.workflowKey.RunID),
-	)
 
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), c.MutableState)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)

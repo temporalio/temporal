@@ -57,8 +57,6 @@ func GetRawHistory(
 		}
 	}()
 
-	logger := shardContext.GetLogger()
-	logger.Info("PREMATURE-EOS: pageSize", tag.Int32("pageSize", pageSize))
 	rawHistory, size, nextToken, err := persistence.ReadFullPageRawEvents(
 		ctx, shardContext.GetExecutionManager(),
 		&persistence.ReadHistoryBranchRequest{
@@ -200,10 +198,6 @@ func GetHistory(
 	if err != nil {
 		return nil, nil, err
 	}
-
-	logger := shardContext.GetLogger()
-
-	logger.Info("PREMATURE-EOS: pageSize", tag.Int32("pageSize", pageSize))
 
 	metricsHandler := interceptor.GetMetricsHandlerFromContext(ctx, logger).WithTags(metrics.OperationTag(metrics.HistoryGetHistoryScope))
 	metrics.HistorySize.With(metricsHandler).Record(int64(size))
