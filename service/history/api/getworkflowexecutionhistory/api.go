@@ -300,6 +300,29 @@ func Invoke(
 	config := shardContext.GetConfig()
 	sendRawHistoryBetweenInternalServices := config.SendRawHistoryBetweenInternalServices()
 	sendRawWorkflowHistoryForNamespace := config.SendRawWorkflowHistory(request.Request.GetNamespace())
+	// fetchGapEvents fetches events in [fromEventID, toEventID) from persistence and appends
+	// them to the current response (history or historyBlob). Used to close gaps that form
+	// when events are committed to DB between paginated GetWorkflowExecutionHistory calls.
+	fetchGapEvents := func(fromEventID, toEventID int64, branchToken []byte) error {
+		if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
+			gapBlob, _, err := api.GetRawHistory(ctx, shardContext, namespaceName, namespaceID, execution,
+				fromEventID, toEventID, math.MaxInt32, nil, nil, branchToken)
+			if err != nil {
+				return err
+			}
+			historyBlob = append(historyBlob, gapBlob...)
+		} else {
+			gapHistory, _, err := api.GetHistory(ctx, shardContext, namespaceName, namespaceID, execution,
+				fromEventID, toEventID, math.MaxInt32, nil, nil, branchToken, persistenceVisibilityMgr)
+			if err != nil {
+				return err
+			}
+			if gapHistory != nil {
+				history.Events = append(history.Events, gapHistory.Events...)
+			}
+		}
+		return nil
+	}
 	if isCloseEventOnly {
 		if !isWorkflowRunning {
 			if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
@@ -428,25 +451,8 @@ func Invoke(
 						continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
 				if freshErr == nil && freshNextEventID > continuationToken.NextEventId {
 					// Events were committed to DB during pagination — fetch the gap.
-					if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
-						var gapBlob []*commonpb.DataBlob
-						gapBlob, _, freshErr = api.GetRawHistory(ctx, shardContext, namespaceName, namespaceID, execution,
-							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil, continuationToken.BranchToken)
-						if freshErr != nil {
-							return nil, freshErr
-						}
-						historyBlob = append(historyBlob, gapBlob...)
-					} else {
-						var gapHistory *historypb.History
-						gapHistory, _, freshErr = api.GetHistory(ctx, shardContext, namespaceName, namespaceID, execution,
-							continuationToken.NextEventId, freshNextEventID, math.MaxInt32, nil, nil,
-							continuationToken.BranchToken, persistenceVisibilityMgr)
-						if freshErr != nil {
-							return nil, freshErr
-						}
-						if gapHistory != nil {
-							history.Events = append(history.Events, gapHistory.Events...)
-						}
+					if freshErr = fetchGapEvents(continuationToken.NextEventId, freshNextEventID, continuationToken.BranchToken); freshErr != nil {
+						return nil, freshErr
 					}
 					// Update the event boundary so appendTransientTasks validates against the correct nextEventID.
 					continuationToken.NextEventId = freshNextEventID
