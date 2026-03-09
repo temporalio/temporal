@@ -310,9 +310,11 @@ func (ch *commandHandler) handleCancelCommand(
 
 	key := strconv.FormatInt(attrs.ScheduledEventId, 10)
 	operationField, operationFound := wf.Operations[key]
-	hasBufferedEvent := wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
+	hasBufferedEvent := func() bool {
+		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
+	}
 
-	if !operationFound && !hasBufferedEvent {
+	if !operationFound && !hasBufferedEvent() {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
@@ -325,7 +327,7 @@ func (ch *commandHandler) handleCancelCommand(
 		// The operation is in a terminal state and the terminal event has not just been buffered.
 		// We allow the workflow to request canceling an operation that has just completed while a workflow task is in
 		// flight since it cannot know about the state of the operation.
-		if !nexusoperation.TransitionCanceled.Possible(op) && !hasBufferedEvent {
+		if !nexusoperation.TransitionCanceled.Possible(op) && !hasBufferedEvent() {
 			return command.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
