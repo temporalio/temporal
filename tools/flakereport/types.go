@@ -10,16 +10,19 @@ type TestFailure struct {
 	ArtifactID string    // Artifact identifier from GitHub
 	RunID      int64     // GitHub Actions run ID
 	JobID      string    // GitHub Actions job ID (or "unknown")
+	MatrixName string    // DB config name from artifact name (e.g. "sqlite", "cassandra")
 	Timestamp  time.Time // When the workflow run was created
 }
 
 // TestRun represents a test execution (success or failure)
 type TestRun struct {
-	SuiteName string // Top-level test suite name
-	Name      string // Test name
-	Failed    bool   // Whether the test failed
-	Skipped   bool   // Whether the test was skipped
-	RunID     int64  // Workflow run ID
+	SuiteName  string // Top-level test suite name
+	Name       string // Test name
+	Failed     bool   // Whether the test failed
+	Skipped    bool   // Whether the test was skipped
+	RunID      int64  // Workflow run ID
+	JobID      string // GitHub Actions job ID (unique per matrix job/shard)
+	MatrixName string // DB config name from artifact name (e.g. "sqlite", "cassandra")
 }
 
 // TestReport represents aggregated failures for a single test
@@ -35,9 +38,9 @@ type TestReport struct {
 // SuiteReport represents aggregated flake data for a test suite
 type SuiteReport struct {
 	SuiteName   string    // Test suite name from JUnit XML
-	FlakeRate   float64   // Percentage of runs with at least one non-retry failure
-	FailedRuns  int       // Number of runs with at least one non-retry failure
-	TotalRuns   int       // Total number of workflow runs where this suite appeared
+	FlakeRate   float64   // Percentage of job executions with at least one non-retry failure
+	FailedRuns  int       // Number of job executions with at least one non-retry failure
+	TotalRuns   int       // Total number of job executions where this suite appeared
 	LastFailure time.Time // Timestamp of the most recent failure
 }
 
