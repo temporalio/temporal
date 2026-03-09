@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -461,12 +462,16 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	s.Eventually(func() bool {
-		release1(nil)
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	release1(nil)
+	s.EventuallyWithT(func(collect *assert.CollectT) {
 		snapshot := capture.Snapshot()
-		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 100*time.Millisecond)
-		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
-	}, 150*time.Millisecond, 100*time.Millisecond)
+		recordings := snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()]
+		if assert.NotEmpty(collect, recordings) {
+			assert.Greater(collect, recordings[0].Value, 100*time.Millisecond)
+			assert.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
+		}
+	}, time.Second, 10*time.Millisecond)
 
 	capture = metricsHandler.StartCapture()
 	release2, err := s.cache.GetOrCreateCurrentExecution(
@@ -478,12 +483,16 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	s.Eventually(func() bool {
-		release2(nil)
+	time.Sleep(200 * time.Millisecond) //nolint:forbidigo
+	release2(nil)
+	s.EventuallyWithT(func(collect *assert.CollectT) {
 		snapshot := capture.Snapshot()
-		s.Greater(snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Value, 200*time.Millisecond)
-		return tests.NamespaceID.String() == snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()][0].Tags["namespace_id"]
-	}, 300*time.Millisecond, 200*time.Millisecond)
+		recordings := snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()]
+		if assert.NotEmpty(collect, recordings) {
+			assert.Greater(collect, recordings[0].Value, 200*time.Millisecond)
+			assert.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
+		}
+	}, time.Second, 10*time.Millisecond)
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
