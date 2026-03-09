@@ -125,7 +125,7 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		return errRetryable
 	}
 
-	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyWorkflowID, request.CloseTime.AsTime())
+	filename = constructVisibilityWorkflowIDIndexFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyWorkflowID, request.CloseTime.AsTime())
 	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable

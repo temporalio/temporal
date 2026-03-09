@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -452,10 +453,12 @@ func (s *visibilityArchiverSuite) TestQuery_Success_WorkflowIDOnly() {
 	expectedPrefix := constructVisibilityFilenamePrefix(testNamespaceID, indexKeyWorkflowID)
 	expectedPrefix = fmt.Sprintf("%s_%s", expectedPrefix, hash(testWorkflowID))
 
+	filename := expectedPrefix + "_2020-02-05T09:56:14Z_" + hash(testWorkflowTypeName) + "_" + hash(testWorkflowID) + "_" + hash(testRunID) + ".visibility"
+
 	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, expectedPrefix, 10, 0, gomock.Any()).Return([]string{
-		"workflowID_" + hash(testWorkflowID) + "_2020-02-05T09:56:14Z_test-workflow-id_test-run-id.visibility",
+		filename,
 	}, true, 1, nil)
-	storageWrapper.EXPECT().Get(gomock.Any(), URI, testNamespaceID+"/"+"workflowID_"+hash(testWorkflowID)+"_2020-02-05T09:56:14Z_test-workflow-id_test-run-id.visibility").Return([]byte(exampleVisibilityRecord), nil)
+	storageWrapper.EXPECT().Get(gomock.Any(), URI, testNamespaceID+"/"+filepath.Base(filename)).Return([]byte(exampleVisibilityRecord), nil)
 
 	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
 	s.NoError(err)
