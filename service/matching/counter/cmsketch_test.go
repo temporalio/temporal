@@ -219,6 +219,43 @@ func TestCMSketch_Reseed(t *testing.T) {
 	assert.GreaterOrEqual(t, cms.GetPass("trigger", 0, 0), int64(1))
 }
 
+func TestCMSketch_Reseed_BreaksCollision(t *testing.T) {
+	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+	cms := NewCMSketchCounter(CMSketchParams{
+		W: 5, // small to force collision
+		D: 3,
+	}, src, nil)
+
+	// set up a "hot" key
+	hotCount := int64(100)
+	_ = cms.GetPass("hot", hotCount, 0)
+
+	// find a key that collides with "hot" on all rows
+	var collider string
+	// should succeed within several hundred iterations
+	for i := 0; ; i++ {
+		key := fmt.Sprintf("probe%d", i)
+		if cms.GetPass(key, 0, 0) >= hotCount {
+			collider = key
+			break
+		}
+	}
+	t.Log("found colliding key", collider)
+
+	for i := range 15 {
+		// try reseed to break the collision. usually succeeds in 1-2 reseeds but could take
+		// more if we get very unlucky.
+		t.Log("reseeding", i+1)
+		cms.reseed()
+		hotCount++
+		_ = cms.GetPass("hot", hotCount, 0)
+		if cms.GetPass(collider, 0, 0) < hotCount {
+			return
+		}
+	}
+	assert.Fail(t, "couldn't break collision after multiple tries")
+}
+
 func TestCMSketch_SlideBase_LargeDelta(t *testing.T) {
 	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
 	cms := NewCMSketchCounter(CMSketchParams{W: 10, D: 3}, src, nil)
