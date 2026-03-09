@@ -458,3 +458,13 @@ func (c *clientImpl) SyncWorkflowState(
 	defer cancel()
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }
+
+func (c *clientImpl) UpdateFairnessState(
+	ctx context.Context,
+	request *adminservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateFairnessStateResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateFairnessState(ctx, request, opts...)
+}

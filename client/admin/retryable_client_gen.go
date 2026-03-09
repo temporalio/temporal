@@ -685,3 +685,18 @@ func (c *retryableClient) SyncWorkflowState(
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UpdateFairnessState(
+	ctx context.Context,
+	request *adminservice.UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateFairnessStateResponse, error) {
+	var resp *adminservice.UpdateFairnessStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateFairnessState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}

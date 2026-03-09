@@ -963,6 +963,26 @@ func (mr *MockAdminServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceClient)(nil).SyncWorkflowState), varargs...)
 }
 
+// UpdateFairnessState mocks base method.
+func (m *MockAdminServiceClient) UpdateFairnessState(ctx context.Context, in *adminservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*adminservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateFairnessState", varargs...)
+	ret0, _ := ret[0].(*adminservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockAdminServiceClientMockRecorder) UpdateFairnessState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockAdminServiceClient)(nil).UpdateFairnessState), varargs...)
+}
+
 // MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -1812,6 +1832,21 @@ func (m *MockAdminServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *a
 func (mr *MockAdminServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceServer)(nil).SyncWorkflowState), arg0, arg1)
+}
+
+// UpdateFairnessState mocks base method.
+func (m *MockAdminServiceServer) UpdateFairnessState(arg0 context.Context, arg1 *adminservice.UpdateFairnessStateRequest) (*adminservice.UpdateFairnessStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateFairnessState", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.UpdateFairnessStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateFairnessState indicates an expected call of UpdateFairnessState.
+func (mr *MockAdminServiceServerMockRecorder) UpdateFairnessState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFairnessState", reflect.TypeOf((*MockAdminServiceServer)(nil).UpdateFairnessState), arg0, arg1)
 }
 
 // mustEmbedUnimplementedAdminServiceServer mocks base method.
