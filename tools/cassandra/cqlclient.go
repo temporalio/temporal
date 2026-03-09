@@ -39,6 +39,8 @@ type (
 		Consistency              string
 		TLS                      *auth.TLS
 		DisableInitialHostLookup bool
+		IgnorePeerAddr           bool
+		DisableShardAwarePort    bool
 		AddressTranslator        *config.CassandraAddressTranslator
 	}
 )
@@ -121,6 +123,8 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 		TLS:                      cfg.TLS,
 		Datacenter:               cfg.Datacenter,
 		DisableInitialHostLookup: cfg.DisableInitialHostLookup,
+		IgnorePeerAddr:           cfg.IgnorePeerAddr,
+		DisableShardAwarePort:    cfg.DisableShardAwarePort,
 		Consistency: &config.CassandraStoreConsistency{
 			Default: &config.CassandraConsistencySettings{
 				Consistency: cfg.Consistency,
