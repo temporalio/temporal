@@ -549,7 +549,7 @@ func (s *fileBasedClientSuite) TestUpdate_ReadFileFailShouldRetry() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	defer close(doneCh)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	logger := log.NewNoopLogger()
@@ -595,11 +595,13 @@ func (s *fileBasedClientSuite) TestUpdate_YamlParseErrorDoesNotRetry() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	defer close(doneCh)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	logger := log.NewNoopLogger()
 
+	// update interval is set to 5 minutes to postpone the goroutine from updating the config file
+	// and leave room for manual calls of update()
 	updateInterval := time.Minute * 5
 	t1 := time.Now()
 	t2 := t1.Add(time.Second)
