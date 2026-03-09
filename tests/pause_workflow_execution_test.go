@@ -168,6 +168,9 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 		info := desc.GetWorkflowExecutionInfo()
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		// Wait for the workflow task to be processed and the activity to be scheduled,
+		// so that a subsequent pause request is applied to a fully initialized workflow.
+		require.NotEmpty(t, desc.PendingActivities)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	pauseRequest := &workflowservice.PauseWorkflowExecutionRequest{
@@ -654,6 +657,9 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 		info := desc.GetWorkflowExecutionInfo()
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		// Wait for the workflow task to be processed and the activity to be scheduled,
+		// so that a subsequent pause request is applied to a fully initialized workflow.
+		require.NotEmpty(t, desc.PendingActivities)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// 1st pause request should succeed.
