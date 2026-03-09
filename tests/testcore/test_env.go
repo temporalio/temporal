@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
@@ -40,6 +41,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
 type testEnv struct {
@@ -212,6 +214,27 @@ func (e *testEnv) Namespace() namespace.Name {
 
 func (e *testEnv) NamespaceID() namespace.ID {
 	return e.nsID
+}
+
+// InjectHook sets a test hook inside the cluster.
+//
+// It auto-detects the scope from the hook:
+// - For namespace-scoped hooks: scopes it to the test's namespace
+// - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
+func (e *testEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
+	var scope any
+	switch hook.Scope() {
+	case testhooks.ScopeNamespace:
+		scope = e.nsID
+	case testhooks.ScopeGlobal:
+		if e.isShared {
+			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
+		}
+		scope = testhooks.GlobalScope
+	default:
+		e.t.Fatalf("InjectHook: unknown scope %v", hook.Scope())
+	}
+	return e.cluster.host.injectHook(e.t, hook, scope)
 }
 
 func (e *testEnv) TaskPoller() *taskpoller.TaskPoller {

@@ -835,7 +835,7 @@ func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	s.OverrideDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second)
 	s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0)
 	// Set deployment register error backoff to zero so to speed up the test.
-	s.InjectHook(testhooks.MatchingDeploymentRegisterErrorBackoff, 0*time.Second)
+	s.InjectHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, 0*time.Second))
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	tvs := make([]*testvars.TestVars, testMaxVersionsInDeployment)
