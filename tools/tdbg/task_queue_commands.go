@@ -8,7 +8,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
 // AdminListTaskQueueTasks displays task information
@@ -247,5 +250,74 @@ func AdminForceUnloadTaskQueuePartition(c *cli.Context, clientFactory ClientFact
 		prettyPrintJSONObject(c, response)
 
 	}
+	return nil
+}
+
+// AdminUpdateFairnessState updates the fairness state for a task queue
+func AdminUpdateFairnessState(c *cli.Context, clientFactory ClientFactory) error {
+	// extracting the namespace
+	namespaceStr, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	// get namespace ID
+	namespaceID, err := getNamespaceID(c, clientFactory, namespace.Name(namespaceStr))
+	if err != nil {
+		return fmt.Errorf("unable to get namespace ID: %w", err)
+	}
+
+	// extracting the task queue name
+	tqName, err := getRequiredOption(c, FlagTaskQueue)
+	if err != nil {
+		return err
+	}
+
+	// extracting the task queue type
+	tqTypeString, err := getRequiredOption(c, FlagTaskQueueType)
+	if err != nil {
+		return err
+	}
+
+	tlTypeInt, err := StringToEnum(tqTypeString, enumspb.TaskQueueType_value)
+	if err != nil {
+		return fmt.Errorf("invalid task queue type: %w", err)
+	}
+	tqType := enumspb.TaskQueueType(tlTypeInt)
+	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		return errors.New("invalid task queue type") // nolint
+	}
+
+	// extracting the fairness state
+	fairnessStateString, err := getRequiredOption(c, FlagFairnessState)
+	if err != nil {
+		return err
+	}
+
+	fairnessStateInt, err := StringToEnum(fairnessStateString, enumsspb.FairnessState_value)
+	if err != nil {
+		return fmt.Errorf("invalid fairness state: %w", err)
+	}
+	fairnessState := enumsspb.FairnessState(fairnessStateInt)
+	if fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
+		return errors.New("invalid fairness state") // nolint
+	}
+
+	client := clientFactory.MatchingClient(c)
+	req := &matchingservice.UpdateFairnessStateRequest{
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     tqName,
+		TaskQueueType: tqType,
+		FairnessState: fairnessState,
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	if _, e := client.UpdateFairnessState(ctx, req); e != nil {
+		return fmt.Errorf("unable to update fairness state: %w", e)
+	}
+
+	fmt.Printf("Successfully updated fairness state for task queue %s (type: %s) to %s\n",
+		tqName, tqType.String(), fairnessState.String())
 	return nil
 }

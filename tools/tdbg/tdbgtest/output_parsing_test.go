@@ -11,6 +11,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	commonspb "go.temporal.io/server/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
@@ -92,6 +93,10 @@ func (t *testClient) AdminClient(*cli.Context) adminservice.AdminServiceClient {
 }
 
 func (t *testClient) WorkflowClient(*cli.Context) workflowservice.WorkflowServiceClient {
+	panic("unimplemented")
+}
+
+func (t *testClient) MatchingClient(*cli.Context) matchingservice.MatchingServiceClient {
 	panic("unimplemented")
 }
 
