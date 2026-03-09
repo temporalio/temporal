@@ -3,6 +3,8 @@ package interceptor
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -15,7 +17,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+)
+
+const (
+	chasmProtoPrefix   = "temporal/server/chasm/lib/"
+	serviceProtoSuffix = "/service.proto"
 )
 
 type (
@@ -45,23 +53,36 @@ type (
 	}
 )
 
-// longPollAPIs maps full method names to true if they should be excluded from health signals.
-// This includes both long-polling APIs and admin APIs.
-// Built at init time from proto method options.
-var excludedAPIs = make(map[string]bool)
+// excludedAPIs maps full method names to true if they should be excluded from health signals.
+// This includes both long-polling APIs and system APIs.
+// Built lazily on first use from proto method options.
+var (
+	excludedAPIs     map[string]bool
+	excludedAPIsOnce sync.Once
+)
 
-func init() {
-	// Categories to exclude from health signal tracking
+func initExcludedAPIs() {
+	excludedAPIs = make(map[string]bool)
 	excludedCategories := map[commonspb.ApiCategory]bool{
 		commonspb.API_CATEGORY_LONG_POLL: true,
 		commonspb.API_CATEGORY_SYSTEM:    true,
 	}
 
-	// Process HistoryService
+	// Process HistoryService explicitly.
 	processServiceFile(historyservice.File_temporal_server_api_historyservice_v1_service_proto, excludedCategories)
+
+	// Auto-detect all registered chasm/lib service files.
+	// New services under chasm/lib are picked up automatically without code changes here.
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		path := string(fd.Path())
+		if strings.HasPrefix(path, chasmProtoPrefix) && strings.HasSuffix(path, serviceProtoSuffix) {
+			processServiceFile(fd, excludedCategories)
+		}
+		return true
+	})
 }
 
-// processServiceFile enumerates all methods in a service file and adds excluded categories to longPollAPIs
+// processServiceFile enumerates all methods in a service file and adds excluded categories to excludedAPIs.
 func processServiceFile(file protoreflect.FileDescriptor, excludedCategories map[commonspb.ApiCategory]bool) {
 	services := file.Services()
 	for i := 0; i < services.Len(); i++ {
@@ -81,8 +102,9 @@ func processServiceFile(file protoreflect.FileDescriptor, excludedCategories map
 	}
 }
 
-// isExcludedAPI checks if an API is marked as a non-standard API via proto options
+// isExcludedAPI checks if an API is marked as a non-standard API via proto options.
 func isExcludedAPI(fullMethod string) bool {
+	excludedAPIsOnce.Do(initExcludedAPIs)
 	return excludedAPIs[fullMethod]
 }
 
