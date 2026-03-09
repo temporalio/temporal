@@ -107,6 +107,14 @@ func (s *PayloadStore) Close(
 	return ClosePayloadStoreResponse{}, nil
 }
 
+func (s *PayloadStore) Cancel(
+	_ chasm.MutableContext,
+	_ CancelPayloadStoreRequest,
+) (CancelPayloadStoreResponse, error) {
+	s.State.Canceled = true
+	return CancelPayloadStoreResponse{}, nil
+}
+
 func (s *PayloadStore) AddPayload(
 	mutableContext chasm.MutableContext,
 	request AddPayloadRequest,
@@ -189,6 +197,9 @@ func (s *PayloadStore) LifecycleState(
 		panic("registered component key value pair not available in context")
 	}
 
+	if s.State.Canceled {
+		return chasm.LifecycleStateFailed
+	}
 	if s.State.Closed {
 		return chasm.LifecycleStateCompleted
 	}
@@ -218,10 +229,15 @@ func (s *PayloadStore) SearchAttributes(
 		panic("registered component key value pair not available in context")
 	}
 
+	status := s.LifecycleState(chasmContext).String()
+	if s.State.Canceled {
+		status = "Canceled"
+	}
+
 	return []chasm.SearchAttributeKeyValue{
 		PayloadTotalCountSearchAttribute.Value(s.State.TotalCount),
 		PayloadTotalSizeSearchAttribute.Value(s.State.TotalSize),
-		ExecutionStatusSearchAttribute.Value(s.LifecycleState(chasmContext).String()),
+		ExecutionStatusSearchAttribute.Value(status),
 		chasm.SearchAttributeTemporalScheduledByID.Value(TestScheduleID),
 		chasm.SearchAttributeTaskQueue.Value(DefaultPayloadStoreTaskQueue),
 	}

@@ -14,10 +14,12 @@ enum ClusterMemberRole {
 
 enum HealthState {
     HEALTH_STATE_UNSPECIFIED = 0;
-    // The host is in a healthy state. 
+    // The host is in a healthy state.
     HEALTH_STATE_SERVING = 1;
-    // The host is unhealthy through external observation. 
-    HEALTH_STATE_NOT_SERVING = 2; 
-    // The host has marked itself as not ready to serve traffic. 
-    HEALTH_STATE_DECLINED_SERVING = 3; 
+    // The host is unhealthy through external observation.
+    HEALTH_STATE_NOT_SERVING = 2;
+    // The host has marked itself as not ready to serve traffic.
+    HEALTH_STATE_DECLINED_SERVING = 3;
+    // An internal error occurred while checking health (e.g. resolver failure).
+    HEALTH_STATE_INTERNAL_ERROR = 4;
 }
