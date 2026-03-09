@@ -68,8 +68,8 @@ func isGoTestSuite(name string) bool {
 func extractFailures(suites *junit.Testsuites, artifactName string, runID int64, timestamp time.Time) []TestFailure {
 	var failures []TestFailure
 
-	// Parse artifact name for run_id and job_id
-	_, jobID := parseArtifactName(artifactName)
+	// Parse artifact name for run_id, job_id, and matrix_name
+	_, jobID, matrixName := parseArtifactName(artifactName)
 
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
@@ -82,6 +82,7 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64,
 					ArtifactID: artifactName,
 					RunID:      runID,
 					JobID:      jobID,
+					MatrixName: matrixName,
 					Timestamp:  timestamp,
 				}
 				failures = append(failures, failure)
@@ -94,17 +95,19 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64,
 
 // extractAllTestRuns extracts all test runs (including successes) from parsed JUnit data
 // Used for calculating failure rates
-func extractAllTestRuns(suites *junit.Testsuites, runID int64) []TestRun {
+func extractAllTestRuns(suites *junit.Testsuites, runID int64, jobID, matrixName string) []TestRun {
 	var runs []TestRun
 
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
 			run := TestRun{
-				SuiteName: topLevelTestName(testcase.Name),
-				Name:      testcase.Name,
-				Failed:    testcase.Failure != nil,
-				Skipped:   testcase.Skipped != nil,
-				RunID:     runID,
+				SuiteName:  topLevelTestName(testcase.Name),
+				Name:       testcase.Name,
+				Failed:     testcase.Failure != nil,
+				Skipped:    testcase.Skipped != nil,
+				RunID:      runID,
+				JobID:      jobID,
+				MatrixName: matrixName,
 			}
 			runs = append(runs, run)
 		}
@@ -237,6 +240,25 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 	return reports
 }
 
+// filterParentTests removes top-level test names from grouped when subtests of
+// that parent were observed in testRunCounts. A top-level failure whose subtests
+// ran in other CI jobs is already captured (with a correct denominator) in the
+// Flaky Suites section, so including it in the per-test table produces a
+// misleading 1/1 entry.
+func filterParentTests(grouped map[string][]TestFailure, testRunCounts map[string]int) {
+	suitePrefix := make(map[string]bool, len(testRunCounts))
+	for name := range testRunCounts {
+		if idx := strings.IndexByte(name, '/'); idx >= 0 {
+			suitePrefix[name[:idx]] = true
+		}
+	}
+	for testName := range grouped {
+		if !strings.Contains(testName, "/") && suitePrefix[testName] {
+			delete(grouped, testName)
+		}
+	}
+}
+
 // isFinalRetry returns true if the test name has the "(final)" suffix,
 // indicating the test runner exhausted all retries.
 func isFinalRetry(testName string) bool {
@@ -341,23 +363,35 @@ func identifyCIBreakers(failures []TestFailure) (map[string][]TestFailure, map[s
 	return ciBreakers, ciBreakCount
 }
 
+// suiteRunKey returns a string that uniquely identifies a single (CI run × DB config) pair.
+// Each workflow run may spawn multiple matrix jobs sharing the same RunID but with distinct
+// MatrixNames (DB configs). Keying by (RunID, MatrixName) ensures shards belonging to the
+// same run+config are counted once, regardless of how many shard JobIDs they produce.
+func suiteRunKey(runID int64, matrixName string) string {
+	return fmt.Sprintf("%d:%s", runID, matrixName)
+}
+
 // generateSuiteReports creates per-suite flake breakdown from all failures and test runs.
-// Suite flake rate = % of workflow runs where the suite had at least one non-retry failure.
+// Suite flake rate = % of (CI run × DB config) pairs where the suite had at least one
+// non-retry failure.
 func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []SuiteReport {
-	// Track unique workflow runs per suite (denominator)
-	suiteRuns := make(map[string]map[int64]bool)
+	// Track unique (CI run × DB config) pairs per suite (denominator).
+	// Using MatrixName avoids the inflation caused by per-shard JobIDs: suites whose
+	// test methods are spread across N shards would otherwise be counted N times per
+	// (run × DB config).
+	suiteRuns := make(map[string]map[string]bool)
 	for _, run := range allTestRuns {
 		if run.Skipped || !isGoTestSuite(run.SuiteName) {
 			continue
 		}
 		if suiteRuns[run.SuiteName] == nil {
-			suiteRuns[run.SuiteName] = make(map[int64]bool)
+			suiteRuns[run.SuiteName] = make(map[string]bool)
 		}
-		suiteRuns[run.SuiteName][run.RunID] = true
+		suiteRuns[run.SuiteName][suiteRunKey(run.RunID, run.MatrixName)] = true
 	}
 
-	// Track workflow runs with non-retry failures per suite (numerator)
-	suiteFailedRuns := make(map[string]map[int64]bool)
+	// Track (CI run × DB config) pairs with non-retry failures per suite (numerator)
+	suiteFailedRuns := make(map[string]map[string]bool)
 	suiteLastFailure := make(map[string]time.Time)
 	for _, failure := range allFailures {
 		if !isGoTestSuite(failure.SuiteName) {
@@ -368,9 +402,9 @@ func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []Su
 			continue
 		}
 		if suiteFailedRuns[failure.SuiteName] == nil {
-			suiteFailedRuns[failure.SuiteName] = make(map[int64]bool)
+			suiteFailedRuns[failure.SuiteName] = make(map[string]bool)
 		}
-		suiteFailedRuns[failure.SuiteName][failure.RunID] = true
+		suiteFailedRuns[failure.SuiteName][suiteRunKey(failure.RunID, failure.MatrixName)] = true
 		if failure.Timestamp.After(suiteLastFailure[failure.SuiteName]) {
 			suiteLastFailure[failure.SuiteName] = failure.Timestamp
 		}
