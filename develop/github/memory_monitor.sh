@@ -141,8 +141,8 @@ EOF
   fi
 }
 
-# Take snapshots every 2s until killed.
+# Take snapshots every 30s until killed.
 while true; do
   snapshot
-  sleep 2
+  sleep 30
 done
