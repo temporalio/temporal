@@ -3,8 +3,6 @@ package getworkflowexecutionhistory
 import (
 	"context"
 	"errors"
-	"math"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -306,14 +304,14 @@ func Invoke(
 	fetchGapEvents := func(fromEventID, toEventID int64, branchToken []byte) error {
 		if sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices {
 			gapBlob, _, err := api.GetRawHistory(ctx, shardContext, namespaceName, namespaceID, execution,
-				fromEventID, toEventID, math.MaxInt32, nil, nil, branchToken)
+				fromEventID, toEventID, request.Request.GetMaximumPageSize(), nil, nil, branchToken)
 			if err != nil {
 				return err
 			}
 			historyBlob = append(historyBlob, gapBlob...)
 		} else {
 			gapHistory, _, err := api.GetHistory(ctx, shardContext, namespaceName, namespaceID, execution,
-				fromEventID, toEventID, math.MaxInt32, nil, nil, branchToken, persistenceVisibilityMgr)
+				fromEventID, toEventID, request.Request.GetMaximumPageSize(), nil, nil, branchToken, persistenceVisibilityMgr)
 			if err != nil {
 				return err
 			}
