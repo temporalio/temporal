@@ -48,6 +48,12 @@ type Engine interface {
 		...TransitionOption,
 	) ([]byte, error)
 
+	DeleteExecution(
+		context.Context,
+		ComponentRef,
+		TerminateComponentRequest,
+	) error
+
 	// NotifyExecution notifies any PollComponent callers waiting on the execution.
 	NotifyExecution(ExecutionKey)
 }
@@ -392,6 +398,21 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 		return output, nil, err
 	}
 	return output, newSerializedRef, err
+}
+
+// DeleteExecution deletes the execution identified by the supplied execution key.
+// If the execution is still running, it is terminated first. A DeleteExecutionTask is
+// then queued to remove all execution data from persistence.
+func DeleteExecution[C RootComponent](
+	ctx context.Context,
+	key ExecutionKey,
+	request TerminateComponentRequest,
+) error {
+	return engineFromContext(ctx).DeleteExecution(
+		ctx,
+		NewComponentRef[C](key),
+		request,
+	)
 }
 
 func convertComponentRef[R []byte | ComponentRef](

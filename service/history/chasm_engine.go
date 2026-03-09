@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -429,6 +430,64 @@ func (e *ChasmEngine) UpdateComponent(
 	}()
 
 	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn)
+}
+
+// DeleteExecution deletes a CHASM execution. If the execution is still running, it is terminated
+// first. A DeleteExecutionTask is then queued to remove all execution data from persistence.
+func (e *ChasmEngine) DeleteExecution(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	request chasm.TerminateComponentRequest,
+) (retError error) {
+	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		executionLease.GetReleaseFn()(retError)
+	}()
+
+	mutableState := executionLease.GetMutableState()
+	archetypeID, err := ref.ArchetypeID(e.registry)
+	if err != nil {
+		return err
+	}
+
+	if mutableState.IsWorkflowExecutionRunning() {
+		chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
+		if !ok {
+			return serviceerror.NewInternalf(
+				"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+				mutableState.ChasmTree(),
+				&chasm.Node{},
+			)
+		}
+
+		if err := chasmTree.Terminate(request); err != nil {
+			return err
+		}
+		chasmTree.SetDeleteAfterClose()
+
+		mutableState.AddTasks(&tasks.DeleteExecutionTask{
+			WorkflowKey: mutableState.GetWorkflowKey(),
+			ArchetypeID: archetypeID,
+		})
+
+		return executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
+	}
+
+	return shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID:     shardContext.GetShardID(),
+		NamespaceID: ref.NamespaceID,
+		WorkflowID:  ref.BusinessID,
+		ArchetypeID: archetypeID,
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTransfer: {&tasks.DeleteExecutionTask{
+				WorkflowKey: mutableState.GetWorkflowKey(),
+				ArchetypeID: archetypeID,
+			}},
+		},
+	})
 }
 
 // ReadComponent evaluates readFn against the current state of the component identified by the

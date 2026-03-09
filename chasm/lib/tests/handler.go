@@ -183,6 +183,32 @@ func GetPayloadHandler(
 	}, nil
 }
 
+type (
+	DeletePayloadStoreRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+		Reason      string
+		Identity    string
+	}
+)
+
+func DeletePayloadStoreHandler(
+	ctx context.Context,
+	request DeletePayloadStoreRequest,
+) error {
+	return chasm.DeleteExecution[*PayloadStore](
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: request.NamespaceID.String(),
+			BusinessID:  request.StoreID,
+		},
+		chasm.TerminateComponentRequest{
+			Reason:   request.Reason,
+			Identity: request.Identity,
+		},
+	)
+}
+
 func RemovePayloadHandler(
 	ctx context.Context,
 	request RemovePayloadRequest,

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -554,6 +555,109 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 		Status:           status,
 		LastWriteVersion: s.namespaceEntry.FailoverVersion(tv.WorkflowID()) - 1,
 	}
+}
+
+func (s *chasmEngineSuite) TestDeleteExecution_RunningExecution() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+				ActivityId: tv.ActivityID(),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.UpdateWorkflowExecutionRequest,
+		) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Equal(
+				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				request.UpdateWorkflowMutation.ExecutionState.State,
+			)
+			s.Equal(
+				enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+				request.UpdateWorkflowMutation.ExecutionState.Status,
+			)
+
+			transferTasks := request.UpdateWorkflowMutation.Tasks[tasks.CategoryTransfer]
+			var foundDeleteTask bool
+			for _, t := range transferTasks {
+				if _, ok := t.(*tasks.DeleteExecutionTask); ok {
+					foundDeleteTask = true
+					break
+				}
+			}
+			s.True(foundDeleteTask, "expected DeleteExecutionTask in transfer tasks")
+
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	err := s.engine.DeleteExecution(
+		context.Background(),
+		ref,
+		chasm.TerminateComponentRequest{
+			Reason:    "test deletion",
+			Identity:  "test-identity",
+			RequestID: tv.Any().String(),
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *chasmEngineSuite) TestDeleteExecution_ClosedExecution() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+				ActivityId: tv.ActivityID(),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil),
+		}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.AddHistoryTasksRequest,
+		) error {
+			transferTasks := request.Tasks[tasks.CategoryTransfer]
+			s.Len(transferTasks, 1)
+			deleteTask, ok := transferTasks[0].(*tasks.DeleteExecutionTask)
+			s.True(ok)
+			s.Equal(s.archetypeID, deleteTask.ArchetypeID)
+			return nil
+		},
+	).Times(1)
+
+	err := s.engine.DeleteExecution(
+		context.Background(),
+		ref,
+		chasm.TerminateComponentRequest{
+			Reason:    "test deletion",
+			Identity:  "test-identity",
+			RequestID: tv.Any().String(),
+		},
+	)
+	s.NoError(err)
 }
 
 func (s *chasmEngineSuite) TestUpdateComponent_Success() {

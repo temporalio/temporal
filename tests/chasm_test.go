@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -580,6 +581,88 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
+			})
+			s.NoError(err)
+			return len(resp.Executions) == 0
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+}
+
+func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	createResp, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
+	s.True(ok)
+
+	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	s.Eventually(
+		func() bool {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
+			})
+			s.NoError(err)
+			return len(resp.Executions) == 1
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			Reason:      "test deletion",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	// Validate mutable state is deleted.
+	s.Eventually(
+		func() bool {
+			_, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: storeID,
+					RunId:      createResp.RunID,
+				},
+				Archetype: archetype,
+			})
+			var notFoundErr *serviceerror.NotFound
+			return errors.As(err, &notFoundErr)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	// Validate visibility record is deleted.
+	s.Eventually(
+		func() bool {
+			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace: s.Namespace().String(),
+				PageSize:  10,
+				Query:     visQuery,
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 0

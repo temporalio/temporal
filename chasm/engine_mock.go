@@ -40,6 +40,20 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 	return m.recorder
 }
 
+// DeleteExecution mocks base method.
+func (m *MockEngine) DeleteExecution(arg0 context.Context, arg1 ComponentRef, arg2 TerminateComponentRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExecution", arg0, arg1, arg2)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteExecution indicates an expected call of DeleteExecution.
+func (mr *MockEngineMockRecorder) DeleteExecution(arg0, arg1, arg2 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecution", reflect.TypeOf((*MockEngine)(nil).DeleteExecution), arg0, arg1, arg2)
+}
+
 // NotifyExecution mocks base method.
 func (m *MockEngine) NotifyExecution(arg0 ExecutionKey) {
 	m.ctrl.T.Helper()

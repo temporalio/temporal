@@ -118,6 +118,11 @@ type (
 		//
 		// We can consider extending the force terminate concept to sub-components as well, and make the field durable.
 		terminated bool
+
+		// deleteAfterClose suppresses the close visibility task when an execution is being
+		// terminated as part of a delete operation. Like terminated, this is in-memory only
+		// and only needed for the current transaction.
+		deleteAfterClose bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
@@ -1573,6 +1578,14 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	immutableContext Context,
 	rootLifecycleChanged bool,
 ) error {
+	if n.deleteAfterClose {
+		return nil
+	}
+
+	if !rootLifecycleChanged &&
+		n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return nil
+	}
 
 	needUpdate := rootLifecycleChanged
 
@@ -2547,6 +2560,12 @@ func (n *Node) Terminate(
 
 	n.terminated = true
 	return nil
+}
+
+// SetDeleteAfterClose suppresses the close visibility task generation for the current transaction.
+// This should be called when an execution is being terminated as part of a delete operation.
+func (n *Node) SetDeleteAfterClose() {
+	n.deleteAfterClose = true
 }
 
 // ArchetypeID returns the framework's internal ID for the root component's fully qualified name.
