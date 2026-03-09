@@ -315,7 +315,10 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		defer r.mu.RUnlock()
 		entry := r.mu.cache[shardID]
 		return !entry.staleAt.IsZero()
-	}, 4*staleTTL, staleTTL)
+	}, 4*staleTTL, 10*time.Millisecond)
+
+	// Wait for the stale TTL to expire so clientForShardID re-resolves the shard owner.
+	time.Sleep(staleTTL) //nolint:forbidigo
 
 	s.resolver.EXPECT().
 		Lookup(convert.Int32ToString(shardID)).

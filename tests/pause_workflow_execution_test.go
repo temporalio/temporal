@@ -428,12 +428,15 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	workflowID := workflowRun.GetID()
 	runID := workflowRun.GetRunID()
 
+	// Wait for the workflow task to be processed and the activity to be scheduled,
+	// so that a subsequent pause request is applied to a fully initialized workflow.
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
 		require.NoError(t, err)
 		info := desc.GetWorkflowExecutionInfo()
 		require.NotNil(t, info)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.GetStatus())
+		require.NotEmpty(t, desc.PendingActivities)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Pause the workflow.
