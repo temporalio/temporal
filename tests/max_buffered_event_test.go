@@ -19,12 +19,12 @@ import (
 )
 
 func TestMaxBufferedEventSuite(t *testing.T) {
-	// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit.
-	// Set MutableStateSizeLimitError low so buffered events exhaust mutable state size.
 	commonOpts := []testcore.TestOption{
 		testcore.WithSdkWorker(),
+		// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit.
 		testcore.WithDynamicConfig(dynamicconfig.MaximumBufferedEventsSizeInBytes, 10*1024*1024), // 10MB
 		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitWarn, 200),
+		// Set MutableStateSizeLimitError low so buffered events exhaust mutable state size.
 		testcore.WithDynamicConfig(dynamicconfig.MutableStateSizeLimitError, 410*1024), // 410KB
 	}
 
