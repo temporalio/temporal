@@ -323,7 +323,9 @@ func (s *scheduler) run() error {
 					"namespace", s.State.Namespace,
 					"schedule-id", s.State.ScheduleId,
 				)
-				s.metrics.Counter(metrics.ScheduleMigrationCompleted.Name()).Inc(1)
+				s.metrics.WithTags(map[string]string{
+					metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+				}).Counter(metrics.ScheduleMigrationCompleted.Name()).Inc(1)
 				return nil
 			}
 			s.logger.Error("Migration to CHASM failed, continuing V1 workflow",
@@ -331,7 +333,9 @@ func (s *scheduler) run() error {
 				"schedule-id", s.State.ScheduleId,
 				"error", err,
 			)
-			s.metrics.Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
+			s.metrics.WithTags(map[string]string{
+				metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+			}).Counter(metrics.ScheduleMigrationFailed.Name()).Inc(1)
 		}
 
 		// process backfills if we have any too
@@ -998,7 +1002,9 @@ func (s *scheduler) executeMigration() error {
 		"namespace", s.State.Namespace,
 		"schedule-id", s.State.ScheduleId,
 	)
-	s.metrics.Counter(metrics.ScheduleMigrationStarted.Name()).Inc(1)
+	s.metrics.WithTags(map[string]string{
+		metrics.ScheduleMigrationDirectionTag: metrics.ScheduleMigrationDirectionToChasm,
+	}).Counter(metrics.ScheduleMigrationStarted.Name()).Inc(1)
 
 	workflowInfo := workflow.GetInfo(s.ctx)
 

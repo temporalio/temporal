@@ -606,9 +606,13 @@ const (
 const (
 	ScheduleActionTypeTag       = "schedule_action"
 	ScheduleActionStartWorkflow = "start_workflow"
-	ScheduleBackendTag          = "scheduler_backend"
-	ScheduleBackendChasm        = "chasm"
-	ScheduleBackendLegacy       = "legacy"
+	ScheduleBackendTag              = "scheduler_backend"
+	ScheduleBackendChasm            = "chasm"
+	ScheduleBackendLegacy           = "legacy"
+	ScheduleBackendWorkflow         = "workflow"
+	ScheduleMigrationDirectionTag       = "schedule_migration_direction"
+	ScheduleMigrationDirectionToChasm    = "to_chasm"
+	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
 var (
