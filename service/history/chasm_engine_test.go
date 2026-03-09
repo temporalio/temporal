@@ -1590,7 +1590,6 @@ func (s *chasmEngineSuite) TestConvertError() {
 	t := s.T()
 	tv := testvars.New(t)
 	tv = tv.WithRunID(tv.Any().RunID())
-	logger := s.mockShard.GetLogger()
 	businessID := tv.WorkflowID()
 
 	ref := chasm.NewComponentRef[*testComponent](
@@ -1603,7 +1602,7 @@ func (s *chasmEngineSuite) TestConvertError() {
 
 	t.Run("NotFound", func(t *testing.T) {
 		err := serviceerror.NewNotFound("original not found")
-		convertedErr := s.engine.convertError(err, ref, logger, tv.RequestID())
+		convertedErr := s.engine.convertError(err, ref, tv.RequestID())
 		require.Error(t, convertedErr)
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, convertedErr, &notFoundErr)
@@ -1619,7 +1618,7 @@ func (s *chasmEngineSuite) TestConvertError() {
 			},
 		)
 		err := serviceerror.NewNotFound("original not found")
-		convertedErr := s.engine.convertError(err, refWithoutBusinessID, logger, tv.RequestID())
+		convertedErr := s.engine.convertError(err, refWithoutBusinessID, tv.RequestID())
 		require.Error(t, convertedErr)
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, convertedErr, &notFoundErr)
@@ -1644,7 +1643,7 @@ func (s *chasmEngineSuite) TestConvertError() {
 		}
 
 		for _, err := range testErrors {
-			convertedErr := s.engine.convertError(err, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(err, ref, tv.RequestID())
 			require.Equal(t, err, convertedErr)
 		}
 	})
@@ -1786,7 +1785,7 @@ func (s *chasmEngineSuite) TestConvertError() {
 				if tc.setupMocks != nil {
 					tc.setupMocks()
 				}
-				convertedErr := s.engine.convertError(tc.err, ref, logger, tv.RequestID())
+				convertedErr := s.engine.convertError(tc.err, ref, tv.RequestID())
 				require.Error(t, convertedErr)
 				tc.assertErrType(t, convertedErr)
 				for _, msg := range tc.expectedErrMsg {
@@ -1798,7 +1797,7 @@ func (s *chasmEngineSuite) TestConvertError() {
 
 	t.Run("UncategorizedError", func(t *testing.T) {
 		err := errors.New("some unknown error")
-		convertedErr := s.engine.convertError(err, ref, logger, tv.RequestID())
+		convertedErr := s.engine.convertError(err, ref, tv.RequestID())
 		require.Error(t, convertedErr)
 		var unavailableErr *serviceerror.Unavailable
 		require.ErrorAs(t, convertedErr, &unavailableErr)
@@ -1806,18 +1805,18 @@ func (s *chasmEngineSuite) TestConvertError() {
 	})
 
 	t.Run("WrappedErrors", func(t *testing.T) {
-		// Test that wrapped errors are properly detected using errors.As()
+		// Test that wrapped errors are properly detected using errors.AsType()
 		t.Run("WrappedServiceError", func(t *testing.T) {
 			baseErr := serviceerror.NewInvalidArgument("invalid input")
 			wrappedErr := fmt.Errorf("context: %w", baseErr)
-			convertedErr := s.engine.convertError(wrappedErr, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
 			require.ErrorAs(t, convertedErr, new(*serviceerror.InvalidArgument))
 		})
 
 		t.Run("WrappedPersistenceError", func(t *testing.T) {
 			baseErr := &persistence.TimeoutError{Msg: "timeout"}
 			wrappedErr := fmt.Errorf("operation failed: %w", baseErr)
-			convertedErr := s.engine.convertError(wrappedErr, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
 			require.ErrorAs(t, convertedErr, new(*serviceerror.DeadlineExceeded))
 			require.Contains(t, convertedErr.Error(), "persistence operation timed out")
 		})
@@ -1825,7 +1824,7 @@ func (s *chasmEngineSuite) TestConvertError() {
 		t.Run("WrappedChasmError", func(t *testing.T) {
 			baseErr := chasm.NewExecutionAlreadyStartedErr("already started", tv.RequestID(), tv.RunID())
 			wrappedErr := fmt.Errorf("wrapped: %w", baseErr)
-			convertedErr := s.engine.convertError(wrappedErr, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
 			var chasmErr *chasm.ExecutionAlreadyStartedError
 			require.ErrorAs(t, convertedErr, &chasmErr)
 		})
@@ -1833,24 +1832,24 @@ func (s *chasmEngineSuite) TestConvertError() {
 
 	t.Run("ContextErrors", func(t *testing.T) {
 		t.Run("ContextCanceled", func(t *testing.T) {
-			convertedErr := s.engine.convertError(context.Canceled, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(context.Canceled, ref, tv.RequestID())
 			require.ErrorIs(t, convertedErr, context.Canceled)
 		})
 
 		t.Run("ContextDeadlineExceeded", func(t *testing.T) {
-			convertedErr := s.engine.convertError(context.DeadlineExceeded, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(context.DeadlineExceeded, ref, tv.RequestID())
 			require.ErrorIs(t, convertedErr, context.DeadlineExceeded)
 		})
 
 		t.Run("WrappedContextCanceled", func(t *testing.T) {
 			wrappedErr := fmt.Errorf("operation canceled: %w", context.Canceled)
-			convertedErr := s.engine.convertError(wrappedErr, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
 			require.ErrorIs(t, convertedErr, context.Canceled)
 		})
 
 		t.Run("WrappedContextDeadlineExceeded", func(t *testing.T) {
 			wrappedErr := fmt.Errorf("operation timed out: %w", context.DeadlineExceeded)
-			convertedErr := s.engine.convertError(wrappedErr, ref, logger, tv.RequestID())
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
 			require.ErrorIs(t, convertedErr, context.DeadlineExceeded)
 		})
 	})

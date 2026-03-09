@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -112,17 +111,26 @@ func (e *ChasmEngine) StartExecution(
 	executionRef chasm.ComponentRef,
 	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
 	opts ...chasm.TransitionOption,
-) (result chasm.StartExecutionResult, retErr error) {
+) (chasm.StartExecutionResult, error) {
 	options := e.constructTransitionOptions(opts...)
+	result, err := e.startExecution(ctx, executionRef, startFn, options)
+	return result, e.convertError(err, executionRef, options.RequestID)
+}
 
+func (e *ChasmEngine) startExecution(
+	ctx context.Context,
+	executionRef chasm.ComponentRef,
+	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
+	options chasm.TransitionOptions,
+) (result chasm.StartExecutionResult, retErr error) {
 	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
-		return chasm.StartExecutionResult{}, e.convertError(err, executionRef, e.logger, options.RequestID)
+		return chasm.StartExecutionResult{}, err
 	}
 
 	archetypeID, err := executionRef.ArchetypeID(e.registry)
 	if err != nil {
-		return chasm.StartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+		return chasm.StartExecutionResult{}, err
 	}
 
 	if executionRef.RunID != "" {
@@ -137,7 +145,7 @@ func (e *ChasmEngine) StartExecution(
 		archetypeID,
 	)
 	if err != nil {
-		return chasm.StartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+		return chasm.StartExecutionResult{}, err
 	}
 	defer func() {
 		currentExecutionReleaseFn(retErr)
@@ -152,7 +160,7 @@ func (e *ChasmEngine) StartExecution(
 		options,
 	)
 	if err != nil {
-		return chasm.StartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+		return chasm.StartExecutionResult{}, err
 	}
 
 	currentRunInfo, hasCurrentRun, err := e.persistAsBrandNew(
@@ -164,7 +172,7 @@ func (e *ChasmEngine) StartExecution(
 		// Even though Created is false, it's not guaranteed the execution wasn't created.
 		// The persistence layer writes history events outside the main transaction, so on errors
 		// like network timeouts etc., the operation outcome is ambiguous.
-		return chasm.StartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+		return chasm.StartExecutionResult{}, err
 	}
 	if !hasCurrentRun {
 		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
@@ -173,7 +181,7 @@ func (e *ChasmEngine) StartExecution(
 			return chasm.StartExecutionResult{
 				ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
 				Created:      true,
-			}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+			}, err
 		}
 		return chasm.StartExecutionResult{
 			ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
@@ -189,7 +197,7 @@ func (e *ChasmEngine) StartExecution(
 		currentRunInfo,
 		options,
 	)
-	return result, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+	return result, err
 }
 
 func (e *ChasmEngine) UpdateWithStartExecution(
@@ -198,18 +206,27 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
 	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
 	opts ...chasm.TransitionOption,
-) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
+) (chasm.EngineUpdateWithStartExecutionResult, error) {
 	options := e.constructTransitionOptions(opts...)
+	result, err := e.updateWithStartExecution(ctx, executionRef, startFn, updateFn, options)
+	return result, e.convertError(err, executionRef, options.RequestID)
+}
 
+func (e *ChasmEngine) updateWithStartExecution(
+	ctx context.Context,
+	executionRef chasm.ComponentRef,
+	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
+	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	options chasm.TransitionOptions,
+) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
 	shardContext, err := e.getShardContext(executionRef)
 	if err != nil {
-		return chasm.EngineUpdateWithStartExecutionResult{}, e.convertError(err, executionRef, e.logger, options.RequestID)
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
 	archetypeID, err := executionRef.ArchetypeID(e.registry)
 	if err != nil {
-		return chasm.EngineUpdateWithStartExecutionResult{}, e.convertError(
-			err, executionRef, shardContext.GetLogger(), options.RequestID)
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
 	if executionRef.RunID != "" {
@@ -224,9 +241,9 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 		}()
 
 		if executionLease.GetMutableState().IsWorkflowExecutionRunning() {
-			executionKey, newExecutionRef, err := e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn, options.RequestID)
+			executionKey, newExecutionRef, err := e.updateExecution(ctx, shardContext, executionLease, executionRef, updateFn)
 			if err != nil {
-				return chasm.EngineUpdateWithStartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+				return chasm.EngineUpdateWithStartExecutionResult{}, err
 			}
 			return chasm.EngineUpdateWithStartExecutionResult{
 				ExecutionKey: executionKey,
@@ -246,7 +263,7 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 			options,
 		)
 		if err != nil {
-			return chasm.EngineUpdateWithStartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+			return chasm.EngineUpdateWithStartExecutionResult{}, err
 		}
 		return chasm.EngineUpdateWithStartExecutionResult{
 			ExecutionKey: executionKey,
@@ -264,7 +281,7 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 			options,
 		)
 		if err != nil {
-			return chasm.EngineUpdateWithStartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+			return chasm.EngineUpdateWithStartExecutionResult{}, err
 		}
 		return chasm.EngineUpdateWithStartExecutionResult{
 			ExecutionKey: executionKey,
@@ -272,7 +289,7 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 			Created:      created,
 		}, nil
 	default:
-		return chasm.EngineUpdateWithStartExecutionResult{}, e.convertError(err, executionRef, shardContext.GetLogger(), options.RequestID)
+		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 }
 
@@ -282,13 +299,12 @@ func (e *ChasmEngine) updateExecution(
 	executionLease api.WorkflowLease,
 	executionRef chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
-	requestID string,
 ) (chasm.ExecutionKey, []byte, error) {
 	workflowKey := executionLease.GetContext().GetWorkflowKey()
 	actualRef := executionRef
 	actualRef.RunID = workflowKey.RunID
 
-	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, requestID)
+	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn)
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
 	}
@@ -335,7 +351,6 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	executionLease api.WorkflowLease,
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
-	requestID string,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
@@ -350,7 +365,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	mutableContext := chasm.NewMutableContext(ctx, chasmTree)
 	component, err := chasmTree.Component(mutableContext, ref)
 	if err != nil {
-		return nil, e.convertError(err, ref, shardContext.GetLogger(), requestID)
+		return nil, err
 	}
 
 	if err := updateFn(mutableContext, component, e.registry); err != nil {
@@ -363,7 +378,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		ctx,
 		shardContext,
 	); err != nil {
-		return nil, e.convertError(err, ref, shardContext.GetLogger(), requestID)
+		return nil, err
 	}
 
 	serializedRef, err := mutableContext.Ref(component)
@@ -436,19 +451,27 @@ func (e *ChasmEngine) UpdateComponent(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
 	opts ...chasm.TransitionOption,
+) ([]byte, error) {
+	options := e.constructTransitionOptions(opts...)
+	result, err := e.updateComponent(ctx, ref, updateFn)
+	return result, e.convertError(err, ref, options.RequestID)
+}
+
+func (e *ChasmEngine) updateComponent(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
 ) (updatedRef []byte, retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
-		return nil, e.convertError(err, ref, e.logger, "")
+		return nil, err
 	}
 
 	defer func() {
 		executionLease.GetReleaseFn()(retError)
 	}()
 
-	// Error conversion is handled inside applyUpdateWithLease as we don't want to convert any errors originating
-	// from updateFn
-	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, "")
+	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn)
 }
 
 // ReadComponent evaluates readFn against the current state of the component identified by the
@@ -459,10 +482,19 @@ func (e *ChasmEngine) ReadComponent(
 	ref chasm.ComponentRef,
 	readFn func(chasm.Context, chasm.Component, *chasm.Registry) error,
 	opts ...chasm.TransitionOption,
-) (retError error) {
-	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+) error {
+	options := e.constructTransitionOptions(opts...)
+	return e.convertError(e.readComponent(ctx, ref, readFn), ref, options.RequestID)
+}
+
+func (e *ChasmEngine) readComponent(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	readFn func(chasm.Context, chasm.Component, *chasm.Registry) error,
+) error {
+	_, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
-		return e.convertError(err, ref, e.logger, "")
+		return err
 	}
 	defer func() {
 		// Always release the lease with nil error since this is a read only operation
@@ -482,7 +514,7 @@ func (e *ChasmEngine) ReadComponent(
 	chasmContext := chasm.NewContext(ctx, chasmTree)
 	component, err := chasmTree.Component(chasmContext, ref)
 	if err != nil {
-		return e.convertError(err, ref, shardContext.GetLogger(), "")
+		return err
 	}
 
 	return readFn(chasmContext, component, e.registry)
@@ -506,6 +538,16 @@ func (e *ChasmEngine) PollComponent(
 	requestRef chasm.ComponentRef,
 	monotonicPredicate func(chasm.Context, chasm.Component, *chasm.Registry) (bool, error),
 	opts ...chasm.TransitionOption,
+) ([]byte, error) {
+	options := e.constructTransitionOptions(opts...)
+	result, err := e.pollComponent(ctx, requestRef, monotonicPredicate)
+	return result, e.convertError(err, requestRef, options.RequestID)
+}
+
+func (e *ChasmEngine) pollComponent(
+	ctx context.Context,
+	requestRef chasm.ComponentRef,
+	monotonicPredicate func(chasm.Context, chasm.Component, *chasm.Registry) (bool, error),
 ) (retRef []byte, retError error) {
 
 	var ch <-chan struct{}
@@ -516,19 +558,19 @@ func (e *ChasmEngine) PollComponent(
 		}
 	}()
 
-	checkPredicateOrSubscribe := func() (historyi.ShardContext, []byte, error) {
-		shardContext, executionLease, err := e.getExecutionLease(ctx, requestRef)
+	checkPredicateOrSubscribe := func() ([]byte, error) {
+		_, executionLease, err := e.getExecutionLease(ctx, requestRef)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		defer executionLease.GetReleaseFn()(nil) //nolint:revive
 
 		ref, err := e.predicateSatisfied(ctx, monotonicPredicate, requestRef, executionLease)
 		if err != nil {
-			return shardContext, nil, err
+			return nil, err
 		}
 		if ref != nil {
-			return shardContext, ref, nil
+			return ref, nil
 		}
 		// Predicate not satisfied; subscribe before releasing the lock.
 		workflowKey := executionLease.GetContext().GetWorkflowKey()
@@ -537,29 +579,20 @@ func (e *ChasmEngine) PollComponent(
 			BusinessID:  workflowKey.WorkflowID,
 			RunID:       workflowKey.RunID,
 		})
-		return shardContext, nil, nil
+		return nil, nil
 	}
 
-	shardContext, ref, err := checkPredicateOrSubscribe()
+	ref, err := checkPredicateOrSubscribe()
 	if err != nil || ref != nil {
-		logger := e.logger
-		if shardContext != nil {
-			logger = shardContext.GetLogger()
-		}
-		return ref, e.convertError(err, requestRef, logger, "")
+		return ref, err
 	}
 
 	for {
 		select {
 		case <-ch:
-			shardContext, ref, err = checkPredicateOrSubscribe()
+			ref, err = checkPredicateOrSubscribe()
 			if err != nil || ref != nil {
-				logger := e.logger
-				if shardContext != nil {
-					logger = shardContext.GetLogger()
-				}
-
-				return ref, e.convertError(err, requestRef, logger, "")
+				return ref, err
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -604,7 +637,9 @@ func (e *ChasmEngine) constructTransitionOptions(
 ) chasm.TransitionOptions {
 	options := defaultTransitionOptions
 	for _, opt := range opts {
-		opt(&options)
+		if opt != nil {
+			opt(&options)
+		}
 	}
 	if options.RequestID == "" {
 		options.RequestID = primitives.NewUUID().String()
@@ -756,9 +791,8 @@ func (e *ChasmEngine) persistAsBrandNew(
 		return currentExecutionInfo{}, false, nil
 	}
 
-	var currentRunConditionFailedError *persistence.CurrentWorkflowConditionFailedError
-	if !errors.As(err, &currentRunConditionFailedError) ||
-		len(currentRunConditionFailedError.RunID) == 0 {
+	currentRunConditionFailedError, ok := errors.AsType[*persistence.CurrentWorkflowConditionFailedError](err)
+	if !ok || len(currentRunConditionFailedError.RunID) == 0 {
 		return currentExecutionInfo{}, false, err
 	}
 
@@ -1079,14 +1113,13 @@ func (e *ChasmEngine) getExecutionLease(
 	return shardContext, executionLease, nil
 }
 
-// convertError converts non-serviceerror errors to appropriate serviceerror types, or keeps any chasm specific errors
-// as is. It ensures all errors returned are service, chasm, or context errors (for example, context.Canceled and
-// context.DeadlineExceeded) and also handles persistence layer errors appropriately. When component archetypeID and
-// businessID are non-zero/non-empty, it can provide more helpful NotFound error messages.
+// convertError converts non-serviceerror errors to appropriate serviceerror types.
+// Known persistence errors are converted to service errors with a request ID for correlation.
+// All other errors (service errors, context errors, chasm errors, unknown errors) pass through unchanged.
+// When the component ref has a known archetype and businessID, NotFound errors get enriched messages.
 func (e *ChasmEngine) convertError(
 	err error,
 	ref chasm.ComponentRef,
-	logger log.Logger,
 	requestID string,
 ) error {
 	if err == nil {
@@ -1097,15 +1130,16 @@ func (e *ChasmEngine) convertError(
 		return convertedErr
 	}
 
-	if e.isContextOrPassthroughError(err) {
+	// Return context errors, chasm errors, and service errors as-is.
+	if e.isPassthroughError(err) {
 		return err
 	}
 
-	return e.convertPersistenceOrUnknownError(err, logger, requestID)
+	return e.convertPersistenceOrUnknownError(err, requestID)
 }
 
 func (e *ChasmEngine) convertNotFoundError(err error, ref chasm.ComponentRef) error {
-	if !errors.As(err, new(*serviceerror.NotFound)) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
 		return nil
 	}
 
@@ -1124,14 +1158,14 @@ func (e *ChasmEngine) convertNotFoundError(err error, ref chasm.ComponentRef) er
 	return err
 }
 
-func (e *ChasmEngine) isContextOrPassthroughError(err error) bool {
+func (e *ChasmEngine) isPassthroughError(err error) bool {
 	// Return context errors as-is
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
 
 	// Chasm-specific errors - return as-is
-	if errors.As(err, new(*chasm.ExecutionAlreadyStartedError)) {
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 		return true
 	}
 
@@ -1140,38 +1174,36 @@ func (e *ChasmEngine) isContextOrPassthroughError(err error) bool {
 	return errors.As(err, &se)
 }
 
-func (e *ChasmEngine) convertPersistenceOrUnknownError(err error, logger log.Logger, requestID string) error {
-	if requestID == "" {
-		requestID = uuid.NewString()
-	}
-
-	var solErr *persistence.ShardOwnershipLostError
-
-	switch {
-	case errors.As(err, &solErr):
+// convertPersistenceOrUnknownError converts known persistence errors to appropriate service errors.
+// Unrecognized errors are converted to Unavailable.
+// NOTE: Keep in sync with Handler.convertError in handler.go. The CHASM engine variant
+// additionally includes a request ID in error messages for debugging correlation.
+func (e *ChasmEngine) convertPersistenceOrUnknownError(err error, requestID string) error {
+	if solErr, ok := errors.AsType[*persistence.ShardOwnershipLostError](err); ok {
 		hostInfo := e.hostInfoProvider.HostInfo()
-		if ownerInfo, err := e.historyServiceResolver.Lookup(convert.Int32ToString(solErr.ShardID)); err == nil {
+		if ownerInfo, lookupErr := e.historyServiceResolver.Lookup(convert.Int32ToString(solErr.ShardID)); lookupErr == nil {
 			return serviceerrors.NewShardOwnershipLost(ownerInfo.GetAddress(), hostInfo.GetAddress())
 		}
 		return serviceerrors.NewShardOwnershipLost("", hostInfo.GetAddress())
-	case errors.As(err, new(*persistence.AppendHistoryTimeoutError)):
-		return serviceerror.NewUnavailablef("append history timed out (%s)", requestID)
-	case errors.As(err, new(*persistence.WorkflowConditionFailedError)):
-		return serviceerror.NewUnavailablef("workflow condition failed (%s)", requestID)
-	case errors.As(err, new(*persistence.CurrentWorkflowConditionFailedError)):
-		var e *persistence.CurrentWorkflowConditionFailedError
-		errors.As(err, &e)
-		return serviceerror.NewUnavailablef("current workflow condition failed for RunID %s (%s)", e.RunID, requestID)
-	case errors.As(err, new(*persistence.ConditionFailedError)):
-		return serviceerror.NewUnavailablef("condition failed (%s)", requestID)
-	case errors.As(err, new(*persistence.TransactionSizeLimitError)):
-		return serviceerror.NewInvalidArgumentf("transaction size limit exceeded (%s)", requestID)
-	case errors.As(err, new(*persistence.TimeoutError)):
-		return serviceerror.NewDeadlineExceededf("persistence operation timed out (%s)", requestID)
-	default:
-		if logger != nil {
-			logger.Error("uncategorized chasm engine error", tag.Error(err), tag.RequestID(requestID))
-		}
-		return serviceerror.NewUnavailablef("uncategorized chasm engine error (%s)", requestID)
 	}
+	if _, ok := errors.AsType[*persistence.AppendHistoryTimeoutError](err); ok {
+		return serviceerror.NewUnavailablef("append history timed out (%s)", requestID)
+	}
+	if _, ok := errors.AsType[*persistence.WorkflowConditionFailedError](err); ok {
+		return serviceerror.NewUnavailablef("workflow condition failed (%s)", requestID)
+	}
+	if cwcfe, ok := errors.AsType[*persistence.CurrentWorkflowConditionFailedError](err); ok {
+		return serviceerror.NewUnavailablef("current workflow condition failed for RunID %s (%s)", cwcfe.RunID, requestID)
+	}
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
+		return serviceerror.NewUnavailablef("condition failed (%s)", requestID)
+	}
+	if _, ok := errors.AsType[*persistence.TransactionSizeLimitError](err); ok {
+		return serviceerror.NewInvalidArgumentf("transaction size limit exceeded (%s)", requestID)
+	}
+	if _, ok := errors.AsType[*persistence.TimeoutError](err); ok {
+		return serviceerror.NewDeadlineExceededf("persistence operation timed out (%s)", requestID)
+	}
+	e.logger.Error("uncategorized chasm engine error", tag.Error(err), tag.RequestID(requestID))
+	return serviceerror.NewUnavailablef("uncategorized chasm engine error (%s)", requestID)
 }
