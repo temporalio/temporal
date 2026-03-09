@@ -18,6 +18,7 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
+	testhooks "go.temporal.io/server/common/testing/testhooks"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -356,6 +357,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop), arg0)
 }
 
+// TestHooks mocks base method.
+func (m *MockphysicalTaskQueueManager) TestHooks() testhooks.TestHooks {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TestHooks")
+	ret0, _ := ret[0].(testhooks.TestHooks)
+	return ret0
+}
+
+// TestHooks indicates an expected call of TestHooks.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) TestHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestHooks", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).TestHooks))
+}
+
 // TrySyncMatch mocks base method.
 func (m *MockphysicalTaskQueueManager) TrySyncMatch(ctx context.Context, task *internalTask) (bool, error) {
 	m.ctrl.T.Helper()
@@ -417,20 +432,6 @@ func (m *MockphysicalTaskQueueManager) UserDataChanged() {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) UserDataChanged() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserDataChanged", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UserDataChanged))
-}
-
-// WaitForDrainingInitialized mocks base method.
-func (m *MockphysicalTaskQueueManager) WaitForDrainingInitialized(arg0 context.Context) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WaitForDrainingInitialized", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// WaitForDrainingInitialized indicates an expected call of WaitForDrainingInitialized.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) WaitForDrainingInitialized(arg0 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitForDrainingInitialized", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).WaitForDrainingInitialized), arg0)
 }
 
 // WaitUntilInitialized mocks base method.

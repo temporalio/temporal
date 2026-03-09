@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/testing/testhooks"
 )
 
 type (
@@ -18,9 +19,6 @@ type (
 		Stop(unloadCause)
 		WaitUntilInitialized(context.Context) error
 		SetupDraining()
-		// WaitForDrainingInitialized waits for the draining backlog manager to be initialized.
-		// Returns nil if there is no draining backlog manager or if it initializes successfully.
-		WaitForDrainingInitialized(context.Context) error
 		// FinishedDraining is called by a draining backlog manager when it has fully drained.
 		FinishedDraining()
 		// ReprocessRedirectedTasksAfterStop sends tasks in the matcher that came from other
@@ -67,5 +65,8 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
+		// TestHooks returns the test hooks for this queue.
+		// Used by backlog managers to call test hooks when draining tasks are loaded.
+		TestHooks() testhooks.TestHooks
 	}
 )

@@ -40,9 +40,6 @@ type (
 		Start()
 		Stop()
 		WaitUntilInitialized(context.Context) error
-		// WaitForTasksLoaded waits for all task readers to complete their initial load from
-		// the database. This ensures tasks are in the matcher and ready to be dispatched.
-		WaitForTasksLoaded(context.Context) error
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		// BacklogCountHint returns the number of backlog tasks loaded in memory now.
 		// It's returned as a hint to the SDK to influence polling behavior (sticky vs normal).
@@ -163,12 +160,6 @@ func (c *backlogManagerImpl) SetInitializedError(err error) {
 func (c *backlogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	return err
-}
-
-// WaitForTasksLoaded is a no-op for classic backlog manager since it doesn't participate in
-// migration scenarios that require this synchronization.
-func (c *backlogManagerImpl) WaitForTasksLoaded(ctx context.Context) error {
-	return nil
 }
 
 func (c *backlogManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {

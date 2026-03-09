@@ -145,13 +145,6 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 
 	if state.otherHasTasks {
 		c.pqMgr.SetupDraining()
-		// Wait for draining backlog to initialize before loading our tasks.
-		// This ensures draining tasks (with higher priority boost) are in the
-		// matcher before active tasks, preventing race conditions where a poller
-		// could match an active task before draining tasks are available.
-		ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
-		_ = c.pqMgr.WaitForDrainingInitialized(ctx)
-		cancel()
 	}
 
 	c.subqueueLock.Lock()
@@ -164,21 +157,6 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 func (c *fairBacklogManagerImpl) WaitUntilInitialized(ctx context.Context) error {
 	_, err := c.initializedError.Get(ctx)
 	return err
-}
-
-// WaitForTasksLoaded waits for all task readers to complete their initial load from the database.
-// This ensures tasks are in the matcher and ready to be dispatched.
-func (c *fairBacklogManagerImpl) WaitForTasksLoaded(ctx context.Context) error {
-	c.subqueueLock.Lock()
-	subqueues := slices.Clone(c.subqueues)
-	c.subqueueLock.Unlock()
-
-	for _, r := range subqueues {
-		if err := r.WaitForInitialLoad(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (c *fairBacklogManagerImpl) loadSubqueuesLocked(subqueues []persistencespb.SubqueueInfo) {

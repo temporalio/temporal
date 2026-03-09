@@ -407,22 +407,6 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 	drainBacklogMgr.Start()
 }
 
-// WaitForDrainingInitialized waits for the draining backlog manager to be fully initialized
-// AND for its tasks to be loaded into the matcher. This ensures draining tasks (with higher
-// priority boost) are in the matcher before the active backlog starts loading its tasks.
-func (c *physicalTaskQueueManagerImpl) WaitForDrainingInitialized(ctx context.Context) error {
-	m := c.getDrainBacklogMgr()
-	if m == nil {
-		return nil
-	}
-	// First wait for the backlog manager to be initialized (metadata loaded)
-	if err := m.WaitUntilInitialized(ctx); err != nil {
-		return err
-	}
-	// Then wait for tasks to actually be loaded into the matcher
-	return m.WaitForTasksLoaded(ctx)
-}
-
 // FinishedDraining is called by a draining backlog manager when it has fully drained.
 // This updates the active backlog manager's metadata and unloads the draining manager.
 func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
@@ -847,6 +831,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
+}
+
+func (c *physicalTaskQueueManagerImpl) TestHooks() testhooks.TestHooks {
+	return c.partitionMgr.engine.testHooks
 }
 
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {

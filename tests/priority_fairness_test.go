@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -640,6 +642,28 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	// Speed up periodic sync so drain completion is detected faster
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 100*time.Millisecond)
 
+	// Track when draining tasks are loaded using testhook
+	var drainTasksLoadedCount atomic.Int32
+	drainTasksLoaded := make(chan struct{}, 10) // buffered to handle multiple signals
+	s.InjectHook(testhooks.MatchingMigrationDrainTasksLoaded, func() {
+		drainTasksLoadedCount.Add(1)
+		select {
+		case drainTasksLoaded <- struct{}{}:
+		default:
+		}
+	})
+
+	// waitForDrainTasksLoaded waits for at least one draining backlog to finish loading tasks
+	waitForDrainTasksLoaded := func() {
+		s.T().Helper()
+		select {
+		case <-drainTasksLoaded:
+			s.T().Log("draining tasks loaded signal received")
+		case <-time.After(10 * time.Second):
+			s.Require().Fail("timeout waiting for draining tasks to load")
+		}
+	}
+
 	forTest := func(v any) any {
 		return []dynamicconfig.ConstrainedValue{
 			// test tqs (both wf and activity)
@@ -741,6 +765,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_WORKFLOW, 10, 0)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 0)
+	// Wait for draining tasks to be loaded into matcher before processing
+	waitForDrainTasksLoaded()
 
 	// process the other half of workflow tasks. these should come from the draining queue now.
 	// 20 tasks will be queued on new activity queue (still 20 on old).
@@ -783,6 +809,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 
 	setConfig("switching fairness again", true, !fairness)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 20, 7)
+	// Wait for draining tasks to be loaded into matcher before processing
+	waitForDrainTasksLoaded()
 
 	s.T().Log("processing next 1/3 activities")
 	for range 14 {
@@ -792,6 +820,8 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 
 	setConfig("switching fairness last time", true, !fairness)
 	waitForTasks(enumspb.TASK_QUEUE_TYPE_ACTIVITY, 7, 6)
+	// Wait for draining tasks to be loaded into matcher before processing
+	waitForDrainTasksLoaded()
 
 	s.T().Log("processing last 1/3 activities")
 	for range 13 {
