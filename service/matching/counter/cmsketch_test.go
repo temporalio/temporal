@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -187,6 +188,35 @@ func TestCMSketch_SlideBase_MultipleSlides(t *testing.T) {
 
 	// values should still be tracked correctly
 	assert.Equal(t, 5*jump, lastPass)
+}
+
+func TestCMSketch_Reseed(t *testing.T) {
+	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
+	interval := 20
+	cms := NewCMSketchCounter(CMSketchParams{
+		W:      100,
+		D:      3,
+		Reseed: CMSReseedParams{Interval: interval},
+	}, src, nil)
+
+	// do interval-1 operations
+	for i := range interval - 1 {
+		_ = cms.GetPass(fmt.Sprintf("k%d", i), 0, 1)
+	}
+	assert.Equal(t, 0, cms.shadowRow, "shadow should not have rotated yet")
+
+	// trigger reseed
+	prevShadow := cms.shadowRow
+	prevSeeds := slices.Clone(cms.seeds)
+	_ = cms.GetPass("trigger", 0, 1)
+	assert.NotEqual(t, prevShadow, cms.shadowRow, "shadow should have rotated")
+	assert.NotEqual(t, prevSeeds, cms.seeds[1], "some seed should have changed")
+
+	// counts for existing keys should not be reset
+	for i := range interval - 1 {
+		assert.GreaterOrEqual(t, cms.GetPass(fmt.Sprintf("k%d", i), 0, 0), int64(1))
+	}
+	assert.GreaterOrEqual(t, cms.GetPass("trigger", 0, 0), int64(1))
 }
 
 func TestCMSketch_SlideBase_LargeDelta(t *testing.T) {
