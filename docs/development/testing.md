@@ -122,6 +122,20 @@ You'll find a fully initialized task poller in any functional test suite, look f
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
 
+### testhooks package
+
+The `testhooks` package injects test-specific behavior into production code paths that are otherwise
+difficult to test. This is a **last resort** - prefer mocking and dependency injection when possible.
+
+**Example:**
+
+The UpdateWithStart API has a race window between releasing a lock and starting a workflow where
+another request could create the same workflow first. The `UpdateWithStartInBetweenLockAndStart`
+hook lets tests inject a callback at this exact point, making it possible to reliably test
+conflict handling.
+
+_NOTE: Tests using testhooks must be run with `-tags=test_dep`._
+
 ### softassert package
 
 `softassert.That` is a "soft" assertion that logs an error if the given condition is false.

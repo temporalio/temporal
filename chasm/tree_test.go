@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -47,6 +48,7 @@ type (
 		timeSource      *clock.EventTimeSource
 		nodePathEncoder NodePathEncoder
 		logger          log.Logger
+		metricsHandler  metrics.Handler
 	}
 )
 
@@ -61,6 +63,7 @@ func (s *nodeSuite) SetupTest() {
 	s.testLibrary = newTestLibrary(s.controller)
 
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	s.metricsHandler = metrics.NoopMetricsHandler
 	s.registry = NewRegistry(s.logger)
 	err := s.registry.Register(s.testLibrary)
 	s.NoError(err)
@@ -218,7 +221,7 @@ func (s *nodeSuite) TestSerializeNode_ClearSubDataField() {
 }
 
 func (s *nodeSuite) TestSetRootComponent_SetsArchetypeID() {
-	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	rootNode := NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 	s.Equal(WorkflowArchetypeID, rootNode.ArchetypeID())
 	rootComponent := &TestComponent{
 		MSPointer: NewMSPointer(s.nodeBackend),
@@ -1730,7 +1733,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component, _ *Registry) error {
 					return errValidation
 				},
 			},
@@ -1747,7 +1750,7 @@ func (s *nodeSuite) TestGetComponent() {
 					NamespaceFailoverVersion: 1,
 					TransitionCount:          1,
 				},
-				validationFn: func(_ NodeBackend, _ Context, _ Component) error {
+				validationFn: func(_ NodeBackend, _ Context, _ Component, _ *Registry) error {
 					return nil
 				},
 			},
@@ -3350,7 +3353,7 @@ func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger), nil
+		return NewEmptyTree(s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler), nil
 	}
-	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger)
+	return NewTreeFromDB(serializedNodes, s.registry, s.timeSource, s.nodeBackend, s.nodePathEncoder, s.logger, s.metricsHandler)
 }

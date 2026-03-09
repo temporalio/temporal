@@ -18,17 +18,21 @@ func (e *PayloadTTLPureTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLPureTask,
 ) error {
+	if err := assertContextValue(mutableContext); err != nil {
+		return err
+	}
+
 	_, err := store.RemovePayload(mutableContext, task.PayloadKey)
 	return err
 }
 
 func (v *PayloadTTLPureTaskValidator) Validate(
-	_ chasm.Context,
+	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLPureTask,
 ) (bool, error) {
-	return validateTask(store, attributes, task.PayloadKey)
+	return validateTask(chasmContext, store, attributes, task.PayloadKey)
 }
 
 type (
@@ -52,19 +56,24 @@ func (e *PayloadTTLSideEffectTaskExecutor) Execute(
 }
 
 func (v *PayloadTTLSideEffectTaskValidator) Validate(
-	_ chasm.Context,
+	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	task *testspb.TestPayloadTTLSideEffectTask,
 ) (bool, error) {
-	return validateTask(store, attributes, task.PayloadKey)
+	return validateTask(chasmContext, store, attributes, task.PayloadKey)
 }
 
 func validateTask(
+	chasmContext chasm.Context,
 	store *PayloadStore,
 	attributes chasm.TaskAttributes,
 	payloadKey string,
 ) (bool, error) {
+	if err := assertContextValue(chasmContext); err != nil {
+		return false, err
+	}
+
 	expirationTime, ok := store.State.ExpirationTimes[payloadKey]
 	if !ok {
 		return false, nil

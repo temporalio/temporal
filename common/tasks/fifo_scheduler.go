@@ -12,11 +12,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-const (
-	defaultMonitorTickerDuration = time.Minute
-	defaultMonitorTickerJitter   = 0.15
-)
-
 var _ Scheduler[Task] = (*FIFOScheduler[Task])(nil)
 
 type (

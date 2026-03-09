@@ -17,34 +17,34 @@ type Engine interface {
 	StartExecution(
 		context.Context,
 		ComponentRef,
-		func(MutableContext) (Component, error),
+		func(MutableContext, ArchetypeID, *Registry) (RootComponent, error),
 		...TransitionOption,
 	) (StartExecutionResult, error)
 	UpdateWithStartExecution(
 		context.Context,
 		ComponentRef,
-		func(MutableContext) (Component, error),
-		func(MutableContext, Component) error,
+		func(MutableContext, ArchetypeID, *Registry) (RootComponent, error),
+		func(MutableContext, Component, *Registry) error,
 		...TransitionOption,
 	) (EngineUpdateWithStartExecutionResult, error)
 
 	UpdateComponent(
 		context.Context,
 		ComponentRef,
-		func(MutableContext, Component) error,
+		func(MutableContext, Component, *Registry) error,
 		...TransitionOption,
 	) ([]byte, error)
 	ReadComponent(
 		context.Context,
 		ComponentRef,
-		func(Context, Component) error,
+		func(Context, Component, *Registry) error,
 		...TransitionOption,
 	) error
 
 	PollComponent(
 		context.Context,
 		ComponentRef,
-		func(Context, Component) (bool, error),
+		func(Context, Component, *Registry) (bool, error),
 		...TransitionOption,
 	) ([]byte, error)
 
@@ -172,7 +172,7 @@ func WithRequestID(
 // the lifecycle of creating and persisting a new component within an execution context.
 //
 // Type Parameters:
-//   - C: The component type to create, must implement [Component]
+//   - C: The component type to create, must implement [RootComponent]
 //   - I: The input type passed to the factory function
 //   - O: The output type returned by the factory function
 //
@@ -191,7 +191,7 @@ func WithRequestID(
 //   - O: The output value produced by startFn
 //   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
 //   - error: Non-nil if creation failed or policy constraints were violated
-func StartExecution[C Component, I any](
+func StartExecution[C RootComponent, I any](
 	ctx context.Context,
 	key ExecutionKey,
 	startFn func(MutableContext, I) (C, error),
@@ -201,12 +201,12 @@ func StartExecution[C Component, I any](
 	result, err := engineFromContext(ctx).StartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (_ Component, retErr error) {
+		func(ctx MutableContext, archetypeID ArchetypeID, registry *Registry) (_ RootComponent, retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var c C
 			var err error
-			c, err = startFn(ctx, input)
+			c, err = startFn(augmentContextForArchetypeID(ctx, archetypeID, registry), input)
 			return c, err
 		},
 		opts...,
@@ -222,7 +222,7 @@ func StartExecution[C Component, I any](
 	}, nil
 }
 
-func UpdateWithStartExecution[C Component, I any, O any](
+func UpdateWithStartExecution[C RootComponent, I any, O any](
 	ctx context.Context,
 	key ExecutionKey,
 	startFn func(MutableContext, I) (C, error),
@@ -234,19 +234,23 @@ func UpdateWithStartExecution[C Component, I any, O any](
 	result, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (_ Component, retErr error) {
+		func(ctx MutableContext, archetypeID ArchetypeID, registry *Registry) (_ RootComponent, retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var c C
 			var err error
-			c, err = startFn(ctx, input)
+			c, err = startFn(augmentContextForArchetypeID(ctx, archetypeID, registry), input)
 			return c, err
 		},
-		func(ctx MutableContext, c Component) (retErr error) {
+		func(ctx MutableContext, c Component, registry *Registry) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -289,11 +293,15 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
 		ctx,
 		ref,
-		func(ctx MutableContext, c Component) (retErr error) {
+		func(ctx MutableContext, c Component, registry *Registry) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -324,11 +332,15 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	err = engineFromContext(ctx).ReadComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (retErr error) {
+		func(ctx Context, c Component, registry *Registry) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output, err = readFn(c.(C), ctx, input)
+			output, err = readFn(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -361,10 +373,14 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (_ bool, retErr error) {
+		func(ctx Context, c Component, registry *Registry) (_ bool, retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
-			out, satisfied, err := monotonicPredicate(c.(C), ctx, input)
+			out, satisfied, err := monotonicPredicate(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			if satisfied {
 				output = out
 			}

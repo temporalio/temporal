@@ -1,18 +1,20 @@
 package chasm
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 )
 
 type (
 	RegistrableTask struct {
-		taskType        string
-		goType          reflect.Type
-		componentGoType reflect.Type  // It is not clear how this one is used.
-		validateFn      reflect.Value // The Validate() method of the TaskValidator interface.
-		executeFn       reflect.Value // The Execute() method of the TaskExecutor interface.
-		isPureTask      bool
+		taskType                string
+		goType                  reflect.Type
+		componentGoType         reflect.Type // It is not clear how this one is used.
+		validateFn              validateFn
+		pureTaskExecuteFn       pureTaskExecuteFn
+		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
+		isPureTask              bool
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -20,6 +22,10 @@ type (
 	}
 
 	RegistrableTaskOption func(*RegistrableTask)
+
+	validateFn              func(Context, any, TaskAttributes, any, *Registry) (bool, error)
+	pureTaskExecuteFn       func(MutableContext, any, TaskAttributes, any, *Registry) error
+	sideEffectTaskExecuteFn func(context.Context, ComponentRef, TaskAttributes, any) error
 )
 
 // NOTE: C is not Component but any.
@@ -33,8 +39,29 @@ func NewRegistrableSideEffectTask[C any, T any](
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
-		reflect.ValueOf(validator).MethodByName("Validate"),
-		reflect.ValueOf(executor).MethodByName("Execute"),
+		func(
+			ctx Context,
+			component any,
+			taskAttrs TaskAttributes,
+			taskData any,
+			registry *Registry,
+		) (bool, error) {
+			return validator.Validate(
+				AugmentContextForComponent(ctx, component, registry),
+				component.(C),
+				taskAttrs,
+				taskData.(T),
+			)
+		},
+		nil, // pureTaskExecuteFn is not used for side effect tasks
+		func(
+			ctx context.Context,
+			componentRef ComponentRef,
+			taskAttrs TaskAttributes,
+			taskData any,
+		) error {
+			return executor.Execute(ctx, componentRef, taskAttrs, taskData.(T))
+		},
 		false,
 		opts...,
 	)
@@ -50,8 +77,35 @@ func NewRegistrablePureTask[C any, T any](
 		taskType,
 		reflect.TypeFor[T](),
 		reflect.TypeFor[C](),
-		reflect.ValueOf(validator).MethodByName("Validate"),
-		reflect.ValueOf(executor).MethodByName("Execute"),
+		func(
+			ctx Context,
+			component any,
+			taskAttrs TaskAttributes,
+			taskData any,
+			registry *Registry,
+		) (bool, error) {
+			return validator.Validate(
+				AugmentContextForComponent(ctx, component, registry),
+				component.(C),
+				taskAttrs,
+				taskData.(T),
+			)
+		},
+		func(
+			ctx MutableContext,
+			component any,
+			taskAttrs TaskAttributes,
+			taskData any,
+			registry *Registry,
+		) error {
+			return executor.Execute(
+				AugmentContextForComponent(ctx, component, registry),
+				component.(C),
+				taskAttrs,
+				taskData.(T),
+			)
+		},
+		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
 		opts...,
 	)
@@ -60,17 +114,20 @@ func NewRegistrablePureTask[C any, T any](
 func newRegistrableTask(
 	taskType string,
 	goType, componentGoType reflect.Type,
-	validateFn, executeFn reflect.Value,
+	validateFn validateFn,
+	pureTaskExecuteFn pureTaskExecuteFn,
+	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
-		taskType:        taskType,
-		goType:          goType,
-		componentGoType: componentGoType,
-		validateFn:      validateFn,
-		executeFn:       executeFn,
-		isPureTask:      isPureTask,
+		taskType:                taskType,
+		goType:                  goType,
+		componentGoType:         componentGoType,
+		validateFn:              validateFn,
+		pureTaskExecuteFn:       pureTaskExecuteFn,
+		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
+		isPureTask:              isPureTask,
 	}
 
 	for _, opt := range opts {

@@ -320,7 +320,7 @@ jobs:
 
       - name: Print memory snapshot
         if: always()
-        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
+        run: cat /tmp/memory_snapshot.txt || true
 
       - name: Generate crash report
         if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
@@ -354,12 +354,19 @@ jobs:
           flags: unit-test
           report_type: test_results
 
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Unit test
+          run_id: ${{ github.run_id }}
+
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--unit-test
+          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--unit-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -413,7 +420,7 @@ jobs:
 
       - name: Print memory snapshot
         if: always()
-        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
+        run: cat /tmp/memory_snapshot.txt || true
 
       - name: Generate crash report
         if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
@@ -447,12 +454,19 @@ jobs:
           flags: integration-test
           report_type: test_results
 
+      - name: Get job ID
+        id: get_job_id
+        uses: ./.github/actions/get-job-id
+        with:
+          job_name: Integration test
+          run_id: ${{ github.run_id }}
+
       - name: Upload test results to GitHub
         # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
         uses: actions/upload-artifact@v4.4.3
         if: ${{ !cancelled() }}
         with:
-          name: junit-xml--${{github.run_id}}--${{github.run_attempt}}--integration-test
+          name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--integration-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
@@ -537,9 +551,13 @@ jobs:
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
 
+      - name: Dump container logs
+        if: ${{ failure() && toJson(matrix.containers) != '[]' }}
+        run: docker compose -f ${{ env.DOCKER_COMPOSE_FILE }} logs --no-color
+
       - name: Print memory snapshot
         if: always()
-        run: if [ -f /tmp/memory_snapshot.txt ]; then cat /tmp/memory_snapshot.txt; fi
+        run: cat /tmp/memory_snapshot.txt || true
 
       - name: Generate crash report
         if: failure() # if the tests failed, we would expect one JUnit XML report per attempt; otherwise it must have crashed
@@ -582,6 +600,67 @@ jobs:
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
           retention-days: 28
+
+  mixed-brain-test:
+    name: Mixed brain test
+    needs: [pre-build, test-setup]
+    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - name: Start PostgreSQL
+        uses: hoverkraft-tech/compose-action@v2.0.1
+        with:
+          compose-file: ${{ env.DOCKER_COMPOSE_FILE }}
+          services: postgresql
+          down-flags: -v
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache: false
+
+      - name: Restore dependencies
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/go/pkg/mod
+          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
+
+      - name: Restore build outputs
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+
+      - name: Install PostgreSQL schema
+        run: make install-schema-postgresql12
+
+      - name: Run mixed brain test
+        timeout-minutes: 20
+        run: ./develop/github/monitor_test.sh make mixed-brain-test
+        env:
+          TEST_TIMEOUT: 18m
+          MIXED_BRAIN_TEST_DURATION: 5m
+          PERSISTENCE_DRIVER: postgres12
+
+      - name: Print memory snapshot
+        if: always()
+        run: cat /tmp/memory_snapshot.txt || true
+
+      - name: Print current server logs
+        if: always()
+        run: cat .testoutput/mixedbrain_process-current.log || true
+
+      - name: Print release server logs
+        if: always()
+        run: cat .testoutput/mixedbrain_process-release.log || true
+
+      - name: Print Omes logs
+        if: always()
+        run: cat .testoutput/mixedbrain_omes.log || true
 
   test-status:
     if: always()

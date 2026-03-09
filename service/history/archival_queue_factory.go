@@ -73,9 +73,17 @@ func newHostScheduler(params ArchivalQueueFactoryParams) queues.Scheduler {
 			ActiveNamespaceWeights:         dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
 			StandbyNamespaceWeights:        dynamicconfig.GetMapPropertyFnFilteredByNamespace(ArchivalTaskPriorities),
 			InactiveNamespaceDeletionDelay: params.Config.TaskSchedulerInactiveChannelDeletionDelay,
+			ExecutionAwareSchedulerOptions: ctasks.ExecutionAwareSchedulerOptions{
+				Enabled:          params.Config.TaskSchedulerEnableExecutionQueueScheduler,
+				MaxQueues:        params.Config.TaskSchedulerExecutionQueueSchedulerMaxQueues,
+				QueueTTL:         params.Config.TaskSchedulerExecutionQueueSchedulerQueueTTL,
+				QueueConcurrency: params.Config.TaskSchedulerExecutionQueueSchedulerQueueConcurrency,
+			},
 		},
 		params.NamespaceRegistry,
 		params.Logger,
+		params.MetricsHandler,
+		params.TimeSource,
 	)
 }
 
