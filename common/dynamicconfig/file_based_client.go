@@ -38,7 +38,7 @@ type (
 		values          atomic.Value // ConfigValueMap
 		logger          log.Logger
 		reader          FileReader
-		lastUpdatedTime time.Time
+		lastCheckedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan any
 		metricsHandler  metrics.Handler
@@ -115,18 +115,19 @@ func (fc *fileBasedClient) init() error {
 // have to call it explicitly.
 func (fc *fileBasedClient) Update() (updateErr error) {
 	modtime, err := fc.reader.GetModTime()
+	retryOnErr := true
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
-	if !modtime.After(fc.lastUpdatedTime) {
+	if !modtime.After(fc.lastCheckedTime) {
 		return nil
 	}
-	prevModtime := fc.lastUpdatedTime
-	fc.lastUpdatedTime = modtime
 	defer func() {
 		if updateErr != nil {
-			fc.lastUpdatedTime = prevModtime
 			metrics.DynamicConfigUpdateFailureCounter.With(fc.metricsHandler).Record(1)
+		}
+		if updateErr == nil || !retryOnErr {
+			fc.lastCheckedTime = modtime
 		}
 	}()
 
@@ -137,12 +138,13 @@ func (fc *fileBasedClient) Update() (updateErr error) {
 
 	lr := LoadYamlFile(contents)
 	for _, e := range lr.Errors {
-		fc.logger.Warn("dynamic config error", tag.Error(e))
+		fc.logger.Error("dynamic config error", tag.Error(e))
 	}
 	for _, w := range lr.Warnings {
 		fc.logger.Warn("dynamic config warning", tag.Error(w))
 	}
 	if len(lr.Errors) > 0 {
+		retryOnErr = false
 		return fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
 			len(lr.Errors), len(lr.Warnings))
 	}

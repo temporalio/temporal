@@ -543,7 +543,7 @@ testGetFloat64PropertyKey:
 	close(doneCh)
 }
 
-func (s *fileBasedClientSuite) TestUpdate_ReadFileFailRollsBackLastUpdatedTime() {
+func (s *fileBasedClientSuite) TestUpdate_ReadFileFailShouldRetry() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
 	ctrl := gomock.NewController(s.T())
@@ -581,10 +581,78 @@ testGetIntPropertyKey:
 	s.Error(client.Update())
 
 	// Third update: same mod time t2.
-	// If lastUpdatedTime was rolled back to t1, t2.After(t1) is true → ReadFile is called again.
-	// If NOT rolled back (bug), t2.After(t2) is false → update silently skipped → mock expectation fails.
+	// Since retryOnErr=true for ReadFile failures, lastCheckedTime is not advanced.
+	// t2.After(t1) is true → ReadFile is called again.
+	// If bug: t2.After(t2) is false → update silently skipped → mock expectation fails.
 	reader.EXPECT().GetModTime().Return(t2, nil)
 	reader.EXPECT().ReadFile().Return(fileData, nil)
+	s.NoError(client.Update())
+}
+
+func (s *fileBasedClientSuite) TestUpdate_YamlParseErrorDoesNotRetry() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan interface{})
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	goodData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+	// Invalid YAML that produces lr.Errors (decode error)
+	badData := []byte(`{
+  "matching.numTaskqueueReadPartitions": [
+    {
+      "value": 4
+    },
+    {
+      "constraints": {
+        "namespace": "cp-snapjoinerv2-staging.27ece"
+      },
+      "value": 16
+    },
+    {
+      "constraints": {
+        "namespace": "ejp-automation-api-prod.2bf53",
+        "taskQueueName": "Interpreter_DEFAULT",
+        "taskType": "Activity, Workflow"
+      },
+      "value": 8
+    }
+  ]
+}`)
+
+	// init: GetModTime called twice (validateStaticConfig + Update), ReadFile once
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(goodData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.NoError(err)
+
+	// Second update: mod time advanced to t2, ReadFile returns bad YAML (parse error)
+	// retryOnErr=false → lastCheckedTime advances to t2
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(badData, nil)
+	s.Error(client.Update())
+
+	// Third update: same mod time t2.
+	// Since retryOnErr=false for parse errors, lastCheckedTime was already set to t2.
+	// t2.After(t2) is false → update skipped, ReadFile is NOT called.
+	reader.EXPECT().GetModTime().Return(t2, nil)
 	s.NoError(client.Update())
 }
 
@@ -594,7 +662,7 @@ func (s *fileBasedClientSuite) TestUpdate_EmitsMetricOnFailure() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 
-	doneCh := make(chan interface{})
+	doneCh := make(chan any)
 	defer close(doneCh)
 	reader := dynamicconfig.NewMockFileReader(ctrl)
 	logger := log.NewNoopLogger()
