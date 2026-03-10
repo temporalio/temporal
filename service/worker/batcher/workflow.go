@@ -142,7 +142,7 @@ type BatchOperationStats struct {
 // attachBatchOperationStats attaches statistics on the number of
 // individual successes and failures to the memo of this workflow.
 func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) error {
-	memo := map[string]interface{}{
+	memo := map[string]any{
 		BatchOperationStatsMemo: BatchOperationStats{
 			NumSuccess: result.SuccessCount,
 			NumFailure: result.ErrorCount,

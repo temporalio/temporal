@@ -110,7 +110,7 @@ func initSession(
 
 func (s *session) Query(
 	stmt string,
-	values ...interface{},
+	values ...any,
 ) Query {
 	q := s.Value.Load().(*gocql.Session).Query(stmt, values...)
 	if q == nil {
@@ -146,7 +146,7 @@ func (s *session) ExecuteBatch(
 
 func (s *session) MapExecuteBatchCAS(
 	b *Batch,
-	previous map[string]interface{},
+	previous map[string]any,
 ) (_ bool, _ Iter, retError error) {
 	defer func() { s.handleError(retError) }()
 

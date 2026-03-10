@@ -98,7 +98,7 @@ func cacheRetainingTest(s *cachingRedirectorSuite, opErr error, verify func(erro
 	r := NewCachingRedirector(s.connections, s.resolver, s.logger, dynamicconfig.GetDurationPropertyFn(0))
 	defer r.stop()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err := r.Execute(
 			context.Background(),
 			shardID,

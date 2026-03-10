@@ -28,11 +28,11 @@ func NewRetryableInterceptor(
 
 func (i *RetryableInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	var response interface{}
+) (any, error) {
+	var response any
 	op := func(ctx context.Context) error {
 		var err error
 		response, err = handler(ctx, req)

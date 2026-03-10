@@ -28,7 +28,7 @@ func NewSdkLogger(logger Logger) *SdkLogger {
 	}
 }
 
-func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
+func (l *SdkLogger) tags(keyvals []any) []tag.Tag {
 	var tags []tag.Tag
 	for i := 0; i < len(keyvals); i++ {
 		if t, keyvalIsTag := keyvals[i].(tag.Tag); keyvalIsTag {
@@ -40,7 +40,7 @@ func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
 		if !keyIsString {
 			key = fmt.Sprintf("%v", keyvals[i])
 		}
-		var val interface{}
+		var val any
 		if i+1 == len(keyvals) {
 			val = noValue
 		} else {
@@ -54,23 +54,23 @@ func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
 	return tags
 }
 
-func (l *SdkLogger) Debug(msg string, keyvals ...interface{}) {
+func (l *SdkLogger) Debug(msg string, keyvals ...any) {
 	l.logger.Debug(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) Info(msg string, keyvals ...interface{}) {
+func (l *SdkLogger) Info(msg string, keyvals ...any) {
 	l.logger.Info(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) Warn(msg string, keyvals ...interface{}) {
+func (l *SdkLogger) Warn(msg string, keyvals ...any) {
 	l.logger.Warn(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) Error(msg string, keyvals ...interface{}) {
+func (l *SdkLogger) Error(msg string, keyvals ...any) {
 	l.logger.Error(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) With(keyvals ...interface{}) log.Logger {
+func (l *SdkLogger) With(keyvals ...any) log.Logger {
 	return NewSdkLogger(
 		With(l.logger, l.tags(keyvals)...))
 }

@@ -568,9 +568,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			case 2:
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
-  5 WorkflowTaskScheduled // Speculative WT2 which was created while completing WT1.
+  5 WorkflowTaskScheduled
   6 WorkflowTaskStarted`, task.History)
-				// Message handler rejects update.
+				// Message handled rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -692,9 +692,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.EqualHistory(`
   4 WorkflowTaskCompleted
   5 ActivityTaskScheduled
-  6 WorkflowTaskScheduled // Speculative WFT2 with event (5) which was created while completing WFT1.
+  6 WorkflowTaskScheduled
   7 WorkflowTaskStarted`, task.History)
-				// Message handler rejects update.
+				// Message handled rejects update.
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
@@ -2200,7 +2200,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.ErrorAs(updateResult.err, &wfNotReady)
 		s.Contains(updateResult.err.Error(), "Unable to perform workflow execution update due to unexpected workflow task failure.")
 
-		// New transient WFT is created, but it is not shown in the history.
+		// New transient WFT is created and is now included in the history.
 		events := s.GetHistory(s.Namespace().String(), s.Tv().WorkflowExecution())
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -2209,7 +2209,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
-  7 WorkflowTaskFailed`, events)
+  7 WorkflowTaskFailed
+  8 WorkflowTaskScheduled`, events)
 
 		// Send Update again. It will be delivered on existing transient WFT.
 		updateResultCh = sendUpdate(timeoutCtx, s, s.Tv())
@@ -2243,7 +2244,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		s.True(common.IsContextDeadlineExceededErr(updateResult.err), "UpdateWorkflowExecution must timeout after 2 seconds")
 		s.Nil(updateResult.response)
 
-		// This WFT failure wasn't recorded because WFT was transient.
+		// This WFT failure wasn't recorded because WFT was transient, but the scheduled event is included.
 		events = s.GetHistory(s.Namespace().String(), s.Tv().WorkflowExecution())
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
@@ -2252,7 +2253,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
-  7 WorkflowTaskFailed`, events)
+  7 WorkflowTaskFailed
+  8 WorkflowTaskScheduled`, events)
 
 		// Try to accept 2nd update in workflow 2nd time: get error. Poller will fail WT. Update is not aborted.
 		_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
@@ -2277,7 +2279,8 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
-  7 WorkflowTaskFailed`, events)
+  7 WorkflowTaskFailed
+  8 WorkflowTaskScheduled`, events)
 
 		// Complete Update and workflow.
 		_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
@@ -4432,7 +4435,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				return nil, nil
 			case 3:
 				s.EqualHistory(`
-  4 WorkflowTaskCompleted // Speculative WT was dropped and history starts from 4 again.
+  4 WorkflowTaskCompleted
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted`, task.History)
 				commands := append(s.UpdateAcceptCompleteCommands(tv2),
@@ -4724,7 +4727,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 		nUpdates := 10
 
 		mustStartWorkflow(s, s.Tv())
-		for i := 0; i < nUpdates; i++ {
+		for i := range nUpdates {
 			// Sequentially send updates one by one.
 			sendUpdateNoError(s, s.Tv().WithUpdateIDNumber(i))
 		}
@@ -4770,7 +4773,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   3 WorkflowTaskStarted
   4 WorkflowTaskCompleted
 `
-		for i := 0; i < nUpdates; i++ {
+		for i := range nUpdates {
 			tvi := s.Tv().WithUpdateIDNumber(i)
 			expectedHistory += fmt.Sprintf(`
   %d WorkflowExecutionUpdateAccepted {"AcceptedRequest":{"Meta": {"UpdateId": "%s"}}}
@@ -5553,18 +5556,17 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 		t.Run("workflow start conflict", func(t *testing.T) {
 			t.Run("workflow id conflict policy fail: use-existing", func(t *testing.T) {
-				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				s := testcore.NewEnv(t)
 				startReq := startWorkflowReq(s, s.Tv())
 				startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
 				updateReq := updateWorkflowRequest(s, s.Tv(),
 					&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
 
 				// simulate a race condition
-				s.InjectHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
+				s.InjectHook(testhooks.NewHook(testhooks.UpdateWithStartInBetweenLockAndStart, func() {
 					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 					s.NoError(err)
-				})
+				}))
 
 				uwsCh := sendUpdateWithStart(s, testcore.NewContext(), startReq, updateReq)
 
@@ -5634,8 +5636,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 			})
 
 			t.Run("return retryable error after retry", func(t *testing.T) {
-				// Uses InjectHook which requires a dedicated cluster to avoid conflicts with other tests.
-				s := testcore.NewEnv(t, testcore.WithDedicatedCluster())
+				s := testcore.NewEnv(t)
 				// start workflow
 				_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
 				s.NoError(err)
@@ -5652,13 +5653,13 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				// wait until the update is admitted
 				waitUpdateAdmitted(s, s.Tv())
 
-				s.InjectHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
+				s.InjectHook(testhooks.NewHook(testhooks.UpdateWithStartOnClosingWorkflowRetry, func() {
 					_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startWorkflowReq(s, s.Tv()))
 					s.NoError(err)
-				})
+				}))
 
 				// complete workflow (twice including retry)
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 						func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 							return &workflowservice.RespondWorkflowTaskCompletedRequest{

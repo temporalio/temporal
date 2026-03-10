@@ -32,7 +32,7 @@ type (
 	lru struct {
 		mut             sync.Mutex
 		byAccess        *list.List
-		byKey           map[interface{}]*list.Element
+		byKey           map[any]*list.Element
 		maxSize         int
 		currSize        int
 		pinnedSize      int
@@ -53,9 +53,9 @@ type (
 	}
 
 	entryImpl struct {
-		key        interface{}
+		key        any
 		createTime time.Time
-		value      interface{}
+		value      any
 		refCount   int
 		size       int
 	}
@@ -117,11 +117,11 @@ func (c *lru) Iterator() Iterator {
 	return iterator
 }
 
-func (entry *entryImpl) Key() interface{} {
+func (entry *entryImpl) Key() any {
 	return entry.key
 }
 
-func (entry *entryImpl) Value() interface{} {
+func (entry *entryImpl) Value() any {
 	return entry.value
 }
 
@@ -163,7 +163,7 @@ func NewWithMetrics(maxSize int, opts *Options, handler metrics.Handler) Stoppab
 	metrics.CacheTtl.With(handler).Record(opts.TTL)
 	c := &lru{
 		byAccess:        list.New(),
-		byKey:           make(map[interface{}]*list.Element),
+		byKey:           make(map[any]*list.Element),
 		ttl:             opts.TTL,
 		maxSize:         maxSize,
 		currSize:        0,
@@ -187,7 +187,7 @@ func NewLRU(maxSize int, handler metrics.Handler) StoppableCache {
 }
 
 // Get retrieves the value stored under the given key
-func (c *lru) Get(key interface{}) interface{} {
+func (c *lru) Get(key any) any {
 	if c.maxSize == 0 { //
 		return nil
 	}
@@ -215,7 +215,7 @@ func (c *lru) Get(key interface{}) interface{} {
 }
 
 // Put puts a new value associated with a given key, returning the existing value (if present)
-func (c *lru) Put(key interface{}, value interface{}) interface{} {
+func (c *lru) Put(key any, value any) any {
 	if c.pin {
 		panic("Cannot use Put API in Pin mode. Use Delete and PutIfNotExist if necessary")
 	}
@@ -224,7 +224,7 @@ func (c *lru) Put(key interface{}, value interface{}) interface{} {
 }
 
 // PutIfNotExist puts a value associated with a given key if it does not exist
-func (c *lru) PutIfNotExist(key interface{}, value interface{}) (interface{}, error) {
+func (c *lru) PutIfNotExist(key any, value any) (any, error) {
 	existing, err := c.putInternal(key, value, false)
 	if err != nil {
 		return nil, err
@@ -239,7 +239,7 @@ func (c *lru) PutIfNotExist(key interface{}, value interface{}) (interface{}, er
 }
 
 // Delete deletes a key, value pair associated with a key
-func (c *lru) Delete(key interface{}) {
+func (c *lru) Delete(key any) {
 	if c.maxSize == 0 {
 		return
 	}
@@ -253,7 +253,7 @@ func (c *lru) Delete(key interface{}) {
 }
 
 // Release decrements the ref count of a pinned element.
-func (c *lru) Release(key interface{}) {
+func (c *lru) Release(key any) {
 	if c.maxSize == 0 || !c.pin {
 		return
 	}
@@ -293,7 +293,7 @@ func (c *lru) Size() int {
 
 // Put puts a new value associated with a given key, returning the existing value (if present)
 // allowUpdate flag is used to control overwrite behavior if the value exists.
-func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) (interface{}, error) {
+func (c *lru) putInternal(key any, value any, allowUpdate bool) (any, error) {
 	if c.maxSize == 0 {
 		return nil, nil
 	}

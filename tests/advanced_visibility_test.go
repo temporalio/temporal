@@ -136,7 +136,7 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
 	startFilter := &filterpb.StartTimeFilter{}
 	startFilter.EarliestTime = timestamppb.New(startTime)
 	var openExecution *workflowpb.WorkflowExecutionInfo
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 		resp, err := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
@@ -375,7 +375,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 		PageSize:  testcore.DefaultPageSize,
 		Query:     query1,
 	}
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -396,7 +396,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	query2 := fmt.Sprintf(`CustomIntField = %d or CustomIntField = %d`, 1, 2)
 	listRequest.Query = query2
 	var openExecutions []*workflowpb.WorkflowExecutionInfo
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 2 {
@@ -421,7 +421,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
 	// query for open
 	query3 := fmt.Sprintf(`(CustomIntField = %d or CustomIntField = %d) and ExecutionStatus = 'Running'`, 2, 3)
 	listRequest.Query = query3
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 2 {
@@ -553,7 +553,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
 		PageSize:  testcore.DefaultPageSize,
 		Query:     `CustomTextField = "nothing else matters"`,
 	}
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -599,7 +599,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 	tl := "es-functional-list-workflow-max-window-size-test-taskqueue"
 	startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 
-	for i := 0; i < testcore.DefaultPageSize; i++ {
+	for i := range testcore.DefaultPageSize {
 		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
@@ -618,7 +618,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
 		Query:         fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = "Running"`, wt),
 	}
 	// get first page
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == testcore.DefaultPageSize {
@@ -649,7 +649,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	tl := "es-functional-list-workflow-order-by-test-taskqueue"
 
 	initialTime := time.Now().UTC()
-	for i := 0; i < testcore.DefaultPageSize+1; i++ { // start 6
+	for i := range testcore.DefaultPageSize + 1 { // start 6
 		startRequest := s.createStartWorkflowExecutionRequest(id, wt, tl)
 		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = id + strconv.Itoa(i)
@@ -725,7 +725,7 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
 	}
 
 	// greatest effort to reduce duplicate code
-	testHelper := func(query, searchAttrKey string, prevVal, currVal interface{}) {
+	testHelper := func(query, searchAttrKey string, prevVal, currVal any) {
 		listRequest.Query = query
 		listRequest.NextPageToken = []byte{}
 		resp, err := s.FrontendClient().ListWorkflowExecutions(ctx, listRequest)
@@ -801,7 +801,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	wid, wType string,
 ) {
 	// start enough number of workflows
-	for i := 0; i < numOfWorkflows; i++ {
+	for i := range numOfWorkflows {
 		startRequest.RequestId = uuid.NewString()
 		startRequest.WorkflowId = wid + strconv.Itoa(i)
 		_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
@@ -821,7 +821,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	}
 
 	// test first page
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(listResponse.GetExecutions()) == pageSize {
@@ -838,7 +838,7 @@ func (s *AdvancedVisibilitySuite) testListWorkflowHelper(
 	// test last page
 	listRequest.NextPageToken = nextPageToken
 	inIf := false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(listResponse.GetExecutions()) == numOfWorkflows-pageSize {
@@ -862,7 +862,7 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(expectedRunID string, qu
 		Query:     query,
 	}
 
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		listResponse, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(listResponse.GetExecutions()) == 1 {
@@ -901,7 +901,7 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
 		Query:     query,
 	}
 	var resp *workflowservice.CountWorkflowExecutionsResponse
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 		s.NoError(err)
 		if resp.GetCount() == int64(1) {
@@ -925,7 +925,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 
 	numWorkflows := 10
 	numClosedWorkflows := 4
-	for i := 0; i < numWorkflows; i++ {
+	for i := range numWorkflows {
 		wfid := id + strconv.Itoa(i)
 		request := s.createStartWorkflowExecutionRequest(wfid, wt, tl)
 		we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
@@ -952,7 +952,7 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
 	}
 	var resp *workflowservice.CountWorkflowExecutionsResponse
 	var err error
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err = s.FrontendClient().CountWorkflowExecutions(testcore.NewContext(), countRequest)
 		s.NoError(err)
 		if resp.GetCount() == int64(numWorkflows) {
@@ -1137,7 +1137,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified := false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -1205,7 +1205,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified = false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -1229,7 +1229,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running' and CustomTextField is null and CustomIntField is null`, wt),
 	}
 	verified = false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -1250,7 +1250,7 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() 
 	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), descRequest)
 	s.NoError(err)
 	expectedSearchAttributes, _ := searchattribute.Encode(
-		map[string]interface{}{
+		map[string]any{
 			"CustomDoubleField":    22.0878,
 			sadefs.BinaryChecksums: []string{"binary-v1", "binary-v2"},
 			sadefs.BuildIds:        []string{worker_versioning.UnversionedSearchAttribute},
@@ -1434,7 +1434,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified := false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -1480,7 +1480,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 		Query:     fmt.Sprintf(`WorkflowType = '%s' and ExecutionStatus = 'Running'`, wt),
 	}
 	verified = false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -1519,7 +1519,7 @@ func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
 
 func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRequest *workflowservice.ListWorkflowExecutionsRequest) {
 	verified := false
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), listRequest)
 		s.NoError(err)
 		if len(resp.GetExecutions()) == 1 {
@@ -1568,7 +1568,7 @@ func (s *AdvancedVisibilitySuite) testListResultForUpsertSearchAttributes(listRe
 }
 
 func (s *AdvancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttributes {
-	searchAttributes, err := searchattribute.Encode(map[string]interface{}{
+	searchAttributes, err := searchattribute.Encode(map[string]any{
 		"CustomTextField":      "another string",
 		"CustomIntField":       123,
 		"CustomDoubleField":    22.0878,
@@ -1643,14 +1643,16 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}`, historyEvents)
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: search attribute INVALIDKEY is not defined"}}
+  5 WorkflowTaskScheduled`, historyEvents)
 	} else {
 		s.ErrorContains(err, fmt.Sprintf("BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY", s.Namespace().String()))
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
   3 WorkflowTaskStarted
-  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}`, s.Namespace().String()), historyEvents)
+  4 WorkflowTaskFailed {"Cause":23,"Failure":{"Message":"BadSearchAttributes: Namespace %s has no mapping defined for search attribute INVALIDKEY"}}
+  5 WorkflowTaskScheduled`, s.Namespace().String()), historyEvents)
 	}
 }
 
@@ -2685,10 +2687,10 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow() {
 	s.Require().NoError(err)
 	s.Require().True(acknowledged)
 
-	for i := 0; i < numOfRetry; i++ {
+	for range numOfRetry {
 		settings, err := esClient.IndexGetSettings(context.Background(), esConfig.GetVisibilityIndex())
 		s.Require().NoError(err)
-		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]interface{})["max_result_window"].(string) == strconv.Itoa(testcore.DefaultPageSize) { //nolint:revive // unchecked-type-assertion
+		if settings[esConfig.GetVisibilityIndex()].Settings["index"].(map[string]any)["max_result_window"].(string) == strconv.Itoa(testcore.DefaultPageSize) { //nolint:revive // unchecked-type-assertion
 			return
 		}
 		time.Sleep(waitTimeInMs * time.Millisecond) //nolint:forbidigo

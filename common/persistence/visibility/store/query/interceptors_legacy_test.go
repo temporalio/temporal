@@ -25,12 +25,12 @@ func (t *testNameInterceptor) Name(name string, usage FieldNameUsage) (string, e
 	return name + "1", nil
 }
 
-func (t *testValuesInterceptor) Values(name string, fieldName string, values ...interface{}) ([]interface{}, error) {
+func (t *testValuesInterceptor) Values(name string, fieldName string, values ...any) ([]any, error) {
 	if name == "error" {
 		return nil, errors.New("interceptor error")
 	}
 
-	var result []interface{}
+	var result []any
 	for _, value := range values {
 		if name == "ExecutionStatus" {
 			intVal, isIntVal := value.(int64)
@@ -53,7 +53,7 @@ func TestNameInterceptor(t *testing.T) {
 	//nolint:staticcheck
 	actualQueryJson, _ := json.Marshal(actualQueryMap)
 	require.JSONEq(t, `{"bool":{"filter":{"term":{"ExecutionStatus1":"Running"}}}}`, string(actualQueryJson))
-	var actualSorterMaps []interface{}
+	var actualSorterMaps []any
 	for _, sorter := range queryParams.Sorter {
 		actualSorterMap, _ := sorter.Source()
 		actualSorterMaps = append(actualSorterMaps, actualSorterMap)

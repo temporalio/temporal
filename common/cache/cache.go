@@ -12,20 +12,20 @@ import (
 type Cache interface {
 	// Get retrieves an element based on a key, returning nil if the element
 	// does not exist
-	Get(key interface{}) interface{}
+	Get(key any) any
 
 	// Put adds an element to the cache, returning the previous element
-	Put(key interface{}, value interface{}) interface{}
+	Put(key any, value any) any
 
 	// PutIfNotExist puts a value associated with a given key if it does not exist
-	PutIfNotExist(key interface{}, value interface{}) (interface{}, error)
+	PutIfNotExist(key any, value any) (any, error)
 
 	// Delete deletes an element in the cache
-	Delete(key interface{})
+	Delete(key any)
 
 	// Release decrements the ref count of a pinned element. If the ref count
 	// drops to 0, the element can be evicted from the cache.
-	Release(key interface{})
+	Release(key any)
 
 	// Iterator returns the iterator of the cache
 	Iterator() Iterator
@@ -73,7 +73,7 @@ type SimpleOptions struct {
 // scheduled for removal from the Cache. If f is a function with the
 // appropriate signature and i is the interface{} scheduled for
 // deletion, Cache calls go f(i)
-type RemovedFunc func(interface{})
+type RemovedFunc func(any)
 
 // Iterator represents the interface for cache iterators.
 type Iterator interface {
@@ -89,9 +89,9 @@ type Iterator interface {
 // Entry represents a key-value entry within the map.
 type Entry interface {
 	// Key represents the key
-	Key() interface{}
+	Key() any
 	// Value represents the value
-	Value() interface{}
+	Value() any
 	// CreateTime represents the time when the entry is created
 	CreateTime() time.Time
 }

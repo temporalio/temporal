@@ -719,7 +719,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidLinks() 
 	s.ErrorContains(err, "link exceeds allowed size of 4000")
 
 	req.Links = []*commonpb.Link{}
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		req.Links = append(req.Links, &commonpb.Link{
 			Variant: &commonpb.Link_WorkflowEvent_{
 				WorkflowEvent: &commonpb.Link_WorkflowEvent{
@@ -900,7 +900,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 
 	// add 10 links and one of them is duplicated in the callback
 	req.Links = []*commonpb.Link{}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		req.Links = append(req.Links, &commonpb.Link{
 			Variant: &commonpb.Link_WorkflowEvent_{
 				WorkflowEvent: &commonpb.Link_WorkflowEvent{
@@ -2192,7 +2192,7 @@ func (s *WorkflowHandlerSuite) TestCountWorkflowExecutions() {
 func (s *WorkflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	logger := log.NewTestLogger()
 	events := make([]*historyspb.StrippedHistoryEvent, 50)
-	for i := 0; i < len(events); i++ {
+	for i := range events {
 		events[i] = &historyspb.StrippedHistoryEvent{EventId: int64(i + 1)}
 	}
 	var eventsWithHoles []*historyspb.StrippedHistoryEvent

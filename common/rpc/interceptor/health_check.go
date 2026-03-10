@@ -47,7 +47,13 @@ var excludedAPIsForHealthSignal = map[string]struct{}{
 	"PollWorkflowExecutionUpdate":  {},
 	"PollWorkflowExecutionHistory": {},
 	"UpdateWorkflowExecution":      {},
+	// QueryWorkflow is excluded because its latency reflects worker availability,
+	// not history node health. With no workers polling, queries block ~30s until
+	// context deadline, which can push AverageLatency() past the threshold
+	// and cause healthy nodes to report HEALTH_STATE_NOT_SERVING.
+	"QueryWorkflow": {},
 }
+
 var getWorkflowExecutionHistoryAPI = "GetWorkflowExecutionHistory"
 
 // NewHealthCheckInterceptor creates a new health check interceptor
@@ -60,10 +66,10 @@ func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *H
 // UnaryIntercept implements the gRPC unary interceptor interface
 func (h *HealthCheckInterceptor) UnaryIntercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	startTime := time.Now()
 	resp, err := handler(ctx, req)
 	elapsed := time.Since(startTime)

@@ -148,7 +148,7 @@ func (s *queueMessageSuite) TestInsertSelect_Multiple() {
 	maxMessageID := messageID + int64(numMessages)
 
 	var messages []sqlplugin.QueueMessageRow
-	for i := 0; i < numMessages; i++ {
+	for range numMessages {
 		message := s.newRandomQueueMessageRow(queueType, messageID)
 		messageID++
 		messages = append(messages, message)
@@ -262,7 +262,7 @@ func (s *queueMessageSuite) TestInsertDeleteSelect_Multiple() {
 	maxMessageID := messageID + int64(numMessages)
 
 	var messages []sqlplugin.QueueMessageRow
-	for i := 0; i < numMessages; i++ {
+	for range numMessages {
 		message := s.newRandomQueueMessageRow(queueType, messageID)
 		messageID++
 		messages = append(messages, message)

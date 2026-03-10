@@ -38,7 +38,7 @@ func getCurrentUserFromEnv() string {
 	return "unknown"
 }
 
-func prettyPrintJSONObject(c *cli.Context, o interface{}) {
+func prettyPrintJSONObject(c *cli.Context, o any) {
 	var b []byte
 	var err error
 	if pb, ok := o.(proto.Message); ok {
@@ -213,7 +213,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 	isTableView := !c.Bool(FlagPrintJSON)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var pageItems []interface{}
+	var pageItems []any
 	for iter.HasNext() {
 		item, err := iter.Next()
 		if err != nil {
@@ -242,7 +242,7 @@ func paginate[V any](c *cli.Context, paginationFn collection.PaginationFn[V], pa
 
 var exportRgx = regexp.MustCompile("^[A-Z]")
 
-func printTable(items []interface{}, writer io.Writer) error {
+func printTable(items []any, writer io.Writer) error {
 	if len(items) == 0 {
 		return nil
 	}
@@ -267,7 +267,7 @@ func printTable(items []interface{}, writer io.Writer) error {
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)
 	table.SetHeaderLine(false)
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		item := reflect.ValueOf(items[i])
 		for item.Type().Kind() == reflect.Ptr {
 			item = item.Elem()

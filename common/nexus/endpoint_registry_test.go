@@ -50,7 +50,7 @@ func TestGet(t *testing.T) {
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).AnyTimes()
@@ -90,7 +90,7 @@ func TestGetNotFound(t *testing.T) {
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).AnyTimes()
@@ -191,7 +191,7 @@ func TestEnableDisableEnable(t *testing.T) {
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		closeOnce()
 		time.Sleep(100 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
@@ -226,7 +226,7 @@ func TestEnableDisableEnable(t *testing.T) {
 		PageSize:              int32(100),
 		LastKnownTableVersion: int64(1),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		closeOnce()
 		time.Sleep(100 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
@@ -291,7 +291,7 @@ func TestTableVersionErrorResetsMatchingPagination(t *testing.T) {
 		PageSize:              int32(1),
 		LastKnownTableVersion: int64(3),
 		Wait:                  true,
-	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...interface{}) (*matchingservice.ListNexusEndpointsResponse, error) {
+	}).DoAndReturn(func(context.Context, *matchingservice.ListNexusEndpointsRequest, ...any) (*matchingservice.ListNexusEndpointsResponse, error) {
 		time.Sleep(20 * time.Millisecond)
 		return &matchingservice.ListNexusEndpointsResponse{TableVersion: int64(1)}, nil
 	}).MaxTimes(1)
