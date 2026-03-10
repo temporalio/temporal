@@ -761,6 +761,110 @@ testGetIntPropertyKey:
 	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][1].Value, 0)
 }
 
+func (s *fileBasedClientSuite) TestUpdate_NilMetricsHandlerLogsWarning() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	mockLogger := log.NewMockLogger(ctrl)
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime x2 (validateStaticConfig + Update), ReadFile x1
+	// During init Update(): 1 change log Info + 1 "Updated dynamic config" Info + 1 Warn (nil handler)
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
+	mockLogger.EXPECT().Warn("dynamic config is missing correct metrics handler")
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, mockLogger, doneCh, nil)
+	s.NoError(err)
+
+	// Explicit update with advanced modtime: same data → no change log, only "Updated dynamic config" + Warn
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	mockLogger.EXPECT().Info(gomock.Any())
+	mockLogger.EXPECT().Warn("dynamic config is missing correct metrics handler")
+
+	s.NoError(client.Update())
+}
+
+func (s *fileBasedClientSuite) TestUpdate_SetMetricsHandlerRecordsMetrics() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	captureHandler := metricstest.NewCaptureHandler()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+	t3 := t2.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init with nil metricsHandler — should succeed without error
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, nil)
+	s.NoError(err)
+
+	// Set the metrics handler; subsequent updates should record metrics
+	client.SetMetricsHandler(captureHandler)
+
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// Successful update should record gauge 0
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	s.NoError(client.Update())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][0].Value, 0)
+
+	// Failed update should record gauge 1
+	// lastCheckedTime is now t2, so t3 triggers a read
+	reader.EXPECT().GetModTime().Return(t3, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient error"))
+	s.Error(client.Update())
+
+	snapshot = capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 2)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][1].Value, 0)
+}
+
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
@@ -861,4 +965,22 @@ testGetBoolPropertyKey:
 		}
 	}
 	s.Equal(3, found)
+}
+
+func (s *fileBasedClientSuite) TestNewFileBasedClientWithoutMetrics() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+
+	client, err := dynamicconfig.NewFileBasedClientWithoutMetrics(
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: time.Minute * 5,
+		}, logger, doneCh)
+	s.NoError(err)
+
+	client.SetMetricsHandler(metrics.NoopMetricsHandler)
+	s.NoError(client.Update())
 }
