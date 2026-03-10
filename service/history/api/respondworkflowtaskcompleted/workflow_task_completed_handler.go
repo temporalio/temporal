@@ -335,7 +335,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		handlerOpts := chasmcommand.HandlerOptions{
 			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 		}
-		if handler.mutableState.ChasmEnabled() {
+		if handler.config.NexusChasmEnabled(handler.mutableState.GetNamespaceEntry().Name().String()) {
 			// Use CHASM command handler.
 			chasmWorkflow, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
 			if err != nil {

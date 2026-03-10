@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
-var ChasmNexusEnabled = dynamicconfig.NewGlobalBoolSetting(
+var ChasmNexusEnabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasm",
 	false,
 	`Feature flag that controls whether the legacy HSM-based implementation (when flag is false; default) or the newer
@@ -151,7 +151,7 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFn
+	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
