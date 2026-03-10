@@ -161,8 +161,8 @@ var transitionSucceeded = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
-		// Terminal state - no tasks to emit.
-		// Caller must call Workflow.RemoveNexusOperation after applying this transition.
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
 		return nil
 	},
 )
@@ -179,8 +179,8 @@ var transitionFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_FAILED,
 	func(o *Operation, ctx chasm.MutableContext, event EventFailed) error {
-		// Terminal state - no tasks to emit.
-		// Caller must call Workflow.RemoveNexusOperation after applying this transition.
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
 		return nil
 	},
 )
@@ -197,8 +197,8 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
 	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
-		// Terminal state - no tasks to emit.
-		// Caller must call Workflow.RemoveNexusOperation after applying this transition.
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
 		return nil
 	},
 )
@@ -215,8 +215,8 @@ var transitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		// Terminal state - no tasks to emit.
-		// Caller must call Workflow.RemoveNexusOperation after applying this transition.
+		// Terminal state - no tasks to emit
+		// The component will be deleted after this transition
 		return nil
 	},
 )

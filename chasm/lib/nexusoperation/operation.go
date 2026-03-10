@@ -30,7 +30,6 @@ type Operation struct {
 	// this is a parent pointer back to the workflow. For a standalone Nexus operation this is nil.
 	Store chasm.ParentPtr[OperationStore]
 
-	// Cancellation is the child cancellation component (at most one per operation).
 	Cancellation chasm.Field[*Cancellation]
 }
 
