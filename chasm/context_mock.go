@@ -7,11 +7,14 @@ import (
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var _ Context = (*MockContext)(nil)
@@ -127,13 +130,17 @@ func (c *MockContext) withValue(key any, value any) Context {
 	}
 }
 
-// MockMutableContext is a mock implementation of [MutableContext] that records added tasks for inspection in
-// tests.
+// MockMutableContext is a mock implementation of [MutableContext] that records added tasks and history events
+// for inspection in tests.
 type MockMutableContext struct {
 	MockContext
 
-	mu    sync.Mutex
-	Tasks []MockTask
+	HandleAddHistoryEvent func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+
+	mu            sync.Mutex
+	Tasks         []MockTask
+	HistoryEvents []*historypb.HistoryEvent
+	lastEventID   int64
 }
 
 func (c *MockMutableContext) AddTask(component Component, attributes TaskAttributes, payload any) {
@@ -142,10 +149,30 @@ func (c *MockMutableContext) AddTask(component Component, attributes TaskAttribu
 	c.Tasks = append(c.Tasks, MockTask{component, attributes, payload})
 }
 
+func (c *MockMutableContext) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
+	if c.HandleAddHistoryEvent != nil {
+		return c.HandleAddHistoryEvent(t, setAttributes)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.lastEventID++
+	event := &historypb.HistoryEvent{
+		EventType: t,
+		EventId:   c.lastEventID,
+		EventTime: timestamppb.Now(),
+	}
+	setAttributes(event)
+	c.HistoryEvents = append(c.HistoryEvents, event)
+	return event
+}
+
 func (c *MockMutableContext) withValue(key any, value any) Context {
 	return &MockMutableContext{
-		MockContext: *ContextWithValue(&c.MockContext, key, value),
-		Tasks:       slices.Clone(c.Tasks),
+		MockContext:           *ContextWithValue(&c.MockContext, key, value),
+		HandleAddHistoryEvent: c.HandleAddHistoryEvent,
+		Tasks:                 slices.Clone(c.Tasks),
+		HistoryEvents:         slices.Clone(c.HistoryEvents),
+		lastEventID:           c.lastEventID,
 	}
 }
 
