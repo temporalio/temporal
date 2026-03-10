@@ -47,10 +47,7 @@ func appendTransientTasks(
 	nextEventID int64,
 ) {
 	// CLI and UI clients should not receive transient events for backward compatibility
-	// Check this FIRST before doing any work
-	clientName, _ := headers.GetClientNameAndVersion(ctx)
-	if clientName == headers.ClientNameCLI || clientName == headers.ClientNameUI {
-		shardContext.GetLogger().Warn("skipping transient tasks for CLI or UI")
+	if !api.ClientSupportsTranOrSpecEvents(ctx) {
 		return
 	}
 
@@ -448,7 +445,10 @@ func Invoke(
 				_, _, _, freshNextEventID, freshIsRunning, freshVersionHistoryItem, freshVersionedTransition, freshTransientTasks, freshErr :=
 					queryMutableState(namespaceID, execution, common.EmptyEventID,
 						continuationToken.BranchToken, continuationToken.VersionHistoryItem, continuationToken.VersionedTransition)
-				if freshErr == nil && freshNextEventID > continuationToken.NextEventId {
+				if freshErr != nil {
+					return nil, freshErr
+				}
+				if freshNextEventID > continuationToken.NextEventId {
 					// Events were committed to DB during pagination — fetch the gap.
 					if freshErr = fetchGapEvents(continuationToken.NextEventId, freshNextEventID, continuationToken.BranchToken); freshErr != nil {
 						return nil, freshErr
@@ -460,8 +460,6 @@ func Invoke(
 					continuationToken.VersionedTransition = freshVersionedTransition
 					// Provide fresh transient tasks to appendTransientTasks to avoid a redundant re-query.
 					cachedTransientTasks = freshTransientTasks
-				} else if freshErr != nil {
-					return nil, freshErr
 				}
 
 				appendTransientTasks(
