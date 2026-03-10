@@ -17,6 +17,10 @@ var (
 	TaskQueuesInDeploymentSyncBatchSize      = newKey[int, global]()
 	MatchingIgnoreRoutingConfigRevisionCheck = newKey[bool, namespace.ID]()
 	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
+	// MatchingMigrationDrainTasksLoaded is called when a draining backlog manager
+	// finishes loading its initial batch of tasks into the matcher.
+	// Used by tests to synchronize before polling to ensure draining tasks are available.
+	MatchingMigrationDrainTasksLoaded = newKey[func(), namespace.ID]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

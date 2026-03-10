@@ -645,13 +645,13 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	// Track when draining tasks are loaded using testhook
 	var drainTasksLoadedCount atomic.Int32
 	drainTasksLoaded := make(chan struct{}, 10) // buffered to handle multiple signals
-	s.InjectHook(testhooks.MatchingMigrationDrainTasksLoaded, func() {
+	s.InjectHook(testhooks.NewHook(testhooks.MatchingMigrationDrainTasksLoaded, func() {
 		drainTasksLoadedCount.Add(1)
 		select {
 		case drainTasksLoaded <- struct{}{}:
 		default:
 		}
-	})
+	}))
 
 	// waitForDrainTasksLoaded waits for at least one draining backlog to finish loading tasks
 	waitForDrainTasksLoaded := func() {

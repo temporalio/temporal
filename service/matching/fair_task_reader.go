@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -252,7 +253,8 @@ func (tr *fairTaskReader) readTasksImpl() {
 
 	// Signal initial load completion for draining backlogs (used by tests)
 	if tr.backlogMgr.isDraining && tr.initialLoadSignaled.CompareAndSwap(false, true) {
-		testhooks.Call(tr.backlogMgr.pqMgr.TestHooks(), testhooks.MatchingMigrationDrainTasksLoaded)
+		namespaceID := tr.backlogMgr.pqMgr.QueueKey().NamespaceId()
+		testhooks.Call(tr.backlogMgr.pqMgr.TestHooks(), testhooks.MatchingMigrationDrainTasksLoaded, namespace.ID(namespaceID))
 	}
 }
 
