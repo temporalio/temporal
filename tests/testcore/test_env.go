@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -38,6 +39,7 @@ type Env interface {
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
 	FrontendClient() workflowservice.WorkflowServiceClient
+	AdminClient() adminservice.AdminServiceClient
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
