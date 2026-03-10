@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -609,16 +611,16 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	visQuery := fmt.Sprintf("WorkflowId = '%s'", storeID)
 
 	// Wait for visibility record to appear.
-	s.Eventually(
-		func() bool {
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
 			})
-			s.NoError(err)
-			return len(resp.Executions) == 1
+			require.NoError(t, err)
+			assert.Len(t, resp.Executions, 1)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
@@ -636,16 +638,16 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	s.NoError(err)
 
 	// Validate execution is fully deleted (both mutable state and visibility record).
-	s.Eventually(
-		func() bool {
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
 			})
-			s.NoError(err)
-			return len(resp.Executions) == 0
+			require.NoError(t, err)
+			assert.Empty(t, resp.Executions)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,
