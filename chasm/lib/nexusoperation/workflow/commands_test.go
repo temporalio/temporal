@@ -694,7 +694,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Len(t, tcx.history.Events, 1)
 		event := tcx.history.Events[0]
 
-		// Simulate terminal transition caller removing the operation from the workflow.
+		// TODO: Complete the operation using CHASM equivalent of CompletedEventDefinition.
 		tcx.wf.RemoveNexusOperation(operationKey(event.EventId))
 
 		// Try to cancel - should fail since operation is completed/deleted.
@@ -729,7 +729,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Len(t, tcx.history.Events, 1)
 		event := tcx.history.Events[0]
 
-		// Simulate terminal transition caller removing the operation from the workflow.
+		// TODO: Complete the operation using CHASM equivalent of CompletedEventDefinition.
 		tcx.wf.RemoveNexusOperation(operationKey(event.EventId))
 
 		// Try to cancel - should succeed because there's a buffered completion.
@@ -759,8 +759,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		}, command.HandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 
-		// Transition the operation to SCHEDULED state (the command handler creates
-		// the operation in UNSPECIFIED state; the transition is applied separately).
+		// TODO: Replace with CHASM equivalent of ScheduledEventDefinition.Apply().
 		event := tcx.history.Events[0]
 		key := operationKey(event.EventId)
 		op := tcx.wf.Operations[key].Get(tcx.chasmCtx)
