@@ -31,10 +31,6 @@ const (
 	WorkerPluginNameTagName     = "worker_plugin_name"
 	PollerTypeTagName           = "poller_type"
 	headerCallsiteTagName       = "header_callsite"
-
-	PollerTypeWorkflow = "workflow"
-	PollerTypeActivity = "activity"
-	PollerTypeNexus    = "nexus"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -59,6 +55,10 @@ const (
 	ActiveNamespaceStateTagValue  = "active"
 	PassiveNamespaceStateTagValue = "passive"
 	UnknownNamespaceStateTagValue = "unknown"
+
+	PollerTypeWorkflow = "workflow"
+	PollerTypeActivity = "activity"
+	PollerTypeNexus    = "nexus"
 )
 
 // Admin Client Operations
