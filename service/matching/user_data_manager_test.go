@@ -660,11 +660,12 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
 		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId,
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 0,
-			WaitNewData:              false,
+			NamespaceId:                   defaultNamespaceId,
+			TaskQueue:                     defaultRootTqID,
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      0,
+			LastKnownEphemeralDataVersion: -1,
+			WaitNewData:                   false,
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,
@@ -673,11 +674,12 @@ func TestUserData_FetchesActivityToWorkflow(t *testing.T) {
 	tqCfg.matchingClientMock.EXPECT().GetTaskQueueUserData(
 		gomock.Any(),
 		&matchingservice.GetTaskQueueUserDataRequest{
-			NamespaceId:              defaultNamespaceId,
-			TaskQueue:                defaultRootTqID,
-			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			LastKnownUserDataVersion: 1,
-			WaitNewData:              true, // after first successful poll, there would be long polls
+			NamespaceId:                   defaultNamespaceId,
+			TaskQueue:                     defaultRootTqID,
+			TaskQueueType:                 enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion:      1,
+			LastKnownEphemeralDataVersion: -1,
+			WaitNewData:                   true, // after first successful poll, there would be long polls
 		}).
 		Return(&matchingservice.GetTaskQueueUserDataResponse{
 			UserData: data1,

@@ -594,9 +594,10 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 			return nil, err
 		}
 		newUserData := userData.GetVersion() > lastVersion
-		newEphData := ephData.GetVersion() > lastEphVersion
+		// lastEphVersion < 0 means the caller does not want ephemeral data
+		newEphData := lastEphVersion >= 0 && ephData.GetVersion() > lastEphVersion
 		if newUserData || newEphData {
-			m.logger.Info("returning user data",
+			m.logger.Debug("returning user data",
 				tag.Bool("long-poll", req.WaitNewData),
 				tag.Int64("request-known-version", lastVersion),
 				tag.UserDataVersion(userData.GetVersion()),
@@ -721,6 +722,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	}
 }
 
+// LocalBacklogPriorityChanged can be called on any normal partition.
 func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[PhysicalTaskQueueVersion]int64) {
 	// TODO: later, we'll send this data to the root to propagate instead of just keeping it
 	// locally and merging.
@@ -738,30 +740,49 @@ func (m *userDataManagerImpl) LocalBacklogPriorityChanged(backlogPriority map[Ph
 		})
 	}
 
-	newEph := &taskqueuespb.VersionedEphemeralData{
-		Data: &taskqueuespb.EphemeralData{
-			Partition: []*taskqueuespb.EphemeralData_ByPartition{
-				&taskqueuespb.EphemeralData_ByPartition{
-					Partition: int32(normal.PartitionId()),
-					Version:   byVersion,
-				},
-			},
+	newPartition := []*taskqueuespb.EphemeralData_ByPartition{
+		&taskqueuespb.EphemeralData_ByPartition{
+			Partition: int32(normal.PartitionId()),
+			Version:   byVersion,
 		},
-		Version: time.Now().UnixNano(),
+	}
+
+	m.updateEphemeralData(func(newData *taskqueuespb.EphemeralData) {
+		newData.Partition = newPartition
+	})
+}
+
+func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
+	if m.partition.IsRoot() {
+		// Root activity/nexus partition should not get ephemeral data from its fetch source
+		// (root workflow partition). This is done by setting LastKnownEphemeralDataVersion to
+		// -1 on root non-wf partitions and having HandleGetUserDataRequest not send ephemeral
+		// data in that case. But if we do get it (e.g. during deployment), ignore it.
+		return
 	}
 
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.myEphemeralData = newEph
+	m.incomingEphemeralData = eph
 	m.mergeEphemeralDataLocked()
 }
 
-func (m *userDataManagerImpl) gotIncomingEphemeralData(eph *taskqueuespb.VersionedEphemeralData) {
+// updateEphemeralData updates the ephemeral data owned by this partition. The update function
+// will be given a non-nil clone of the current data, which it should mutate.
+func (m *userDataManagerImpl) updateEphemeralData(update func(*taskqueuespb.EphemeralData)) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.incomingEphemeralData = eph
+	newData := common.CloneProto(m.myEphemeralData.GetData())
+	if newData == nil {
+		newData = &taskqueuespb.EphemeralData{}
+	}
+	update(newData)
+	m.myEphemeralData = &taskqueuespb.VersionedEphemeralData{
+		Data:    newData,
+		Version: time.Now().UnixNano(),
+	}
 	m.mergeEphemeralDataLocked()
 }
 
@@ -773,6 +794,12 @@ func (m *userDataManagerImpl) getMergedEphemeralData() (*taskqueuespb.VersionedE
 }
 
 func (m *userDataManagerImpl) getIncomingEphemeralDataVersion() int64 {
+	if m.partition.IsRoot() {
+		// The root activity/nexus partition should not fetch ephemeral data from the root
+		// workflow partition.
+		return -1
+	}
+
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
