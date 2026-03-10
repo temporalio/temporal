@@ -6757,35 +6757,11 @@ func (wh *WorkflowHandler) ListWorkers(
 		return nil, err
 	}
 
-	workers := make([]*workerpb.WorkerListInfo, len(resp.GetWorkersInfo()))
-	for i, info := range resp.GetWorkersInfo() {
-		workers[i] = workerHeartbeatToListInfo(info.GetWorkerHeartbeat())
-	}
-
 	return &workflowservice.ListWorkersResponse{
 		WorkersInfo:   resp.GetWorkersInfo(),
-		Workers:       workers,
+		Workers:       resp.GetWorkers(),
 		NextPageToken: resp.GetNextPageToken(),
 	}, nil
-}
-
-func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerListInfo {
-	hostInfo := hb.GetHostInfo()
-	return &workerpb.WorkerListInfo{
-		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
-		WorkerIdentity:    hb.GetWorkerIdentity(),
-		TaskQueue:         hb.GetTaskQueue(),
-		DeploymentVersion: hb.GetDeploymentVersion(),
-		SdkName:           hb.GetSdkName(),
-		SdkVersion:        hb.GetSdkVersion(),
-		Status:            hb.GetStatus(),
-		StartTime:         hb.GetStartTime(),
-		HostName:          hostInfo.GetHostName(),
-		WorkerGroupingKey: hostInfo.GetWorkerGroupingKey(),
-		ProcessId:         hostInfo.GetProcessId(),
-		Plugins:           hb.GetPlugins(),
-		Drivers:           hb.GetDrivers(),
-	}
 }
 
 func (wh *WorkflowHandler) UpdateTaskQueueConfig(

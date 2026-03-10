@@ -696,6 +696,7 @@ message ListWorkersRequest {
 message ListWorkersResponse {
     repeated temporal.api.worker.v1.WorkerInfo workers_info = 1;
     bytes next_page_token = 2;
+    repeated temporal.api.worker.v1.WorkerListInfo workers = 3;
 }
 
 // (-- api-linter: core::0134::request-resource-required=disabled
