@@ -58,18 +58,10 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 	o.Status = status
 }
 
-// Cancel marks the Operation as canceled by creating a child Cancellation component. If a
-// cancellation was already requested, ErrCancellationAlreadyRequested is returned. If the
-// operation is in STARTED state, the cancellation is immediately scheduled; otherwise it will
-// be scheduled when the operation transitions to STARTED.
 func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) error {
-	// The operation may still be present in the workflow's Operations map after reaching a terminal state
-	// if the caller hasn't called Workflow.RemoveNexusOperation yet. Reject cancellation in this case.
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}
-
-	// Cancel spawns a child Cancellation component; if one already exists we got a duplicate cancellation request.
 	if _, ok := o.Cancellation.TryGet(ctx); ok {
 		return ErrCancellationAlreadyRequested
 	}
