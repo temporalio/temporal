@@ -12,6 +12,7 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -135,7 +136,7 @@ func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 	return w.MSPointer.AddHistoryEvent(t, setAttributes)
 }
 
-func (w *Workflow) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
 }
 

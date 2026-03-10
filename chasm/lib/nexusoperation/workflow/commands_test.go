@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/tests"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -54,7 +55,7 @@ type testContext struct {
 }
 
 func (tcx *testContext) setHasAnyBufferedEvent(value bool) {
-	tcx.backend.HandleHasAnyBufferedEvent = func(filter func(*historypb.HistoryEvent) bool) bool {
+	tcx.backend.HandleHasAnyBufferedEvent = func(filter historybuilder.BufferedEventFilter) bool {
 		return value
 	}
 }
