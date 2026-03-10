@@ -701,7 +701,64 @@ testGetIntPropertyKey:
 
 	snapshot := capture.Snapshot()
 	s.Len(snapshot["dynamic_config_update_failure"], 1)
-	s.Equal(int64(1), snapshot["dynamic_config_update_failure"][0].Value)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
+}
+
+func (s *fileBasedClientSuite) TestUpdate_EmitsGaugeMetricOnFailure() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	captureHandler := metricstest.NewCaptureHandler()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+	t3 := t2.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime x2, ReadFile x1
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, captureHandler)
+	s.NoError(err)
+
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// Trigger a failing update: gauge should be 1
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
+
+	// Fix the problem and trigger a successful update: gauge should be 0
+	// lastCheckedTime is still t1 (retryOnErr=true on transient error), so t2 will trigger a read
+	reader.EXPECT().GetModTime().Return(t3, nil)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	s.NoError(client.Update())
+
+	snapshot = capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 2)
+	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][1].Value, 0)
 }
 
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {

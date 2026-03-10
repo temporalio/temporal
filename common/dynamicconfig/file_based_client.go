@@ -114,22 +114,24 @@ func (fc *fileBasedClient) init() error {
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
 func (fc *fileBasedClient) Update() (updateErr error) {
-	modtime, err := fc.reader.GetModTime()
+	modtime, updateErr := fc.reader.GetModTime()
 	retryOnErr := true
-	if err != nil {
-		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
-	}
-	if !modtime.After(fc.lastCheckedTime) {
-		return nil
-	}
 	defer func() {
 		if updateErr != nil {
-			metrics.DynamicConfigUpdateFailureCounter.With(fc.metricsHandler).Record(1)
+			metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(1)
+		} else {
+			metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(0)
 		}
 		if updateErr == nil || !retryOnErr {
 			fc.lastCheckedTime = modtime
 		}
 	}()
+	if updateErr != nil {
+		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, updateErr)
+	}
+	if !modtime.After(fc.lastCheckedTime) {
+		return nil
+	}
 
 	contents, err := fc.reader.ReadFile()
 	if err != nil {
@@ -144,6 +146,7 @@ func (fc *fileBasedClient) Update() (updateErr error) {
 		fc.logger.Warn("dynamic config warning", tag.Error(w))
 	}
 	if len(lr.Errors) > 0 {
+		// we don't retry on parsing errors which will fail deterministically until the file is fixed
 		retryOnErr = false
 		return fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
 			len(lr.Errors), len(lr.Warnings))
