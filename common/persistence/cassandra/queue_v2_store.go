@@ -160,7 +160,7 @@ func (s *queueV2Store) ReadMessages(
 		0,
 		int(minMessageID),
 		request.PageSize,
-	).WithContext(ctx).Iter()
+	).WithContext(ctx).Idempotent(true).Iter()
 
 	var (
 		messages []persistence.QueueV2Message
@@ -288,7 +288,7 @@ func (s *queueV2Store) RangeDeleteMessages(
 		0, // partition
 		deleteRange.MinMessageID,
 		deleteRange.MaxMessageID,
-	).WithContext(ctx).Exec()
+	).WithContext(ctx).Idempotent(true).Exec()
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2RangeDeleteMessages", err)
 	}
@@ -387,7 +387,7 @@ func GetQueue(
 		version          int64
 	)
 
-	err := session.Query(TemplateGetQueueQuery, queueType, queueName).WithContext(ctx).Scan(
+	err := session.Query(TemplateGetQueueQuery, queueType, queueName).WithContext(ctx).Idempotent(true).Scan(
 		&queueBytes,
 		&queueEncodingStr,
 		&version,
@@ -454,7 +454,7 @@ func (s *queueV2Store) getMessageCountAndLastID(
 func (s *queueV2Store) getMaxMessageID(ctx context.Context, queueType persistence.QueueV2Type, queueName string) (int64, bool, error) {
 	var maxMessageID int64
 
-	err := s.session.Query(TemplateGetMaxMessageIDQuery, queueType, queueName, 0).WithContext(ctx).Scan(&maxMessageID)
+	err := s.session.Query(TemplateGetMaxMessageIDQuery, queueType, queueName, 0).WithContext(ctx).Idempotent(true).Scan(&maxMessageID)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return 0, false, nil
@@ -474,7 +474,7 @@ func (s *queueV2Store) ListQueues(
 	iter := s.session.Query(
 		templateGetQueueNamesQuery,
 		request.QueueType,
-	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Iter()
+	).PageSize(request.PageSize).PageState(request.NextPageToken).WithContext(ctx).Idempotent(true).Iter()
 
 	var queues []persistence.QueueInfo
 	for {

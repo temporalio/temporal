@@ -69,7 +69,7 @@ func (d *ShardStore) GetOrCreateShard(
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 
 	var data []byte
 	var encoding string
