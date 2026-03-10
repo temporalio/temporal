@@ -115,12 +115,6 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	firstPageEvents := histPage1.History.Events
 	staleNextPageToken := histPage1.NextPageToken
 
-	// Simulate shard movement before the signal to clear in-memory mutable state.
-	// This drops the speculative WFT from memory, but the pending update survives in the
-	// update registry (no ShardFinalizerTimeout=0 override). On the next mutable state
-	// load the pending update will cause a normal WFT_SCHEDULED to be written as event 8.
-	// closeShard(s, tv.WorkflowID())
-
 	// Send the signal. Since the speculative WFT was cleared by the shard reload, signal
 	// processing finds the pending update in the registry and schedules a normal WFT:
 	//   8: WorkflowTaskScheduled  (normal WFT scheduled to handle the pending update)
@@ -133,11 +127,6 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 			SignalName:        tv.Any().String(),
 		})
 	s.NoError(signalErr)
-
-	// Simulate shard movement after the signal to clear mutable state again before page 2
-	// is fetched. This ensures the gap-detection fix works even when the shard is reloaded
-	// between the signal and the subsequent GetWorkflowExecutionHistory call.
-	// closeShard(s, tv.WorkflowID())
 
 	// Fetch remaining history pages using the stale token obtained before the signal.
 	allEvents := make([]*historypb.HistoryEvent, len(firstPageEvents))
