@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
 	// Blank imports register chasm/lib service file descriptors into protoregistry.GlobalFiles.
 	_ "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	_ "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
