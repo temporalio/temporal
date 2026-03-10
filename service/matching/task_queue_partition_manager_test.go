@@ -84,6 +84,8 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	}
 
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
+	s.matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
 	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
 
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
