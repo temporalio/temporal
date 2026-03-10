@@ -324,9 +324,6 @@ func (ch *commandHandler) handleCancelCommand(
 	var op *nexusoperation.Operation
 	if operationFound {
 		op = operationField.Get(chasmCtx)
-		// The operation is in a terminal state and the terminal event has not just been buffered.
-		// We allow the workflow to request canceling an operation that has just completed while a workflow task is in
-		// flight since it cannot know about the state of the operation.
 		if !nexusoperation.TransitionCanceled.Possible(op) && !hasBufferedEvent() {
 			return command.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
