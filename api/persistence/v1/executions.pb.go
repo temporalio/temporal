@@ -357,10 +357,11 @@ type WorkflowExecutionInfo struct {
 	// workflow. Overwritten on each workflow task start. Read at continue-as-new
 	// time to pass to the new run.
 	LatestTargetWorkerDeploymentVersion *v17.WorkerDeploymentVersion `protobuf:"bytes,113,opt,name=latest_target_worker_deployment_version,json=latestTargetWorkerDeploymentVersion,proto3" json:"latest_target_worker_deployment_version,omitempty"`
-	// True when this run was initiated by continue-as-new and inherited a pinned
-	// version from the previous run. Used in the targetDeploymentVersionChanged
-	// condition to detect CaN-initiated runs that declined upgrade.
-	HasInheritedPinnedVersionContinueAsNew bool `protobuf:"varint,114,opt,name=has_inherited_pinned_version_continue_as_new,json=hasInheritedPinnedVersionContinueAsNew,proto3" json:"has_inherited_pinned_version_continue_as_new,omitempty"`
+	// True when this run was initiated by continue-as-new or retry and inherited
+	// a pinned version from the previous run. Used in the
+	// targetDeploymentVersionChanged condition to detect continuation runs that
+	// declined upgrade.
+	HasInheritedPinnedVersionContinueAsNewOrRetry bool `protobuf:"varint,114,opt,name=has_inherited_pinned_version_continue_as_new_or_retry,json=hasInheritedPinnedVersionContinueAsNewOrRetry,proto3" json:"has_inherited_pinned_version_continue_as_new_or_retry,omitempty"`
 	// The previous run's latest target version, set once during application of the
 	// WorkflowExecutionStartedEvent. Never overwritten. Used to compare against the
 	// current target to detect whether the target has changed since this run started.
@@ -1131,9 +1132,9 @@ func (x *WorkflowExecutionInfo) GetLatestTargetWorkerDeploymentVersion() *v17.Wo
 	return nil
 }
 
-func (x *WorkflowExecutionInfo) GetHasInheritedPinnedVersionContinueAsNew() bool {
+func (x *WorkflowExecutionInfo) GetHasInheritedPinnedVersionContinueAsNewOrRetry() bool {
 	if x != nil {
-		return x.HasInheritedPinnedVersionContinueAsNew
+		return x.HasInheritedPinnedVersionContinueAsNewOrRetry
 	}
 	return false
 }
@@ -4613,7 +4614,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xd6C\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xe6C\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4724,8 +4725,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"pause_info\x18j \x01(\v25.temporal.server.api.persistence.v1.WorkflowPauseInfoR\tpauseInfo\x12x\n" +
 	" last_workflow_task_failure_cause\x18k \x01(\x0e2..temporal.api.enums.v1.WorkflowTaskFailedCauseH\x00R\x1clastWorkflowTaskFailureCause\x12m\n" +
 	"!last_workflow_task_timed_out_type\x18l \x01(\x0e2\".temporal.api.enums.v1.TimeoutTypeH\x00R\x1clastWorkflowTaskTimedOutType\x12\x89\x01\n" +
-	"'latest_target_worker_deployment_version\x18q \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR#latestTargetWorkerDeploymentVersion\x12\\\n" +
-	",has_inherited_pinned_version_continue_as_new\x18r \x01(\bR&hasInheritedPinnedVersionContinueAsNew\x12\x8c\x01\n" +
+	"'latest_target_worker_deployment_version\x18q \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR#latestTargetWorkerDeploymentVersion\x12l\n" +
+	"5has_inherited_pinned_version_continue_as_new_or_retry\x18r \x01(\bR-hasInheritedPinnedVersionContinueAsNewOrRetry\x12\x8c\x01\n" +
 	")target_worker_deployment_version_on_start\x18s \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR$targetWorkerDeploymentVersionOnStart\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +

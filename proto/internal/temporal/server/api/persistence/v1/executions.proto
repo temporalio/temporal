@@ -301,10 +301,11 @@ message WorkflowExecutionInfo {
     // time to pass to the new run.
     temporal.api.deployment.v1.WorkerDeploymentVersion latest_target_worker_deployment_version = 113;
 
-    // True when this run was initiated by continue-as-new and inherited a pinned
-    // version from the previous run. Used in the targetDeploymentVersionChanged
-    // condition to detect CaN-initiated runs that declined upgrade.
-    bool has_inherited_pinned_version_continue_as_new = 114;
+    // True when this run was initiated by continue-as-new or retry and inherited
+    // a pinned version from the previous run. Used in the
+    // targetDeploymentVersionChanged condition to detect continuation runs that
+    // declined upgrade.
+    bool has_inherited_pinned_version_continue_as_new_or_retry = 114;
 
     // The previous run's latest target version, set once during application of the
     // WorkflowExecutionStartedEvent. Never overwritten. Used to compare against the

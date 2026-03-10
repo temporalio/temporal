@@ -2949,7 +2949,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	// while excluding case 3 (children have no continued run ID).
 	// Crons are safe — they never set InheritedPinnedVersion.
 	if event.GetContinuedExecutionRunId() != "" && event.GetInheritedPinnedVersion() != nil {
-		ms.executionInfo.HasInheritedPinnedVersionContinueAsNew = true
+		ms.executionInfo.HasInheritedPinnedVersionContinueAsNewOrRetry = true
 	}
 
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.

@@ -514,7 +514,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
 			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
 		// 4. CaN-inherited-pinned (declined to upgrade on CAN) and target unchanged since start — decline to upgrade.
-		case m.ms.executionInfo.HasInheritedPinnedVersionContinueAsNew &&
+		case m.ms.executionInfo.HasInheritedPinnedVersionContinueAsNewOrRetry &&
 			m.ms.executionInfo.GetTargetWorkerDeploymentVersionOnStart().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
 			m.ms.executionInfo.GetTargetWorkerDeploymentVersionOnStart().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
 		default:
