@@ -75,6 +75,23 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	s.Equal(defaultValue, v)
 }
 
+func (s *fileBasedClientSuite) TestNewFileBasedClientWithoutMetrics() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+
+	client, err := dynamicconfig.NewFileBasedClientWithoutMetrics(
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "config/testConfig.yaml",
+			PollInterval: time.Minute * 5,
+		}, logger, doneCh)
+	s.NoError(err)
+
+	client.SetMetricsHandler(metrics.NoopMetricsHandler)
+	s.NoError(client.Update())
+}
+
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
 	cvs := s.client.GetValue(dynamicconfig.MakeKey(testCaseInsensitivePropertyKey))
 	s.Equal(1, len(cvs))
@@ -965,22 +982,4 @@ testGetBoolPropertyKey:
 		}
 	}
 	s.Equal(3, found)
-}
-
-func (s *fileBasedClientSuite) TestNewFileBasedClientWithoutMetrics() {
-	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
-
-	logger := log.NewNoopLogger()
-	doneCh := make(chan any)
-	defer close(doneCh)
-
-	client, err := dynamicconfig.NewFileBasedClientWithoutMetrics(
-		&dynamicconfig.FileBasedClientConfig{
-			Filepath:     "anyValue",
-			PollInterval: time.Minute * 5,
-		}, logger, doneCh)
-	s.NoError(err)
-
-	client.SetMetricsHandler(metrics.NoopMetricsHandler)
-	s.NoError(client.Update())
 }

@@ -51,8 +51,8 @@ type (
 	}
 )
 
-// An explicit way to create a file based client without metrics.Handler,
-// and update later with SetMetricsHandler. This is useful when the metricsHandler is not available
+// NewFileBasedClientWithoutMetrics creates a file based client without a metrics.Handler,
+// which can be set later with SetMetricsHandler. This is useful when the metricsHandler is not available
 // at the time of initialization like in cases of circular dependencies.
 func NewFileBasedClientWithoutMetrics(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
 	return NewFileBasedClient(config, logger, doneCh, nil)
