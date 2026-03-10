@@ -83,14 +83,14 @@ runs:
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        .github/actions/build-docker-images/scripts/docker-build-helper extract-cli-version
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-binary-version temporal cli-version
 
     - name: Extract server version from binary
       id: extract-version
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        .github/actions/build-docker-images/scripts/docker-build-helper extract-version
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-binary-version temporal-server server-version
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@v3

@@ -37,6 +37,11 @@ func TestParseTemporalVersion(t *testing.T) {
 			want:   "1.6.0",
 		},
 		{
+			name:   "pre-release version",
+			output: "temporal version 1.31.0-151.5",
+			want:   "1.31.0-151.5",
+		},
+		{
 			name:   "extra spaces between version and number",
 			output: "temporal version              1.6.1",
 			want:   "1.6.1",
@@ -58,16 +63,15 @@ func TestParseTemporalVersion(t *testing.T) {
 			got, err := parseTemporalVersion(tt.output)
 			if tt.wantErr {
 				if err == nil {
-					t.Errorf("expected error, got version %q", got)
+					t.Fatalf("expected error, got version %q", got)
 				}
-				return
-			}
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-				return
-			}
-			if got != tt.want {
-				t.Errorf("got %q, want %q", got, tt.want)
+			} else {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if got != tt.want {
+					t.Fatalf("got %q, want %q", got, tt.want)
+				}
 			}
 		})
 	}

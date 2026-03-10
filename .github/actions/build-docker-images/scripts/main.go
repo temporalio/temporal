@@ -23,8 +23,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  set-image-tags    - Generate Docker image tags from branch and SHA\n")
 		fmt.Fprintf(os.Stderr, "  organize-binaries - Organize binaries for Docker\n")
 		fmt.Fprintf(os.Stderr, "  download-cli      - Download Temporal CLI\n")
-		fmt.Fprintf(os.Stderr, "  extract-version   - Extract version from temporal-server binary\n")
-		fmt.Fprintf(os.Stderr, "  extract-cli-version - Extract version from temporal CLI binary\n")
+		fmt.Fprintf(os.Stderr, "  extract-binary-version <binary-name> <output-name> - Extract version from a binary\n")
 		os.Exit(1)
 	}
 
@@ -46,13 +45,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-	case "extract-version":
-		if err := extractVersion(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	case "extract-binary-version":
+		if len(os.Args) != 4 {
+			fmt.Fprintf(os.Stderr, "Usage: %s extract-binary-version <binary-name> <output-name>\n", os.Args[0])
 			os.Exit(1)
 		}
-	case "extract-cli-version":
-		if err := extractCLIVersion(); err != nil {
+		if err := extractBinaryVersion(os.Args[2], os.Args[3]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -78,7 +76,7 @@ func resolveGitInfo() (ref string, sha string, err error) {
 		ref = strings.TrimSpace(string(refOut))
 	} else {
 		tagCmd := exec.Command("git", "describe", "--tags", "--exact-match", "HEAD")
-		if tagOut, err := tagCmd.Output(); err == nil {
+		if tagOut, tagErr := tagCmd.Output(); tagErr == nil {
 			ref = strings.TrimSpace(string(tagOut))
 		} else {
 			ref = sha
@@ -431,25 +429,26 @@ func downloadCLIForArch(arch string) error {
 	return nil
 }
 
-// extractVersion extracts the version from the temporal-server binary
-func extractVersion() error {
-	// Try to find the temporal-server binary in any available architecture directory
-	var binaryPath string
+// findBuildBinary finds a binary by name in the docker/build/{arch}/ directories.
+func findBuildBinary(name string) (string, error) {
 	for _, arch := range validArchs {
-		candidatePath := filepath.Join("docker", "build", arch, "temporal-server")
+		candidatePath := filepath.Join("docker", "build", arch, name)
 		if _, err := os.Stat(candidatePath); err == nil {
-			binaryPath = candidatePath
-			break
+			return candidatePath, nil
 		}
 	}
+	return "", fmt.Errorf("%s binary not found in docker/build/{amd64,arm64}/", name)
+}
 
-	if binaryPath == "" {
-		return fmt.Errorf("temporal-server binary not found in docker/build/{amd64,arm64}/")
+// extractBinaryVersion finds a binary, runs --version, parses the output, and sets a GitHub Actions output.
+func extractBinaryVersion(binaryName, outputName string) error {
+	binaryPath, err := findBuildBinary(binaryName)
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("Extracting version from %s\n", binaryPath)
 
-	// Run the binary with --version flag
 	cmd := exec.Command(binaryPath, "--version")
 	output, err := cmd.Output()
 	if err != nil {
@@ -462,43 +461,7 @@ func extractVersion() error {
 	}
 	fmt.Printf("Extracted version: %s\n", version)
 
-	if err := setOutput("server-version", version); err != nil {
-		return fmt.Errorf("failed to set output: %w", err)
-	}
-
-	return nil
-}
-
-// extractCLIVersion extracts the version from the temporal CLI binary
-func extractCLIVersion() error {
-	var binaryPath string
-	for _, arch := range validArchs {
-		candidatePath := filepath.Join("docker", "build", arch, "temporal")
-		if _, err := os.Stat(candidatePath); err == nil {
-			binaryPath = candidatePath
-			break
-		}
-	}
-
-	if binaryPath == "" {
-		return fmt.Errorf("temporal CLI binary not found in docker/build/{amd64,arm64}/")
-	}
-
-	fmt.Printf("Extracting CLI version from %s\n", binaryPath)
-
-	cmd := exec.Command(binaryPath, "--version")
-	output, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("failed to run %s --version: %w", binaryPath, err)
-	}
-
-	version, err := parseTemporalVersion(string(output))
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Extracted CLI version: %s\n", version)
-
-	if err := setOutput("cli-version", version); err != nil {
+	if err := setOutput(outputName, version); err != nil {
 		return fmt.Errorf("failed to set output: %w", err)
 	}
 
