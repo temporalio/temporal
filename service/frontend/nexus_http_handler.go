@@ -188,14 +188,15 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		}
 		switch s.Code() {
 		case codes.NotFound:
-			if r, ok := (err.(interface{ Retryable() bool })); ok {
-				if r.Retryable() {
-					w.Header().Set("nexus-request-retryable", "true")
-				} else {
-					w.Header().Set("nexus-request-retryable", "false")
-				}
+			retryBehavior := nexus.HandlerErrorRetryBehaviorNonRetryable
+			if r, ok := (err.(interface{ Retryable() bool })); ok && r.Retryable() {
+				retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 			}
-			h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "nexus endpoint not found"))
+			h.writeFailure(w, r, &nexus.HandlerError{
+				Type:          nexus.HandlerErrorTypeNotFound,
+				Message:       "nexus endpoint not found",
+				RetryBehavior: retryBehavior,
+			})
 		case codes.DeadlineExceeded:
 			h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeRequestTimeout, "request timed out"))
 		default:
@@ -253,8 +254,11 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
 			var notFoundErr *serviceerror.NamespaceNotFound
 			if errors.As(err, &notFoundErr) {
-				w.Header().Set("nexus-request-retryable", "true")
-				h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "invalid endpoint target"))
+				h.writeFailure(w, r, &nexus.HandlerError{
+					Type:          nexus.HandlerErrorTypeNotFound,
+					Message:       "invalid endpoint target",
+					RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
+				})
 			} else {
 				h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 			}
