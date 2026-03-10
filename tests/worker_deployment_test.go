@@ -3465,7 +3465,11 @@ func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
 	actualResp *workflowservice.DescribeWorkerDeploymentResponse,
 	expectedResp *workflowservice.DescribeWorkerDeploymentResponse,
 ) {
-	a.True((actualResp == nil) == (expectedResp == nil))
+	if expectedResp == nil {
+		a.Nil(actualResp)
+	} else {
+		a.NotNil(actualResp)
+	}
 	s.verifyWorkerDeploymentInfo(a, expectedResp.GetWorkerDeploymentInfo(), actualResp.GetWorkerDeploymentInfo())
 }
 
