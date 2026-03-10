@@ -6757,9 +6757,9 @@ func (wh *WorkflowHandler) ListWorkers(
 		return nil, err
 	}
 
-	workers := make([]*workerpb.WorkerListInfo, 0, len(resp.GetWorkersInfo()))
-	for _, info := range resp.GetWorkersInfo() {
-		workers = append(workers, workerHeartbeatToListInfo(info.GetWorkerHeartbeat()))
+	workers := make([]*workerpb.WorkerListInfo, len(resp.GetWorkersInfo()))
+	for i, info := range resp.GetWorkersInfo() {
+		workers[i] = workerHeartbeatToListInfo(info.GetWorkerHeartbeat())
 	}
 
 	return &workflowservice.ListWorkersResponse{
@@ -6770,9 +6770,6 @@ func (wh *WorkflowHandler) ListWorkers(
 }
 
 func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerListInfo {
-	if hb == nil {
-		return nil
-	}
 	hostInfo := hb.GetHostInfo()
 	return &workerpb.WorkerListInfo{
 		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
