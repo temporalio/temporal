@@ -23,9 +23,9 @@ inputs:
     required: false
     default: "false"
   cli-version:
-    description: "Temporal CLI version to download"
+    description: "Temporal CLI version to download (uses default from build helper if empty)"
     required: false
-    default: "1.5.1"
+    default: ""
   alpine-tag:
     description: "Alpine base image tag"
     required: false
@@ -93,6 +93,13 @@ runs:
       run: |
         .github/actions/build-docker-images/scripts/docker-build-helper download-cli
 
+    - name: Extract CLI version from binary
+      id: extract-cli-version
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        .github/actions/build-docker-images/scripts/docker-build-helper extract-cli-version
+
     - name: Extract server version from binary
       id: extract-version
       shell: bash
@@ -125,6 +132,7 @@ runs:
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
+        CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
         if [ -n "${{ inputs.platform }}" ]; then
           docker buildx bake \
@@ -151,6 +159,7 @@ runs:
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
+        CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
         docker buildx bake \
           --push \

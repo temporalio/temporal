@@ -1,16 +1,9 @@
 name: Manual Docker Build
+# Dispatch this workflow from the branch you want to build from.
 
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: "Git ref (branch, tag, or SHA) to build from"
-        required: true
-        default: "main"
-      cli-version:
-        description: "Temporal CLI version to include in images"
-        required: true
-        default: "1.5.1"
       alpine-tag:
         description: "Alpine base image tag (e.g., 3.23.3)"
         required: true
@@ -45,7 +38,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.ref }}
           fetch-depth: 0
 
       - name: Determine single-arch parameter
@@ -73,7 +65,6 @@ jobs:
           push: false
           tag-latest: ${{ inputs.tag-latest }}
           platform: ${{ inputs.platform }}
-          cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}
           load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
 
@@ -85,7 +76,6 @@ jobs:
           push: true
           tag-latest: ${{ inputs.tag-latest }}
           platform: ${{ inputs.platform }}
-          cli-version: ${{ inputs.cli-version }}
           alpine-tag: ${{ inputs.alpine-tag }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -98,10 +88,9 @@ jobs:
           {
             echo "### Docker Images Built"
             echo ""
-            echo "**Git Ref:** ${{ inputs.ref }}"
+            echo "**Branch:** ${{ github.ref_name }}"
             echo "**SHA Tag:** ${SHA_TAG}"
             echo "**Branch Tag:** ${BRANCH_TAG}"
-            echo "**CLI Version:** ${{ inputs.cli-version }}"
             echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}"
             echo "**Pushed to Docker Hub:** ${{ inputs.push }}"
             echo "**Tagged as latest:** ${{ inputs.tag-latest }}"

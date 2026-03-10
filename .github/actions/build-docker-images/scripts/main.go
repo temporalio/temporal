@@ -24,6 +24,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  organize-binaries - Organize binaries for Docker\n")
 		fmt.Fprintf(os.Stderr, "  download-cli      - Download Temporal CLI\n")
 		fmt.Fprintf(os.Stderr, "  extract-version   - Extract version from temporal-server binary\n")
+		fmt.Fprintf(os.Stderr, "  extract-cli-version - Extract version from temporal CLI binary\n")
 		os.Exit(1)
 	}
 
@@ -47,6 +48,11 @@ func main() {
 		}
 	case "extract-version":
 		if err := extractVersion(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+	case "extract-cli-version":
+		if err := extractCLIVersion(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -426,23 +432,65 @@ func extractVersion() error {
 		return fmt.Errorf("failed to run %s --version: %w", binaryPath, err)
 	}
 
-	// Parse the version from output like "temporal version 1.29.0"
-	outputStr := strings.TrimSpace(string(output))
-	versionRegex := regexp.MustCompile(`^temporal version (\d+\.\d+\.\d+)`)
-	matches := versionRegex.FindStringSubmatch(outputStr)
-	if len(matches) < 2 {
-		return fmt.Errorf("failed to parse version from output: %s", outputStr)
+	version, err := parseTemporalVersion(string(output))
+	if err != nil {
+		return err
 	}
-
-	version := matches[1]
 	fmt.Printf("Extracted version: %s\n", version)
 
-	// Set output for GitHub Actions
 	if err := setOutput("server-version", version); err != nil {
 		return fmt.Errorf("failed to set output: %w", err)
 	}
 
 	return nil
+}
+
+// extractCLIVersion extracts the version from the temporal CLI binary
+func extractCLIVersion() error {
+	var binaryPath string
+	for _, arch := range validArchs {
+		candidatePath := filepath.Join("docker", "build", arch, "temporal")
+		if _, err := os.Stat(candidatePath); err == nil {
+			binaryPath = candidatePath
+			break
+		}
+	}
+
+	if binaryPath == "" {
+		return fmt.Errorf("temporal CLI binary not found in docker/build/{amd64,arm64}/")
+	}
+
+	fmt.Printf("Extracting CLI version from %s\n", binaryPath)
+
+	cmd := exec.Command(binaryPath, "--version")
+	output, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("failed to run %s --version: %w", binaryPath, err)
+	}
+
+	version, err := parseTemporalVersion(string(output))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Extracted CLI version: %s\n", version)
+
+	if err := setOutput("cli-version", version); err != nil {
+		return fmt.Errorf("failed to set output: %w", err)
+	}
+
+	return nil
+}
+
+// parseTemporalVersion extracts the version from output like
+// "temporal version 1.29.0" or "temporal version 0.0.0-DEV (Server 1.30.1, UI 2.45.3)"
+func parseTemporalVersion(output string) (string, error) {
+	s := strings.TrimSpace(output)
+	re := regexp.MustCompile(`^temporal version\s+(\d+\.\d+\.\d+\S*)`)
+	matches := re.FindStringSubmatch(s)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("failed to parse version from output: %s", s)
+	}
+	return matches[1], nil
 }
 
 // Helper functions
