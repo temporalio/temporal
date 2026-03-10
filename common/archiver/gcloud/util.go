@@ -110,7 +110,7 @@ func constructVisibilityFilename(namespace, workflowTypeName, workflowID, runID,
 
 func constructVisibilityWorkflowIDIndexFilename(namespace, workflowTypeName, workflowID, runID, tag string, t time.Time) string {
 	prefix := constructVisibilityFilenamePrefix(namespace, tag)
-	return fmt.Sprintf("%s_%s_%s_%s_%s_%s.visibility", prefix, hash(workflowID), t.Format(time.RFC3339), hash(workflowTypeName), hash(workflowID), hash(runID))
+	return fmt.Sprintf("%s_%s_%s_%s_%s.visibility", prefix, hash(workflowID), t.Format(time.RFC3339), hash(workflowTypeName), hash(runID))
 }
 
 func deserializeQueryVisibilityToken(bytes []byte) (*queryVisibilityToken, error) {
