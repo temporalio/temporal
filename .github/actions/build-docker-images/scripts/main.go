@@ -62,16 +62,37 @@ func main() {
 	}
 }
 
-// setImageTags generates Docker image tags from branch name and commit SHA
-func setImageTags() error {
-	ref := os.Getenv("GIT_REF")
-	if ref == "" {
-		return fmt.Errorf("GIT_REF environment variable not set")
+// resolveGitInfo resolves the current git ref and SHA from the working tree.
+func resolveGitInfo() (ref string, sha string, err error) {
+	shaCmd := exec.Command("git", "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve git SHA: %w", err)
+	}
+	sha = strings.TrimSpace(string(shaOut))
+
+	// Use the symbolic ref (branch name) if available, otherwise fall back
+	// to a tag name or the raw SHA.
+	refCmd := exec.Command("git", "symbolic-ref", "HEAD")
+	if refOut, err := refCmd.Output(); err == nil {
+		ref = strings.TrimSpace(string(refOut))
+	} else {
+		tagCmd := exec.Command("git", "describe", "--tags", "--exact-match", "HEAD")
+		if tagOut, err := tagCmd.Output(); err == nil {
+			ref = strings.TrimSpace(string(tagOut))
+		} else {
+			ref = sha
+		}
 	}
 
-	sha := os.Getenv("GIT_SHA")
-	if sha == "" {
-		return fmt.Errorf("GIT_SHA environment variable not set")
+	return ref, sha, nil
+}
+
+// setImageTags generates Docker image tags from branch name and commit SHA
+func setImageTags() error {
+	ref, sha, err := resolveGitInfo()
+	if err != nil {
+		return err
 	}
 
 	// Remove refs/heads/ or refs/tags/ prefix
@@ -122,6 +143,9 @@ func setImageTags() error {
 	}
 	if err := setOutput("sha", shaTag); err != nil {
 		return fmt.Errorf("failed to set sha output: %w", err)
+	}
+	if err := setOutput("git-sha", sha); err != nil {
+		return fmt.Errorf("failed to set git-sha output: %w", err)
 	}
 
 	return nil
