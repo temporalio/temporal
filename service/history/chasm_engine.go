@@ -190,14 +190,13 @@ func (e *ChasmEngine) startExecution(
 		}, nil
 	}
 
-	result, err = e.handleExecutionConflict(
+	return e.handleExecutionConflict(
 		ctx,
 		shardContext,
 		newExecutionParams,
 		currentRunInfo,
 		options,
 	)
-	return result, err
 }
 
 func (e *ChasmEngine) UpdateWithStartExecution(
@@ -637,9 +636,7 @@ func (e *ChasmEngine) constructTransitionOptions(
 ) chasm.TransitionOptions {
 	options := defaultTransitionOptions
 	for _, opt := range opts {
-		if opt != nil {
-			opt(&options)
-		}
+		opt(&options)
 	}
 	if options.RequestID == "" {
 		options.RequestID = primitives.NewUUID().String()
@@ -1175,10 +1172,12 @@ func (e *ChasmEngine) isPassthroughError(err error) bool {
 }
 
 // convertPersistenceOrUnknownError converts known persistence errors to appropriate service errors.
-// Unrecognized errors are converted to Unavailable.
+// Unrecognized errors are logged and passed through.
 // NOTE: Keep in sync with Handler.convertError in handler.go. The CHASM engine variant
 // additionally includes a request ID in error messages for debugging correlation.
 func (e *ChasmEngine) convertPersistenceOrUnknownError(err error, requestID string) error {
+	e.logger.Error(fmt.Sprintf("chasm engine error (request ID: %s): %v", requestID, err))
+
 	if solErr, ok := errors.AsType[*persistence.ShardOwnershipLostError](err); ok {
 		hostInfo := e.hostInfoProvider.HostInfo()
 		if ownerInfo, lookupErr := e.historyServiceResolver.Lookup(convert.Int32ToString(solErr.ShardID)); lookupErr == nil {
@@ -1187,23 +1186,22 @@ func (e *ChasmEngine) convertPersistenceOrUnknownError(err error, requestID stri
 		return serviceerrors.NewShardOwnershipLost("", hostInfo.GetAddress())
 	}
 	if _, ok := errors.AsType[*persistence.AppendHistoryTimeoutError](err); ok {
-		return serviceerror.NewUnavailablef("append history timed out (%s)", requestID)
+		return serviceerror.NewUnavailablef("append history timed out (request ID: %s)", requestID)
 	}
 	if _, ok := errors.AsType[*persistence.WorkflowConditionFailedError](err); ok {
-		return serviceerror.NewUnavailablef("workflow condition failed (%s)", requestID)
+		return serviceerror.NewUnavailablef("workflow condition failed (request ID: %s)", requestID)
 	}
 	if cwcfe, ok := errors.AsType[*persistence.CurrentWorkflowConditionFailedError](err); ok {
-		return serviceerror.NewUnavailablef("current workflow condition failed for RunID %s (%s)", cwcfe.RunID, requestID)
+		return serviceerror.NewUnavailablef("current workflow condition failed for RunID %s (request ID: %s)", cwcfe.RunID, requestID)
 	}
 	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
-		return serviceerror.NewUnavailablef("condition failed (%s)", requestID)
+		return serviceerror.NewUnavailablef("condition failed (request ID: %s)", requestID)
 	}
 	if _, ok := errors.AsType[*persistence.TransactionSizeLimitError](err); ok {
-		return serviceerror.NewInvalidArgumentf("transaction size limit exceeded (%s)", requestID)
+		return serviceerror.NewInvalidArgumentf("transaction size limit exceeded (request ID: %s)", requestID)
 	}
 	if _, ok := errors.AsType[*persistence.TimeoutError](err); ok {
-		return serviceerror.NewDeadlineExceededf("persistence operation timed out (%s)", requestID)
+		return serviceerror.NewDeadlineExceededf("persistence operation timed out (request ID: %s)", requestID)
 	}
-	e.logger.Error("uncategorized chasm engine error", tag.Error(err), tag.RequestID(requestID))
-	return serviceerror.NewUnavailablef("uncategorized chasm engine error (%s)", requestID)
+	return err
 }

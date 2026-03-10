@@ -1799,9 +1799,8 @@ func (s *chasmEngineSuite) TestConvertError() {
 		err := errors.New("some unknown error")
 		convertedErr := s.engine.convertError(err, ref, tv.RequestID())
 		require.Error(t, convertedErr)
-		var unavailableErr *serviceerror.Unavailable
-		require.ErrorAs(t, convertedErr, &unavailableErr)
-		require.Contains(t, convertedErr.Error(), "uncategorized chasm engine error")
+		// Should pass through
+		require.Equal(t, err, convertedErr)
 	})
 
 	t.Run("WrappedErrors", func(t *testing.T) {
