@@ -37,7 +37,7 @@ func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
 	s.doneCh = make(chan any)
 	logger := log.NewNoopLogger()
-	s.client, err = dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	s.client, err = dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
 	}, logger, s.doneCh, metrics.NoopMetricsHandler)
@@ -81,15 +81,12 @@ func (s *fileBasedClientSuite) TestNewFileBasedClientWithoutMetrics() {
 	doneCh := make(chan any)
 	defer close(doneCh)
 
-	client, err := dynamicconfig.NewFileBasedClientWithoutMetrics(
+	_, err := dynamicconfig.NewFileBasedClient(
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "config/testConfig.yaml",
 			PollInterval: time.Minute * 5,
 		}, logger, doneCh)
 	s.NoError(err)
-
-	client.SetMetricsHandler(metrics.NoopMetricsHandler)
-	s.NoError(client.Update())
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
@@ -276,12 +273,12 @@ func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
-	_, err := dynamicconfig.NewFileBasedClient(nil, nil, nil, nil)
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(nil, nil, nil, nil)
 	s.Error(err)
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
-	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "file/not/exist.yaml",
 		PollInterval: time.Second * 10,
 	}, nil, nil, nil)
@@ -289,7 +286,7 @@ func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
-	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second,
 	}, nil, nil, nil)
@@ -820,66 +817,6 @@ testGetIntPropertyKey:
 	mockLogger.EXPECT().Warn("dynamic config is missing correct metrics handler")
 
 	s.NoError(client.Update())
-}
-
-func (s *fileBasedClientSuite) TestUpdate_SetMetricsHandlerRecordsMetrics() {
-	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
-
-	ctrl := gomock.NewController(s.T())
-	defer ctrl.Finish()
-
-	doneCh := make(chan any)
-	defer close(doneCh)
-	reader := dynamicconfig.NewMockFileReader(ctrl)
-	logger := log.NewNoopLogger()
-	captureHandler := metricstest.NewCaptureHandler()
-
-	updateInterval := time.Minute * 5
-	t1 := time.Now()
-	t2 := t1.Add(time.Second)
-	t3 := t2.Add(time.Second)
-
-	fileData := []byte(`
-testGetIntPropertyKey:
-- value: 1000
-  constraints: {}
-`)
-
-	// init with nil metricsHandler — should succeed without error
-	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
-	reader.EXPECT().ReadFile().Return(fileData, nil)
-
-	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
-		&dynamicconfig.FileBasedClientConfig{
-			Filepath:     "anyValue",
-			PollInterval: updateInterval,
-		}, logger, doneCh, nil)
-	s.NoError(err)
-
-	// Set the metrics handler; subsequent updates should record metrics
-	client.SetMetricsHandler(captureHandler)
-
-	capture := captureHandler.StartCapture()
-	defer captureHandler.StopCapture(capture)
-
-	// Successful update should record gauge 0
-	reader.EXPECT().GetModTime().Return(t2, nil)
-	reader.EXPECT().ReadFile().Return(fileData, nil)
-	s.NoError(client.Update())
-
-	snapshot := capture.Snapshot()
-	s.Len(snapshot["dynamic_config_update_failure"], 1)
-	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][0].Value, 0)
-
-	// Failed update should record gauge 1
-	// lastCheckedTime is now t2, so t3 triggers a read
-	reader.EXPECT().GetModTime().Return(t3, nil)
-	reader.EXPECT().ReadFile().Return(nil, errors.New("transient error"))
-	s.Error(client.Update())
-
-	snapshot = capture.Snapshot()
-	s.Len(snapshot["dynamic_config_update_failure"], 2)
-	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][1].Value, 0)
 }
 
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
