@@ -156,6 +156,7 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 
 		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 		require.NoError(t, err)
+
 		var buf bytes.Buffer
 		cmd := exec.CommandContext(t.Context(), binary,
 			"run-scenario-with-worker",
@@ -163,6 +164,7 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 			"--language", "go",
 			"--server-address", serverAddr,
 			"--duration", remaining.String(),
+			"--timeout", (remaining + 2*time.Minute).String(), // with grace period to complete
 			"--run-id", runID,
 			"--max-concurrent", "5",
 			"--option", "internal-iterations=10",
