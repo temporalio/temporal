@@ -352,6 +352,7 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 			LoadedTasks:             int64(r.getLoadedTasks()),
 			FairMaxReadLevel:        maxReadLevel.toProto(),
 			ApproximateBacklogCount: count,
+			Drained:                 r.isDrained(),
 		}
 	}
 	return status

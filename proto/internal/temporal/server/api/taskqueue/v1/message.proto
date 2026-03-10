@@ -58,8 +58,12 @@ message InternalTaskQueueStatus {
     int64 approximate_backlog_count = 5;
     int64 max_read_level = 6;
     FairLevel fair_max_read_level = 9;
-    // Draining means that this status is from a draining queue.
+    // Draining means that this status is from a queue that is being drained to
+    // migrate from v1 to v2 tasks persistence (or backwards).
     bool draining = 10;
+    // Drained means that this queue has an empty backlog (at this point in time).
+    // Used for partition scaling.
+    bool drained = 11;
 }
 
 message TaskQueueVersionInfoInternal {
