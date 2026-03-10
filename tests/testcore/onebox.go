@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/faultinject"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -119,6 +120,9 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+
+		// faultInjector is shared across all services - allows tests to inject faults into RPC calls
+		faultInjector *faultinject.RPCFaultGenerator
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -222,6 +226,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+		faultInjector:                    faultinject.NewRPCFaultGenerator(),
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -378,12 +383,14 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() []grpc.UnaryServerInterceptor {
-				if c.replicationStreamRecorder != nil {
-					return []grpc.UnaryServerInterceptor{
-						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
-					}
+				interceptors := []grpc.UnaryServerInterceptor{
+					faultinject.GRPCUnaryServerInterceptor(c.faultInjector),
 				}
-				return nil
+				if c.replicationStreamRecorder != nil {
+					interceptors = append(interceptors,
+						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
+				}
+				return interceptors
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
 				if c.replicationStreamRecorder != nil {
@@ -473,10 +480,14 @@ func (c *TemporalImpl) startHistory() {
 				return c.taskQueueRecorder
 			}),
 			fx.Decorate(func(base []grpc.UnaryServerInterceptor) []grpc.UnaryServerInterceptor {
+				// Add fault injection interceptor first (will be checked before other interceptors)
+				result := append([]grpc.UnaryServerInterceptor{
+					faultinject.GRPCUnaryServerInterceptor(c.faultInjector),
+				}, base...)
 				if c.replicationStreamRecorder != nil {
-					return append(base, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
+					result = append(result, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
 				}
-				return base
+				return result
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
 				if c.replicationStreamRecorder != nil {
@@ -551,6 +562,12 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(func() log.ThrottledLogger { return logger }),
 			fx.Provide(c.newRPCFactory),
 			fx.Provide(c.GetGrpcClientInterceptor),
+			// Add fault injection interceptor for matching service
+			fx.Provide(func() []grpc.UnaryServerInterceptor {
+				return []grpc.UnaryServerInterceptor{
+					faultinject.GRPCUnaryServerInterceptor(c.faultInjector),
+				}
+			}),
 			static.MembershipModule(c.makeHostMap(serviceName, host)),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -693,6 +710,12 @@ func (c *TemporalImpl) GetTLSConfigProvider() encryption.TLSConfigProvider {
 
 func (c *TemporalImpl) GetGrpcClientInterceptor() *grpcinject.Interceptor {
 	return c.grpcClientInterceptor
+}
+
+// GetFaultInjector returns the shared fault injector for all services.
+// Tests can use this to inject faults into RPC calls for any service.
+func (c *TemporalImpl) GetFaultInjector() *faultinject.RPCFaultGenerator {
+	return c.faultInjector
 }
 
 func (c *TemporalImpl) GetTaskCategoryRegistry() tasks.TaskCategoryRegistry {

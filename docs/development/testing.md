@@ -120,7 +120,29 @@ or if there's no SDK support for that API available yet.
 
 You'll find a fully initialized task poller in any functional test suite, look for `s.TaskPoller`.
 
-_NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
+_NOTE_: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
+
+### gRPC fault injection
+
+The `testcore` package injects faults into gRPC calls by intercepting requests and responses.
+The fault function determines which RPCs trigger a fault and returns the error to inject.
+Only the first matching request is affected.
+
+**Example:**
+
+```go
+testcore.InjectRPCFault(s.T(), s.GetTestCluster(),
+    func(req, _ any, _ error) error {
+        r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
+        if ok {
+            return serviceerror.NewNotFound("injected fault")
+        }
+        return nil
+    })
+```
+
+The fault function receives `(req, resp, err)`. For pre-handler calls, `resp` and `err` are nil.
+Return an error to inject the fault, or nil to skip. The test fails if the fault never triggers.
 
 ### testhooks package
 
