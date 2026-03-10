@@ -71,7 +71,7 @@ func TestMaxBufferedEventSuite(t *testing.T) {
 			return sigCount, nil
 		}
 
-		s.Worker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
 
 		testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 		defer cancel()
@@ -79,7 +79,7 @@ func TestMaxBufferedEventSuite(t *testing.T) {
 		wid := "test-max-buffered-events-limit"
 		wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
 			ID:                  wid,
-			TaskQueue:           s.TaskQueue(),
+			TaskQueue:           s.WorkerTaskQueue(),
 			WorkflowTaskTimeout: time.Second * 20,
 		}, workflowFn)
 
@@ -165,7 +165,7 @@ func TestMaxBufferedEventSuite(t *testing.T) {
 			return sigCount, nil
 		}
 
-		s.Worker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
 
 		testCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 		defer cancel()
@@ -173,7 +173,7 @@ func TestMaxBufferedEventSuite(t *testing.T) {
 		wid := "test-max-buffered-events-limit"
 		wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
 			ID:                  wid,
-			TaskQueue:           s.TaskQueue(),
+			TaskQueue:           s.WorkerTaskQueue(),
 			WorkflowTaskTimeout: time.Second * 20,
 		}, workflowFn)
 
