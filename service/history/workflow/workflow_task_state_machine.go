@@ -491,16 +491,34 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		suggestContinueAsNewReasons = append(suggestContinueAsNewReasons, enumspb.SUGGEST_CONTINUE_AS_NEW_REASON_TOO_MANY_UPDATES)
 	}
 
-	// checking whether targetDeploymentVersion == nil means that we won't send the targetDeploymentVersionChanged=true
-	// to workflows that are about to transition to the target version. This is good because if their transition succeeds,
-	// they don't need to CaN-with-upgrade to start using the new version.
+	// Store the latest target version, sent from matching, on executionInfo so it can be passed to the
+	// new run during continue-as-new.
+	if targetDeploymentVersion != nil {
+		m.ms.executionInfo.LatestTargetWorkerDeploymentVersion = targetDeploymentVersion
+	}
+
 	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
 		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
 		targetDeploymentVersion != nil {
-		if currentDeploymentVersion := m.ms.GetEffectiveDeployment(); currentDeploymentVersion != nil &&
-			(currentDeploymentVersion.BuildId != targetDeploymentVersion.BuildId ||
-				currentDeploymentVersion.SeriesName != targetDeploymentVersion.DeploymentName) {
+
+		effectiveDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(m.ms.GetEffectiveDeployment())
+
+		switch {
+		// 1. Override active — operator controls version, don't signal.
+		case m.ms.executionInfo.GetVersioningInfo().GetVersioningOverride() != nil:
+		// 2. AutoUpgrade — will transition naturally, no CaN needed.
+		case m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
+		// Rest of the checks are guaranteed to have the Workflow's Effective Versioning Behavior to be Pinned in nature.
+		// 3. Already on target — nothing changed.
+		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
+			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+		// 4. CaN-inherited-pinned (declined to upgrade on CAN) and target unchanged since start — decline to upgrade.
+		case m.ms.executionInfo.HasInheritedPinnedVersionContinueAsNew &&
+			m.ms.executionInfo.GetTargetWorkerDeploymentVersionOnStart().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
+			m.ms.executionInfo.GetTargetWorkerDeploymentVersionOnStart().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+		default:
+			// Otherwise — target changed + did not decline to upgrade on CAN. Signal the SDK.
 			targetDeploymentVersionChanged = true
 		}
 	}

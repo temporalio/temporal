@@ -295,6 +295,21 @@ message WorkflowExecutionInfo {
         temporal.api.enums.v1.WorkflowTaskFailedCause last_workflow_task_failure_cause = 107;
         temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
     }
+
+    // The latest target Worker Deployment Version that matching resolved for this
+    // workflow. Overwritten on each workflow task start. Read at continue-as-new
+    // time to pass to the new run.
+    temporal.api.deployment.v1.WorkerDeploymentVersion latest_target_worker_deployment_version = 113;
+
+    // True when this run was initiated by continue-as-new and inherited a pinned
+    // version from the previous run. Used in the targetDeploymentVersionChanged
+    // condition to detect CaN-initiated runs that declined upgrade.
+    bool has_inherited_pinned_version_continue_as_new = 114;
+
+    // The previous run's latest target version, set once during application of the
+    // WorkflowExecutionStartedEvent. Never overwritten. Used to compare against the
+    // current target to detect whether the target has changed since this run started.
+    temporal.api.deployment.v1.WorkerDeploymentVersion target_worker_deployment_version_on_start = 115;
 }
 
 message ExecutionStats {
