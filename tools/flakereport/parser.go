@@ -13,7 +13,8 @@ import (
 	"github.com/jstemmer/go-junit-report/v2/junit"
 )
 
-var retryRegex = regexp.MustCompile(`\s*\(retry \d+\)$`)
+var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
+var trailingSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
 // parseJUnitFile reads and parses a single JUnit XML file
 func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
@@ -45,13 +46,30 @@ func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
 	return &testsuites, nil
 }
 
+// topLevelTestName extracts the suite/top-level test name from a test name.
+// For "TestSuiteV0/TestMethod" returns "TestSuiteV0".
+// For "TestFoo" (no slash) returns "TestFoo".
+func topLevelTestName(name string) string {
+	if idx := strings.IndexByte(name, '/'); idx >= 0 {
+		return name[:idx]
+	}
+	return name
+}
+
+// isGoTestSuite returns true if the name looks like a Go testify suite name
+// (starts with "Test" and contains "Suite").
+// e.g. TestDeploymentVersionSuiteV0, TestFunctionalSuite
+func isGoTestSuite(name string) bool {
+	return strings.HasPrefix(name, "Test") && strings.Contains(name, "Suite")
+}
+
 // extractFailures extracts all test failures from parsed JUnit data
 // Filters for: passed = false AND skipped = false (matching tringa SQL query)
-func extractFailures(suites *junit.Testsuites, artifactName string, runID int64) []TestFailure {
+func extractFailures(suites *junit.Testsuites, artifactName string, runID int64, timestamp time.Time) []TestFailure {
 	var failures []TestFailure
 
-	// Parse artifact name for run_id and job_id
-	_, jobID := parseArtifactName(artifactName)
+	// Parse artifact name for run_id, job_id, and matrix_name
+	_, jobID, matrixName := parseArtifactName(artifactName)
 
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
@@ -60,10 +78,12 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64)
 				failure := TestFailure{
 					ClassName:  testcase.Classname,
 					Name:       testcase.Name,
+					SuiteName:  topLevelTestName(testcase.Name),
 					ArtifactID: artifactName,
 					RunID:      runID,
 					JobID:      jobID,
-					Timestamp:  time.Now(),
+					MatrixName: matrixName,
+					Timestamp:  timestamp,
 				}
 				failures = append(failures, failure)
 			}
@@ -75,15 +95,19 @@ func extractFailures(suites *junit.Testsuites, artifactName string, runID int64)
 
 // extractAllTestRuns extracts all test runs (including successes) from parsed JUnit data
 // Used for calculating failure rates
-func extractAllTestRuns(suites *junit.Testsuites) []TestRun {
+func extractAllTestRuns(suites *junit.Testsuites, runID int64, jobID, matrixName string) []TestRun {
 	var runs []TestRun
 
 	for _, suite := range suites.Suites {
 		for _, testcase := range suite.Testcases {
 			run := TestRun{
-				Name:    testcase.Name,
-				Failed:  testcase.Failure != nil,
-				Skipped: testcase.Skipped != nil,
+				SuiteName:  topLevelTestName(testcase.Name),
+				Name:       testcase.Name,
+				Failed:     testcase.Failure != nil,
+				Skipped:    testcase.Skipped != nil,
+				RunID:      runID,
+				JobID:      jobID,
+				MatrixName: matrixName,
 			}
 			runs = append(runs, run)
 		}
@@ -92,10 +116,16 @@ func extractAllTestRuns(suites *junit.Testsuites) []TestRun {
 	return runs
 }
 
-// normalizeTestName strips "(retry N)" suffix from test names
-// Regex: \s*\(retry \d+\)$
+// normalizeTestName strips all trailing parenthesized suffixes from test names,
+// e.g. "(retry 1)", "(final)", "(timeout)".
 func normalizeTestName(name string) string {
-	return retryRegex.ReplaceAllString(name, "")
+	for {
+		stripped := trailingSuffixRegex.ReplaceAllString(name, "")
+		if stripped == name {
+			return name
+		}
+		name = stripped
+	}
 }
 
 // groupFailuresByTest groups failures by normalized test name
@@ -125,23 +155,37 @@ func countTestRuns(allRuns []TestRun) map[string]int {
 	return counts
 }
 
-// classifyFailures separates failures into categories
+// classifyFailure returns "timeout", "crash", or "flaky" based on the test name.
+// Uses Contains (not HasSuffix) so it works on both raw and normalized names.
+func classifyFailure(name string) string {
+	lower := strings.ToLower(name)
+	if strings.Contains(lower, "(timeout)") {
+		return "timeout"
+	}
+	if strings.Contains(lower, "(crash)") {
+		return "crash"
+	}
+	return "flaky"
+}
+
+// classifyFailures separates failures into categories.
+// Classifies using the raw failure name (not the normalized key) since
+// normalizeTestName strips suffixes like "(timeout)".
 func classifyFailures(grouped map[string][]TestFailure) (flaky, timeout, crash map[string][]TestFailure) {
 	flaky = make(map[string][]TestFailure)
 	timeout = make(map[string][]TestFailure)
 	crash = make(map[string][]TestFailure)
 
 	for testName, failures := range grouped {
-		// Classify based on test name patterns
-		if strings.HasSuffix(testName, "(timeout)") {
+		switch classifyFailure(failures[0].Name) {
+		case "timeout":
 			timeout[testName] = failures
-		} else if strings.Contains(strings.ToLower(testName), "crash") {
+		case "crash":
 			crash[testName] = failures
-		}
-
-		// Flaky: more than MinFlakyFailures failures
-		if len(failures) >= minFlakyFailures {
+		case "flaky":
 			flaky[testName] = failures
+		default:
+			panic("unknown failure classification: " + classifyFailure(failures[0].Name)) //nolint:forbidigo
 		}
 	}
 
@@ -159,17 +203,19 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 			totalRuns = len(failures) // Fallback if we don't have run counts
 		}
 
-		// Calculate failure rate per 1000 test runs
-		failureRate := 0.0
-		if totalRuns > 0 {
-			failureRate = (float64(len(failures)) / float64(totalRuns)) * 1000.0
+		// Find most recent failure
+		var lastFailure time.Time
+		for _, f := range failures {
+			if f.Timestamp.After(lastFailure) {
+				lastFailure = f.Timestamp
+			}
 		}
 
 		report := TestReport{
 			TestName:     testName,
 			FailureCount: len(failures),
 			TotalRuns:    totalRuns,
-			FailureRate:  failureRate,
+			LastFailure:  lastFailure,
 			GitHubURLs:   make([]string, 0, maxLinks),
 		}
 
@@ -186,84 +232,58 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 
 	// Sort by failure rate descending (most problematic tests first)
 	sort.Slice(reports, func(i, j int) bool {
-		return reports[i].FailureRate > reports[j].FailureRate
+		ri := float64(reports[i].FailureCount) / float64(reports[i].TotalRuns)
+		rj := float64(reports[j].FailureCount) / float64(reports[j].TotalRuns)
+		return ri > rj
 	})
 
 	return reports
 }
 
-// getRetryLevel determines the retry level from a test name
-func getRetryLevel(testName string) string {
-	if strings.Contains(testName, "(retry 2)") {
-		return "retry2"
+// filterParentTests removes top-level test names from grouped when subtests of
+// that parent were observed in testRunCounts. A top-level failure whose subtests
+// ran in other CI jobs is already captured (with a correct denominator) in the
+// Flaky Suites section, so including it in the per-test table produces a
+// misleading 1/1 entry.
+func filterParentTests(grouped map[string][]TestFailure, testRunCounts map[string]int) {
+	suitePrefix := make(map[string]bool, len(testRunCounts))
+	for name := range testRunCounts {
+		if idx := strings.IndexByte(name, '/'); idx >= 0 {
+			suitePrefix[name[:idx]] = true
+		}
 	}
-	if strings.Contains(testName, "(retry 1)") {
-		return "retry1"
+	for testName := range grouped {
+		if !strings.Contains(testName, "/") && suitePrefix[testName] {
+			delete(grouped, testName)
+		}
 	}
-	return "original"
 }
 
-// analyzeArtifactForCIBreakers analyzes a single artifact for CI breakers
-// Returns map of test names that broke CI in this artifact
+// isFinalRetry returns true if the test name has the "(final)" suffix,
+// indicating the test runner exhausted all retries.
+func isFinalRetry(testName string) bool {
+	return finalRegex.MatchString(testName)
+}
+
+// analyzeArtifactForCIBreakers analyzes a single artifact for CI breakers.
+// A test is a CI breaker if it has a failure with the "(final)" suffix,
+// meaning the test runner exhausted all retries.
 func analyzeArtifactForCIBreakers(artifactID string, artifactFailures []TestFailure) map[string][]TestFailure {
-	// Group by normalized name and track retry levels
-	testRetries := make(map[string]map[string][]TestFailure)
+	ciBreakers := make(map[string][]TestFailure)
 
-	fmt.Printf("\nArtifact: %s (%d total failures)\n", artifactID, len(artifactFailures))
-
-	// Show first few raw failure names
-	for i, failure := range artifactFailures {
-		if i < 5 {
-			fmt.Printf("  Raw failure name: %s\n", failure.Name)
+	for _, failure := range artifactFailures {
+		if !isFinalRetry(failure.Name) {
+			continue
 		}
-
-		normalizedName := normalizeTestName(failure.Name)
-		retryLevel := getRetryLevel(failure.Name)
-
-		if testRetries[normalizedName] == nil {
-			testRetries[normalizedName] = make(map[string][]TestFailure)
-		}
-		testRetries[normalizedName][retryLevel] = append(testRetries[normalizedName][retryLevel], failure)
+		normalized := normalizeTestName(failure.Name)
+		ciBreakers[normalized] = append(ciBreakers[normalized], failure)
 	}
 
-	// Find tests with both retry1 and retry2 failures
-	fmt.Printf("  Unique tests (normalized): %d\n", len(testRetries))
-	ciBreakersInArtifact := make(map[string][]TestFailure)
-
-	for testName, retryLevels := range testRetries {
-		hasRetry1 := len(retryLevels["retry1"]) > 0
-		hasRetry2 := len(retryLevels["retry2"]) > 0
-
-		// Debug output for tests with retries
-		if hasRetry1 || hasRetry2 {
-			retryInfo := buildRetryInfo(retryLevels, hasRetry1, hasRetry2)
-			fmt.Printf("    %s: %s\n", testName, retryInfo)
-		}
-
-		// A test breaks CI if it failed BOTH retry 1 and retry 2
-		if hasRetry1 && hasRetry2 {
-			allFailures := append(retryLevels["retry1"], retryLevels["retry2"]...)
-			ciBreakersInArtifact[testName] = allFailures
-			fmt.Printf("  ✓ CI BREAKER FOUND: %s (failed retry 1 and retry 2)\n", testName)
-		}
+	for testName := range ciBreakers {
+		fmt.Printf("  CI BREAKER: %s (artifact %s)\n", testName, artifactID)
 	}
 
-	return ciBreakersInArtifact
-}
-
-// buildRetryInfo builds a debug string showing retry level information
-func buildRetryInfo(retryLevels map[string][]TestFailure, hasRetry1, hasRetry2 bool) string {
-	var retryInfo string
-	if hasRetry1 {
-		retryInfo = fmt.Sprintf("retry1: %d", len(retryLevels["retry1"]))
-	}
-	if hasRetry2 {
-		if retryInfo != "" {
-			retryInfo += ", "
-		}
-		retryInfo += fmt.Sprintf("retry2: %d", len(retryLevels["retry2"]))
-	}
-	return retryInfo
+	return ciBreakers
 }
 
 // convertCIBreakersToReports converts CI breaker failures to TestReport slice
@@ -272,10 +292,18 @@ func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts 
 	var reports []TestReport
 
 	for testName, failures := range grouped {
+		var lastFailure time.Time
+		for _, f := range failures {
+			if f.Timestamp.After(lastFailure) {
+				lastFailure = f.Timestamp
+			}
+		}
+
 		report := TestReport{
 			TestName:     testName,
 			FailureCount: len(failures),
 			CIRunsBroken: ciBreakCounts[testName],
+			LastFailure:  lastFailure,
 			GitHubURLs:   make([]string, 0, maxLinks),
 		}
 
@@ -301,9 +329,9 @@ func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts 
 	return reports
 }
 
-// identifyCIBreakers finds tests that failed all retries in a single CI job
-// A test breaks CI if it has both "(retry 1)" AND "(retry 2)" failures in the same artifact
-// Returns: ciBreakers map and count of how many artifacts each test broke
+// identifyCIBreakers finds tests that failed their final retry in a CI job.
+// A test breaks CI if it has a failure with the "(final)" suffix in an artifact.
+// Returns: ciBreakers map and count of how many artifacts each test broke.
 func identifyCIBreakers(failures []TestFailure) (map[string][]TestFailure, map[string]int) {
 	// Group failures by artifact ID first
 	byArtifact := make(map[string][]TestFailure)
@@ -318,15 +346,10 @@ func identifyCIBreakers(failures []TestFailure) (map[string][]TestFailure, map[s
 	// Track tests that broke CI
 	ciBreakers := make(map[string][]TestFailure)
 	ciBreakCount := make(map[string]int)
-	totalArtifactsWithBreakers := 0
 
 	// Analyze each artifact for CI breakers
 	for artifactID, artifactFailures := range byArtifact {
 		breakersInArtifact := analyzeArtifactForCIBreakers(artifactID, artifactFailures)
-
-		if len(breakersInArtifact) > 0 {
-			totalArtifactsWithBreakers++
-		}
 
 		// Aggregate results
 		for testName, failures := range breakersInArtifact {
@@ -335,18 +358,78 @@ func identifyCIBreakers(failures []TestFailure) (map[string][]TestFailure, map[s
 		}
 	}
 
-	// Print summary
-	printCIBreakerSummary(totalArtifactsWithBreakers, ciBreakers, ciBreakCount)
+	fmt.Printf("Unique tests that broke CI: %d\n", len(ciBreakers))
 
 	return ciBreakers, ciBreakCount
 }
 
-// printCIBreakerSummary prints the summary of CI breaker analysis
-func printCIBreakerSummary(totalArtifacts int, ciBreakers map[string][]TestFailure, ciBreakCount map[string]int) {
-	fmt.Println("\n=== CI Breaker Summary ===")
-	fmt.Printf("Total artifacts with CI breakers: %d\n", totalArtifacts)
-	fmt.Printf("Unique tests that broke CI: %d\n", len(ciBreakers))
-	for testName, count := range ciBreakCount {
-		fmt.Printf("  %s: broke %d CI run(s)\n", testName, count)
+// suiteRunKey returns a string that uniquely identifies a single (CI run × DB config) pair.
+// Each workflow run may spawn multiple matrix jobs sharing the same RunID but with distinct
+// MatrixNames (DB configs). Keying by (RunID, MatrixName) ensures shards belonging to the
+// same run+config are counted once, regardless of how many shard JobIDs they produce.
+func suiteRunKey(runID int64, matrixName string) string {
+	return fmt.Sprintf("%d:%s", runID, matrixName)
+}
+
+// generateSuiteReports creates per-suite flake breakdown from all failures and test runs.
+// Suite flake rate = % of (CI run × DB config) pairs where the suite had at least one
+// non-retry failure.
+func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []SuiteReport {
+	// Track unique (CI run × DB config) pairs per suite (denominator).
+	// Using MatrixName avoids the inflation caused by per-shard JobIDs: suites whose
+	// test methods are spread across N shards would otherwise be counted N times per
+	// (run × DB config).
+	suiteRuns := make(map[string]map[string]bool)
+	for _, run := range allTestRuns {
+		if run.Skipped || !isGoTestSuite(run.SuiteName) {
+			continue
+		}
+		if suiteRuns[run.SuiteName] == nil {
+			suiteRuns[run.SuiteName] = make(map[string]bool)
+		}
+		suiteRuns[run.SuiteName][suiteRunKey(run.RunID, run.MatrixName)] = true
 	}
+
+	// Track (CI run × DB config) pairs with non-retry failures per suite (numerator)
+	suiteFailedRuns := make(map[string]map[string]bool)
+	suiteLastFailure := make(map[string]time.Time)
+	for _, failure := range allFailures {
+		if !isGoTestSuite(failure.SuiteName) {
+			continue
+		}
+		// Only report the original, complete run
+		if normalizeTestName(failure.Name) != failure.Name {
+			continue
+		}
+		if suiteFailedRuns[failure.SuiteName] == nil {
+			suiteFailedRuns[failure.SuiteName] = make(map[string]bool)
+		}
+		suiteFailedRuns[failure.SuiteName][suiteRunKey(failure.RunID, failure.MatrixName)] = true
+		if failure.Timestamp.After(suiteLastFailure[failure.SuiteName]) {
+			suiteLastFailure[failure.SuiteName] = failure.Timestamp
+		}
+	}
+
+	var reports []SuiteReport
+	for suiteName, runIDs := range suiteRuns {
+		failedRuns := len(suiteFailedRuns[suiteName])
+		if failedRuns == 0 {
+			continue
+		}
+		totalRuns := len(runIDs)
+		flakeRate := float64(failedRuns) / float64(totalRuns) * 100.0
+		reports = append(reports, SuiteReport{
+			SuiteName:   suiteName,
+			FlakeRate:   flakeRate,
+			FailedRuns:  failedRuns,
+			TotalRuns:   totalRuns,
+			LastFailure: suiteLastFailure[suiteName],
+		})
+	}
+
+	sort.Slice(reports, func(i, j int) bool {
+		return reports[i].SuiteName < reports[j].SuiteName
+	})
+
+	return reports
 }

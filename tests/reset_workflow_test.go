@@ -1152,3 +1152,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.Equal(int64(1), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
 }
+
+func (s *ResetWorkflowTestSuite) Context() context.Context {
+	return s.T().Context()
+}
