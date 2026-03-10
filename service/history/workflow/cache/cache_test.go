@@ -462,13 +462,14 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 		locks.PriorityHigh,
 	)
 	s.NoError(err)
-	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	holdDuration := 100 * time.Millisecond
+	time.Sleep(holdDuration) //nolint:forbidigo
 	release1(nil)
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		snapshot := capture.Snapshot()
 		recordings := snapshot[metrics.HistoryWorkflowExecutionCacheLockHoldDuration.Name()]
 		if assert.NotEmpty(collect, recordings) {
-			assert.Greater(collect, recordings[0].Value, 100*time.Millisecond)
+			assert.Greater(collect, recordings[0].Value, holdDuration)
 			assert.Equal(collect, tests.NamespaceID.String(), recordings[0].Tags["namespace_id"])
 		}
 	}, time.Second, 10*time.Millisecond)
