@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
@@ -113,6 +114,15 @@ func Invoke(
 				0); err != nil {
 				return nil, err
 			}
+
+			shardContext.GetLogger().Warn("workflow task failed",
+				tag.WorkflowNamespaceID(token.NamespaceId),
+				tag.WorkflowID(token.WorkflowId),
+				tag.WorkflowRunID(token.RunId),
+				tag.WorkflowTaskFailedCause(request.GetCause()),
+				tag.NewStringTag("failure-message", request.GetFailure().GetMessage()),
+				tag.NewStringTag("failure-source", request.GetFailure().GetSource()),
+			)
 
 			// TODO (alex-update): if it was speculative WT that failed, and there is nothing but pending updates,
 			//  new WT also should be create as speculative (or not?). Currently, it will be recreated as normal WT.
