@@ -39,6 +39,7 @@ func appendTransientTasks(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	eventNotifier events.Notifier,
 	namespaceID namespace.ID,
+	namespaceName string,
 	execution *commonpb.WorkflowExecution,
 	useRawHistory bool,
 	history *historypb.History,
@@ -46,6 +47,10 @@ func appendTransientTasks(
 	cachedTransientTasks *historyspb.TransientWorkflowTaskInfo,
 	nextEventID int64,
 ) {
+	if !shardContext.GetConfig().SendTransientOrSpeculativeWorkflowTaskEvents(namespaceName) {
+		return
+	}
+
 	// CLI and UI clients should not receive transient events for backward compatibility
 	if !api.ClientSupportsTranOrSpecEvents(ctx) {
 		return
@@ -468,6 +473,7 @@ func Invoke(
 					workflowConsistencyChecker,
 					eventNotifier,
 					namespaceID,
+					namespaceName.String(),
 					execution,
 					sendRawWorkflowHistoryForNamespace || sendRawHistoryBetweenInternalServices,
 					history,
