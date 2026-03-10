@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -596,7 +595,7 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	defer cancel()
 
 	storeID := tv.Any().String()
-	createResp, err := tests.NewPayloadStoreHandler(
+	_, err := tests.NewPayloadStoreHandler(
 		ctx,
 		tests.NewPayloadStoreRequest{
 			NamespaceID:      s.NamespaceID(),
@@ -607,18 +606,16 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	)
 	s.NoError(err)
 
-	archetypeID, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentIDFor(&tests.PayloadStore{})
-	s.True(ok)
-	archetype, ok := s.FunctionalTestBase.GetTestCluster().Host().GetCHASMRegistry().ComponentFqnByID(archetypeID)
-	s.True(ok)
+	visQuery := fmt.Sprintf("WorkflowId = '%s'", storeID)
 
-	visQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND WorkflowId = '%s'", archetypeID, storeID)
+	// Wait for visibility record to appear.
 	s.Eventually(
 		func() bool {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				PageSize:  10,
-				Query:     visQuery,
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 1
@@ -638,31 +635,14 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	)
 	s.NoError(err)
 
-	// Validate mutable state is deleted.
+	// Validate execution is fully deleted (both mutable state and visibility record).
 	s.Eventually(
 		func() bool {
-			_, err := s.AdminClient().DescribeMutableState(testcore.NewContext(), &adminservice.DescribeMutableStateRequest{
-				Namespace: s.Namespace().String(),
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: storeID,
-					RunId:      createResp.RunID,
-				},
-				Archetype: archetype,
-			})
-			var notFoundErr *serviceerror.NotFound
-			return errors.As(err, &notFoundErr)
-		},
-		testcore.WaitForESToSettle,
-		100*time.Millisecond,
-	)
-
-	// Validate visibility record is deleted.
-	s.Eventually(
-		func() bool {
-			resp, err := s.FrontendClient().ListWorkflowExecutions(testcore.NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
-				Namespace: s.Namespace().String(),
-				PageSize:  10,
-				Query:     visQuery,
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 0

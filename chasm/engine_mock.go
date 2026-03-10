@@ -41,7 +41,7 @@ func (m *MockEngine) EXPECT() *MockEngineMockRecorder {
 }
 
 // DeleteExecution mocks base method.
-func (m *MockEngine) DeleteExecution(arg0 context.Context, arg1 ComponentRef, arg2 TerminateComponentRequest) error {
+func (m *MockEngine) DeleteExecution(arg0 context.Context, arg1 ComponentRef, arg2 DeleteExecutionRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteExecution", arg0, arg1, arg2)
 	ret0, _ := ret[0].(error)

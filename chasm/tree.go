@@ -2559,13 +2559,8 @@ func (n *Node) Terminate(
 	}
 
 	n.terminated = true
+	n.deleteAfterClose = request.DeleteAfterClose
 	return nil
-}
-
-// SetDeleteAfterClose suppresses the close visibility task generation for the current transaction.
-// This should be called when an execution is being terminated as part of a delete operation.
-func (n *Node) SetDeleteAfterClose() {
-	n.deleteAfterClose = true
 }
 
 // ArchetypeID returns the framework's internal ID for the root component's fully qualified name.

@@ -23,10 +23,10 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -607,10 +607,12 @@ func (s *chasmEngineSuite) TestDeleteExecution_RunningExecution() {
 	err := s.engine.DeleteExecution(
 		context.Background(),
 		ref,
-		chasm.TerminateComponentRequest{
-			Reason:    "test deletion",
-			Identity:  "test-identity",
-			RequestID: tv.Any().String(),
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:    "test deletion",
+				Identity:  "test-identity",
+				RequestID: tv.Any().String(),
+			},
 		},
 	)
 	s.NoError(err)
@@ -651,10 +653,12 @@ func (s *chasmEngineSuite) TestDeleteExecution_ClosedExecution() {
 	err := s.engine.DeleteExecution(
 		context.Background(),
 		ref,
-		chasm.TerminateComponentRequest{
-			Reason:    "test deletion",
-			Identity:  "test-identity",
-			RequestID: tv.Any().String(),
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:    "test deletion",
+				Identity:  "test-identity",
+				RequestID: tv.Any().String(),
+			},
 		},
 	)
 	s.NoError(err)

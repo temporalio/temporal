@@ -51,11 +51,16 @@ type Engine interface {
 	DeleteExecution(
 		context.Context,
 		ComponentRef,
-		TerminateComponentRequest,
+		DeleteExecutionRequest,
 	) error
 
 	// NotifyExecution notifies any PollComponent callers waiting on the execution.
 	NotifyExecution(ExecutionKey)
+}
+
+// DeleteExecutionRequest is the request for Engine.DeleteExecution.
+type DeleteExecutionRequest struct {
+	TerminateComponentRequest
 }
 
 type BusinessIDReusePolicy int
@@ -406,7 +411,7 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 func DeleteExecution[C RootComponent](
 	ctx context.Context,
 	key ExecutionKey,
-	request TerminateComponentRequest,
+	request DeleteExecutionRequest,
 ) error {
 	return engineFromContext(ctx).DeleteExecution(
 		ctx,

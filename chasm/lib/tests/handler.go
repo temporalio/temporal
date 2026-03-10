@@ -202,9 +202,11 @@ func DeletePayloadStoreHandler(
 			NamespaceID: request.NamespaceID.String(),
 			BusinessID:  request.StoreID,
 		},
-		chasm.TerminateComponentRequest{
-			Reason:   request.Reason,
-			Identity: request.Identity,
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:   request.Reason,
+				Identity: request.Identity,
+			},
 		},
 	)
 }

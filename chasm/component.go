@@ -33,6 +33,11 @@ type TerminateComponentRequest struct {
 	Reason    string
 	Details   *commonpb.Payloads
 	RequestID string
+
+	// DeleteAfterClose suppresses the close visibility task when terminating
+	// as part of a delete operation. This is an infrastructure concern and
+	// should not be inspected by component implementations.
+	DeleteAfterClose bool
 }
 
 type TerminateComponentResponse struct{}
