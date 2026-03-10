@@ -167,7 +167,7 @@ func (s *NexusEndpointStore) GetNexusEndpoint(
 	ctx context.Context,
 	request *p.GetNexusEndpointRequest,
 ) (*p.InternalNexusEndpoint, error) {
-	query := s.session.Query(templateGetEndpointByIdQuery, rowTypeNexusEndpoint, request.ID).WithContext(ctx)
+	query := s.session.Query(templateGetEndpointByIdQuery, rowTypeNexusEndpoint, request.ID).WithContext(ctx).Idempotent(true)
 
 	var data []byte
 	var dataEncoding string
@@ -198,7 +198,7 @@ func (s *NexusEndpointStore) ListNexusEndpoints(
 
 	response := &p.InternalListNexusEndpointsResponse{}
 
-	query := s.session.Query(templateListEndpointsQuery, rowTypeNexusEndpoint).WithContext(ctx)
+	query := s.session.Query(templateListEndpointsQuery, rowTypeNexusEndpoint).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	endpoints, err := s.getEndpointList(iter)
@@ -291,7 +291,7 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 ) (*p.InternalListNexusEndpointsResponse, error) {
 	response := &p.InternalListNexusEndpointsResponse{}
 
-	query := s.session.Query(templateListEndpointsFirstPageQuery).WithContext(ctx)
+	query := s.session.Query(templateListEndpointsFirstPageQuery).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(request.PageSize + 1).PageState(nil).Iter() // Use PageSize+1 to account for partitionStatus row
 
 	partitionStateRow := make(map[string]any)
@@ -330,7 +330,7 @@ func (s *NexusEndpointStore) listFirstPageWithVersion(
 }
 
 func (s *NexusEndpointStore) getTableVersion(ctx context.Context) (int64, error) {
-	query := s.session.Query(templateGetTableVersion, rowTypePartitionStatus, tableVersionEndpointID).WithContext(ctx)
+	query := s.session.Query(templateGetTableVersion, rowTypePartitionStatus, tableVersionEndpointID).WithContext(ctx).Idempotent(true)
 
 	var version int64
 	if err := query.Scan(&version); err != nil {

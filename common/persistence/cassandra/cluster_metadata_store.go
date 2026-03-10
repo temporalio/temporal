@@ -64,7 +64,7 @@ func (m *ClusterMetadataStore) ListClusterMetadata(
 	ctx context.Context,
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {
-	query := m.session.Query(templateListClusterMetadata, constMetadataPartition).WithContext(ctx)
+	query := m.session.Query(templateListClusterMetadata, constMetadataPartition).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListClusterMetadataResponse{}
@@ -106,7 +106,7 @@ func (m *ClusterMetadataStore) GetClusterMetadata(
 	var encoding string
 	var version int64
 
-	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx)
+	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx).Idempotent(true)
 	err := query.Scan(&clusterMetadata, &encoding, &version)
 	if err != nil {
 		return nil, gocql.ConvertError("GetClusterMetadata", err)
@@ -159,7 +159,7 @@ func (m *ClusterMetadataStore) DeleteClusterMetadata(
 	ctx context.Context,
 	request *p.InternalDeleteClusterMetadataRequest,
 ) error {
-	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx)
+	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx).Idempotent(true)
 	if err := query.Exec(); err != nil {
 		return gocql.ConvertError("DeleteClusterMetadata", err)
 	}
@@ -202,7 +202,7 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	}
 
 	queryString.WriteString(templateAllowFiltering)
-	query := m.session.Query(queryString.String(), operands...).WithContext(ctx)
+	query := m.session.Query(queryString.String(), operands...).WithContext(ctx).Idempotent(true)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -257,7 +257,7 @@ func (m *ClusterMetadataStore) UpsertClusterMembership(
 		request.SessionStart,
 		time.Now().UTC(),
 		int64(request.RecordExpiry.Seconds()),
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 	err := query.Exec()
 
 	if err != nil {

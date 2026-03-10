@@ -154,7 +154,7 @@ func (m *MetadataStore) CreateNamespaceInV2Table(
 	defer func() { _ = iter.Close() }()
 	deleteOrphanNamespace := func() {
 		// Delete namespace from `namespaces_by_id`
-		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).WithContext(ctx).Exec(); errDelete != nil {
+		if errDelete := m.session.Query(templateDeleteNamespaceQuery, request.ID).WithContext(ctx).Idempotent(true).Exec(); errDelete != nil {
 			m.logger.Warn("Unable to delete orphan namespace record. Error", tag.Error(errDelete))
 		}
 	}
@@ -251,7 +251,7 @@ func (m *MetadataStore) RenameNamespace(
 	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
 		request.Name,
 		request.Id,
-	).WithContext(ctx).Exec(); updateErr != nil {
+	).WithContext(ctx).Idempotent(true).Exec(); updateErr != nil {
 		return gocql.ConvertError("RenameNamespace", updateErr)
 	}
 
@@ -316,14 +316,14 @@ func (m *MetadataStore) GetNamespace(
 
 	namespace := request.Name
 	if len(request.ID) > 0 {
-		query = m.session.Query(templateGetNamespaceQuery, request.ID).WithContext(ctx)
+		query = m.session.Query(templateGetNamespaceQuery, request.ID).WithContext(ctx).Idempotent(true)
 		err = query.Scan(&namespace)
 		if err != nil {
 			return nil, handleError(request.Name, request.ID, err)
 		}
 	}
 
-	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx)
+	query = m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, namespace).WithContext(ctx).Idempotent(true)
 	err = query.Scan(
 		nil,
 		nil,
@@ -352,7 +352,7 @@ func (m *MetadataStore) ListNamespaces(
 	ctx context.Context,
 	request *p.InternalListNamespacesRequest,
 ) (*p.InternalListNamespacesResponse, error) {
-	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition).WithContext(ctx)
+	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition).WithContext(ctx).Idempotent(true)
 	pageSize := request.PageSize
 	nextPageToken := request.NextPageToken
 	response := &p.InternalListNamespacesResponse{}
@@ -418,7 +418,7 @@ func (m *MetadataStore) DeleteNamespace(
 	request *p.DeleteNamespaceRequest,
 ) error {
 	var name string
-	query := m.session.Query(templateGetNamespaceQuery, request.ID).WithContext(ctx)
+	query := m.session.Query(templateGetNamespaceQuery, request.ID).WithContext(ctx).Idempotent(true)
 	err := query.Scan(&name)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -439,7 +439,7 @@ func (m *MetadataStore) DeleteNamespaceByName(
 	request *p.DeleteNamespaceByNameRequest,
 ) error {
 	var ID []byte
-	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name).WithContext(ctx)
+	query := m.session.Query(templateGetNamespaceByNameQueryV2, constNamespacePartition, request.Name).WithContext(ctx).Idempotent(true)
 	err := query.Scan(&ID, nil, nil, nil, nil, nil)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -454,7 +454,7 @@ func (m *MetadataStore) GetMetadata(
 	ctx context.Context,
 ) (*p.GetMetadataResponse, error) {
 	var notificationVersion int64
-	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName).WithContext(ctx)
+	query := m.session.Query(templateGetMetadataQueryV2, constNamespacePartition, namespaceMetadataRecordName).WithContext(ctx).Idempotent(true)
 	err := query.Scan(&notificationVersion)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
@@ -486,12 +486,12 @@ func (m *MetadataStore) updateMetadataBatch(
 }
 
 func (m *MetadataStore) deleteNamespace(ctx context.Context, name string, ID []byte) error {
-	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name).WithContext(ctx)
+	query := m.session.Query(templateDeleteNamespaceByNameQueryV2, constNamespacePartition, name).WithContext(ctx).Idempotent(true)
 	if err := query.Exec(); err != nil {
 		return gocql.ConvertError("DeleteNamespaceByName", err)
 	}
 
-	query = m.session.Query(templateDeleteNamespaceQuery, ID).WithContext(ctx)
+	query = m.session.Query(templateDeleteNamespaceQuery, ID).WithContext(ctx).Idempotent(true)
 	if err := query.Exec(); err != nil {
 		return gocql.ConvertError("DeleteNamespace", err)
 	}
