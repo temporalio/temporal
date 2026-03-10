@@ -3,7 +3,6 @@ package testcore
 import (
 	"context"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -48,8 +47,8 @@ func calculateTimeout(customTimeout time.Duration) time.Duration {
 	}
 
 	if envTimeout := os.Getenv("TEMPORAL_TEST_TIMEOUT"); envTimeout != "" {
-		if seconds, err := strconv.Atoi(envTimeout); err == nil && seconds > 0 {
-			return time.Duration(seconds) * time.Second * debug.TimeoutMultiplier
+		if dur, err := time.ParseDuration(envTimeout); err == nil && dur > 0 {
+			return dur * debug.TimeoutMultiplier
 		}
 	}
 
