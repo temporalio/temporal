@@ -349,7 +349,8 @@ func (ch *commandHandler) handleCancelCommand(
 	})
 
 	if !operationFound {
-		// Operation was deleted on terminal state but the terminal event is buffered. Ignore.
+		// Operation not found but there's a buffered terminal event. The workflow couldn't know
+		// the operation completed while its task was in flight. Ignore.
 		return nil
 	}
 

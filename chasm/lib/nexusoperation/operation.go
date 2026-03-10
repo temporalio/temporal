@@ -64,9 +64,8 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 // operation is in STARTED state, the cancellation is immediately scheduled; otherwise it will
 // be scheduled when the operation transitions to STARTED.
 func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) error {
-	// TODO: Remove this check when the operation auto-deletes itself on terminal state.
-	// The operation may already be in a terminal state because it doesn't yet delete itself. We don't want to accept
-	// cancellation in this case unless the terminal event is buffered (not yet handled in CHASM).
+	// The operation may still be present in the workflow's Operations map after reaching a terminal state
+	// if the caller hasn't called Workflow.RemoveNexusOperation yet. Reject cancellation in this case.
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}

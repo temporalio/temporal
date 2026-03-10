@@ -139,6 +139,10 @@ func (w *Workflow) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool
 	return w.MSPointer.HasAnyBufferedEvent(filter)
 }
 
+func (w *Workflow) RemoveNexusOperation(key string) {
+	delete(w.Operations, key)
+}
+
 func (w *Workflow) PendingNexusOperationCount() int {
 	return len(w.Operations)
 }

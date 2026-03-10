@@ -694,8 +694,8 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Len(t, tcx.history.Events, 1)
 		event := tcx.history.Events[0]
 
-		// Simulate operation completion by removing it from the map (CHASM auto-deletes on terminal state).
-		delete(tcx.wf.Operations, operationKey(event.EventId))
+		// Simulate terminal transition caller removing the operation from the workflow.
+		tcx.wf.RemoveNexusOperation(operationKey(event.EventId))
 
 		// Try to cancel - should fail since operation is completed/deleted.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
@@ -714,8 +714,7 @@ func TestHandleCancelCommand(t *testing.T) {
 
 	t.Run("operation already completed - completion buffered", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		// Mock HasAnyBufferedEvent to return true (simulating a buffered terminal event).
-		tcx.setHasAnyBufferedEvent(true)
+		tcx.setHasAnyBufferedEvent(true) // simulate buffered terminal event
 
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 			Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -730,8 +729,8 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.Len(t, tcx.history.Events, 1)
 		event := tcx.history.Events[0]
 
-		// Simulate operation completion by removing it from the map (CHASM auto-deletes on terminal state).
-		delete(tcx.wf.Operations, operationKey(event.EventId))
+		// Simulate terminal transition caller removing the operation from the workflow.
+		tcx.wf.RemoveNexusOperation(operationKey(event.EventId))
 
 		// Try to cancel - should succeed because there's a buffered completion.
 		err = tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
