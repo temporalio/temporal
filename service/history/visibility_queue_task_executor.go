@@ -425,6 +425,12 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 		return err
 	}
 
+	visTaskContext = chasm.AugmentContextForComponent(
+		visTaskContext,
+		rootComponent,
+		t.shardContext.ChasmRegistry(),
+	)
+
 	var chasmTaskQueue string
 	if chasmSAProvider, ok := rootComponent.(chasm.VisibilitySearchAttributesProvider); ok {
 		for _, chasmSA := range chasmSAProvider.SearchAttributes(visTaskContext) {

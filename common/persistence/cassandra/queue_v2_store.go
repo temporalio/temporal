@@ -225,7 +225,7 @@ func (s *queueV2Store) CreateQueue(
 		bytes,
 		enumspb.ENCODING_TYPE_PROTO3.String(),
 		0,
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return nil, gocql.ConvertError("QueueV2CreateQueue", err)
 	}
@@ -320,7 +320,7 @@ func (s *queueV2Store) updateQueue(
 		queueType,
 		queueName,
 		version,
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2UpdateQueueMetadata", err)
 	}
@@ -350,7 +350,7 @@ func (s *queueV2Store) tryInsert(
 		messageID,
 		blob.Data,
 		blob.EncodingType.String(),
-	).WithContext(ctx).MapScanCAS(make(map[string]interface{}))
+	).WithContext(ctx).MapScanCAS(make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("QueueV2EnqueueMessage", err)
 	}

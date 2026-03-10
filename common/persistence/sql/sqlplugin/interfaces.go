@@ -87,7 +87,7 @@ type (
 		DropAllTables(database string) error
 		CreateDatabase(database string) error
 		DropDatabase(database string) error
-		Exec(stmt string, args ...interface{}) error
+		Exec(stmt string, args ...any) error
 	}
 
 	// Tx defines the API for a SQL transaction
@@ -122,10 +122,10 @@ type (
 	// Conn defines the API for a single database connection
 	Conn interface {
 		Rebind(query string) string
-		ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-		NamedExecContext(ctx context.Context, query string, arg interface{}) (sql.Result, error)
-		GetContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
-		SelectContext(ctx context.Context, dest interface{}, query string, args ...interface{}) error
+		ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+		NamedExecContext(ctx context.Context, query string, arg any) (sql.Result, error)
+		GetContext(ctx context.Context, dest any, query string, args ...any) error
+		SelectContext(ctx context.Context, dest any, query string, args ...any) error
 		PrepareNamedContext(ctx context.Context, query string) (*sqlx.NamedStmt, error)
 	}
 )

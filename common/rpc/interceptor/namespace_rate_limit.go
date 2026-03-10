@@ -58,10 +58,10 @@ func NewNamespaceRateLimitInterceptor(
 
 func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (interface{}, error) {
+) (any, error) {
 	if ns := MustGetNamespaceName(ni.namespaceRegistry, req); ns != namespace.EmptyName {
 		method := info.FullMethod
 		if IsLongPollGetWorkflowExecutionHistoryRequest(req) {
@@ -97,7 +97,7 @@ func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name,
 }
 
 func IsLongPollGetWorkflowExecutionHistoryRequest(
-	req interface{},
+	req any,
 ) bool {
 	switch request := req.(type) {
 	case *workflowservice.GetWorkflowExecutionHistoryRequest:
@@ -107,7 +107,7 @@ func IsLongPollGetWorkflowExecutionHistoryRequest(
 }
 
 func IsLongPollDescribeActivityExecutionRequest(
-	req interface{},
+	req any,
 ) bool {
 	switch request := req.(type) {
 	case *workflowservice.DescribeActivityExecutionRequest:

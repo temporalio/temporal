@@ -17,34 +17,34 @@ type Engine interface {
 	StartExecution(
 		context.Context,
 		ComponentRef,
-		func(MutableContext) (Component, error),
+		func(MutableContext, ArchetypeID, *Registry) (RootComponent, error),
 		...TransitionOption,
 	) (StartExecutionResult, error)
 	UpdateWithStartExecution(
 		context.Context,
 		ComponentRef,
-		func(MutableContext) (Component, error),
-		func(MutableContext, Component) error,
+		func(MutableContext, ArchetypeID, *Registry) (RootComponent, error),
+		func(MutableContext, Component, *Registry) error,
 		...TransitionOption,
-	) (ExecutionKey, []byte, error)
+	) (EngineUpdateWithStartExecutionResult, error)
 
 	UpdateComponent(
 		context.Context,
 		ComponentRef,
-		func(MutableContext, Component) error,
+		func(MutableContext, Component, *Registry) error,
 		...TransitionOption,
 	) ([]byte, error)
 	ReadComponent(
 		context.Context,
 		ComponentRef,
-		func(Context, Component) error,
+		func(Context, Component, *Registry) error,
 		...TransitionOption,
 	) error
 
 	PollComponent(
 		context.Context,
 		ComponentRef,
-		func(Context, Component) (bool, error),
+		func(Context, Component, *Registry) (bool, error),
 		...TransitionOption,
 	) ([]byte, error)
 
@@ -77,8 +77,7 @@ type TransitionOptions struct {
 
 type TransitionOption func(*TransitionOptions)
 
-// StartExecutionResult contains the outcome of creating a new execution via [StartExecution]
-// or [UpdateWithStartExecution].
+// StartExecutionResult contains the outcome of creating a new execution via [StartExecution].
 //
 // This struct provides information about whether a new execution was actually created,
 // along with identifiers needed to reference the execution in subsequent operations.
@@ -99,6 +98,30 @@ type StartExecutionResult struct {
 	ExecutionRef []byte
 	Created      bool
 }
+
+// UpdateWithStartExecutionResult is the result of a UpdateWithStartExecution operation.
+//
+// Fields:
+//   - ExecutionKey: The unique identifier for the execution. This key can be used to
+//     look up or reference the execution in future operations.
+//   - ExecutionRef: A serialized reference to the newly created root component.
+//     This can be passed to [UpdateComponent], [ReadComponent], or [PollComponent]
+//     to interact with the component. Use [DeserializeComponentRef] to convert this
+//     back to a [ComponentRef] if needed.
+//   - Created: Indicates whether a new execution was actually created. When false,
+//     the execution already existed (based on the [BusinessIDReusePolicy] and
+//     [BusinessIDConflictPolicy] configured via [WithBusinessIDPolicy]), and the
+//     existing execution was returned instead.
+//   - UpdateOutput: The output value returned by the update function.
+type UpdateWithStartExecutionResult[O any] struct {
+	ExecutionKey ExecutionKey
+	ExecutionRef []byte
+	Created      bool
+	UpdateOutput O
+}
+
+// EngineUpdateWithStartExecutionResult is a type alias for the result type returned by the UpdateWithStart Engine implementation.
+type EngineUpdateWithStartExecutionResult = UpdateWithStartExecutionResult[struct{}]
 
 // (only) this transition will not be persisted
 // The next non-speculative transition will persist this transition as well.
@@ -149,7 +172,7 @@ func WithRequestID(
 // the lifecycle of creating and persisting a new component within an execution context.
 //
 // Type Parameters:
-//   - C: The component type to create, must implement [Component]
+//   - C: The component type to create, must implement [RootComponent]
 //   - I: The input type passed to the factory function
 //   - O: The output type returned by the factory function
 //
@@ -168,7 +191,7 @@ func WithRequestID(
 //   - O: The output value produced by startFn
 //   - [NewExecutionResult]: Contains the execution key, serialized ref, and whether a new execution was created
 //   - error: Non-nil if creation failed or policy constraints were violated
-func StartExecution[C Component, I any](
+func StartExecution[C RootComponent, I any](
 	ctx context.Context,
 	key ExecutionKey,
 	startFn func(MutableContext, I) (C, error),
@@ -178,12 +201,12 @@ func StartExecution[C Component, I any](
 	result, err := engineFromContext(ctx).StartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (_ Component, retErr error) {
+		func(ctx MutableContext, archetypeID ArchetypeID, registry *Registry) (_ RootComponent, retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var c C
 			var err error
-			c, err = startFn(ctx, input)
+			c, err = startFn(augmentContextForArchetypeID(ctx, archetypeID, registry), input)
 			return c, err
 		},
 		opts...,
@@ -199,40 +222,50 @@ func StartExecution[C Component, I any](
 	}, nil
 }
 
-func UpdateWithStartExecution[C Component, I any, O1 any, O2 any](
+func UpdateWithStartExecution[C RootComponent, I any, O any](
 	ctx context.Context,
 	key ExecutionKey,
-	startFn func(MutableContext, I) (C, O1, error),
-	updateFn func(C, MutableContext, I) (O2, error),
+	startFn func(MutableContext, I) (C, error),
+	updateFn func(C, MutableContext, I) (O, error),
 	input I,
 	opts ...TransitionOption,
-) (O1, O2, ExecutionKey, []byte, error) {
-	var output1 O1
-	var output2 O2
-	executionKey, serializedRef, err := engineFromContext(ctx).UpdateWithStartExecution(
+) (UpdateWithStartExecutionResult[O], error) {
+	var output O
+	result, err := engineFromContext(ctx).UpdateWithStartExecution(
 		ctx,
 		NewComponentRef[C](key),
-		func(ctx MutableContext) (_ Component, retErr error) {
+		func(ctx MutableContext, archetypeID ArchetypeID, registry *Registry) (_ RootComponent, retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var c C
 			var err error
-			c, output1, err = startFn(ctx, input)
+			c, err = startFn(augmentContextForArchetypeID(ctx, archetypeID, registry), input)
 			return c, err
 		},
-		func(ctx MutableContext, c Component) (retErr error) {
+		func(ctx MutableContext, c Component, registry *Registry) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output2, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			return err
 		},
 		opts...,
 	)
 	if err != nil {
-		return output1, output2, ExecutionKey{}, nil, err
+		return UpdateWithStartExecutionResult[O]{
+			UpdateOutput: output,
+		}, err
 	}
-	return output1, output2, executionKey, serializedRef, err
+	return UpdateWithStartExecutionResult[O]{
+		ExecutionKey: result.ExecutionKey,
+		ExecutionRef: result.ExecutionRef,
+		Created:      result.Created,
+		UpdateOutput: output,
+	}, nil
 }
 
 // TODO:
@@ -260,11 +293,15 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).UpdateComponent(
 		ctx,
 		ref,
-		func(ctx MutableContext, c Component) (retErr error) {
+		func(ctx MutableContext, c Component, registry *Registry) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output, err = updateFn(c.(C), ctx, input)
+			output, err = updateFn(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -295,11 +332,15 @@ func ReadComponent[C any, R []byte | ComponentRef, I any, O any](
 	err = engineFromContext(ctx).ReadComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (retErr error) {
+		func(ctx Context, c Component, registry *Registry) (retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
 			var err error
-			output, err = readFn(c.(C), ctx, input)
+			output, err = readFn(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			return err
 		},
 		opts...,
@@ -332,10 +373,14 @@ func PollComponent[C any, R []byte | ComponentRef, I any, O any](
 	newSerializedRef, err := engineFromContext(ctx).PollComponent(
 		ctx,
 		ref,
-		func(ctx Context, c Component) (_ bool, retErr error) {
+		func(ctx Context, c Component, registry *Registry) (_ bool, retErr error) {
 			defer log.CapturePanic(ctx.Logger(), &retErr)
 
-			out, satisfied, err := monotonicPredicate(c.(C), ctx, input)
+			out, satisfied, err := monotonicPredicate(
+				c.(C),
+				AugmentContextForComponent(ctx, c, registry),
+				input,
+			)
 			if satisfied {
 				output = out
 			}

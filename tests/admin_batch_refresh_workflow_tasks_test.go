@@ -45,7 +45,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) simpleWorkflow(ctx workflow.Co
 	return "done", nil
 }
 
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(ctx context.Context, workflowFn interface{}) sdkclient.WorkflowRun {
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(ctx context.Context, workflowFn any) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 		TaskQueue: s.TaskQueue(),

@@ -24,12 +24,14 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
@@ -45,6 +47,7 @@ var Module = fx.Options(
 	batcher.Module,
 	workerdeployment.Module,
 	dlq.Module,
+	dummy.Module,
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
@@ -91,7 +94,7 @@ var Module = fx.Options(
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
-	fx.Provide(NewPerNamespaceWorkerManager),
+	fx.Provide(PerNamespaceWorkerManagerProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -179,6 +182,30 @@ func VisibilityManagerProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+type perNamespaceWorkerManagerInitParams struct {
+	fx.In
+	Logger            log.Logger
+	SdkClientFactory  sdk.ClientFactory
+	NamespaceRegistry namespace.Registry
+	HostName          resource.HostName
+	Config            *Config
+	ClusterMetadata   cluster.Metadata
+	Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
+}
+
+func PerNamespaceWorkerManagerProvider(params perNamespaceWorkerManagerInitParams) *PerNamespaceWorkerManager {
+	return NewPerNamespaceWorkerManager(
+		params.Logger,
+		params.SdkClientFactory,
+		params.NamespaceRegistry,
+		params.HostName,
+		params.Config,
+		params.ClusterMetadata,
+		params.Components,
+		primitives.PerNSWorkerTaskQueue,
+	)
 }
 
 func ServerProvider(rpcFactory common.RPCFactory, logger log.Logger) *grpc.Server {

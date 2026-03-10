@@ -1,6 +1,7 @@
 package testcore
 
 import (
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
@@ -8,16 +9,19 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 )
 
@@ -28,8 +32,9 @@ import (
 var shardSalt string
 
 var (
-	_                Env      = (*testEnv)(nil)
-	sequentialSuites sync.Map // map[string]*sequentialSuite
+	_                  Env = (*testEnv)(nil)
+	sequentialSuites   sync.Map
+	defaultTestTimeout = 90 * time.Second * debug.TimeoutMultiplier
 )
 
 type Env interface {
@@ -40,6 +45,8 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	Context() context.Context
+	InjectHook(hook testhooks.Hook) (cleanup func())
 }
 
 type testEnv struct {
@@ -55,6 +62,7 @@ type testEnv struct {
 	taskPoller *taskpoller.TaskPoller
 	t          *testing.T
 	tv         *testvars.TestVars
+	ctx        context.Context
 }
 
 type TestOption func(*testOptions)
@@ -62,6 +70,7 @@ type TestOption func(*testOptions)
 type testOptions struct {
 	dedicatedCluster      bool
 	dynamicConfigSettings []dynamicConfigOverride
+	timeout               time.Duration
 }
 
 type dynamicConfigOverride struct {
@@ -89,6 +98,15 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 			o.dedicatedCluster = true
 		}
 		o.dynamicConfigSettings = append(o.dynamicConfigSettings, dynamicConfigOverride{setting: setting, value: value})
+	}
+}
+
+// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
+// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
+// The TEMPORAL_TEST_TIMEOUT environment variable can also set the default timeout in seconds.
+func WithTimeout(duration time.Duration) TestOption {
+	return func(o *testOptions) {
+		o.timeout = duration
 	}
 }
 
@@ -193,6 +211,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 testvars.New(t),
+		ctx:                setupTestTimeoutWithContext(t, options.timeout),
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
@@ -214,6 +233,27 @@ func (e *testEnv) NamespaceID() namespace.ID {
 	return e.nsID
 }
 
+// InjectHook sets a test hook inside the cluster.
+//
+// It auto-detects the scope from the hook:
+// - For namespace-scoped hooks: scopes it to the test's namespace
+// - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
+func (e *testEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
+	var scope any
+	switch hook.Scope() {
+	case testhooks.ScopeNamespace:
+		scope = e.nsID
+	case testhooks.ScopeGlobal:
+		if e.isShared {
+			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
+		}
+		scope = testhooks.GlobalScope
+	default:
+		e.t.Fatalf("InjectHook: unknown scope %v", hook.Scope())
+	}
+	return e.cluster.host.injectHook(e.t, hook, scope)
+}
+
 func (e *testEnv) TaskPoller() *taskpoller.TaskPoller {
 	return e.taskPoller
 }
@@ -224,6 +264,18 @@ func (e *testEnv) T() *testing.T {
 
 func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// Context returns the test-level timeout context with RPC version headers already included.
+// This context will be canceled when the test timeout occurs. Use this directly for all RPC
+// operations - no need to wrap with NewContext or add headers manually.
+//
+// For custom timeouts, use:
+//
+//	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
+//	defer cancel()
+func (e *testEnv) Context() context.Context {
+	return e.ctx
 }
 
 // OverrideDynamicConfig overrides a dynamic config setting for the duration of this test.

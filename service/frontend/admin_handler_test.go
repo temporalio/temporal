@@ -1464,7 +1464,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 				dlq.QueryTypeProgress,
 			)
 			mockValue := mocksdk.NewMockEncodedValue(s.controller)
-			mockValue.EXPECT().Get(gomock.Any()).Do(func(result interface{}) {
+			mockValue.EXPECT().Get(gomock.Any()).Do(func(result any) {
 				*(result.(*dlq.ProgressQueryResponse)) = tc.progressQueryResponse
 			})
 			queryExpectation.Return(mockValue, nil)

@@ -47,7 +47,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 
 	cases := []struct {
 		key   string
-		value interface{}
+		value any
 	}{
 		{key: sadefs.StartTime, value: int64(1528358645123456789)},
 		{key: sadefs.CloseTime, value: "2018-06-07T15:04:05+07:00"},
@@ -87,7 +87,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 
 	cases := []struct {
 		key   string
-		value interface{}
+		value any
 	}{
 		{key: sadefs.ExecutionStatus, value: "Completed"},
 		{key: sadefs.ExecutionStatus, value: int64(1)},
@@ -133,7 +133,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 
 	cases := []struct {
 		key   string
-		value interface{}
+		value any
 	}{
 		{key: sadefs.ExecutionDuration, value: "1"},
 		{key: sadefs.ExecutionDuration, value: int64(1)},
@@ -144,7 +144,7 @@ func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
 		{key: sadefs.WorkflowID, value: "should not be modified"},
 	}
 	expected := []struct {
-		value     interface{}
+		value     any
 		returnErr bool
 	}{
 		{value: int64(1), returnErr: false},

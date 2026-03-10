@@ -52,7 +52,7 @@ type (
 
 		clusters               []*testcore.TestCluster
 		logger                 log.Logger
-		dynamicConfigOverrides map[dynamicconfig.Key]interface{}
+		dynamicConfigOverrides map[dynamicconfig.Key]any
 
 		startTime          time.Time
 		onceClusterConnect sync.Once
@@ -82,7 +82,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 		s.logger = log.NewTestLogger()
 	}
 	if s.dynamicConfigOverrides == nil {
-		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]interface{})
+		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
 	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
 	s.dynamicConfigOverrides[dynamicconfig.NamespaceCacheRefreshInterval.Key()] = testcore.NamespaceCacheRefreshInterval

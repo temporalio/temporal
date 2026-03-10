@@ -69,7 +69,7 @@ func (s *sequentialSchedulerSuite) TestSubmitProcess_Running_Panic_ShouldCapture
 	mockTask.EXPECT().Execute().DoAndReturn(func() {
 		panic("random panic")
 	}).Times(1)
-	mockTask.EXPECT().Nack(gomock.Any()).Do(func(arg interface{}) { testWaitGroup.Done() }).Times(1)
+	mockTask.EXPECT().Nack(gomock.Any()).Do(func(arg any) { testWaitGroup.Done() }).Times(1)
 
 	s.scheduler.Submit(mockTask)
 
@@ -146,9 +146,9 @@ func (s *sequentialSchedulerSuite) TestParallelSubmitProcess() {
 
 	startWaitGroup.Add(numSubmitter)
 
-	for i := 0; i < numSubmitter; i++ {
+	for range numSubmitter {
 		channel := make(chan *MockTask, numTasks)
-		for j := 0; j < numTasks; j++ {
+		for j := range numTasks {
 			mockTask := NewMockTask(s.controller)
 			mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 			switch j % 2 {
@@ -300,14 +300,14 @@ func (s *sequentialSchedulerSuite) TestTrySubmitConcurrent() {
 	goroutineStartWG.Add(numGoroutines)
 	goroutineEndWG.Add(numGoroutines)
 
-	for goroutineID := 0; goroutineID < numGoroutines; goroutineID++ {
+	for goroutineID := range numGoroutines {
 		go func(gID int) {
 			defer goroutineEndWG.Done()
 
 			// Create tasks with mock expectations
 			tasks := make([]*MockTask, tasksPerGoroutine)
 
-			for taskIdx := 0; taskIdx < tasksPerGoroutine; taskIdx++ {
+			for taskIdx := range tasksPerGoroutine {
 				mockTask := NewMockTask(s.controller)
 				mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 				mockTask.EXPECT().Execute().DoAndReturn(func() error {
@@ -383,7 +383,7 @@ assertionsLabel:
 }
 
 func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*MockTask] {
-	hashFn := func(key interface{}) uint32 {
+	hashFn := func(key any) uint32 {
 		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
@@ -403,7 +403,7 @@ func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*Mock
 }
 
 func (s *sequentialSchedulerSuite) newTestProcessorWithQueueSize(queueSize int) *SequentialScheduler[*MockTask] {
-	hashFn := func(key interface{}) uint32 {
+	hashFn := func(key any) uint32 {
 		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {

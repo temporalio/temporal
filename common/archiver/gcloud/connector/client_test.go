@@ -281,7 +281,7 @@ func (s *clientSuite) TestQueryWithFilter() {
 }
 
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
-	return func(subject interface{}) bool {
+	return func(subject any) bool {
 
 		if workflowID == "" {
 			return true

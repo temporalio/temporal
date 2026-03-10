@@ -126,6 +126,7 @@ func (s *executableTaskSuite) SetupTest() {
 		NamespaceCache:          s.namespaceCache,
 		MetricsHandler:          s.metricsHandler,
 		Logger:                  s.logger,
+		ThrottledLogger:         s.logger,
 		EagerNamespaceRefresher: s.eagerNamespaceRefresher,
 		DLQWriter:               NewExecutionManagerDLQWriter(s.mockExecutionManager),
 		Serializer:              s.serializer,

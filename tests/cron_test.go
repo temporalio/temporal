@@ -269,7 +269,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 	s.NoError(terminateErr)
 
 	// first two should be failures
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		events := s.GetHistory(s.Namespace().String(), executions[i])
 		s.EqualHistoryEvents(fmt.Sprintf(`
   1 WorkflowExecutionStarted {"Memo":{"Fields":{"memoKey":{"Data":"\"memoVal\""}}},"SearchAttributes":{"IndexedFields":{"CustomKeywordField":{"Data":"\"keyword-value\"","Metadata":{"type":"Keyword"}}}}}
@@ -292,7 +292,7 @@ func (s *CronTestSuite) TestCronWorkflow() {
 
 	startFilter.LatestTime = timestamppb.New(time.Now().UTC())
 	var closedExecutions []*workflowpb.WorkflowExecutionInfo
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		resp, err := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,

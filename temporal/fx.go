@@ -95,7 +95,7 @@ type (
 	serverOptionsProvider struct {
 		fx.Out
 		ServerOptions              *serverOptions
-		StopChan                   chan interface{}
+		StopChan                   chan any
 		StartupSynchronizationMode synchronizationModeParams
 
 		Config      *config.Config
@@ -192,7 +192,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		return serverOptionsProvider{}, err
 	}
 
-	stopChan := make(chan interface{})
+	stopChan := make(chan any)
 
 	// ClientFactoryProvider
 	clientFactoryProvider := so.clientFactoryProvider
@@ -214,7 +214,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	if dcClient == nil {
 		dcConfig := so.config.DynamicConfigClient
 		if dcConfig != nil {
-			dcClient, err = dynamicconfig.NewFileBasedClient(dcConfig, logger, stopChan)
+			dcClient, err = dynamicconfig.NewFileBasedClient(dcConfig, logger, stopChan, metricHandler)
 			if err != nil {
 				return serverOptionsProvider{}, fmt.Errorf("unable to create dynamic config client: %w", err)
 			}

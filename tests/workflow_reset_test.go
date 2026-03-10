@@ -204,7 +204,7 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 	runs := s.setupRuns(ctx, workflowID, 1, true, versioningConfig{})
 	baseRunID := runs[0]
 	// Reset the current run repeatedly. Verify that each time the new run points to the original baseRunID
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		currentRunID := s.performReset(ctx, workflowID, baseRunID)
 		baseMutableState, err := s.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 			Namespace: s.Namespace().String(),

@@ -96,6 +96,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"go.temporal.io/server/service/worker/workerdeployment"
 )
 
 type (
@@ -135,6 +136,8 @@ type (
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionMembershipCache     worker_versioning.VersionMembershipCache
+		reactivationSignalCache    worker_versioning.ReactivationSignalCache
+		workerDeploymentClient     workerdeployment.Client
 		routingInfoCache           worker_versioning.RoutingInfoCache
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
@@ -156,6 +159,8 @@ func NewEngineWithShardContext(
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
+	reactivationSignalCache worker_versioning.ReactivationSignalCache,
+	workerDeploymentClient workerdeployment.Client,
 	routingInfoCache worker_versioning.RoutingInfoCache,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	workflowCache wcache.Cache,
@@ -227,6 +232,8 @@ func NewEngineWithShardContext(
 		testHooks:                  testHooks,
 		chasmEngine:                chasmEngine,
 		versionMembershipCache:     versionMembershipCache,
+		reactivationSignalCache:    reactivationSignalCache,
+		workerDeploymentClient:     workerDeploymentClient,
 		routingInfoCache:           routingInfoCache,
 	}
 
@@ -406,6 +413,8 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		startRequest,
 		e.matchingClient,
 		e.versionMembershipCache,
+		e.reactivationSignalCache,
+		e.workerDeploymentClient.SignalVersionReactivation,
 		api.NewWorkflowLeaseAndContext,
 	)
 	if err != nil {
@@ -428,6 +437,8 @@ func (e *historyEngineImpl) ExecuteMultiOperation(
 		e.tokenSerializer,
 		e.matchingClient,
 		e.versionMembershipCache,
+		e.reactivationSignalCache,
+		e.workerDeploymentClient.SignalVersionReactivation,
 		e.testHooks,
 	)
 }
@@ -642,7 +653,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.SignalWithStartWorkflowExecutionRequest,
 ) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	return signalwithstartworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache)
+	return signalwithstartworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache, e.reactivationSignalCache, e.workerDeploymentClient.SignalVersionReactivation)
 }
 
 func (e *historyEngineImpl) UpdateWorkflowExecution(
@@ -843,7 +854,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.ResetWorkflowExecutionRequest,
 ) (*historyservice.ResetWorkflowExecutionResponse, error) {
-	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache)
+	return resetworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache, e.reactivationSignalCache, e.workerDeploymentClient.SignalVersionReactivation)
 }
 
 // UpdateWorkflowExecutionOptions updates the options of a specific workflow execution.
@@ -852,7 +863,7 @@ func (e *historyEngineImpl) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	req *historyservice.UpdateWorkflowExecutionOptionsRequest,
 ) (*historyservice.UpdateWorkflowExecutionOptionsResponse, error) {
-	return updateworkflowoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache)
+	return updateworkflowoptions.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.matchingClient, e.versionMembershipCache, e.reactivationSignalCache, e.workerDeploymentClient.SignalVersionReactivation)
 }
 
 func (e *historyEngineImpl) NotifyNewHistoryEvent(

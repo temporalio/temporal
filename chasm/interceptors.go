@@ -52,10 +52,10 @@ type ChasmVisibilityInterceptor struct {
 
 func (i *ChasmVisibilityInterceptor) Intercept(
 	ctx context.Context,
-	req interface{},
+	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
-) (resp interface{}, retError error) {
+) (resp any, retError error) {
 	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
 	return handler(ctx, req)
 }
