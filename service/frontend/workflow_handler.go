@@ -2889,7 +2889,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 	return &workflowservice.ShutdownWorkerResponse{}, nil
 }
 
-// cancelOutstandingWorkerPolls cancels all outstanding polls for the worker across all partitions.
+// cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
 // This is a best-effort operation - errors are logged but don't fail the shutdown.
 func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	ctx context.Context,
@@ -2902,6 +2902,8 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		return
 	}
 
+	namespaceName := request.GetNamespace()
+
 	// Use task queue types from request, or default to both workflow and activity
 	taskTypes := request.GetTaskQueueTypes()
 	if len(taskTypes) == 0 {
@@ -2911,6 +2913,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		}
 	}
 
+	// The partition is only used for routing; the matching engine cancels all pollers for the workerInstanceKey.
 	tqFamily, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	if err != nil {
 		wh.logger.Warn("Invalid task queue name for poll cancellation.",
@@ -2919,13 +2922,16 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		return
 	}
 
-	namespaceName := request.GetNamespace()
 	var waitGroup sync.WaitGroup
 	var totalCancelled atomic.Int32
 	var failedPartitions atomic.Int32
 
 	for _, taskType := range taskTypes {
-		numPartitions := max(1, wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType))
+		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
+		if numPartitions < 1 {
+			numPartitions = 1
+		}
+
 		tq := tqFamily.TaskQueue(taskType)
 		// TODO: Remove partition iteration after release. Matching fans out when it receives root.
 		// Switch to sending root partition only in follow-up PR #9477 after matching is deployed.
