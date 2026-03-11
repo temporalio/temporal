@@ -74,6 +74,8 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) err
 	})
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
 
+	// Once started, the handler returns a token that can be used in the cancelation request.
+	// Until then, no need to schedule the cancelation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
 		return transitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
 	}
