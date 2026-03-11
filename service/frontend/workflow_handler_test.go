@@ -3842,10 +3842,10 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Expect cancellation for 2 task types * 2 partitions = 4 calls (frontend iterates until matching fan-out is deployed)
+	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(4)
+		Times(2)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -3926,10 +3926,10 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Mixed results: some succeed, some fail (2 task types * 2 partitions = 4 calls)
+	// Mixed results: some succeed, some fail (2 task types = 2 calls)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(3)
+		Times(1)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnavailable("temporary error")).
 		Times(1)
