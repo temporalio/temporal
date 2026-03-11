@@ -2891,8 +2891,9 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 
 // cancelOutstandingWorkerPolls cancels all outstanding polls for the worker across all partitions.
 // This is a best-effort operation - errors are logged but don't fail the shutdown.
-// Partition iteration is done by the matching service (root partition triggers fan-out to all partitions),
-// so each cell uses its own partition config (supports different partition counts per cell, e.g. MCN).
+//
+// TODO: Remove partition iteration after release. Matching service now fans out when it receives
+// root partition. Switch to sending root partition only in a follow-up PR after matching is deployed.
 func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	ctx context.Context,
 	namespaceID string,
@@ -2921,26 +2922,31 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 		return
 	}
 
+	namespaceName := request.GetNamespace()
 	var totalCancelled int32
 	for _, taskType := range taskTypes {
-		rootPartition := tqFamily.TaskQueue(taskType).RootPartition()
-		resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
-			NamespaceId: namespaceID,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: rootPartition.RpcName(),
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			TaskQueueType:     taskType,
-			WorkerInstanceKey: workerInstanceKey,
-			WorkerIdentity:    request.GetIdentity(),
-		})
-		if err != nil {
-			wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-				tag.WorkflowTaskQueueName(rootPartition.RpcName()),
-				tag.String("worker-instance-key", workerInstanceKey),
-				tag.Error(err))
-		} else {
-			totalCancelled += resp.CancelledCount
+		tq := tqFamily.TaskQueue(taskType)
+		numPartitions := max(1, wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType))
+		for i := range numPartitions {
+			partition := tq.NormalPartition(i)
+			resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId: namespaceID,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: partition.RpcName(),
+					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+				},
+				TaskQueueType:     taskType,
+				WorkerInstanceKey: workerInstanceKey,
+				WorkerIdentity:    request.GetIdentity(),
+			})
+			if err != nil {
+				wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+					tag.WorkflowTaskQueueName(partition.RpcName()),
+					tag.String("worker-instance-key", workerInstanceKey),
+					tag.Error(err))
+			} else {
+				totalCancelled += resp.CancelledCount
+			}
 		}
 	}
 

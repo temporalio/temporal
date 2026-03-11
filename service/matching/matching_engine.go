@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"golang.org/x/sync/errgroup"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -1237,32 +1238,37 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsFanOut(
 		return nil, err
 	}
 	tqConfig := newTaskQueueConfig(rootPartition.TaskQueue(), e.config, ns)
-	numPartitions := max(tqConfig.NumWritePartitions(), tqConfig.NumReadPartitions())
-	if numPartitions < 1 {
-		numPartitions = 1
-	}
+	numPartitions := max(1, tqConfig.NumReadPartitions())
 
-	var totalCancelled int32
+	var totalCancelled atomic.Int32
+	g, gctx := errgroup.WithContext(ctx)
 	for i := range numPartitions {
-		partition := rootPartition.TaskQueue().NormalPartition(i)
-		partitionReq := &matchingservice.CancelOutstandingWorkerPollsRequest{
-			NamespaceId:       request.GetNamespaceId(),
-			TaskQueue:         &taskqueuepb.TaskQueue{Name: partition.RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-			TaskQueueType:     request.GetTaskQueueType(),
-			WorkerInstanceKey: request.GetWorkerInstanceKey(),
-			WorkerIdentity:    request.GetWorkerIdentity(),
-		}
-		resp, err := e.matchingRawClient.CancelOutstandingWorkerPolls(ctx, partitionReq)
-		if err != nil {
-			e.logger.Warn("Failed to cancel outstanding worker polls for partition",
-				tag.WorkflowTaskQueueName(partition.RpcName()),
-				tag.String("worker-instance-key", request.GetWorkerInstanceKey()),
-				tag.Error(err))
-			continue
-		}
-		totalCancelled += resp.CancelledCount
+		i := i
+		g.Go(func() error {
+			partition := rootPartition.TaskQueue().NormalPartition(i)
+			partitionReq := &matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       request.GetNamespaceId(),
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: partition.RpcName(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     request.GetTaskQueueType(),
+				WorkerInstanceKey: request.GetWorkerInstanceKey(),
+				WorkerIdentity:    request.GetWorkerIdentity(),
+			}
+			resp, err := e.matchingRawClient.CancelOutstandingWorkerPolls(gctx, partitionReq)
+			if err != nil {
+				e.logger.Warn("Failed to cancel outstanding worker polls for partition",
+					tag.WorkflowTaskQueueName(partition.RpcName()),
+					tag.String("worker-instance-key", request.GetWorkerInstanceKey()),
+					tag.Error(err))
+				return nil // best-effort: log and continue
+			}
+			totalCancelled.Add(resp.CancelledCount)
+			return nil
+		})
 	}
-	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: totalCancelled}, nil
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: totalCancelled.Load()}, nil
 }
 
 // removePollerFromHistory eagerly removes the worker from pollerHistory so
