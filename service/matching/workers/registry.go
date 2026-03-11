@@ -22,6 +22,7 @@ type (
 	Registry interface {
 		RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat)
 		ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error)
+		CountWorkers(nsID namespace.ID, query string) (int64, error)
 		DescribeWorker(nsID namespace.ID, workerInstanceKey string) (*workerpb.WorkerHeartbeat, error)
 	}
 )

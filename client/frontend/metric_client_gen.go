@@ -37,6 +37,20 @@ func (c *metricClient) CountSchedules(
 	return c.client.CountSchedules(ctx, request, opts...)
 }
 
+func (c *metricClient) CountWorkers(
+	ctx context.Context,
+	request *workflowservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.CountWorkersResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCountWorkers")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountWorkers(ctx, request, opts...)
+}
+
 func (c *metricClient) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,

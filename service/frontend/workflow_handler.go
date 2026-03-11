@@ -6763,6 +6763,31 @@ func (wh *WorkflowHandler) ListWorkers(
 	}, nil
 }
 
+func (wh *WorkflowHandler) CountWorkers(
+	ctx context.Context, request *workflowservice.CountWorkersRequest,
+) (*workflowservice.CountWorkersResponse, error) {
+	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
+		return nil, serviceerror.NewUnimplemented("method CountWorkers not supported")
+	}
+	namespaceName := namespace.Name(request.GetNamespace())
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := wh.matchingClient.CountWorkers(ctx, &matchingservice.CountWorkersRequest{
+		NamespaceId:  namespaceID.String(),
+		CountRequest: request,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.CountWorkersResponse{
+		Count: resp.GetCount(),
+	}, nil
+}
+
 func (wh *WorkflowHandler) UpdateTaskQueueConfig(
 	ctx context.Context, request *workflowservice.UpdateTaskQueueConfigRequest,
 ) (*workflowservice.UpdateTaskQueueConfigResponse, error) {

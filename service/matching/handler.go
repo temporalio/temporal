@@ -599,6 +599,19 @@ func (h *Handler) ListWorkers(
 	}, nil
 }
 
+func (h *Handler) CountWorkers(
+	_ context.Context, request *matchingservice.CountWorkersRequest,
+) (*matchingservice.CountWorkersResponse, error) {
+	nsID := namespace.ID(request.GetNamespaceId())
+	count, err := h.workersRegistry.CountWorkers(nsID, request.GetCountRequest().GetQuery())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.CountWorkersResponse{
+		Count: count,
+	}, nil
+}
+
 func (h *Handler) UpdateFairnessState(
 	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
 ) (*matchingservice.UpdateFairnessStateResponse, error) {

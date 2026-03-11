@@ -49,6 +49,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/SyncDeploymentUserData":                 1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/RecordWorkerHeartbeat":                  1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListWorkers":                            1,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CountWorkers":                           1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig":                  1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker":                         1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState":                    1,

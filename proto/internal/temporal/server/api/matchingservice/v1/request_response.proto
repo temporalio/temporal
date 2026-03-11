@@ -698,6 +698,15 @@ message ListWorkersResponse {
     bytes next_page_token = 2;
 }
 
+message CountWorkersRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.CountWorkersRequest count_request = 2;
+}
+
+message CountWorkersResponse {
+    int64 count = 1;
+}
+
 // (-- api-linter: core::0134::request-resource-required=disabled
 //     aip.dev/not-precedent: UpdateTaskQueueConfigRequest RPC doesn't follow Google API format. --)
 // (-- api-linter: core::0134::request-mask-required=disabled

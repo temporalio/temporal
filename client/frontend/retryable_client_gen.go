@@ -41,6 +41,21 @@ func (c *retryableClient) CountSchedules(
 	return resp, err
 }
 
+func (c *retryableClient) CountWorkers(
+	ctx context.Context,
+	request *workflowservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountWorkersResponse, error) {
+	var resp *workflowservice.CountWorkersResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountWorkers(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,

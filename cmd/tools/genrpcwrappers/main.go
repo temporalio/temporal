@@ -324,6 +324,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		"ReplicateTaskQueueUserDataRequest",
 		"RecordWorkerHeartbeatRequest",
 		"ListWorkersRequest",
+		"CountWorkersRequest",
 		"DescribeWorkerRequest":
 		// Always route these requests to the same matching node by namespace.
 		tq = fieldWithPath{path: "\"not-applicable\""}

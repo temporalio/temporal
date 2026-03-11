@@ -185,6 +185,9 @@ service MatchingService {
     // Returns an error if the namespace doesn't exist.
     rpc ListWorkers (ListWorkersRequest) returns (ListWorkersResponse) {}
 
+    // CountWorkers counts workers in the specified namespace that match the provided query.
+    rpc CountWorkers (CountWorkersRequest) returns (CountWorkersResponse) {}
+
     // Set the persisted task queue configuration.
     // (-- api-linter: core::0134::method-signature=disabled
     //     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)

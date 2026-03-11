@@ -29,6 +29,16 @@ func (c *clientImpl) CountSchedules(
 	return c.client.CountSchedules(ctx, request, opts...)
 }
 
+func (c *clientImpl) CountWorkers(
+	ctx context.Context,
+	request *workflowservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CountWorkersResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CountWorkers(ctx, request, opts...)
+}
+
 func (c *clientImpl) CountWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.CountWorkflowExecutionsRequest,

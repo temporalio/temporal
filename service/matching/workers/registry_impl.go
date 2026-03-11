@@ -388,6 +388,24 @@ func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) 
 	return paginateWorkers(workers, params.PageSize, params.NextPageToken)
 }
 
+func (m *registryImpl) CountWorkers(nsID namespace.ID, query string) (int64, error) {
+	var predicate func(*workerpb.WorkerHeartbeat) bool
+	if query == "" {
+		predicate = func(_ *workerpb.WorkerHeartbeat) bool { return true }
+	} else {
+		queryEngine, err := newWorkerQueryEngine(nsID.String(), query)
+		if err != nil {
+			return 0, err
+		}
+		predicate = func(heartbeat *workerpb.WorkerHeartbeat) bool {
+			result, err := queryEngine.EvaluateWorker(heartbeat)
+			return err == nil && result
+		}
+	}
+	workers := m.filterWorkers(nsID, predicate)
+	return int64(len(workers)), nil
+}
+
 // paginateWorkers applies cursor-based pagination to a list of workers.
 // Workers are sorted by WorkerInstanceKey for deterministic ordering.
 // Returns the paginated slice and a token for the next page (nil if no more pages).
