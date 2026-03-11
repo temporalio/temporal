@@ -2323,10 +2323,13 @@ func (x *SetCurrentVersionResponse) GetConflictToken() []byte {
 
 // used as Worker Deployment workflow update input:
 type CreateWorkerDeploymentArgs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Identity      string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
-	RequestId     string                 `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	ComputeConfig *v12.ComputeConfig     `protobuf:"bytes,3,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Identity string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	// Retrying with same request id is a successful no-op.
+	// Retrying with different request id is an error.
+	// One deployment is deleted, same or different request id will re-create it.
+	RequestId     string             `protobuf:"bytes,2,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	ComputeConfig *v12.ComputeConfig `protobuf:"bytes,3,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
