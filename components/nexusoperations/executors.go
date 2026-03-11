@@ -193,7 +193,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 	}
 
-	callbackURL, err := buildCallbackURL(e.Config.UseSystemCallbackURL(), e.Config.CallbackURLTemplate(ns.Name().String()), ns, endpoint)
+	callbackURL, err := buildCallbackURL(e.Config.UseSystemCallbackURL(), e.Config.CallbackURLTemplate(), ns, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to build callback URL: %w", err)
 	}

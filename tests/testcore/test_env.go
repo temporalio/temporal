@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 )
 
@@ -315,6 +316,12 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 }
 
 func (e *TestEnv) setupSdkClient() {
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
+	// Use base's OverrideDynamicConfig since CallbackURLTemplate is a global setting.
+	e.FunctionalTestBase.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+e.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+
 	clientOptions := sdkclient.Options{
 		HostPort:  e.FrontendGRPCAddress(),
 		Namespace: e.nsName.String(),
@@ -359,6 +366,12 @@ func (e *TestEnv) WorkerTaskQueue() string {
 }
 
 func (e *TestEnv) setupSdk() {
+	// Set URL template after httpAPAddress is set, see commonnexus.RouteCompletionCallback.
+	// Use base's OverrideDynamicConfig since CallbackURLTemplate is a global setting.
+	e.FunctionalTestBase.OverrideDynamicConfig(
+		nexusoperations.CallbackURLTemplate,
+		"http://"+e.HttpAPIAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback")
+
 	clientOptions := sdkclient.Options{
 		HostPort:  e.FrontendGRPCAddress(),
 		Namespace: e.nsName.String(),
