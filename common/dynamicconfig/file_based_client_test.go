@@ -995,3 +995,22 @@ testGetBoolPropertyKey:
 	}
 	s.Equal(3, found)
 }
+
+func (s *fileBasedClientSuite) TestGetMetricsHandler_SetNilHandler() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader.EXPECT().GetModTime().Return(time.Now(), nil).AnyTimes()
+	// Use a minimal valid YAML config to avoid parse errors
+	reader.EXPECT().ReadFile().Return([]byte("testGetIntPropertyKey:\n- value: 1000\n"), nil).AnyTimes()
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "anyValue",
+		PollInterval: time.Minute * 5,
+	}, logger, doneCh, nil)
+	s.NoError(err)
+	client.SetMetricsHandler(nil)
+	s.NoError(client.Update())
+}
