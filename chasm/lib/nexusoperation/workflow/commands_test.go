@@ -153,6 +153,16 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Empty(t, tcx.history.Events)
 	})
 
+	t.Run("chasm nexus not enabled", func(t *testing.T) {
+		tcx := newTestContext(t, &nexusoperation.Config{
+			Enabled:           dynamicconfig.GetBoolPropertyFn(true),
+			ChasmNexusEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		})
+		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, command.HandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.ErrorIs(t, err, command.ErrNotSupported)
+		require.Empty(t, tcx.history.Events)
+	})
+
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, command.HandlerOptions{WorkflowTaskCompletedEventID: 1})
@@ -650,6 +660,16 @@ func TestHandleCancelCommand(t *testing.T) {
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failWFTErr.Cause)
+		require.Empty(t, tcx.history.Events)
+	})
+
+	t.Run("chasm nexus not enabled", func(t *testing.T) {
+		tcx := newTestContext(t, &nexusoperation.Config{
+			Enabled:           dynamicconfig.GetBoolPropertyFn(true),
+			ChasmNexusEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		})
+		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, command.HandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.ErrorIs(t, err, command.ErrNotSupported)
 		require.Empty(t, tcx.history.Events)
 	})
 
