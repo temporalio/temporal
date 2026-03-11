@@ -71,7 +71,7 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) err
 		return ErrCancellationAlreadyRequested
 	}
 
-	cancellation := NewCancellation(&nexusoperationpb.CancellationState{
+	cancellation := newCancellation(&nexusoperationpb.CancellationState{
 		RequestedEventId: requestedEventID,
 	})
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
