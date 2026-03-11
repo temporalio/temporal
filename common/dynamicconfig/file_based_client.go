@@ -10,6 +10,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ Client = (*fileBasedClient)(nil)
@@ -37,9 +38,10 @@ type (
 		values          atomic.Value // ConfigValueMap
 		logger          log.Logger
 		reader          FileReader
-		lastUpdatedTime time.Time
+		lastCheckedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan any
+		metricsHandler  metrics.Handler
 
 		NotifyingClientImpl
 	}
@@ -50,20 +52,27 @@ type (
 )
 
 // NewFileBasedClient creates a file based client.
+// use the NewFileBasedClientWithMetrics instead if you want to collect metrics.
+// This method is retained mainly for backward compatibility.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
+	return NewFileBasedClientWithMetrics(config, logger, doneCh, metrics.NoopMetricsHandler)
+}
+
+func NewFileBasedClientWithMetrics(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*fileBasedClient, error) {
 	if config == nil {
 		return nil, errors.New("configuration for dynamic config client is nil")
 	}
 	reader := &osReader{path: config.Filepath}
-	return NewFileBasedClientWithReader(reader, config, logger, doneCh)
+	return NewFileBasedClientWithReader(reader, config, logger, doneCh, metricsHandler)
 }
 
-func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
+func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*fileBasedClient, error) {
 	client := &fileBasedClient{
 		logger:              logger,
 		reader:              reader,
 		config:              config,
 		doneCh:              doneCh,
+		metricsHandler:      metricsHandler,
 		NotifyingClientImpl: NewNotifyingClientImpl(),
 	}
 
@@ -110,15 +119,30 @@ func (fc *fileBasedClient) init() error {
 
 // This is public mainly for testing. The update loop will call this periodically, you don't
 // have to call it explicitly.
-func (fc *fileBasedClient) Update() error {
-	modtime, err := fc.reader.GetModTime()
-	if err != nil {
-		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
+func (fc *fileBasedClient) Update() (updateErr error) {
+	modtime, updateErr := fc.reader.GetModTime()
+	retryOnErr := true
+	defer func() {
+		if fc.metricsHandler == nil {
+			fc.logger.Warn("dynamic config is missing correct metrics handler")
+		} else {
+			// gauge value 1 refers to a failed update state, and should trigger alerts
+			if updateErr != nil {
+				metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(1)
+			} else {
+				metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(0)
+			}
+		}
+		if updateErr == nil || !retryOnErr {
+			fc.lastCheckedTime = modtime
+		}
+	}()
+	if updateErr != nil {
+		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, updateErr)
 	}
-	if !modtime.After(fc.lastUpdatedTime) {
+	if !modtime.After(fc.lastCheckedTime) {
 		return nil
 	}
-	fc.lastUpdatedTime = modtime
 
 	contents, err := fc.reader.ReadFile()
 	if err != nil {
@@ -127,12 +151,14 @@ func (fc *fileBasedClient) Update() error {
 
 	lr := LoadYamlFile(contents)
 	for _, e := range lr.Errors {
-		fc.logger.Warn("dynamic config error", tag.Error(e))
+		fc.logger.Error("dynamic config error", tag.Error(e))
 	}
 	for _, w := range lr.Warnings {
 		fc.logger.Warn("dynamic config warning", tag.Error(w))
 	}
 	if len(lr.Errors) > 0 {
+		// we don't retry on parsing errors which will fail deterministically until the file is fixed
+		retryOnErr = false
 		return fmt.Errorf("loading dynamic config failed: %d errors, %d warnings",
 			len(lr.Errors), len(lr.Warnings))
 	}

@@ -118,11 +118,6 @@ func (s *Versioning3Suite) SetupSuite() {
 		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
 		// since it creates a large number of unique deployments in the test suite's namespace.
 		dynamicconfig.MatchingMaxDeployments.Key(): 1000,
-
-		// Use new matcher for versioning tests. Ideally we would run everything with old and new,
-		// but for now we pick a subset of tests. Versioning tests exercise the most features of
-		// matching so they're a good condidate.
-		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -1717,11 +1712,17 @@ func (s *Versioning3Suite) TestEagerActivity() {
 			s.verifyWorkflowVersioning(s.Assertions, tv, vbUnspecified, nil, nil, tv.DeploymentVersionTransition())
 			resp := respondWftWithActivities(tv, tv, true, vbUnpinned, "5")
 			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
+			resp.Commands[0].GetScheduleActivityTaskCommandAttributes().Priority = &commonpb.Priority{
+				FairnessKey: "fairness-key",
+				PriorityKey: 2,
+			}
 			return resp, nil
 		})
 	s.verifyWorkflowVersioning(s.Assertions, tv, vbUnpinned, tv.Deployment(), nil, nil)
 
 	s.NotEmpty(resp.GetActivityTasks())
+	s.Equal("fairness-key", resp.GetActivityTasks()[0].GetPriority().GetFairnessKey())
+	s.EqualValues(2, resp.GetActivityTasks()[0].GetPriority().GetPriorityKey())
 
 	_, err := poller.HandleActivityTask(tv, resp.GetActivityTasks()[0],
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
@@ -3481,7 +3482,7 @@ func (s *Versioning3Suite) rollbackTaskQueueToVersion(
 	tv *testvars.TestVars,
 ) {
 
-	cleanup := s.InjectHook(testhooks.MatchingIgnoreRoutingConfigRevisionCheck, true)
+	cleanup := s.InjectHook(testhooks.NewHook(testhooks.MatchingIgnoreRoutingConfigRevisionCheck, true))
 	defer cleanup()
 
 	rc := &deploymentpb.RoutingConfig{
@@ -5711,4 +5712,8 @@ func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.Deployment
 	if s.deploymentWorkflowVersion < version {
 		s.T().Skipf("test supports workflow version %v and newer", version)
 	}
+}
+
+func (s *Versioning3Suite) Context() context.Context {
+	return s.T().Context()
 }

@@ -2410,6 +2410,11 @@ the number of children greater than or equal to this threshold`,
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
 	)
+	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
+		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
+		true,
+		`SendTransientOrSpeculativeWorkflowTaskEvents controls whether GetWorkflowExecutionHistory returns non-durable transient or speculative workflow task events. Enabled by default but can be disabled per namespace if it causes compatibility problems.`,
+	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
 		primitives.DefaultWorkflowTaskTimeout,
