@@ -67,7 +67,7 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *p.InternalUpdateTaskQueueUserDataRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.UnloggedBatch).WithContext(ctx)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	for taskQueue, update := range request.Updates {
 		if update.Version == 0 {
