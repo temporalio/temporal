@@ -1,8 +1,7 @@
 package nexusoperation
 
 import (
-	"errors"
-
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
@@ -11,10 +10,10 @@ var _ chasm.Component = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 
 // ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
-var ErrCancellationAlreadyRequested = errors.New("cancellation already requested")
+var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
 
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
-var ErrOperationAlreadyCompleted = errors.New("operation already completed")
+var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
 type OperationStore any
 
