@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -710,10 +711,9 @@ func (s *NexusStateReplicationSuite) waitCallback(
 ) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, execution.WorkflowId, execution.RunId)
-		assert.NoError(t, err)
-		if assert.Len(t, descResp.GetCallbacks(), 1) {
-			assert.True(t, condition(descResp.GetCallbacks()[0]))
-		}
+		require.NoError(t, err)
+		require.Len(t, descResp.GetCallbacks(), 1)
+		require.True(t, condition(descResp.GetCallbacks()[0]))
 	}, time.Second*20, time.Millisecond*100)
 }
 
