@@ -358,10 +358,6 @@ func (ch *commandHandler) handleCancelCommand(
 			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
 		}
 	}
-	if errors.Is(err, nexusoperation.ErrOperationAlreadyCompleted) {
-		// This may happen if there's a buffered completion. Ignore.
-		return nil
-	}
 	return err
 }
 
