@@ -610,6 +610,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		HeartbeatDetails:            ai.LastHeartbeatDetails,
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
+		Priority:                    ai.Priority,
 	}
 	metrics.ActivityEagerExecutionCounter.With(
 		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),

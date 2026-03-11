@@ -21,7 +21,7 @@ import (
 
 func TestActivityApiPauseClientTestSuite(t *testing.T) {
 	t.Run("TestActivityPauseApi_WhileRunning", func(t *testing.T) {
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		initialRetryInterval := 1 * time.Second
 		scheduleToCloseTimeout := 30 * time.Minute
@@ -62,8 +62,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowFn := makeWorkflowFunc(activityFunction)
 
-		s.Worker().RegisterWorkflow(workflowFn)
-		s.Worker().RegisterActivity(activityFunction)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -166,7 +166,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 		 * 4. Validate activity failed
 		 * 5. Validate number of activity attempts increased
 		 */
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		initialRetryInterval := 1 * time.Second
 		scheduleToCloseTimeout := 30 * time.Minute
@@ -211,8 +211,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowFn := makeWorkflowFunc(activityFunction)
 
-		s.Worker().RegisterWorkflow(workflowFn)
-		s.Worker().RegisterActivity(activityFunction)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -304,7 +304,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 		// In this case, pause happens when activity is in retry state.
 		// Make sure that activity is paused and then unpaused.
 		// Also check that activity will not be retried while unpaused.
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		initialRetryInterval := 1 * time.Second
 		scheduleToCloseTimeout := 30 * time.Minute
@@ -343,8 +343,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowFn := makeWorkflowFunc(activityFunction)
 
-		s.Worker().RegisterWorkflow(workflowFn)
-		s.Worker().RegisterActivity(activityFunction)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -419,7 +419,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 		// In this case, pause can happen when activity is in retry state.
 		// Make sure that activity is paused and then unpaused.
 		// Also tests noWait flag.
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		initialRetryInterval := 30 * time.Second
 		scheduleToCloseTimeout := 30 * time.Minute
@@ -458,8 +458,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowFn := makeWorkflowFunc(activityFunction)
 
-		s.Worker().RegisterWorkflow(workflowFn)
-		s.Worker().RegisterActivity(activityFunction)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
@@ -514,7 +514,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 	t.Run("TestActivityPauseApi_WithReset", func(t *testing.T) {
 		// pause/unpause the activity with reset option and noWait flag
-		s := testcore.NewEnv(t)
+		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 		initialRetryInterval := 1 * time.Second
 		scheduleToCloseTimeout := 30 * time.Minute
@@ -557,8 +557,8 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowFn := makeWorkflowFunc(activityFunction)
 
-		s.Worker().RegisterWorkflow(workflowFn)
-		s.Worker().RegisterActivity(activityFunction)
+		s.SdkWorker().RegisterWorkflow(workflowFn)
+		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),

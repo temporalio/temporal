@@ -89,14 +89,14 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 	require.Len(t, suites, 2)
 	require.Equal(t, 4, report.Testsuites.Failures)
 	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
-	require.Equal(t, "go.temporal.io/server/tests (retry 1)", suites[1].Name)
+	require.Equal(t, "go.temporal.io/server/tests (retry 1) (final)", suites[1].Name)
 
 	testNames := collectTestNames(suites)
 	require.Len(t, testNames, 6)
 	require.NotContains(t, testNames, "TestCallbacksSuite")
 	require.NotContains(t, testNames, "TestCallbacksSuite/TestWorkflowNexusCallbacks_CarriedOver")
 	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument")
-	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1)")
+	require.Contains(t, testNames, "TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument (retry 1) (final)")
 }
 
 func TestMergeReports_IterationSuffixPreserved(t *testing.T) {

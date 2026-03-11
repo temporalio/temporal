@@ -641,6 +641,7 @@ var (
 	ServiceDialLatency                       = NewTimerDef("service_dial_latency", WithDescription("The latency of establishing a new TCP connection."))
 	ServiceDialSuccessCount                  = NewCounterDef("service_dial_success", WithDescription("Number of TCP dial attempts that successfully established a connection."))
 	ServiceDialErrorCount                    = NewCounterDef("service_dial_error", WithDescription("Number of TCP dial attempts that failed to establish a connection."))
+	DynamicConfigUpdateFailure               = NewGaugeDef("dynamic_config_update_failure")
 	ServiceLatency                           = NewTimerDef("service_latency")
 	ServiceLatencyNoUserLatency              = NewTimerDef("service_latency_nouserlatency")
 	ServiceLatencyUserLatency                = NewTimerDef("service_latency_userlatency")
@@ -1082,8 +1083,18 @@ var (
 	DynamicWorkerPoolSchedulerEnqueuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_enqueued_tasks")
 	DynamicWorkerPoolSchedulerDequeuedTasks = NewCounterDef("dynamic_worker_pool_scheduler_dequeued_tasks")
 	DynamicWorkerPoolSchedulerRejectedTasks = NewCounterDef("dynamic_worker_pool_scheduler_rejected_tasks")
-	PausedActivitiesCounter                 = NewCounterDef("paused_activities")
-	ExternalPayloadUploadSize               = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
+
+	// ExecutionQueueScheduler metrics
+	ExecutionQueueSchedulerQueueCount     = NewGaugeDef("execution_queue_scheduler_queue_count")
+	ExecutionQueueSchedulerTasksSubmitted = NewCounterDef("execution_queue_scheduler_tasks_submitted")
+	ExecutionQueueSchedulerTasksCompleted = NewCounterDef("execution_queue_scheduler_tasks_completed")
+	ExecutionQueueSchedulerTasksFailed    = NewCounterDef("execution_queue_scheduler_tasks_failed")
+	ExecutionQueueSchedulerSubmitRejected = NewCounterDef("execution_queue_scheduler_submit_rejected")
+	ExecutionQueueSchedulerTaskLatency    = NewTimerDef("execution_queue_scheduler_task_latency")
+	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
+
+	PausedActivitiesCounter   = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")

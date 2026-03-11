@@ -119,6 +119,14 @@ type Config struct {
 	TaskSchedulerNamespaceMaxQPS              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	TaskSchedulerInactiveChannelDeletionDelay dynamicconfig.DurationPropertyFn
 
+	// ExecutionQueueScheduler settings for sequential per-workflow task processing
+	TaskSchedulerEnableExecutionQueueScheduler dynamicconfig.BoolPropertyFn
+	// TaskSchedulerExecutionQueueSchedulerMaxQueues requires restart to take effect
+	TaskSchedulerExecutionQueueSchedulerMaxQueues dynamicconfig.IntPropertyFn
+	// TaskSchedulerExecutionQueueSchedulerQueueTTL requires restart to take effect
+	TaskSchedulerExecutionQueueSchedulerQueueTTL         dynamicconfig.DurationPropertyFn
+	TaskSchedulerExecutionQueueSchedulerQueueConcurrency dynamicconfig.IntPropertyFn
+
 	// TimerQueueProcessor settings
 	TimerTaskBatchSize                               dynamicconfig.IntPropertyFn
 	TimerProcessorSchedulerWorkerCount               dynamicconfig.TypedSubscribable[int]
@@ -251,6 +259,8 @@ type Config struct {
 	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// TODO seankane: Added on 3/10/2026, if this is never used we should remove it at a later date
+	SendTransientOrSpeculativeWorkflowTaskEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
@@ -512,14 +522,18 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
-		TaskSchedulerEnableRateLimiter:            dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
-		TaskSchedulerEnableRateLimiterShadowMode:  dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
-		TaskSchedulerRateLimiterStartupDelay:      dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
-		TaskSchedulerGlobalMaxQPS:                 dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
-		TaskSchedulerMaxQPS:                       dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
-		TaskSchedulerNamespaceMaxQPS:              dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
-		TaskSchedulerGlobalNamespaceMaxQPS:        dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
-		TaskSchedulerInactiveChannelDeletionDelay: dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
+		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
+		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),
+		TaskSchedulerGlobalMaxQPS:                            dynamicconfig.TaskSchedulerGlobalMaxQPS.Get(dc),
+		TaskSchedulerMaxQPS:                                  dynamicconfig.TaskSchedulerMaxQPS.Get(dc),
+		TaskSchedulerNamespaceMaxQPS:                         dynamicconfig.TaskSchedulerNamespaceMaxQPS.Get(dc),
+		TaskSchedulerGlobalNamespaceMaxQPS:                   dynamicconfig.TaskSchedulerGlobalNamespaceMaxQPS.Get(dc),
+		TaskSchedulerInactiveChannelDeletionDelay:            dynamicconfig.TaskSchedulerInactiveChannelDeletionDelay.Get(dc),
+		TaskSchedulerEnableExecutionQueueScheduler:           dynamicconfig.TaskSchedulerEnableExecutionQueueScheduler.Get(dc),
+		TaskSchedulerExecutionQueueSchedulerMaxQueues:        dynamicconfig.TaskSchedulerExecutionQueueSchedulerMaxQueues.Get(dc),
+		TaskSchedulerExecutionQueueSchedulerQueueTTL:         dynamicconfig.TaskSchedulerExecutionQueueSchedulerQueueTTL.Get(dc),
+		TaskSchedulerExecutionQueueSchedulerQueueConcurrency: dynamicconfig.TaskSchedulerExecutionQueueSchedulerQueueConcurrency.Get(dc),
 
 		TimerTaskBatchSize:                               dynamicconfig.TimerTaskBatchSize.Get(dc),
 		TimerProcessorSchedulerWorkerCount:               dynamicconfig.TimerProcessorSchedulerWorkerCount.Subscribe(dc),
@@ -652,6 +666,7 @@ func NewConfig(
 		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
+		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
