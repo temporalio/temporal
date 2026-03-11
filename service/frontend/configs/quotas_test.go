@@ -131,7 +131,6 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIs() {
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":       {},
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": {},
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentManager":        {},
 		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":     {},
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             {},
 	}
