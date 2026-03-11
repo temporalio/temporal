@@ -23,6 +23,20 @@ func (c *metricClient) CountActivityExecutions(
 	return c.client.CountActivityExecutions(ctx, request, opts...)
 }
 
+func (c *metricClient) CountNexusOperationExecutions(
+	ctx context.Context,
+	request *workflowservice.CountNexusOperationExecutionsRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.CountNexusOperationExecutionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientCountNexusOperationExecutions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.CountNexusOperationExecutions(ctx, request, opts...)
+}
+
 func (c *metricClient) CountSchedules(
 	ctx context.Context,
 	request *workflowservice.CountSchedulesRequest,
@@ -91,6 +105,20 @@ func (c *metricClient) DeleteActivityExecution(
 	}()
 
 	return c.client.DeleteActivityExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) DeleteNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DeleteNexusOperationExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDeleteNexusOperationExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DeleteNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) DeleteSchedule(
@@ -231,6 +259,20 @@ func (c *metricClient) DescribeNamespace(
 	}()
 
 	return c.client.DescribeNamespace(ctx, request, opts...)
+}
+
+func (c *metricClient) DescribeNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.DescribeNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.DescribeNexusOperationExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientDescribeNexusOperationExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeSchedule(
@@ -583,6 +625,20 @@ func (c *metricClient) ListNamespaces(
 	return c.client.ListNamespaces(ctx, request, opts...)
 }
 
+func (c *metricClient) ListNexusOperationExecutions(
+	ctx context.Context,
+	request *workflowservice.ListNexusOperationExecutionsRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.ListNexusOperationExecutionsResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientListNexusOperationExecutions")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.ListNexusOperationExecutions(ctx, request, opts...)
+}
+
 func (c *metricClient) ListOpenWorkflowExecutions(
 	ctx context.Context,
 	request *workflowservice.ListOpenWorkflowExecutionsRequest,
@@ -765,6 +821,20 @@ func (c *metricClient) PollActivityTaskQueue(
 	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
+func (c *metricClient) PollNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.PollNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.PollNexusOperationExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientPollNexusOperationExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.PollNexusOperationExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) PollNexusTaskQueue(
 	ctx context.Context,
 	request *workflowservice.PollNexusTaskQueueRequest,
@@ -889,6 +959,20 @@ func (c *metricClient) RequestCancelActivityExecution(
 	}()
 
 	return c.client.RequestCancelActivityExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) RequestCancelNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.RequestCancelNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.RequestCancelNexusOperationExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientRequestCancelNexusOperationExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.RequestCancelNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) RequestCancelWorkflowExecution(
@@ -1241,6 +1325,20 @@ func (c *metricClient) StartBatchOperation(
 	return c.client.StartBatchOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) StartNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.StartNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.StartNexusOperationExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientStartNexusOperationExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.StartNexusOperationExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) StartWorkflowExecution(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
@@ -1281,6 +1379,20 @@ func (c *metricClient) TerminateActivityExecution(
 	}()
 
 	return c.client.TerminateActivityExecution(ctx, request, opts...)
+}
+
+func (c *metricClient) TerminateNexusOperationExecution(
+	ctx context.Context,
+	request *workflowservice.TerminateNexusOperationExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *workflowservice.TerminateNexusOperationExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "FrontendClientTerminateNexusOperationExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.TerminateNexusOperationExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) TerminateWorkflowExecution(
