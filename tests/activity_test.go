@@ -1436,6 +1436,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteForceCompletion() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, 1, len(description.PendingActivities))
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,
@@ -1467,6 +1468,7 @@ func (s *ActivityTestSuite) TestActivityTaskCompleteRejectCompletion() {
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, 1, len(description.PendingActivities))
+		require.NotNil(t, description.PendingActivities[0].LastFailure)
 		require.Equal(t, "mock error of an activity", description.PendingActivities[0].LastFailure.Message)
 	},
 		10*time.Second,

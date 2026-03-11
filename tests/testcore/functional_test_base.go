@@ -590,6 +590,11 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	return s.testCluster.host.injectHook(s.T(), hook, scope)
 }
 
+// Context returns a context with RPC headers for use in this test.
+func (s *FunctionalTestBase) Context() context.Context {
+	return NewContext()
+}
+
 // CloseShard closes the shard that contains the given workflow.
 // This is a cluster-global operation and cannot be called on shared clusters.
 func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
