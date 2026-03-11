@@ -587,6 +587,7 @@ func (h *Handler) ListWorkers(
 	if err != nil {
 		return nil, err
 	}
+	// TODO: Stop populating workersInfo once all callers migrate to the Workers field.
 	workersInfo := make([]*workerpb.WorkerInfo, len(resp.Workers))
 	workersList := make([]*workerpb.WorkerListInfo, len(resp.Workers))
 	for i, heartbeat := range resp.Workers {
