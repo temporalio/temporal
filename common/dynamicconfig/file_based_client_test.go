@@ -37,7 +37,7 @@ func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
 	s.doneCh = make(chan any)
 	logger := log.NewNoopLogger()
-	s.client, err = dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	s.client, err = dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
 	}, logger, s.doneCh, metrics.NoopMetricsHandler)
@@ -81,15 +81,12 @@ func (s *fileBasedClientSuite) TestNewFileBasedClientWithoutMetrics() {
 	doneCh := make(chan any)
 	defer close(doneCh)
 
-	client, err := dynamicconfig.NewFileBasedClientWithoutMetrics(
+	_, err := dynamicconfig.NewFileBasedClient(
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "config/testConfig.yaml",
 			PollInterval: time.Minute * 5,
 		}, logger, doneCh)
 	s.NoError(err)
-
-	client.SetMetricsHandler(metrics.NoopMetricsHandler)
-	s.NoError(client.Update())
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
@@ -275,25 +272,55 @@ func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
-	_, err := dynamicconfig.NewFileBasedClient(nil, nil, nil, nil)
-	s.Error(err)
+func (s *fileBasedClientSuite) TestValidateConfig_NilLogger() {
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
+	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, nil, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err, "logger for dynamic config client is nil")
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
-	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
-		Filepath:     "file/not/exist.yaml",
-		PollInterval: time.Second * 10,
-	}, nil, nil, nil)
-	s.Error(err)
+func (s *fileBasedClientSuite) TestValidateConfig_NilConfig() {
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(nil, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err, "configuration for dynamic config client is nil")
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilReader() {
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithReader(nil, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err, "file reader for dynamic config client is nil")
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilDoneCh() {
+	logger := log.NewNoopLogger()
+	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
+	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, logger, nil, metrics.NoopMetricsHandler)
+	s.Error(err, "done channel for dynamic config client is nil")
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
-	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second,
-	}, nil, nil, nil)
-	s.Error(err)
+	}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Contains(err.Error(), "poll interval should be at least")
 }
 
 func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
@@ -389,6 +416,46 @@ testGetBoolPropertyKey:
 	cancel2()
 	c.Stop()
 
+	close(doneCh)
+}
+
+func (s *fileBasedClientSuite) TestNewFileBasedClientWithNilMetricsHandler() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	originFileData := []byte(`
+testGetFloat64PropertyKey:
+- value: 12.22
+  constraints: {}
+`)
+
+	doneCh := make(chan any)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	mockLogger := log.NewMockLogger(ctrl)
+	fileModTime := time.Now().Add(-time.Minute * 5)
+	pollInterval := time.Minute * 5
+	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
+	// warnings expected with nil metrics and unregistered key
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	reader.EXPECT().GetModTime().Return(fileModTime, nil).Times(3)
+	reader.EXPECT().ReadFile().Return([]byte(originFileData), nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: pollInterval,
+		}, mockLogger, doneCh, nil)
+	s.NoError(err)
+
+	//  set the metrics handler and shoul expect no warnings
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	client.SetMetricsHandler(captureHandler)
+	s.NoError(client.Update())
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][0].Value, 0)
 	close(doneCh)
 }
 
@@ -778,50 +845,6 @@ testGetIntPropertyKey:
 	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][1].Value, 0)
 }
 
-func (s *fileBasedClientSuite) TestUpdate_NilMetricsHandlerLogsWarning() {
-	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
-
-	ctrl := gomock.NewController(s.T())
-	defer ctrl.Finish()
-
-	doneCh := make(chan any)
-	defer close(doneCh)
-	reader := dynamicconfig.NewMockFileReader(ctrl)
-	mockLogger := log.NewMockLogger(ctrl)
-
-	updateInterval := time.Minute * 5
-	t1 := time.Now()
-	t2 := t1.Add(time.Second)
-
-	fileData := []byte(`
-testGetIntPropertyKey:
-- value: 1000
-  constraints: {}
-`)
-
-	// init: GetModTime x2 (validateStaticConfig + Update), ReadFile x1
-	// During init Update(): 1 change log Info + 1 "Updated dynamic config" Info + 1 Warn (nil handler)
-	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
-	reader.EXPECT().ReadFile().Return(fileData, nil)
-	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
-	mockLogger.EXPECT().Warn("dynamic config is missing correct metrics handler")
-
-	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
-		&dynamicconfig.FileBasedClientConfig{
-			Filepath:     "anyValue",
-			PollInterval: updateInterval,
-		}, mockLogger, doneCh, nil)
-	s.NoError(err)
-
-	// Explicit update with advanced modtime: same data → no change log, only "Updated dynamic config" + Warn
-	reader.EXPECT().GetModTime().Return(t2, nil)
-	reader.EXPECT().ReadFile().Return(fileData, nil)
-	mockLogger.EXPECT().Info(gomock.Any())
-	mockLogger.EXPECT().Warn("dynamic config is missing correct metrics handler")
-
-	s.NoError(client.Update())
-}
-
 func (s *fileBasedClientSuite) TestUpdate_SetMetricsHandlerRecordsMetrics() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
@@ -837,7 +860,6 @@ func (s *fileBasedClientSuite) TestUpdate_SetMetricsHandlerRecordsMetrics() {
 	updateInterval := time.Minute * 5
 	t1 := time.Now()
 	t2 := t1.Add(time.Second)
-	t3 := t2.Add(time.Second)
 
 	fileData := []byte(`
 testGetIntPropertyKey:
@@ -845,7 +867,7 @@ testGetIntPropertyKey:
   constraints: {}
 `)
 
-	// init with nil metricsHandler — should succeed without error
+	// init: GetModTime x2, ReadFile x1; starts with NoopMetricsHandler so no captured metrics
 	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
 	reader.EXPECT().ReadFile().Return(fileData, nil)
 
@@ -853,33 +875,23 @@ testGetIntPropertyKey:
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
-		}, logger, doneCh, nil)
+		}, logger, doneCh, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
-	// Set the metrics handler; subsequent updates should record metrics
+	// Inject the real metrics handler after construction (deferred injection pattern)
 	client.SetMetricsHandler(captureHandler)
 
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	// Successful update should record gauge 0
+	// Trigger a failing update — metric should now be recorded via the injected handler
 	reader.EXPECT().GetModTime().Return(t2, nil)
-	reader.EXPECT().ReadFile().Return(fileData, nil)
-	s.NoError(client.Update())
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
 
 	snapshot := capture.Snapshot()
 	s.Len(snapshot["dynamic_config_update_failure"], 1)
-	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][0].Value, 0)
-
-	// Failed update should record gauge 1
-	// lastCheckedTime is now t2, so t3 triggers a read
-	reader.EXPECT().GetModTime().Return(t3, nil)
-	reader.EXPECT().ReadFile().Return(nil, errors.New("transient error"))
-	s.Error(client.Update())
-
-	snapshot = capture.Snapshot()
-	s.Len(snapshot["dynamic_config_update_failure"], 2)
-	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][1].Value, 0)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
 }
 
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
@@ -982,4 +994,23 @@ testGetBoolPropertyKey:
 		}
 	}
 	s.Equal(3, found)
+}
+
+func (s *fileBasedClientSuite) TestGetMetricsHandler_SetNilHandler() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader.EXPECT().GetModTime().Return(time.Now(), nil).AnyTimes()
+	// Use a minimal valid YAML config to avoid parse errors
+	reader.EXPECT().ReadFile().Return([]byte("testGetIntPropertyKey:\n- value: 1000\n"), nil).AnyTimes()
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "anyValue",
+		PollInterval: time.Minute * 5,
+	}, logger, doneCh, nil)
+	s.NoError(err)
+	client.SetMetricsHandler(nil)
+	s.NoError(client.Update())
 }

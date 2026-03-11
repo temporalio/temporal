@@ -715,7 +715,7 @@ func (s *NexusStateReplicationSuite) waitCallback(
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
 	completion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload(result),
+		Result: testcore.MustToPayload(s.T(), result),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
