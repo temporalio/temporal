@@ -2321,7 +2321,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
-// NOTE: Keep in sync with ChasmEngine.convertPersistenceOrUnknownError in chasm_engine.go.
+// NOTE: Keep in sync with ChasmEngine.convertError in chasm_engine.go.
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
