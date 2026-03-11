@@ -1218,7 +1218,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		return nil, err
 	}
 	// When request targets root partition, fan out to all partitions (like DescribeTaskQueue enhanced mode).
-	// Each cell uses its own partition config, enabling different partition counts per cell (e.g. MCN).
+	// Each cell uses its own partition config, enabling different partition counts per cell.
 	if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
 		return e.cancelOutstandingWorkerPollsFanOut(ctx, request, partition)
 	}
