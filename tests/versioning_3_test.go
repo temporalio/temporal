@@ -6081,6 +6081,149 @@ func (s *Versioning3Suite) TestRemoveOverride_TriggersTargetVersionChangedSignal
 		})
 }
 
+// TestRetryOfDeclinedCaN_SignalsOnNewTarget verifies that when a CaN'd run
+// ,which declined to upgrade, fails and is retried by the server, the retry
+// run inherits TargetWorkerDeploymentVersionOnStart from the original CaN
+// decision — NOT the failed run's LatestTargetWorkerDeploymentVersion.
+// This ensures that if the target has not changed since the original CaN
+// decision, the retry correctly does not set targetDeploymentVersionChanged=true
+// on the WFT started event.
+//
+// Flow:
+// 1. Start pinned workflow on v1, set v2 as current
+// 2. Signal → workflow CaNs without AU (declines upgrade to v2)
+// 3. CaN run starts on v1: OnStart=v2, target=v2 → does not set targetVersionChanged=true
+// 4. Signal → CaN run fails → server retries
+// 5. Retry run: OnStart=v2 (preserved from CaN decision), target=v2
+// 6. Assert targetDeploymentVersionChanged=false (v2 == v2, decline is preserved)
+func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+	numPollers := 4
+
+	// Workflow: CaN without AU on first run, fail on CaN run, complete on retry.
+	// Uses runCount (workflow arg) to distinguish first run vs CaN run,
+	// and Attempt to distinguish CaN run vs its retry.
+	wf := func(ctx workflow.Context, runCount int) (string, error) {
+		info := workflow.GetInfo(ctx)
+		if runCount == 0 {
+			// First run: wait for signal then CaN without AU (decline upgrade).
+			workflow.GetSignalChannel(ctx, "proceed").Receive(ctx, nil)
+			return "", workflow.NewContinueAsNewError(ctx, "wf", 1)
+		}
+		if info.Attempt == 1 {
+			// CaN run (first attempt): wait for signal then fail to trigger retry.
+			workflow.GetSignalChannel(ctx, "proceed").Receive(ctx, nil)
+			return "", errors.New("explicit failure to trigger retry")
+		}
+		// Retry run (attempt > 1): just complete.
+		return "done", nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	w1 := worker.New(s.SdkClient(), tv1.TaskQueue().GetName(), worker.Options{
+		DeploymentOptions: worker.DeploymentOptions{
+			Version:       tv1.SDKDeploymentVersion(),
+			UseVersioning: true,
+		},
+		MaxConcurrentWorkflowTaskPollers: numPollers,
+	})
+	w1.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{
+		Name: "wf", VersioningBehavior: workflow.VersioningBehaviorPinned,
+	})
+	s.NoError(w1.Start())
+	defer w1.Stop()
+
+	// Set v1 as current.
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
+
+	// Start workflow with retry policy.
+	run0, err := s.SdkClient().ExecuteWorkflow(ctx,
+		sdkclient.StartWorkflowOptions{
+			TaskQueue: tv1.TaskQueue().GetName(),
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval: time.Second,
+			},
+		},
+		"wf", 0,
+	)
+	s.NoError(err)
+	wfID := run0.GetID()
+
+	// Wait for workflow to be running on v1.
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, run0.GetRunID())
+		if err != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Set v2 as current, signal workflow to CaN without AU (decline upgrade).
+	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "v2 idle poll")
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf)
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, run0.GetRunID(), "proceed", nil))
+
+	// Wait for CaN to happen — new run on v1.
+	var canRunID string
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
+		if err != nil {
+			return false
+		}
+		canRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+		return canRunID != run0.GetRunID() &&
+			desc.GetWorkflowExecutionInfo().GetVersioningInfo().GetDeploymentVersion().GetBuildId() == tv1.BuildID()
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Signal CaN run to fail (triggers server retry). Target remains v2.
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, wfID, canRunID, "proceed", nil))
+
+	// Wait for CaN run to fail.
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfID, canRunID)
+		if err != nil {
+			return false
+		}
+		return desc.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Wait for retry run to complete.
+	var retryRunID string
+	s.Eventually(func() bool {
+		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfID, "")
+		if err != nil {
+			return false
+		}
+		retryRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+		return retryRunID != canRunID &&
+			desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Verify: retry run's WFT started should have targetDeploymentVersionChanged=false
+	// because OnStart=v2 (preserved from CaN decision) == target=v2 (still current).
+	retryHistory := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: wfID,
+		RunId:      retryRunID,
+	})
+	foundWFTStarted := false
+	for _, event := range retryHistory {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+			s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"retry run should have targetDeploymentVersionChanged=false (OnStart=v2 == target=v2, decline preserved)")
+			foundWFTStarted = true
+		}
+	}
+	s.True(foundWFTStarted, "should have found at least one WFT started event in retry run")
+}
+
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
 	if s.deploymentWorkflowVersion < version {
 		s.T().Skipf("test supports workflow version %v and newer", version)

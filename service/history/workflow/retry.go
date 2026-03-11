@@ -324,6 +324,7 @@ func SetupNewWorkflowForRetryOrCron(
 		InheritedBuildId:         startAttr.InheritedBuildId,
 		InheritedPinnedVersion:   inheritedPinnedVersion,
 		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
+		PreviousRunLatestTargetWorkerDeploymentVersion: previousExecutionInfo.TargetWorkerDeploymentVersionOnStart,
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {
