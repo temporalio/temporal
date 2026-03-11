@@ -113,7 +113,7 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	// Note: runWithMatchingBehavior already configures partition count based on forwarding behavior.
 	// Do NOT override MatchingNumTaskqueueReadPartitions/WritePartitions inside the subtest.
 	t.Run("TestMultipleTasks_WithMatchingBehavior_ValidateStats", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 			s.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 			s.publishConsumeWorkflowTasksValidateStats(4, false)
@@ -121,55 +121,47 @@ func runTaskQueueStatsTests(t *testing.T, usePriMatcher bool) {
 	})
 
 	t.Run("TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.currentVersionAbsorbsUnversionedBacklogNoRamping()
 		})
 	})
 
 	t.Run("TestRampingAndCurrentAbsorbUnversionedBacklog", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.rampingAndCurrentAbsorbsUnversionedBacklog()
 		})
 	})
 
 	t.Run("TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.currentAbsorbsUnversionedBacklogWhenRampingToUnversioned()
 		})
 	})
 
 	t.Run("TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.rampingAbsorbsUnversionedBacklogWhenCurrentIsUnversioned()
 		})
 	})
 
 	t.Run("TestInactiveVersionDoesNotAbsorbUnversionedBacklog", func(t *testing.T) {
-		runWithMatchingBehavior(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
+		runSuiteWithMatchingBehaviors(t, baseOpts, usePriMatcher, func(s *taskQueueStatsSuite) {
 			s.inactiveVersionDoesNotAbsorbUnversionedBacklog()
 		})
 	})
 }
 
-// runWithMatchingBehavior runs a test with all combinations of matching behaviors.
-func runWithMatchingBehavior(
+// runSuiteWithMatchingBehaviors runs a test with all combinations of matching behaviors.
+func runSuiteWithMatchingBehaviors(
 	t *testing.T,
 	baseOpts []testcore.TestOption,
 	usePriMatcher bool,
 	subtest func(s *taskQueueStatsSuite),
 ) {
-	for _, behavior := range testcore.AllMatchingBehaviors() {
-		t.Run(behavior.Name(), func(t *testing.T) {
-			opts := append([]testcore.TestOption{}, baseOpts...)
-			opts = append(opts, behavior.Options()...)
-
-			env := testcore.NewEnv(t, opts...)
-			behavior.InjectHooks(env)
-
-			s := newTaskQueueStatsSuite(t, env, usePriMatcher)
-			subtest(s)
-		})
-	}
+	runWithMatchingBehaviors(t, baseOpts, func(env *testcore.TestEnv, behavior testcore.MatchingBehavior) {
+		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		subtest(s)
+	})
 }
 
 func (s *taskQueueStatsSuite) testDescribeTaskQueueNonRoot() {

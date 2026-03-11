@@ -2889,6 +2889,22 @@ func (e *matchingEngineImpl) pollTask(
 	return pm.PollTask(ctx, pollMetadata)
 }
 
+// emitTaskDispatchLatency emits latency metrics for a task dispatched to a worker.
+// Here is what task_dispatch_latency measures vs schedule_to_start_latency:
+//
+//	Latency        					 		 | task_dispatch 	| schedule_to_start
+//
+// --------------------------------------------------+------------------+------------------
+//
+//	transfer task processing 						 | excluded 		| included
+//	record*TaskStarted latency 						 | included 		| partial
+//	task forward latency 							 | included 		| included
+//	poll forward latency 							 | excluded for now | excluded
+//	backlog delay 									 | included 	    | included
+//	sync match delay 								 | included 	    | included
+//	rescheduling of the same task attempt by History | resets latency   | does not reset
+//
+// ----------------------------------------------------------------------------------------
 func (e *matchingEngineImpl) emitTaskDispatchLatency(
 	task *internalTask,
 	partition tqid.Partition,
@@ -2912,7 +2928,10 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 	// forward info; for local tasks use the current partition.
 	originPartition := partition
 	if task.isForwarded() && task.forwardInfo.GetOriginPartition() != "" {
-		originPartition = tqid.MustNormalPartitionFromRpcName(task.forwardInfo.GetOriginPartition(), namespaceID, taskType)
+		o, err := tqid.NormalPartitionFromRpcName(task.forwardInfo.GetOriginPartition(), namespaceID, taskType)
+		if err == nil {
+			originPartition = o
+		} // else ignore the error and use the current partition
 	}
 
 	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions))

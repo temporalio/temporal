@@ -963,15 +963,18 @@ func (s *TaskQueueSuite) TestTaskDispatchLatencyMetric_Nexus() {
 }
 
 func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore.TestEnv, expectedForwarded, expectedSource, expectedPartitionID string, forwardDelay time.Duration)) {
-	runWithMatchingBehaviors(s.T(), func(s *testcore.TestEnv, forcePollForward, forceTaskForward, forceAsync bool) {
-		s.OverrideDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true)
-		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
-		s.OverrideDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3)
+	baseOpts := []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxChildrenPerNode, 3),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEmitTaskDispatchLatencyAtPoll, true),
+	}
+
+	runWithMatchingBehaviors(s.T(), baseOpts, func(s *testcore.TestEnv, b testcore.MatchingBehavior) {
 
 		// When task forwarding is forced, inject a delay so we can verify
 		// the latency metric captures forwarding time.
 		var forwardDelay time.Duration
-		if forceTaskForward {
+		if b.ForceTaskForward {
 			forwardDelay = 100 * time.Millisecond
 			s.InjectHook(testhooks.NewHook(testhooks.MatchingForwardTaskDelay, forwardDelay))
 			forwardDelay *= 2 // two forward hops
@@ -979,19 +982,17 @@ func (s *TaskQueueSuite) testTaskDispatchLatencyMetric(scenario func(s *testcore
 
 		// Determine expected tag values based on matching behavior.
 		expectedForwarded := "false"
-		if forceTaskForward {
+		expectedPartitionID := "0"
+		if b.ForceTaskForward {
 			expectedForwarded = "true"
+			expectedPartitionID = "11"
 		}
+
 		// When async is forced, tasks always go through DB backlog.
 		// When sync is allowed, the source depends on timing and is non-deterministic.
 		expectedSource := "History"
-		if forceAsync {
+		if b.ForceAsync {
 			expectedSource = "DbBacklog"
-		}
-
-		expectedPartitionID := "0"
-		if forceTaskForward {
-			expectedPartitionID = "11"
 		}
 
 		scenario(s, expectedForwarded, expectedSource, expectedPartitionID, forwardDelay)

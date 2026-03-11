@@ -180,8 +180,8 @@ func newInternalQueryTask(
 }
 
 func getCreateTime(f *taskqueuespb.TaskForwardInfo) *timestamppb.Timestamp {
-	if f != nil && f.GetCreateTime() != nil {
-		return f.GetCreateTime()
+	if t := f.GetCreateTime(); t != nil {
+		return t
 	}
 	return timestamppb.Now()
 }
@@ -246,14 +246,11 @@ func (task *internalTask) isSyncMatchTask() bool {
 func (task *internalTask) getCreateTime() *timestamppb.Timestamp {
 	if task.forwardInfo != nil && task.forwardInfo.GetCreateTime() != nil {
 		return task.forwardInfo.GetCreateTime()
-	}
-	if task.event != nil {
+	} else if task.event != nil {
 		return task.event.Data.GetCreateTime()
-	}
-	if task.query != nil {
+	} else if task.query != nil {
 		return task.query.createTime
-	}
-	if task.nexus != nil {
+	} else if task.nexus != nil {
 		return task.nexus.createTime
 	}
 
