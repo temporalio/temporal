@@ -76,12 +76,12 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 	if logger == nil {
 		return nil, errors.New("logger for dynamic config client is nil")
 	}
+	if doneCh == nil {
+		return nil, errors.New("done channel for dynamic config client is nil")
+	}
 	if metricsHandler == nil {
 		metricsHandler = metrics.NoopMetricsHandler
 		logger.Warn("metrics handler is nil, using noop metrics handler")
-	}
-	if doneCh == nil {
-		return nil, errors.New("done channel for dynamic config client is nil")
 	}
 
 	client := &FileBasedClient{
@@ -102,14 +102,19 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 // SetMetricsHandler sets the metrics handler for the client. This is useful when the
 // metricsHandler is not available at the time of initialization due to circular dependencies.
 func (fc *FileBasedClient) SetMetricsHandler(metricsHandler metrics.Handler) {
+	if metricsHandler == nil {
+		fc.logger.Warn("metrics handler is nil, using noop metrics handler")
+		metricsHandler = metrics.NoopMetricsHandler
+	}
 	fc.metricsHandler.Store(&metricsHandler)
 }
 
 func (fc *FileBasedClient) getMetricsHandler() metrics.Handler {
 	h := fc.metricsHandler.Load() // nolint:revive // unchecked-type-assertion
 	if h == nil {
-		fc.logger.Warn("dynamic config is missing correct metrics handler")
-		return nil
+		// this should never happen, but we'll log a warning if it does
+		fc.logger.Warn("dynamic config is missing correct metrics handler, using noop metrics handler")
+		return metrics.NoopMetricsHandler
 	}
 	return *h
 }
