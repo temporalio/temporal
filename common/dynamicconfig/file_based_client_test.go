@@ -389,6 +389,36 @@ testGetBoolPropertyKey:
 	close(doneCh)
 }
 
+func (s *fileBasedClientSuite) TestNewFileBasedClientWithNilMetricsHandler() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	originFileData := []byte(`
+testGetFloat64PropertyKey:
+- value: 12.22
+  constraints: {}
+`)
+
+	doneCh := make(chan any)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	mockLogger := log.NewMockLogger(ctrl)
+	fileModTime := time.Now().Add(-time.Minute * 5)
+	pollInterval := time.Minute * 5
+	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
+	// warnings expected with nil metrics and unregistered key
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	reader.EXPECT().GetModTime().Return(fileModTime, nil).Times(2)
+	reader.EXPECT().ReadFile().Return([]byte(originFileData), nil)
+
+	_, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: pollInterval,
+		}, mockLogger, doneCh, nil)
+	s.NoError(err)
+	close(doneCh)
+}
+
 func (s *fileBasedClientSuite) TestUpdate_ChangedTypedValue() {
 	dynamicconfig.NewNamespaceTypedSetting("history.fakeRetryPolicy", retrypolicy.DefaultDefaultRetrySettings, "")
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -36,14 +35,13 @@ type (
 	}
 
 	FileBasedClient struct {
-		values           atomic.Value // ConfigValueMap
-		logger           log.Logger
-		reader           FileReader
-		lastCheckedTime  time.Time
-		config           *FileBasedClientConfig
-		doneCh           <-chan any
-		metricsHandler   metrics.Handler
-		metricsHandlerMu sync.RWMutex
+		values          atomic.Value // ConfigValueMap
+		logger          log.Logger
+		reader          FileReader
+		lastCheckedTime time.Time
+		config          *FileBasedClientConfig
+		doneCh          <-chan any
+		metricsHandler  atomic.Pointer[metrics.Handler]
 
 		NotifyingClientImpl
 	}
@@ -74,30 +72,33 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 		reader:              reader,
 		config:              config,
 		doneCh:              doneCh,
-		metricsHandler:      metricsHandler,
 		NotifyingClientImpl: NewNotifyingClientImpl(),
 	}
-
+	if metricsHandler == nil {
+		metricsHandler = metrics.NoopMetricsHandler
+		logger.Warn("metrics handler is nil, using noop metrics handler")
+	}
+	client.metricsHandler.Store(&metricsHandler)
 	err := client.init()
 	if err != nil {
 		return nil, err
 	}
-
 	return client, nil
 }
 
 // SetMetricsHandler sets the metrics handler for the client. This is useful when the
 // metricsHandler is not available at the time of initialization due to circular dependencies.
 func (fc *FileBasedClient) SetMetricsHandler(metricsHandler metrics.Handler) {
-	fc.metricsHandlerMu.Lock()
-	defer fc.metricsHandlerMu.Unlock()
-	fc.metricsHandler = metricsHandler
+	fc.metricsHandler.Store(&metricsHandler)
 }
 
 func (fc *FileBasedClient) getMetricsHandler() metrics.Handler {
-	fc.metricsHandlerMu.RLock()
-	defer fc.metricsHandlerMu.RUnlock()
-	return fc.metricsHandler
+	h := fc.metricsHandler.Load() // nolint:revive // unchecked-type-assertion
+	if h == nil {
+		fc.logger.Warn("dynamic config is missing correct metrics handler")
+		return nil
+	}
+	return *h
 }
 
 func (fc *FileBasedClient) GetValue(key Key) []ConstrainedValue {
@@ -140,15 +141,11 @@ func (fc *FileBasedClient) Update() (updateErr error) {
 	retryOnErr := true
 	defer func() {
 		h := fc.getMetricsHandler()
-		if h == nil {
-			fc.logger.Warn("dynamic config is missing correct metrics handler")
+		// gauge value 1 refers to a failed update state, and should trigger alerts
+		if updateErr != nil {
+			metrics.DynamicConfigUpdateFailure.With(h).Record(1)
 		} else {
-			// gauge value 1 refers to a failed update state, and should trigger alerts
-			if updateErr != nil {
-				metrics.DynamicConfigUpdateFailure.With(h).Record(1)
-			} else {
-				metrics.DynamicConfigUpdateFailure.With(h).Record(0)
-			}
+			metrics.DynamicConfigUpdateFailure.With(h).Record(0)
 		}
 		if updateErr == nil || !retryOnErr {
 			fc.lastCheckedTime = modtime
