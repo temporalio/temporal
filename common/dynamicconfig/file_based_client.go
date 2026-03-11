@@ -52,7 +52,13 @@ type (
 )
 
 // NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*fileBasedClient, error) {
+// use the NewFileBasedClientWithMetrics instead if you want to collect metrics.
+// This method is retained mainly for backward compatibility.
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
+	return NewFileBasedClientWithMetrics(config, logger, doneCh, metrics.NoopMetricsHandler)
+}
+
+func NewFileBasedClientWithMetrics(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*fileBasedClient, error) {
 	if config == nil {
 		return nil, errors.New("configuration for dynamic config client is nil")
 	}
@@ -117,10 +123,15 @@ func (fc *fileBasedClient) Update() (updateErr error) {
 	modtime, updateErr := fc.reader.GetModTime()
 	retryOnErr := true
 	defer func() {
-		if updateErr != nil {
-			metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(1)
+		if fc.metricsHandler == nil {
+			fc.logger.Warn("dynamic config is missing correct metrics handler")
 		} else {
-			metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(0)
+			// gauge value 1 refers to a failed update state, and should trigger alerts
+			if updateErr != nil {
+				metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(1)
+			} else {
+				metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(0)
+			}
 		}
 		if updateErr == nil || !retryOnErr {
 			fc.lastCheckedTime = modtime

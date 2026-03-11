@@ -119,11 +119,6 @@ func (s *Versioning3Suite) SetupSuite() {
 		// Overriding the number of deployments that can be registered in a single namespace. Done only for this test suite
 		// since it creates a large number of unique deployments in the test suite's namespace.
 		dynamicconfig.MatchingMaxDeployments.Key(): 1000,
-
-		// Use new matcher for versioning tests. Ideally we would run everything with old and new,
-		// but for now we pick a subset of tests. Versioning tests exercise the most features of
-		// matching so they're a good condidate.
-		dynamicconfig.MatchingUseNewMatcher.Key(): true,
 	}
 	s.FunctionalTestBase.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(dynamicConfigOverrides))
 }
@@ -6090,4 +6085,8 @@ func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.Deployment
 	if s.deploymentWorkflowVersion < version {
 		s.T().Skipf("test supports workflow version %v and newer", version)
 	}
+}
+
+func (s *Versioning3Suite) Context() context.Context {
+	return s.T().Context()
 }

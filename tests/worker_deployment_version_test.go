@@ -298,7 +298,9 @@ func (s *DeploymentVersionSuite) TestForceCAN_WithOverrideState() {
 
 		// Verify the metadata from override state is present
 		entries := resp.GetWorkerDeploymentVersionInfo().GetMetadata().GetEntries()
-		a.Len(entries, 1)
+		if !a.Len(entries, 1) {
+			return
+		}
 		a.Equal([]byte("override-value"), entries["override-key"].Data)
 	}, time.Second*10, time.Millisecond*1000)
 }
