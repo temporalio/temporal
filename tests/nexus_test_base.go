@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -13,7 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
+
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/tests/testcore"
@@ -22,13 +23,6 @@ import (
 type NexusTestBaseSuite struct {
 	testcore.FunctionalTestBase
 	useTemporalFailures bool
-}
-
-func (s *NexusTestBaseSuite) mustToPayload(v any) *commonpb.Payload {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload(v)
-	s.NoError(err)
-	return payload
 }
 
 func (s *NexusTestBaseSuite) createNexusEndpoint(name string, taskQueue string) *nexuspb.Endpoint {

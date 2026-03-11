@@ -14,6 +14,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,7 +24,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -388,7 +389,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 		{
 			name: "success",
 			getCompletionFn: func() nexusrpc.CompleteOperationOptions {
-				return nexusrpc.CompleteOperationOptions{Result: s.mustToPayload("result")}
+				return nexusrpc.CompleteOperationOptions{Result: testcore.MustToPayload(s.T(), "result")}
 			},
 			assertHistoryAndGetCompleteWF: func(t *testing.T, events []*historypb.HistoryEvent) *workflowservice.RespondWorkflowTaskCompletedRequest {
 				completedEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
@@ -555,7 +556,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 								Endpoint:  endpointName,
 								Service:   "service",
 								Operation: "operation",
-								Input:     s.mustToPayload("input"),
+								Input:     testcore.MustToPayload(s.T(), "input"),
 							},
 						},
 					},
@@ -707,11 +708,4 @@ func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest
 	require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 	require.Equal(t, 1, len(snap["nexus_latency"]))
 	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
-}
-
-func (s *NexusRequestForwardingSuite) mustToPayload(v any) *commonpb.Payload {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload(v)
-	s.NoError(err)
-	return payload
 }
