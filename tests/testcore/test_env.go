@@ -318,11 +318,12 @@ func (e *testEnv) SdkWorker() sdkworker.Worker {
 	return e.worker
 }
 
-// WorkerTaskQueue returns the task queue name used by the SDK Worker.
+// TaskQueue returns the task queue name used by the SDK Worker.
+// Overrides FunctionalTestBase.TaskQueue() to return the worker task queue set up by WithSdkWorker.
 // Panics if WithSdkWorker was not passed to NewEnv.
 func (e *testEnv) WorkerTaskQueue() string {
 	if e.workerTaskQueue == "" {
-		panic("WorkerTaskQueue() requires WithSdkWorker option to be passed to NewEnv")
+		panic("TaskQueue() requires WithSdkWorker option to be passed to NewEnv")
 	}
 	return e.workerTaskQueue
 }

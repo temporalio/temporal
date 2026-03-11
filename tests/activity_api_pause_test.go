@@ -67,7 +67,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-			TaskQueue: s.TaskQueue(),
+			TaskQueue: s.WorkerTaskQueue(),
 		}
 
 		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
@@ -216,7 +216,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-			TaskQueue: s.TaskQueue(),
+			TaskQueue: s.WorkerTaskQueue(),
 		}
 
 		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
@@ -348,7 +348,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-			TaskQueue: s.TaskQueue(),
+			TaskQueue: s.WorkerTaskQueue(),
 		}
 
 		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
@@ -463,7 +463,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-			TaskQueue: s.TaskQueue(),
+			TaskQueue: s.WorkerTaskQueue(),
 		}
 
 		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
@@ -562,7 +562,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-			TaskQueue: s.TaskQueue(),
+			TaskQueue: s.WorkerTaskQueue(),
 		}
 
 		workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
