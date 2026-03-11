@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
-var ChasmNexusEnabled = dynamicconfig.NewGlobalBoolSetting(
+var ChasmNexusEnabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasm",
 	false,
 	`Feature flag that controls whether the legacy HSM-based implementation (when flag is false; default) or the newer
@@ -107,7 +107,7 @@ var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetti
 or a longer timeout than permitted will have their schedule-to-close timeout capped to this value. 0 implies no limit.`,
 )
 
-var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
+var CallbackURLTemplate = dynamicconfig.NewNamespaceStringSetting(
 	"nexusoperation.callback.endpoint.template",
 	"unset",
 	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver
@@ -151,7 +151,7 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                             dynamicconfig.BoolPropertyFn
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFn
+	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -162,7 +162,7 @@ type Config struct {
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
+	CallbackURLTemplate                 dynamicconfig.StringPropertyFnWithNamespaceFilter
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
 	RetryPolicy                         func() backoff.RetryPolicy

@@ -121,7 +121,7 @@ commands that specify no schedule-to-close timeout or a longer timeout than perm
 schedule-to-close timeout capped to this value. 0 implies no limit.`,
 )
 
-var CallbackURLTemplate = dynamicconfig.NewGlobalStringSetting(
+var CallbackURLTemplate = dynamicconfig.NewNamespaceStringSetting(
 	"component.nexusoperations.callback.endpoint.template",
 	"unset",
 	`Controls the template for generating callback URLs included in Nexus operation requests, which are used to deliver asynchronous completion.
@@ -174,7 +174,7 @@ type Config struct {
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
+	CallbackURLTemplate                 dynamicconfig.StringPropertyFnWithNamespaceFilter
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
