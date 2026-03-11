@@ -30,6 +30,7 @@ type Operation struct {
 	// this is a parent pointer back to the workflow. For a standalone Nexus operation this is nil.
 	Store chasm.ParentPtr[OperationStore]
 
+	// Cancellation is a child component that manages sending the cancel request to the Nexus endpoint.
 	Cancellation chasm.Field[*Cancellation]
 }
 
@@ -58,6 +59,8 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 	o.Status = status
 }
 
+// Cancel requests cancellation of the operation. It creates a Cancellation child component and, if the
+// operation has already started, schedules the cancellation request to be sent to the Nexus endpoint.
 func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) error {
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
