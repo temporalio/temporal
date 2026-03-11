@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,7 +42,8 @@ type (
 		lastCheckedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan any
-		metricsHandler  metrics.Handler
+		metricsHandler   metrics.Handler
+		metricsHandlerMu sync.RWMutex
 
 		NotifyingClientImpl
 	}
@@ -84,6 +86,20 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 	return client, nil
 }
 
+// SetMetricsHandler sets the metrics handler for the client. This is useful when the
+// metricsHandler is not available at the time of initialization due to circular dependencies.
+func (fc *fileBasedClient) SetMetricsHandler(metricsHandler metrics.Handler) {
+	fc.metricsHandlerMu.Lock()
+	defer fc.metricsHandlerMu.Unlock()
+	fc.metricsHandler = metricsHandler
+}
+
+func (fc *fileBasedClient) getMetricsHandler() metrics.Handler {
+	fc.metricsHandlerMu.RLock()
+	defer fc.metricsHandlerMu.RUnlock()
+	return fc.metricsHandler
+}
+
 func (fc *fileBasedClient) GetValue(key Key) []ConstrainedValue {
 	values := fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
 	return values[key]
@@ -123,14 +139,15 @@ func (fc *fileBasedClient) Update() (updateErr error) {
 	modtime, updateErr := fc.reader.GetModTime()
 	retryOnErr := true
 	defer func() {
-		if fc.metricsHandler == nil {
+		h := fc.getMetricsHandler()
+		if h == nil {
 			fc.logger.Warn("dynamic config is missing correct metrics handler")
 		} else {
 			// gauge value 1 refers to a failed update state, and should trigger alerts
 			if updateErr != nil {
-				metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(1)
+				metrics.DynamicConfigUpdateFailure.With(h).Record(1)
 			} else {
-				metrics.DynamicConfigUpdateFailure.With(fc.metricsHandler).Record(0)
+				metrics.DynamicConfigUpdateFailure.With(h).Record(0)
 			}
 		}
 		if updateErr == nil || !retryOnErr {

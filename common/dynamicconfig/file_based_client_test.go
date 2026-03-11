@@ -819,6 +819,55 @@ testGetIntPropertyKey:
 	s.NoError(client.Update())
 }
 
+func (s *fileBasedClientSuite) TestUpdate_SetMetricsHandlerRecordsMetrics() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	captureHandler := metricstest.NewCaptureHandler()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime x2, ReadFile x1; starts with NoopMetricsHandler so no captured metrics
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.NoError(err)
+
+	// Inject the real metrics handler after construction (deferred injection pattern)
+	client.SetMetricsHandler(captureHandler)
+
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// Trigger a failing update — metric should now be recorded via the injected handler
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
+}
+
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
 	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
 
