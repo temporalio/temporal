@@ -15,6 +15,8 @@ type Cancellation struct {
 	*nexusoperationpb.CancellationState
 }
 
+// NewCancellation creates a new Cancellation component with the given state.
+// Typically, cancellations should be created via Operation.Cancel rather than directly.
 func NewCancellation(state *nexusoperationpb.CancellationState) *Cancellation {
 	return &Cancellation{CancellationState: state}
 }

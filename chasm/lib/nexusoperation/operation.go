@@ -20,6 +20,7 @@ var (
 
 type OperationStore any
 
+// Operation is a CHASM component that represents a Nexus operation.
 type Operation struct {
 	chasm.UnimplementedComponent
 
@@ -34,10 +35,12 @@ type Operation struct {
 	Cancellation chasm.Field[*Cancellation]
 }
 
+// NewOperation creates a new Operation component with the given persisted state.
 func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 	return &Operation{OperationState: state}
 }
 
+// LifecycleState maps the operation's status to a CHASM lifecycle state.
 func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch o.Status {
 	case nexusoperationpb.OPERATION_STATUS_SUCCEEDED:
@@ -51,10 +54,12 @@ func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
+// StateMachineState returns the current operation status.
 func (o *Operation) StateMachineState() nexusoperationpb.OperationStatus {
 	return o.Status
 }
 
+// SetStateMachineState sets the operation status.
 func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus) {
 	o.Status = status
 }
