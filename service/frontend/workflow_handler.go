@@ -2891,9 +2891,6 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 
 // cancelOutstandingWorkerPolls cancels all outstanding polls for the worker across all partitions.
 // This is a best-effort operation - errors are logged but don't fail the shutdown.
-//
-// TODO: Remove partition iteration after release. Matching service now fans out when it receives
-// root partition. Switch to sending root partition only in a follow-up PR after matching is deployed.
 func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	ctx context.Context,
 	namespaceID string,
@@ -2927,6 +2924,8 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	for _, taskType := range taskTypes {
 		tq := tqFamily.TaskQueue(taskType)
 		numPartitions := max(1, wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType))
+		// TODO: Remove partition iteration after release. Matching fans out when it receives root.
+		// Switch to sending root partition only in follow-up PR #9477 after matching is deployed.
 		for i := range numPartitions {
 			partition := tq.NormalPartition(i)
 			resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
