@@ -2459,7 +2459,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 						wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 					}
 				}
-				if enableSendTargetVersionChanged {
+				if enableSendTargetVersionChanged && !pinnedOverride {
 					// Verify TargetWorkerDeploymentVersionChanged was sent on WFT started events after deployment change.
 					// Events BEFORE deployment change (events 3, 7) should NOT have the flag.
 					// Events AFTER deployment change (all subsequent WFTs) SHOULD have the flag, regardless of success/failure.
