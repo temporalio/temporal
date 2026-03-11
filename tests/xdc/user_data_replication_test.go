@@ -303,7 +303,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
 			for tqType := 1; tqType <= 3; tqType++ {
 				data := perType[int32(tqType)].GetDeploymentData()
-				if a.Equal(1, len(data.GetVersions())) {
+				if a.Len(data.GetVersions(), 1) {
 					a.True(data.GetVersions()[0].Equal(expectedVersionData))
 				}
 			}
@@ -335,7 +335,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataIsReplicatedFromActiveToPassi
 		if perType := response.GetUserData().GetData().GetPerType(); a.NotNil(perType) {
 			for tqType := 1; tqType <= 3; tqType++ {
 				data := perType[int32(tqType)].GetDeploymentData()
-				if a.Equal(1, len(data.GetVersions())) {
+				if a.Len(data.GetVersions(), 1) {
 					a.True(data.GetVersions()[0].Equal(expectedVersionData))
 				}
 			}
@@ -434,7 +434,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataEntriesAreReplicatedOnDemand(
 	})
 	s.NoError(err)
 	lastMessageId = replicationResponse.GetMessages().GetLastRetrievedMessageId()
-	s.Equal(1, len(replicationResponse.GetMessages().ReplicationTasks))
+	s.Len(replicationResponse.GetMessages().ReplicationTasks, 1)
 	task := replicationResponse.GetMessages().ReplicationTasks[0]
 	s.Equal(namespace, task.GetNamespaceTaskAttributes().GetInfo().GetName())
 
@@ -570,7 +570,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	attrs := task.GetTaskQueueUserDataAttributes()
 	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 	s.Equal(taskQueue, attrs.TaskQueueName)
-	s.Equal(3, len(attrs.UserData.VersioningData.VersionSets))
+	s.Len(attrs.UserData.VersioningData.VersionSets, 3)
 	s.Equal("v0", attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_DELETED, attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
 	s.Equal("v1", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
@@ -601,7 +601,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	attrs = task.GetTaskQueueUserDataAttributes()
 	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 	s.Equal(taskQueue, attrs.TaskQueueName)
-	s.Equal(2, len(attrs.UserData.VersioningData.VersionSets))
+	s.Len(attrs.UserData.VersioningData.VersionSets, 2)
 	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
 	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)
@@ -644,7 +644,7 @@ func (s *UserDataReplicationTestSuite) TestUserDataTombstonesAreReplicated() {
 	attrs = task.GetTaskQueueUserDataAttributes()
 	s.Equal(description.GetNamespaceInfo().Id, attrs.NamespaceId)
 	s.Equal(taskQueue, attrs.TaskQueueName)
-	s.Equal(3, len(attrs.UserData.VersioningData.VersionSets))
+	s.Len(attrs.UserData.VersioningData.VersionSets, 3)
 	s.Equal("v2", attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].Id)
 	s.Equal(persistencespb.STATE_ACTIVE, attrs.UserData.VersioningData.VersionSets[0].BuildIds[0].State)
 	s.Equal("v3", attrs.UserData.VersioningData.VersionSets[1].BuildIds[0].Id)

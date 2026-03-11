@@ -302,7 +302,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	s.GreaterOrEqual(len(describeResp.Info.RecentActions), 2)
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
-	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
+	s.Equal(0, action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second))
 	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
 
 	// validate list response
@@ -350,7 +350,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 	var ex0StartTime time.Time
 	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime], &ex0StartTime))
 	s.WithinRange(ex0StartTime, createTime, time.Now())
-	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
+	s.Equal(0, ex0StartTime.UnixNano()%int64(5*time.Second))
 
 	// list schedules with search attribute filter
 
@@ -415,7 +415,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 
 	s.DurationNear(describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
 	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
-	s.True(lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.AsTime().UnixNano())
+	s.Equal(1000000000, lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second), lastAction.ScheduleTime.AsTime().UnixNano())
 
 	// update schedule and search attributes
 
@@ -526,7 +526,7 @@ func (s *scheduleFunctionalSuiteBase) TestBasics() {
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
-	s.Equal(1, len(listResp.Schedules))
+	s.Len(listResp.Schedules, 1)
 	entry = listResp.Schedules[0]
 	s.Equal(sid, entry.ScheduleId)
 	s.True(entry.Info.Paused)
@@ -668,7 +668,7 @@ func (s *scheduleFunctionalSuiteBase) TestLastCompletionAndError() {
 
 		switch num {
 		case 1:
-			s.Equal("", lcr)
+			s.Empty(lcr)
 			s.NoError(lastErr)
 			return "this one succeeds", nil
 		case 2:
@@ -827,7 +827,7 @@ func (s *ScheduleV1FunctionalSuite) TestRefresh() {
 		ScheduleId: sid,
 	})
 	s.NoError(err)
-	s.EqualValues(1, len(describeResp.Info.RunningWorkflows))
+	s.Len(describeResp.Info.RunningWorkflows, 1)
 
 	events1 := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	expectedHistory := `
@@ -863,7 +863,7 @@ func (s *ScheduleV1FunctionalSuite) TestRefresh() {
 		ScheduleId: sid,
 	})
 	s.NoError(err)
-	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+	s.Empty(describeResp.Info.RunningWorkflows)
 
 	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
 	s.Eventually(func() bool {
@@ -1031,7 +1031,7 @@ func (s *scheduleFunctionalSuiteBase) TestListSchedulesReturnsWorkflowStatus() {
 	listResp := s.getScheduleEntryFomVisibility(sid, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 1
 	})
-	s.Equal(1, len(listResp.Info.RecentActions))
+	s.Len(listResp.Info.RecentActions, 1)
 
 	a1 := listResp.Info.RecentActions[0]
 	s.True(strings.HasPrefix(a1.StartWorkflowResult.WorkflowId, wid))
@@ -1245,9 +1245,9 @@ func (s *scheduleFunctionalSuiteBase) TestLimitMemoSpecSize() {
 	entry := s.getScheduleEntryFomVisibility(sid, nil)
 	s.Require().NotNil(entry)
 	spec := entry.GetInfo().GetSpec()
-	s.Require().Equal(expectedLimit, len(spec.GetInterval()))
-	s.Require().Equal(expectedLimit, len(spec.GetStructuredCalendar()))
-	s.Require().Equal(expectedLimit, len(spec.GetExcludeStructuredCalendar()))
+	s.Require().Len(spec.GetInterval(), expectedLimit)
+	s.Require().Len(spec.GetStructuredCalendar(), expectedLimit)
+	s.Require().Len(spec.GetExcludeStructuredCalendar(), expectedLimit)
 }
 
 // TestNextTimeCache only applies to V1.
