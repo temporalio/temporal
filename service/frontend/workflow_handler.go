@@ -2920,39 +2920,47 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	}
 
 	namespaceName := request.GetNamespace()
-	var totalCancelled int32
+	var waitGroup sync.WaitGroup
+	var totalCancelled atomic.Int32
+	var failedPartitions atomic.Int32
+
 	for _, taskType := range taskTypes {
-		tq := tqFamily.TaskQueue(taskType)
 		numPartitions := max(1, wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType))
+		tq := tqFamily.TaskQueue(taskType)
 		// TODO: Remove partition iteration after release. Matching fans out when it receives root.
 		// Switch to sending root partition only in follow-up PR #9477 after matching is deployed.
-		for i := range numPartitions {
-			partition := tq.NormalPartition(i)
-			resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
-				NamespaceId: namespaceID,
-				TaskQueue: &taskqueuepb.TaskQueue{
-					Name: partition.RpcName(),
-					Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-				},
-				TaskQueueType:     taskType,
-				WorkerInstanceKey: workerInstanceKey,
-				WorkerIdentity:    request.GetIdentity(),
+		for partitionID := range numPartitions {
+			partition := tq.NormalPartition(partitionID)
+			waitGroup.Go(func() {
+				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
+					NamespaceId: namespaceID,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: partition.RpcName(),
+						Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+					},
+					TaskQueueType:     taskType,
+					WorkerInstanceKey: workerInstanceKey,
+					WorkerIdentity:    request.GetIdentity(),
+				})
+				if err != nil {
+					failedPartitions.Add(1)
+					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
+						tag.WorkflowTaskQueueName(partition.RpcName()),
+						tag.String("worker-instance-key", workerInstanceKey),
+						tag.Error(err))
+				} else {
+					totalCancelled.Add(resp.CancelledCount)
+				}
 			})
-			if err != nil {
-				wh.logger.Warn("Failed to cancel outstanding polls for worker.",
-					tag.WorkflowTaskQueueName(partition.RpcName()),
-					tag.String("worker-instance-key", workerInstanceKey),
-					tag.Error(err))
-			} else {
-				totalCancelled += resp.CancelledCount
-			}
 		}
 	}
+	waitGroup.Wait()
 
-	if totalCancelled > 0 {
+	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
 		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
 			tag.String("worker-instance-key", workerInstanceKey),
-			tag.NewInt32("cancelled-count", totalCancelled))
+			tag.NewInt32("cancelled-count", totalCancelled.Load()),
+			tag.NewInt32("failed-partitions", failedPartitions.Load()))
 	}
 }
 
