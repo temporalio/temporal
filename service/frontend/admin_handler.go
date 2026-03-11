@@ -148,6 +148,7 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
+		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.

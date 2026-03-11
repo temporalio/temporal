@@ -97,6 +97,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
+	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
@@ -688,6 +689,7 @@ func AdminHandlerProvider(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
@@ -718,6 +720,7 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		chasmRegistry,
+		namespaceDataMerger,
 		taskCategoryRegistry,
 		matchingClient,
 	}
@@ -728,12 +731,14 @@ func AdminHandlerProvider(
 func NamespaceDLQHandlerProvider(
 	clusterMetadata cluster.Metadata,
 	persistenceMetadataManager persistence.MetadataManager,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	logger log.SnTaggedLogger,
 ) nsreplication.DLQMessageHandler {
 	taskExecutor := nsreplication.NewTaskExecutor(
 		clusterMetadata.GetCurrentClusterName(),
 		persistenceMetadataManager,
+		namespaceDataMerger,
 		logger,
 	)
 	return nsreplication.NewDLQMessageHandler(

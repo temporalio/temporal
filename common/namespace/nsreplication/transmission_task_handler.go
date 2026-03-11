@@ -29,6 +29,7 @@ type (
 			failoverVersion int64,
 			isGlobalNamespace bool,
 			failoverHistoy []*persistencespb.FailoverStatus,
+			forceReplicate bool,
 		) error
 	}
 
@@ -61,13 +62,16 @@ func (r *replicator) HandleTransmissionTask(
 	failoverVersion int64,
 	isGlobalNamespace bool,
 	failoverHistoy []*persistencespb.FailoverStatus,
+	forceReplicate bool,
 ) error {
 
-	if !isGlobalNamespace {
-		return nil
-	}
-	if len(replicationConfig.Clusters) <= 1 && !replicationClusterListUpdated {
-		return nil
+	if !forceReplicate {
+		if !isGlobalNamespace {
+			return nil
+		}
+		if len(replicationConfig.Clusters) <= 1 && !replicationClusterListUpdated {
+			return nil
+		}
 	}
 	if info.State == enumspb.NAMESPACE_STATE_DELETED {
 		// Don't replicate deleted namespace changes.
