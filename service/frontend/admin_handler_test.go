@@ -186,7 +186,14 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.NewString()).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
-	s.handler = NewAdminHandler(args)
+
+	namespaceDLQHandler := NamespaceDLQHandlerProvider(
+		s.mockMetadata,
+		s.mockResource.GetMetadataManager(),
+		s.mockResource.GetNamespaceReplicationQueue(),
+		s.mockResource.GetLogger(),
+	)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler)
 	s.handler.Start()
 }
 

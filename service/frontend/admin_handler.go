@@ -163,13 +163,8 @@ var (
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
+	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
-	namespaceReplicationTaskExecutor := nsreplication.NewTaskExecutor(
-		args.ClusterMetadata.GetCurrentClusterName(),
-		args.PersistenceMetadataManager,
-		args.Logger,
-	)
-
 	historyHealthChecker := NewHealthChecker(
 		primitives.HistoryService,
 		args.MembershipMonitor,
@@ -186,11 +181,7 @@ func NewAdminHandler(
 		status:                common.DaemonStatusInitialized,
 		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
 		config:                args.Config,
-		namespaceDLQHandler: nsreplication.NewDLQMessageHandler(
-			namespaceReplicationTaskExecutor,
-			args.NamespaceReplicationQueue,
-			args.Logger,
-		),
+		namespaceDLQHandler:   namespaceDLQHandler,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
