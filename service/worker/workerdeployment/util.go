@@ -78,7 +78,7 @@ const (
 	errMaxTaskQueuesInVersionType = "errMaxTaskQueuesInVersion"
 	errVersionNotFound            = "Version not found in deployment"
 	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
-	errDeploymentAlreadyExists    = "worker deployment already exists"  // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
+	errDeploymentAlreadyExists    = "worker deployment already exists"  // returned in the race condition that the deployment exists with a different request ID.
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
 	errVersionIsDraining          = "errVersionIsDraining"

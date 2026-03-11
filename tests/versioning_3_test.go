@@ -4035,7 +4035,8 @@ func (s *Versioning3Suite) idlePollActivity(
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			if task != nil {
 				s.Logger.Error(fmt.Sprintf("Unexpected activity task received, ID: %s", task.ActivityId))
-				s.Fail(unexpectedTaskMessage)
+				a := s.Assert()
+				a.Fail(unexpectedTaskMessage)
 			}
 			return nil, nil
 		},

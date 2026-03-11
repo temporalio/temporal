@@ -217,13 +217,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateNamespace":                  1,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerBuildIdCompatibility": 2,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerVersioningRules":      2,
-
-		// Anything that changes task queue user data also creates replication tasks.
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentCurrentVersion": 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentRampingVersion": 2,
-		"/temporal.api.workflowservice.v1.WorkflowService/SetWorkerDeploymentManager":        2,
-		"/temporal.api.workflowservice.v1.WorkflowService/DeleteWorkerDeploymentVersion":     2,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateTaskQueueConfig":             2,
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}

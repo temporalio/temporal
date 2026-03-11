@@ -1112,7 +1112,11 @@ func (d *ClientImpl) CreateWorkerDeployment(
 
 	updateRequest := &updatepb.Request{
 		Input: &updatepb.Input{Name: CreateWorkerDeployment, Args: updateArgs},
-		Meta:  &updatepb.Meta{UpdateId: "_create_" + requestID, Identity: identity},
+		// the WorkflowUpdate's request ID is not used as the `create_request_id` inside the
+		// workflow state. The reason I add the prefix is to differentiate the request id for
+		// create vs other APIs such as setcurrent etc. in case user sends the same request
+		// ID, Temporal still treat them as defferent WorkflowUpdates.
+		Meta: &updatepb.Meta{UpdateId: "_create_" + requestID, Identity: identity},
 	}
 
 	outcome, err := updateWorkflowWithStart(
@@ -1152,6 +1156,9 @@ func (d *ClientImpl) ensureWorkerDeploymentDoesNotExist(
 	requestID string,
 ) ([]byte, error) {
 	// Check if deployment already exists and whether it was created by this request.
+	// The reason for this query is that we don't want to send updates to the
+	// workflow needlessly because it generates history events (ideally, we should
+	// right nothing in case of duplicate request ID.)
 	res, err := d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
 	if err != nil {
 		var notFound *serviceerror.NotFound
