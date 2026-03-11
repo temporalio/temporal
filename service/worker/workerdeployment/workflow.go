@@ -39,7 +39,6 @@ type (
 		logger           sdklog.Logger
 		metrics          sdkclient.MetricsHandler
 		lock             workflow.Mutex
-		conflictToken    []byte
 		deleteDeployment bool
 		unsafeMaxVersion func() int
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
@@ -273,6 +272,31 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
+	err = workflow.SetQueryHandler(ctx, QueryCreateRequestID, func() (*deploymentspb.CreateRequestIDQueryResponse, error) {
+		if d.deleteDeployment {
+			return nil, errors.New(errDeploymentDeleted)
+		}
+		return &deploymentspb.CreateRequestIDQueryResponse{
+			RequestId:     d.GetState().GetCreateRequestId(),
+			ConflictToken: d.State.GetConflictToken(),
+		}, nil
+	})
+	if err != nil {
+		d.logger.Info("SetQueryHandler failed for WorkerDeployment create request-id query with error: " + err.Error())
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		CreateWorkerDeployment,
+		d.handleCreateWorkerDeployment,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateCreateWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
 	if err := workflow.SetUpdateHandler(
 		ctx,
 		RegisterWorkerInWorkerDeployment,
@@ -415,6 +439,52 @@ func (d *WorkflowRunner) ensureNotDeleted() error {
 		return temporal.NewNonRetryableApplicationError(errDeploymentDeleted, errDeploymentDeleted, nil)
 	}
 	return nil
+}
+
+func (d *WorkflowRunner) validateCreateWorkerDeployment(args *deploymentspb.CreateWorkerDeploymentArgs) error {
+	// Only valid if deployment is deleted or the request ID matches the current one.
+	if d.State.GetCreateRequestId() == args.GetRequestId() {
+		return nil
+	}
+
+	return temporal.NewNonRetryableApplicationError(errDeploymentAlreadyExists, errDeploymentAlreadyExists, nil)
+}
+
+func (d *WorkflowRunner) handleCreateWorkerDeployment(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentArgs) (*deploymentspb.CreateWorkerDeploymentResponse, error) {
+	// use lock to enforce only one update at a time
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		// Even if the update doesn't change the state we mark it as dirty because of created history events.
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
+
+	// Re-validate after acquiring lock
+	err = d.validateCreateWorkerDeployment(args)
+	if err != nil {
+		return nil, err
+	}
+
+	if d.State.GetCreateRequestId() == args.GetRequestId() {
+		// Duplicate request, return success without writing anything.
+		return &deploymentspb.CreateWorkerDeploymentResponse{
+			ConflictToken: d.State.ConflictToken,
+		}, nil
+	}
+
+	// At this point this a brand-new workflow.
+	d.State.LastModifierIdentity = args.GetIdentity()
+	d.State.CreateRequestId = args.GetRequestId()
+	d.State.ComputeConfig = args.GetComputeConfig()
+	d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
+
+	return &deploymentspb.CreateWorkerDeploymentResponse{
+		ConflictToken: d.State.ConflictToken,
+	}, nil
 }
 
 func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
