@@ -1348,15 +1348,15 @@ var (
 	)
 	ScheduleMigrationStarted = NewCounterDef(
 		"schedule_migration_started",
-		WithDescription("The number of times a V1 schedule starts migration to CHASM"),
+		WithDescription("The number of times a schedule migration is started"),
 	)
 	ScheduleMigrationCompleted = NewCounterDef(
 		"schedule_migration_completed",
-		WithDescription("The number of times a V1 schedule successfully completes migration to CHASM"),
+		WithDescription("The number of times a schedule migration completes successfully"),
 	)
 	ScheduleMigrationFailed = NewCounterDef(
 		"schedule_migration_failed",
-		WithDescription("The number of times a V1 schedule fails migration to CHASM"),
+		WithDescription("The number of times a schedule migration fails"),
 	)
 
 	// Worker Versioning
