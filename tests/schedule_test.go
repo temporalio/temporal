@@ -1387,6 +1387,154 @@ func (s *scheduleFunctionalSuiteBase) cleanup(sid string) {
 	})
 }
 
+// TestScheduledWorkflowDoubleReset_SchedulerSeesCompletion_HSMCallbacks verifies that
+// the CHASM scheduler correctly processes a completion after the workflow is reset TWICE,
+// using the HSM callback implementation (EnableCHASMCallbacks = false). This exercises
+// the chained-reset code path where CallbackRequestId must propagate through multiple
+// resets. A double reset inherently also tests the single-reset code path.
+func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflowDoubleReset_SchedulerSeesCompletion_HSMCallbacks() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
+	s.runScheduledWorkflowDoubleResetSchedulerSeesCompletion(
+		"sched-test-double-reset-hsm-cb",
+		"sched-test-double-reset-hsm-cb-wf",
+		"sched-test-double-reset-hsm-cb-wt",
+	)
+}
+
+// TestScheduledWorkflowDoubleReset_SchedulerSeesCompletion_ChasmCallbacks verifies the
+// same double-reset fix using the CHASM callback implementation (EnableCHASMCallbacks = true).
+func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflowDoubleReset_SchedulerSeesCompletion_ChasmCallbacks() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	s.runScheduledWorkflowDoubleResetSchedulerSeesCompletion(
+		"sched-test-double-reset-chasm-cb",
+		"sched-test-double-reset-chasm-cb-wf",
+		"sched-test-double-reset-chasm-cb-wt",
+	)
+}
+
+// runScheduledWorkflowDoubleResetSchedulerSeesCompletion verifies that the callback
+// request_id is preserved across two chained resets. After a double reset, the
+// workflow is completed via signal; the scheduler must still see the completion.
+//
+// Without the CallbackRequestId persistence field, the second reset would read
+// CallbackRequestId from the first reset run's CreateRequestId (= reset1RequestId),
+// producing a callback request_id that doesn't match the original BufferedStart.RequestId.
+// The fix stores CallbackRequestId in executionInfo and propagates it across resets.
+func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerSeesCompletion(sid, wid, wt string) {
+	// A workflow that blocks until it receives a "complete" signal. This lets us reset
+	// it multiple times before allowing it to finish.
+	s.worker.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		ch := workflow.GetSignalChannel(ctx, "complete")
+		var signal interface{}
+		ch.Receive(ctx, &signal)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := s.newContext()
+
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(24 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Wait for scheduler to start the workflow and show it as RUNNING.
+	listEntry := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.Info.RecentActions) >= 1 &&
+			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	})
+	a1 := listEntry.Info.RecentActions[0]
+	wfExec := &commonpb.WorkflowExecution{
+		WorkflowId: a1.StartWorkflowResult.WorkflowId,
+		RunId:      a1.StartWorkflowResult.RunId,
+	}
+
+	// Wait for the base run to complete a workflow task (valid reset point).
+	s.WaitForHistoryEvents(`
+		1 WorkflowExecutionStarted
+		2 WorkflowTaskScheduled
+		3 WorkflowTaskStarted
+		4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(s.Namespace().String(), wfExec),
+		5*time.Second,
+		10*time.Millisecond,
+	)
+
+	// First reset: base run → reset run 1.
+	// We reset with WorkflowTaskFinishEventId: 3 (WorkflowTaskStarted). resetRun1 is
+	// created by replaying history up to and including event 3 from the base run.
+	resp1, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         wfExec,
+		Reason:                    "double-reset-test-first",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRun1 := &commonpb.WorkflowExecution{
+		WorkflowId: wfExec.WorkflowId,
+		RunId:      resp1.RunId,
+	}
+
+	// Second reset: reset run 1 → reset run 2.
+	// resetRun1 already has event 3 (WorkflowTaskStarted) from the replay performed by
+	// the first reset, so WorkflowTaskFinishEventId: 3 is valid immediately. We do not
+	// need to wait for resetRun1 to complete a new workflow task before resetting it.
+	_, err = s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         resetRun1,
+		Reason:                    "double-reset-test-second",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+
+	// Signal the latest run (reset run 2) to complete.
+	// Sending without a RunId targets the current/latest run.
+	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wfExec.WorkflowId,
+		},
+		SignalName: "complete",
+	})
+	s.NoError(err)
+
+	// Poll until the scheduler shows the original action as COMPLETED.
+	// Without the chained-reset fix, the second reset run's callback would carry
+	// reset1RequestId instead of originalStartRequestId, so HandleNexusCompletion
+	// would fail to match and silently drop the completion.
+	s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+		for _, action := range ent.Info.RecentActions {
+			if action.GetStartWorkflowResult().GetRunId() == wfExec.RunId {
+				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			}
+		}
+		return false
+	})
+}
+
 // TestCreateScheduleAlreadyExists verifies that creating a schedule with the same ID
 // returns an AlreadyExists serviceerror.
 func (s *ScheduleCHASMFunctionalSuite) TestCreateScheduleAlreadyExists() {

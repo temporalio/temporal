@@ -203,6 +203,19 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		}
 	}
 
+	// Preserve the original start request ID from the base run so callbacks on the
+	// reset workflow are associated with the original start request, not the reset request.
+	// This allows scheduler completion handlers to correlate callbacks to the original run.
+	//
+	// For chained resets, executionInfo.CallbackRequestId carries the original start
+	// request ID from the very first run. Fall back to CreateRequestId for older runs
+	// that pre-date this field (first reset will work; subsequent chained resets may not,
+	// which is the pre-existing behavior before this field was added).
+	baseCallbackRequestID := baseWorkflow.GetMutableState().GetExecutionInfo().GetCallbackRequestId()
+	if baseCallbackRequestID == "" {
+		baseCallbackRequestID = baseWorkflow.GetMutableState().GetExecutionState().GetCreateRequestId()
+	}
+
 	resetWorkflow, err := r.prepareResetWorkflow(
 		ctx,
 		namespaceID,
@@ -213,6 +226,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		baseRebuildLastEventVersion,
 		resetRunID,
 		resetRequestID,
+		baseCallbackRequestID,
 		resetWorkflowVersion,
 		resetReason,
 		allowResetWithPendingChildren,
@@ -264,6 +278,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	resetRunID string,
 	resetRequestID string,
+	callbackRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
 	allowResetWithPendingChildren bool,
@@ -279,6 +294,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		baseRebuildLastEventVersion,
 		resetRunID,
 		resetRequestID,
+		callbackRequestID,
 	)
 	if err != nil {
 		return nil, err
@@ -435,6 +451,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	resetRunID string,
 	resetRequestID string,
+	callbackRequestID string,
 ) (Workflow, error) {
 
 	resetBranchToken, err := r.forkAndGenerateBranchToken(
@@ -480,6 +497,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		),
 		resetBranchToken,
 		resetRequestID,
+		callbackRequestID,
 	)
 	if err != nil {
 		return nil, err

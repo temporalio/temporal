@@ -123,6 +123,7 @@ func (r *resetterImpl) resetWorkflow(
 		),
 		resetBranchToken,
 		requestID,
+		requestID,
 	)
 	if err != nil {
 		return nil, err

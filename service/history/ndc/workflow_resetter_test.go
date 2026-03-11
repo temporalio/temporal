@@ -299,6 +299,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil,
 	)
 
+	callbackRequestID := uuid.NewString()
 	s.mockStateRebuilder.EXPECT().Rebuild(
 		ctx,
 		gomock.Any(),
@@ -317,6 +318,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		resetBranchToken,
 		resetRequestID,
+		callbackRequestID,
 	).Return(resetMutableState, resetStats, nil)
 	resetMutableState.EXPECT().SetBaseWorkflow(
 		s.baseRunID,
@@ -337,6 +339,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		baseRebuildLastEventVersion,
 		s.resetRunID,
 		resetRequestID,
+		callbackRequestID,
 	)
 	s.NoError(err)
 	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
@@ -1513,6 +1516,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		resetBranchToken,
 		resetRequestID,
+		gomock.Any(),
 	).Return(resetMutableState, resetStats, nil)
 
 	resetMutableState.EXPECT().SetBaseWorkflow(s.baseRunID, baseRebuildLastEventID, baseRebuildLastEventVersion)
@@ -1575,6 +1579,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		s.resetRunID,
+		resetRequestID,
 		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,

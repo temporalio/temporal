@@ -91,6 +91,11 @@ message WorkflowExecutionInfo {
     bool workflow_task_suggest_continue_as_new = 69;
     repeated temporal.api.enums.v1.SuggestContinueAsNewReason workflow_task_suggest_continue_as_new_reasons = 110;
     bool workflow_task_target_worker_deployment_version_changed = 112;
+    // The request ID used for callbacks attached to this workflow execution.
+    // For the original run, this equals create_request_id in WorkflowExecutionState.
+    // For reset runs, this preserves the original start request ID across chained resets,
+    // allowing scheduler completion handlers to correlate callbacks correctly.
+    string callback_request_id = 113;
     int64 workflow_task_history_size_bytes = 70;
     // tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
     // - verify WFT completes by the same Build ID that started in the latest attempt

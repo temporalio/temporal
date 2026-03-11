@@ -152,6 +152,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 		workflowKey,
 		branchToken1,
 		requestID,
+		gomock.Any(),
 	).Return(mockRebuildMutableState, RebuildStats{
 		HistorySize:          rand.Int63(),
 		ExternalPayloadSize:  rand.Int63(),
@@ -288,6 +289,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildCurrentMutableState_Rebuild() {
 		workflowKey,
 		branchToken1,
 		gomock.Any(),
+		gomock.Any(),
 	).Return(mockRebuildMutableState, RebuildStats{
 		HistorySize:          rand.Int63(),
 		ExternalPayloadSize:  rand.Int63(),
@@ -394,6 +396,7 @@ func (s *conflictResolverSuite) TestGetOrRebuildMutableState_Rebuild() {
 		util.Ptr(version),
 		workflowKey,
 		branchToken1,
+		gomock.Any(),
 		gomock.Any(),
 	).Return(mockRebuildMutableState, RebuildStats{
 		HistorySize:          rand.Int63(),

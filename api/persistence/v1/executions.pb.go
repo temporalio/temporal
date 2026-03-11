@@ -165,7 +165,12 @@ type WorkflowExecutionInfo struct {
 	WorkflowTaskSuggestContinueAsNew                 bool                             `protobuf:"varint,69,opt,name=workflow_task_suggest_continue_as_new,json=workflowTaskSuggestContinueAsNew,proto3" json:"workflow_task_suggest_continue_as_new,omitempty"`
 	WorkflowTaskSuggestContinueAsNewReasons          []v11.SuggestContinueAsNewReason `protobuf:"varint,110,rep,packed,name=workflow_task_suggest_continue_as_new_reasons,json=workflowTaskSuggestContinueAsNewReasons,proto3,enum=temporal.api.enums.v1.SuggestContinueAsNewReason" json:"workflow_task_suggest_continue_as_new_reasons,omitempty"`
 	WorkflowTaskTargetWorkerDeploymentVersionChanged bool                             `protobuf:"varint,112,opt,name=workflow_task_target_worker_deployment_version_changed,json=workflowTaskTargetWorkerDeploymentVersionChanged,proto3" json:"workflow_task_target_worker_deployment_version_changed,omitempty"`
-	WorkflowTaskHistorySizeBytes                     int64                            `protobuf:"varint,70,opt,name=workflow_task_history_size_bytes,json=workflowTaskHistorySizeBytes,proto3" json:"workflow_task_history_size_bytes,omitempty"`
+	// The request ID used for callbacks attached to this workflow execution.
+	// For the original run, this equals create_request_id in WorkflowExecutionState.
+	// For reset runs, this preserves the original start request ID across chained resets,
+	// allowing scheduler completion handlers to correlate callbacks correctly.
+	CallbackRequestId            string `protobuf:"bytes,113,opt,name=callback_request_id,json=callbackRequestId,proto3" json:"callback_request_id,omitempty"`
+	WorkflowTaskHistorySizeBytes int64  `protobuf:"varint,70,opt,name=workflow_task_history_size_bytes,json=workflowTaskHistorySizeBytes,proto3" json:"workflow_task_history_size_bytes,omitempty"`
 	// tracks the started build ID for transient/speculative WFT. This info is used for two purposes:
 	// - verify WFT completes by the same Build ID that started in the latest attempt
 	// - when persisting transient/speculative WFT, the right Build ID is used in the WFT started event
@@ -595,6 +600,13 @@ func (x *WorkflowExecutionInfo) GetWorkflowTaskTargetWorkerDeploymentVersionChan
 		return x.WorkflowTaskTargetWorkerDeploymentVersionChanged
 	}
 	return false
+}
+
+func (x *WorkflowExecutionInfo) GetCallbackRequestId() string {
+	if x != nil {
+		return x.CallbackRequestId
+	}
+	return ""
 }
 
 func (x *WorkflowExecutionInfo) GetWorkflowTaskHistorySizeBytes() int64 {
@@ -4580,7 +4592,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xdd@\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\x8dA\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4615,7 +4627,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x12workflow_task_type\x18D \x01(\x0e2..temporal.server.api.enums.v1.WorkflowTaskTypeR\x10workflowTaskType\x12O\n" +
 	"%workflow_task_suggest_continue_as_new\x18E \x01(\bR workflowTaskSuggestContinueAsNew\x12\x91\x01\n" +
 	"-workflow_task_suggest_continue_as_new_reasons\x18n \x03(\x0e21.temporal.api.enums.v1.SuggestContinueAsNewReasonR'workflowTaskSuggestContinueAsNewReasons\x12p\n" +
-	"6workflow_task_target_worker_deployment_version_changed\x18p \x01(\bR0workflowTaskTargetWorkerDeploymentVersionChanged\x12F\n" +
+	"6workflow_task_target_worker_deployment_version_changed\x18p \x01(\bR0workflowTaskTargetWorkerDeploymentVersionChanged\x12.\n" +
+	"\x13callback_request_id\x18q \x01(\tR\x11callbackRequestId\x12F\n" +
 	" workflow_task_history_size_bytes\x18F \x01(\x03R\x1cworkflowTaskHistorySizeBytes\x123\n" +
 	"\x16workflow_task_build_id\x18X \x01(\tR\x13workflowTaskBuildId\x12S\n" +
 	"'workflow_task_build_id_redirect_counter\x18Y \x01(\x03R\"workflowTaskBuildIdRedirectCounter\x12.\n" +

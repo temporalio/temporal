@@ -38,6 +38,7 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
+			callbackRequestID string,
 		) (historyi.MutableState, RebuildStats, error)
 		RebuildWithCurrentMutableState(
 			ctx context.Context,
@@ -110,6 +111,7 @@ func (r *StateRebuilderImpl) Rebuild(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
+	callbackRequestID string,
 ) (historyi.MutableState, RebuildStats, error) {
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
@@ -121,6 +123,7 @@ func (r *StateRebuilderImpl) Rebuild(
 		targetWorkflowIdentifier,
 		targetBranchToken,
 		requestID,
+		callbackRequestID,
 	)
 	if err != nil {
 		return nil, RebuildStats{}, err
@@ -170,6 +173,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		baseLastEventVersion,
 		targetWorkflowIdentifier,
 		targetBranchToken,
+		requestID,
 		requestID,
 	)
 	if err != nil {
@@ -231,6 +235,7 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
+	callbackRequestID string,
 ) (historyi.MutableState, int64, error) {
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
 	if err != nil {
@@ -250,6 +255,12 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 		targetWorkflowIdentifier,
 		now,
 	)
+
+	// Pre-populate CallbackRequestId so ApplyWorkflowExecutionStartedEvent uses the
+	// correct request ID for callbacks without needing it as a parameter.
+	if callbackRequestID != "" {
+		rebuiltMutableState.GetExecutionInfo().CallbackRequestId = callbackRequestID
+	}
 
 	var lastTxnId int64
 	for iter.HasNext() {

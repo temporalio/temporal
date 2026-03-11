@@ -2785,12 +2785,23 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	ms.approximateSize -= ms.executionState.Size()
+	// Determine the request ID to use for callbacks. For reset runs, Rebuild pre-populates
+	// executionInfo.CallbackRequestId with the original start request ID so it's preserved
+	// across chained resets. For normal (non-reset) starts, fall back to requestID.
+	cbRequestID := ms.executionInfo.CallbackRequestId
+	if cbRequestID == "" {
+		cbRequestID = requestID
+	}
 	if err := ms.addCompletionCallbacks(
 		startEvent,
-		requestID,
+		cbRequestID,
 		event.GetCompletionCallbacks(),
 	); err != nil {
 		return err
+	}
+	// Persist the callbackRequestID so it propagates through chained resets.
+	if len(event.GetCompletionCallbacks()) > 0 {
+		ms.executionInfo.CallbackRequestId = cbRequestID
 	}
 	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,

@@ -208,10 +208,11 @@ func (m *MutableStateMapperImpl) ApplyEvents(
 	task replicationTask,
 ) (historyi.MutableState, historyi.MutableState, error) {
 	mutableStateRebuilder := m.newMutableStateRebuilder(mutableState, task.getLogger())
+	replicationRequestID := uuid.New().String()
 	newMutableState, err := mutableStateRebuilder.ApplyEvents(
 		ctx,
 		task.getNamespaceID(),
-		uuid.New().String(),
+		replicationRequestID,
 		task.getExecution(),
 		task.getEvents(),
 		task.getNewEvents(),

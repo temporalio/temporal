@@ -151,6 +151,7 @@ func (r *ConflictResolverImpl) rebuild(
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		requestID,
+		requestID,
 	)
 	if err != nil {
 		return nil, err
