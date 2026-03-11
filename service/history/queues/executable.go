@@ -85,13 +85,6 @@ var (
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
 )
 
-var defaultExecutableMetricsTags = []metrics.Tag{
-	metrics.NamespaceUnknownTag(),
-	metrics.TaskTypeTag("__unknown__"),
-	metrics.OperationTag("__unknown__"),
-	metrics.ArchetypeTag("__unknown__"),
-}
-
 const (
 	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
 	// check the comment in shouldResubmitOnNack() for more details
