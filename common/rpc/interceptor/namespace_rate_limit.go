@@ -38,6 +38,8 @@ type (
 		rateLimiter                       quotas.RequestRateLimiter
 		tokens                            map[string]int
 		reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn
+		pollMethods                       map[string]struct{}
+		pollWaitForToken                  dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -48,11 +50,15 @@ func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
+	pollMethods map[string]struct{},
+	pollWaitForToken dynamicconfig.BoolPropertyFn,
 ) NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
 		rateLimiter:       rateLimiter,
 		tokens:            tokens,
+		pollMethods:       pollMethods,
+		pollWaitForToken:  pollWaitForToken,
 	}
 }
 
@@ -69,12 +75,36 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 		} else if IsLongPollDescribeActivityExecutionRequest(req) {
 			method = configs.PollActivityExecutionAPIName
 		}
+		if ni.pollWaitForToken() {
+			if _, ok := ni.pollMethods[info.FullMethod]; ok {
+				if err := ni.wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+					return nil, err
+				}
+				return handler(ctx, req)
+			}
+		}
 		if err := ni.Allow(ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 			return nil, err
 		}
 	}
 
 	return handler(ctx, req)
+}
+
+func (ni *NamespaceRateLimitInterceptorImpl) wait(ctx context.Context, namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
+	token, ok := ni.tokens[methodName]
+	if !ok {
+		token = NamespaceRateLimitDefaultToken
+	}
+
+	return ni.rateLimiter.Wait(ctx, quotas.NewRequest(
+		methodName,
+		token,
+		namespaceName.String(),
+		headerGetter.Get(headers.CallerTypeHeaderName),
+		0,  // this interceptor layer does not throttle based on caller segment
+		"", // this interceptor layer does not throttle based on call initiation
+	))
 }
 
 func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {

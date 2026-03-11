@@ -531,7 +531,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, configs.PollAPISet, serviceConfig.PollWaitForNamespaceRateLimitToken)
 }
 
 func NamespaceCountLimitInterceptorProvider(
