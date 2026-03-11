@@ -61,7 +61,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	ns := chasmCtx.NamespaceEntry()
 	nsName := ns.Name().String()
 
-	if !ch.config.Enabled() {
+	if !ch.config.Enabled() || !ch.config.ChasmNexusEnabled(nsName) {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
 			Message: "Nexus operations disabled",
@@ -293,7 +293,9 @@ func (ch *commandHandler) handleCancelCommand(
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	if !ch.config.Enabled() {
+	nsName := chasmCtx.NamespaceEntry().Name().String()
+
+	if !ch.config.Enabled() || !ch.config.ChasmNexusEnabled(nsName) {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
 			Message: "Nexus operations disabled",
@@ -321,17 +323,6 @@ func (ch *commandHandler) handleCancelCommand(
 		}
 	}
 
-	var op *nexusoperation.Operation
-	if operationFound {
-		op = operationField.Get(chasmCtx)
-		if !nexusoperation.TransitionCanceled.Possible(op) && !hasBufferedEvent() {
-			return command.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("requested cancelation for an already complete operation with scheduled event ID of %d", attrs.ScheduledEventId),
-			}
-		}
-	}
-
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
 	// The event will be applied before the completion since buffered events are reordered and put at the end of the
 	// batch, after command events from the workflow task.
@@ -351,6 +342,7 @@ func (ch *commandHandler) handleCancelCommand(
 		return nil
 	}
 
+	op := operationField.Get(chasmCtx)
 	err := op.Cancel(chasmCtx, event.GetEventId())
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return command.FailWorkflowTaskError{
