@@ -41,7 +41,7 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 				if !recordedPlugins[pluginName] {
 					metrics.WorkerPluginNameMetric.
 						With(e.handler).
-						Record(1, metrics.NamespaceIDTag(nsName.String()), metrics.WorkerPluginNameTag(pluginName))
+						Record(1, metrics.NamespaceTag(nsName.String()), metrics.WorkerPluginNameTag(pluginName))
 					recordedPlugins[pluginName] = true
 				}
 			}
