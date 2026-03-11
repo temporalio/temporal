@@ -15,6 +15,7 @@ import (
 	"time"
 
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -119,6 +120,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		tracerProviders           []oteltrace.TracerProvider
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -356,6 +358,7 @@ func (c *TemporalImpl) startFrontend() {
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		logger := log.With(c.logger, tag.Host(host))
 		var namespaceRegistry namespace.Registry
+		var tp oteltrace.TracerProvider
 		app := fx.New(
 			fx.Supply(
 				c.copyPersistenceConfig(),
@@ -413,7 +416,7 @@ func (c *TemporalImpl) startFrontend() {
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
-			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver),
+			fx.Populate(&namespaceRegistry, &rpcFactory, &historyRawClient, &matchingRawClient, &grpcResolver, &tp),
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.FrontendService),
 			chasmFxOptions,
@@ -425,6 +428,7 @@ func (c *TemporalImpl) startFrontend() {
 
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		c.tracerProviders = append(c.tracerProviders, tp)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start frontend service", tag.Error(err))
@@ -450,6 +454,7 @@ func (c *TemporalImpl) startHistory() {
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
+		var tp oteltrace.TracerProvider
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -513,7 +518,7 @@ func (c *TemporalImpl) startHistory() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.HistoryService),
 			chasmFxOptions,
-			fx.Populate(&namespaceRegistry),
+			fx.Populate(&namespaceRegistry, &tp),
 			fx.Populate(&c.chasmEngine),
 			fx.Populate(&c.chasmVisibilityMgr),
 			fx.Populate(&c.chasmRegistry),
@@ -524,6 +529,7 @@ func (c *TemporalImpl) startHistory() {
 		}
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		c.tracerProviders = append(c.tracerProviders, tp)
 
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start history service", tag.Error(err))
@@ -536,6 +542,7 @@ func (c *TemporalImpl) startMatching() {
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
+		var tp oteltrace.TracerProvider
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 			fx.Supply(
@@ -573,7 +580,7 @@ func (c *TemporalImpl) startMatching() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.MatchingService),
 			chasmFxOptions,
-			fx.Populate(&namespaceRegistry),
+			fx.Populate(&namespaceRegistry, &tp),
 		)
 		err := app.Err()
 		if err != nil {
@@ -581,6 +588,7 @@ func (c *TemporalImpl) startMatching() {
 		}
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		c.tracerProviders = append(c.tracerProviders, tp)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start matching service", tag.Error(err))
 		}
@@ -600,6 +608,7 @@ func (c *TemporalImpl) startWorker() {
 
 	for _, host := range c.hostsByProtocolByService[grpcProtocol][serviceName].All {
 		var namespaceRegistry namespace.Registry
+		var tp oteltrace.TracerProvider
 		logger := log.With(c.logger, tag.Host(host))
 		app := fx.New(
 
@@ -640,7 +649,7 @@ func (c *TemporalImpl) startWorker() {
 			temporal.FxLogAdapter,
 			c.getFxOptionsForService(primitives.WorkerService),
 			chasmFxOptions,
-			fx.Populate(&namespaceRegistry),
+			fx.Populate(&namespaceRegistry, &tp),
 		)
 		err := app.Err()
 		if err != nil {
@@ -649,6 +658,7 @@ func (c *TemporalImpl) startWorker() {
 
 		c.fxApps = append(c.fxApps, app)
 		c.namespaceRegistries = append(c.namespaceRegistries, namespaceRegistry)
+		c.tracerProviders = append(c.tracerProviders, tp)
 		if err := app.Start(context.Background()); err != nil {
 			logger.Fatal("unable to start worker service", tag.Error(err))
 		}
@@ -657,6 +667,16 @@ func (c *TemporalImpl) startWorker() {
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
+}
+
+// ForceFlushSpans calls ForceFlush on all server TracerProviders, ensuring
+// that any buffered spans in the BatchSpanProcessor are exported immediately.
+func (c *TemporalImpl) ForceFlushSpans(ctx context.Context) {
+	for _, tp := range c.tracerProviders {
+		if sdkTP, ok := tp.(*sdktrace.TracerProvider); ok {
+			_ = sdkTP.ForceFlush(ctx)
+		}
+	}
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {

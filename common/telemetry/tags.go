@@ -10,6 +10,7 @@ const (
 	ComponentQueueVisibility = "queue.visibility"
 	ComponentUpdateRegistry  = "update.registry"
 
+	NamespaceKey     = "temporalNamespace"
 	WorkflowIDKey    = "temporalWorkflowID"
 	WorkflowRunIDKey = "temporalRunID"
 )

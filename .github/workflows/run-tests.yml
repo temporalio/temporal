@@ -547,6 +547,9 @@ jobs:
         timeout-minutes: ${{ matrix.github_timeout }}
         run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
+          OTEL_EXPORTER_OTLP_TRACES_INSECURE: true
+          OTEL_TRACES_EXPORTER: otlp
+          TEMPORAL_OTEL_DEBUG: true
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
@@ -599,6 +602,16 @@ jobs:
           name: junit-xml--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}--functional-test
           path: ./.testoutput/junit.*.xml
           include-hidden-files: true
+          retention-days: 28
+
+      - name: Upload OTEL traces to GitHub
+        uses: actions/upload-artifact@v4.4.3
+        if: failure()
+        with:
+          name: otel-traces--${{ github.run_id }}--${{ steps.get_job_id.outputs.job_id }}--${{ github.run_attempt }}--${{ matrix.name }}--${{ matrix.display_name }}
+          path: ./testdata/otel/
+          include-hidden-files: true
+          if-no-files-found: ignore
           retention-days: 28
 
   mixed-brain-test:
