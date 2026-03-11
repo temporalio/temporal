@@ -493,14 +493,11 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 
 	// Store the latest target version, sent from matching, on executionInfo so it can be passed to the
 	// new run during continue-as-new.
-	if targetDeploymentVersion != nil {
-		m.ms.executionInfo.LatestTargetWorkerDeploymentVersion = targetDeploymentVersion
-	}
+	m.ms.executionInfo.LatestTargetWorkerDeploymentVersion = targetDeploymentVersion
 
 	var targetDeploymentVersionChanged bool
 	if m.ms.config.EnableSendTargetVersionChanged(m.ms.namespaceEntry.Name().String()) &&
-		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED &&
-		targetDeploymentVersion != nil {
+		m.ms.GetEffectiveVersioningBehavior() != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
 
 		effectiveDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(m.ms.GetEffectiveDeployment())
 

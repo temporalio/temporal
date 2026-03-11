@@ -6224,6 +6224,91 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 	s.True(foundWFTStarted, "should have found at least one WFT started event in retry run")
 }
 
+// TestPinnedCaN_UpgradeToUnversioned verifies that a pinned workflow can CaN
+// with AUTO_UPGRADE initial behavior when the current deployment is unset
+// (unversioned target). Matching sends nil as the target version, and history
+// correctly signals the SDK to CaN.
+//
+// Flow:
+// 1. Start pinned workflow on v1, set v1 as current
+// 2. Unset current deployment (target becomes nil/unversioned)
+// 3. Signal → WFT has targetDeploymentVersionChanged=true (v1 != nil)
+// 4. CaN with AUTO_UPGRADE → new run picked up by unversioned poller → completes
+func (s *Versioning3Suite) TestPinnedCaN_UpgradeToUnversioned() {
+	s.RunTestWithMatchingBehavior(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		tv1 := testvars.New(s).WithBuildIDNumber(1)
+		execution, _ := s.drainWorkflowTaskAfterSetCurrent(tv1)
+
+		// Trigger a normal WFT and declare pinned behavior to make the workflow pinned on v1.
+		s.triggerNormalWFT(ctx, tv1, execution)
+		s.pollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				return respondEmptyWft(tv1, false, vbPinned), nil
+			})
+		s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+		// Unset the current deployment — target becomes nil (unversioned).
+		s.unsetCurrentDeployment(tv1)
+
+		// Signal to trigger a new WFT.
+		s.triggerNormalWFT(ctx, tv1, execution)
+
+		// Poll as v1 (pinned workflow still dispatched to v1 poller), verify the signal,
+		// and issue CaN with AUTO_UPGRADE initial behavior.
+		s.pollWftAndHandle(tv1, false, nil,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+
+				// Verify targetDeploymentVersionChanged=true on the latest WFT started event.
+				var lastStarted *historypb.HistoryEvent
+				for _, event := range task.History.GetEvents() {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+						lastStarted = event
+					}
+				}
+				s.NotNil(lastStarted)
+				s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+					"should signal targetDeploymentVersionChanged=true when target is unversioned (nil != v1)")
+
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Commands: []*commandpb.Command{
+						{
+							CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+							Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+								ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+									WorkflowType:              tv1.WorkflowType(),
+									TaskQueue:                 tv1.TaskQueue(),
+									Input:                     tv1.Any().Payloads(),
+									InitialVersioningBehavior: enumspb.CONTINUE_AS_NEW_VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+								},
+							},
+						},
+					},
+					ForceCreateNewWorkflowTask: false,
+					VersioningBehavior:         vbPinned,
+					DeploymentOptions:          tv1.WorkerDeploymentOptions(true),
+				}, nil
+			})
+
+		// Poll unversioned to pick up the CaN run's first WFT and complete the workflow.
+		wftNewRunDone := make(chan struct{})
+		s.unversionedPollWftAndHandle(tv1, false, wftNewRunDone,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				s.NotNil(task)
+				s.Equal(execution.GetWorkflowId(), task.WorkflowExecution.GetWorkflowId(),
+					"CaN run should have the same workflow ID")
+				s.NotEqual(execution.GetRunId(), task.WorkflowExecution.GetRunId(),
+					"CaN run should have a different run ID")
+				return respondCompleteWorkflowUnversioned(tv1), nil
+			})
+		s.WaitForChannel(ctx, wftNewRunDone)
+	})
+}
+
 func (s *Versioning3Suite) skipBeforeVersion(version workerdeployment.DeploymentWorkflowVersion) {
 	if s.deploymentWorkflowVersion < version {
 		s.T().Skipf("test supports workflow version %v and newer", version)
