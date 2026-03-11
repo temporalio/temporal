@@ -59,7 +59,7 @@ type testEnv struct {
 	t          *testing.T
 	tv         *testvars.TestVars
 
-	// SDK components (set by SetupSdk).
+	// SDK fields initialized in NewEnv for this test's namespace.
 	envSdkClient sdkclient.Client
 	envWorker    sdkworker.Worker
 	envTaskQueue string
@@ -210,14 +210,14 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		}
 	}
 
-	// Set up an SDK client and worker for the test's dedicated namespace.
+	// Initialize SDK client and worker for this test's namespace.
 	clientOptions := sdkclient.Options{
-		HostPort:  env.FrontendGRPCAddress(),
+		HostPort:  base.FrontendGRPCAddress(),
 		Namespace: ns.String(),
-		Logger:    log.NewSdkLogger(env.Logger),
+		Logger:    log.NewSdkLogger(base.Logger),
 	}
-	if provider := cluster.Host().TlsConfigProvider(); provider != nil {
-		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
+	if tlsProvider := cluster.Host().TlsConfigProvider(); tlsProvider != nil {
+		clientOptions.ConnectionOptions.TLS = tlsProvider.FrontendClientConfig
 	}
 	if interceptor := cluster.Host().GetGrpcClientInterceptor(); interceptor != nil {
 		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
@@ -225,20 +225,22 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 			grpc.WithStreamInterceptor(interceptor.Stream()),
 		}
 	}
-	var sdkErr error
-	env.envSdkClient, sdkErr = sdkclient.Dial(clientOptions)
-	if sdkErr != nil {
-		t.Fatalf("Failed to create SDK client: %v", sdkErr)
+	sdkClient, err := sdkclient.Dial(clientOptions)
+	if err != nil {
+		t.Fatalf("Failed to create SDK client: %v", err)
 	}
-	env.envTaskQueue = RandomizeStr("tq")
-	env.envWorker = sdkworker.New(env.envSdkClient, env.envTaskQueue, sdkworker.Options{})
-	if sdkErr = env.envWorker.Start(); sdkErr != nil {
-		t.Fatalf("Failed to start SDK worker: %v", sdkErr)
+	taskQueue := RandomizeStr("tq")
+	worker := sdkworker.New(sdkClient, taskQueue, sdkworker.Options{})
+	if err := worker.Start(); err != nil {
+		t.Fatalf("Failed to start SDK worker: %v", err)
 	}
 	t.Cleanup(func() {
-		env.envWorker.Stop()
-		env.envSdkClient.Close()
+		worker.Stop()
+		sdkClient.Close()
 	})
+	env.envSdkClient = sdkClient
+	env.envWorker = worker
+	env.envTaskQueue = taskQueue
 
 	return env
 }
@@ -264,17 +266,14 @@ func (e *testEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
-// SdkClient returns the SDK client for this test's namespace.
-func (e *testEnv) SdkClient() sdkclient.Client {
-	return e.envSdkClient
-}
-
-// Worker returns the SDK worker for this test's namespace.
 func (e *testEnv) Worker() sdkworker.Worker {
 	return e.envWorker
 }
 
-// TaskQueue returns the task queue for this test.
+func (e *testEnv) SdkClient() sdkclient.Client {
+	return e.envSdkClient
+}
+
 func (e *testEnv) TaskQueue() string {
 	return e.envTaskQueue
 }
