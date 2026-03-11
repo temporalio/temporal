@@ -51,19 +51,14 @@ type (
 	}
 )
 
-// NewFileBasedClientWithoutMetrics creates a file based client without a metrics.Handler,
-// which can be set later with SetMetricsHandler. This is useful when the metricsHandler is not available
-// at the time of initialization like in cases of circular dependencies.
-func NewFileBasedClientWithoutMetrics(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
-	return NewFileBasedClient(config, logger, doneCh, nil)
-}
-
-func (fc *fileBasedClient) SetMetricsHandler(metricsHandler metrics.Handler) {
-	fc.metricsHandler = metricsHandler
-}
-
 // NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*fileBasedClient, error) {
+// use the NewFileBasedClientWithMetrics instead if you want to collect metrics.
+// This method is retained mainly for backward compatibility.
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any) (*fileBasedClient, error) {
+	return NewFileBasedClientWithMetrics(config, logger, doneCh, metrics.NoopMetricsHandler)
+}
+
+func NewFileBasedClientWithMetrics(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan any, metricsHandler metrics.Handler) (*fileBasedClient, error) {
 	if config == nil {
 		return nil, errors.New("configuration for dynamic config client is nil")
 	}
