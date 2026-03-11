@@ -35,7 +35,7 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 		},
 	}
 
-	// Worker 2: workflow (duplicate), activity, and nexus all enabled
+	// Worker 2: workflow, activity, and nexus all enabled
 	worker2 := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "worker_2",
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
@@ -49,7 +49,7 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 		},
 	}
 
-	// Worker 3: workflow (another duplicate) to verify deduplication
+	// Worker 3: workflow only
 	worker3 := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "worker_3",
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
@@ -61,21 +61,19 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 	emitter.emit(testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
 
 	snapshot := capture.Snapshot()
-	autoscalingMetrics := snapshot[metrics.PollerAutoscalingEnabledMetric.Name()]
+	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
 
-	// Deduplication check: 3 workers have workflow=true, but we should only get 1 workflow metric.
-	// Without dedup we'd have 5 metrics (workflow x3, activity x1, nexus x1), with dedup we have 3.
-	assert.Len(t, autoscalingMetrics, 3, "deduplication failed: expected 3 metrics, not 5")
+	// Counter increments per heartbeat: workflow x3, activity x1, nexus x1 = 5 total recordings
+	assert.Len(t, autoscalingMetrics, 5, "expected 5 counter increments")
 
-	// Verify all expected poller types are present exactly once
 	pollerTypeCounts := make(map[string]int)
 	for _, m := range autoscalingMetrics {
 		pollerTypeCounts[m.Tags[metrics.PollerTypeTagName]]++
-		assert.Equal(t, string(testNamespaceName), m.Tags["namespace_id"])
+		assert.Equal(t, string(testNamespaceName), m.Tags["namespace"])
 	}
-	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeWorkflow], "workflow should appear exactly once")
-	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeActivity], "activity should appear exactly once")
-	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeNexus], "nexus should appear exactly once")
+	assert.Equal(t, 3, pollerTypeCounts[metrics.PollerTypeWorkflow], "workflow should have 3 increments")
+	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeActivity], "activity should have 1 increment")
+	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeNexus], "nexus should have 1 increment")
 }
 
 func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
@@ -102,6 +100,6 @@ func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 	emitter.emit(testNamespaceName, []*workerpb.WorkerHeartbeat{worker1})
 
 	snapshot := capture.Snapshot()
-	autoscalingMetrics := snapshot[metrics.PollerAutoscalingEnabledMetric.Name()]
+	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
 	assert.Empty(t, autoscalingMetrics, "should not record autoscaling metrics when disabled")
 }

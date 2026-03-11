@@ -1211,10 +1211,10 @@ var (
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 	// Matching service: Metrics to understand poller autoscaling adoption.
-	PollerAutoscalingEnabledMetric = NewGaugeDef(
-		"poller_autoscaling_enabled",
+	PollerAutoscalingHeartbeatCount = NewCounterDef(
+		"poller_autoscaling_heartbeat_count",
 		WithDescription(
-			"Set to 1 if workers report poller autoscaling enabled. Dimensions: namespace_id, poller_type"),
+			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, poller_type"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 

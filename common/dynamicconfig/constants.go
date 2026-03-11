@@ -1436,7 +1436,7 @@ an optional feature and also requires a metrics collection system that can handl
 		"matching.enablePollerAutoscalingMetrics",
 		false,
 		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
-The metric has 2 dimensions: namespace_id and poller_type (workflow, activity, nexus). Disabled by default
+The metric has 2 dimensions: namespace and poller_type (workflow, activity, nexus). Disabled by default
 as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(

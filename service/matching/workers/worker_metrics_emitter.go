@@ -24,7 +24,6 @@ func (e *workerMetricsEmitter) emit(nsName namespace.Name, heartbeats []*workerp
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 
 	recordedPlugins := make(map[string]bool)
-	var recordedWorkflow, recordedActivity, recordedNexus bool
 
 	for _, hb := range heartbeats {
 		// Activity slots metric (always enabled)
@@ -47,21 +46,18 @@ func (e *workerMetricsEmitter) emit(nsName namespace.Name, heartbeats []*workerp
 
 		// Poller autoscaling metrics (if enabled)
 		if enablePollerAutoscalingMetrics {
-			nsIDTag := metrics.NamespaceIDTag(nsName.String())
-			if !recordedWorkflow && hb.WorkflowPollerInfo.GetIsAutoscaling() {
-				metrics.PollerAutoscalingEnabledMetric.With(e.handler).
-					Record(1, nsIDTag, metrics.PollerTypeTag(metrics.PollerTypeWorkflow))
-				recordedWorkflow = true
+			nsTag := metrics.NamespaceTag(nsName.String())
+			if hb.WorkflowPollerInfo.GetIsAutoscaling() {
+				metrics.PollerAutoscalingHeartbeatCount.With(e.handler).
+					Record(1, nsTag, metrics.PollerTypeTag(metrics.PollerTypeWorkflow))
 			}
-			if !recordedActivity && hb.ActivityPollerInfo.GetIsAutoscaling() {
-				metrics.PollerAutoscalingEnabledMetric.With(e.handler).
-					Record(1, nsIDTag, metrics.PollerTypeTag(metrics.PollerTypeActivity))
-				recordedActivity = true
+			if hb.ActivityPollerInfo.GetIsAutoscaling() {
+				metrics.PollerAutoscalingHeartbeatCount.With(e.handler).
+					Record(1, nsTag, metrics.PollerTypeTag(metrics.PollerTypeActivity))
 			}
-			if !recordedNexus && hb.NexusPollerInfo.GetIsAutoscaling() {
-				metrics.PollerAutoscalingEnabledMetric.With(e.handler).
-					Record(1, nsIDTag, metrics.PollerTypeTag(metrics.PollerTypeNexus))
-				recordedNexus = true
+			if hb.NexusPollerInfo.GetIsAutoscaling() {
+				metrics.PollerAutoscalingHeartbeatCount.With(e.handler).
+					Record(1, nsTag, metrics.PollerTypeTag(metrics.PollerTypeNexus))
 			}
 		}
 	}
