@@ -30,7 +30,7 @@ type Workflow struct {
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
 
-	// Operations map is used to store the nexus operations for the workflow.
+	// Operations map is used to store the Nexus operations for the workflow.
 	Operations chasm.Map[string, *nexusoperation.Operation]
 }
 
@@ -121,6 +121,7 @@ func (w *Workflow) AddCompletionCallbacks(
 	return nil
 }
 
+// AddNexusOperation adds a Nexus operation component to the workflow.
 func (w *Workflow) AddNexusOperation(
 	ctx chasm.MutableContext,
 	key string,
@@ -132,18 +133,22 @@ func (w *Workflow) AddNexusOperation(
 	w.Operations[key] = chasm.NewComponentField(ctx, op)
 }
 
+// AddHistoryEvent adds a history event to the workflow.
 func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
 	return w.MSPointer.AddHistoryEvent(t, setAttributes)
 }
 
+// HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.
 func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
 }
 
+// RemoveNexusOperation removes a Nexus operation from the workflow.
 func (w *Workflow) RemoveNexusOperation(key string) {
 	delete(w.Operations, key)
 }
 
+// PendingNexusOperationCount returns the number of pending Nexus operations in the workflow.
 func (w *Workflow) PendingNexusOperationCount() int {
 	return len(w.Operations)
 }
