@@ -694,7 +694,9 @@ message ListWorkersRequest {
 }
 
 message ListWorkersResponse {
-    repeated temporal.api.worker.v1.WorkerInfo workers_info = 1;
+    // Deprecated: Use workers instead. This field returns full WorkerInfo which
+    // includes expensive runtime metrics. We will stop populating this field in the future.
+    repeated temporal.api.worker.v1.WorkerInfo workers_info = 1 [deprecated = true];
     bytes next_page_token = 2;
     repeated temporal.api.worker.v1.WorkerListInfo workers = 3;
 }
