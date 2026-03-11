@@ -62,6 +62,7 @@ func (tcx *testContext) setHasAnyBufferedEvent(value bool) {
 
 var defaultConfig = &nexusoperation.Config{
 	Enabled:                            dynamicconfig.GetBoolPropertyFn(true),
+	ChasmNexusEnabled:                  dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),

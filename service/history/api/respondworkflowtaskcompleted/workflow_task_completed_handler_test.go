@@ -19,7 +19,6 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/common/backoff"
@@ -87,7 +86,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
 			dcClient = dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
-				nexusoperation.ChasmNexusEnabled.Key(): true,
+				dynamicconfig.EnableChasm.Key(): true,
 			})
 		}
 

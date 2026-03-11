@@ -61,11 +61,15 @@ func (ch *commandHandler) handleScheduleCommand(
 	ns := chasmCtx.NamespaceEntry()
 	nsName := ns.Name().String()
 
-	if !ch.config.Enabled() || !ch.config.ChasmNexusEnabled(nsName) {
+	if !ch.config.Enabled() {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
 			Message: "Nexus operations disabled",
 		}
+	}
+
+	if !ch.config.ChasmNexusEnabled(nsName) {
+		return command.ErrNotSupported
 	}
 
 	attrs := cmd.GetScheduleNexusOperationCommandAttributes()
@@ -293,13 +297,16 @@ func (ch *commandHandler) handleCancelCommand(
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	nsName := chasmCtx.NamespaceEntry().Name().String()
-
-	if !ch.config.Enabled() || !ch.config.ChasmNexusEnabled(nsName) {
+	if !ch.config.Enabled() {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
 			Message: "Nexus operations disabled",
 		}
+	}
+
+	nsName := chasmCtx.NamespaceEntry().Name().String()
+	if !ch.config.ChasmNexusEnabled(nsName) {
+		return command.ErrNotSupported
 	}
 
 	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()

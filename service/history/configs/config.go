@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -62,7 +61,6 @@ type Config struct {
 	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
 	EnableNexus                           dynamicconfig.BoolPropertyFn
 	ChasmEnabled                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	NexusChasmEnabled                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -476,7 +474,6 @@ func NewConfig(
 		HistoryCacheBackgroundEvict:           dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
 		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		ChasmEnabled:                          dynamicconfig.EnableChasm.Get(dc),
-		NexusChasmEnabled:                     nexusoperation.ChasmNexusEnabled.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
