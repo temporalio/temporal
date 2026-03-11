@@ -164,6 +164,13 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	requestID string,
 	currentMutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, RebuildStats, error) {
+	// Preserve the original callback request ID so that CHASM scheduler completion
+	// handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
+	// Fall back to CreateRequestId for older runs that pre-date the CallbackRequestId field.
+	callbackRequestID := currentMutableState.GetExecutionInfo().GetCallbackRequestId()
+	if callbackRequestID == "" {
+		callbackRequestID = currentMutableState.GetExecutionState().GetCreateRequestId()
+	}
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,
@@ -174,7 +181,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		targetWorkflowIdentifier,
 		targetBranchToken,
 		requestID,
-		requestID,
+		callbackRequestID,
 	)
 	if err != nil {
 		return nil, RebuildStats{}, err

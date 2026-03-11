@@ -160,7 +160,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	}, nil)
 
 	s.mockContext.EXPECT().Clear()
-	rebuiltMutableState, err := s.nDCConflictResolver.rebuild(ctx, 1, requestID)
+	rebuiltMutableState, err := s.nDCConflictResolver.rebuild(ctx, 1, requestID, "")
 	s.NoError(err)
 	s.NotNil(rebuiltMutableState)
 	s.Equal(int32(1), versionHistories.GetCurrentVersionHistoryIndex())

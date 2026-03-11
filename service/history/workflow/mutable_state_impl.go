@@ -2799,9 +2799,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	); err != nil {
 		return err
 	}
-	// Persist the callbackRequestID so it propagates through chained resets.
+	// Persist or clear CallbackRequestId so the field stays consistent with
+	// whether this execution actually has callbacks. This ensures chained resets
+	// propagate the correct value and don't carry a stale ID for callback-free workflows.
 	if len(event.GetCompletionCallbacks()) > 0 {
 		ms.executionInfo.CallbackRequestId = cbRequestID
+	} else {
+		ms.executionInfo.CallbackRequestId = ""
 	}
 	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,

@@ -107,7 +107,17 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	// task.getVersion() > currentLastItem
 	// incoming replication task, after application, will become the current branch
 	// (because higher version wins), we need to Rebuild the mutable state for that
-	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, uuid.NewString())
+	//
+	// Preserve the original callback request ID from the existing mutable state so that
+	// CHASM scheduler completion handlers can still correlate the rebuilt callbacks to
+	// the correct BufferedStart entry. Fall back to CreateRequestId for older runs that
+	// pre-date the CallbackRequestId field.
+
+	callbackRequestID := r.mutableState.GetExecutionInfo().GetCallbackRequestId()
+	if callbackRequestID == "" {
+		callbackRequestID = r.mutableState.GetExecutionState().GetCreateRequestId()
+	}
+	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, uuid.NewString(), callbackRequestID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -118,6 +128,7 @@ func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
 	requestID string,
+	callbackRequestID string,
 ) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
@@ -151,7 +162,7 @@ func (r *ConflictResolverImpl) rebuild(
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		requestID,
-		requestID,
+		callbackRequestID,
 	)
 	if err != nil {
 		return nil, err
