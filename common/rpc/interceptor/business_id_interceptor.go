@@ -122,7 +122,7 @@ var methodToPattern = map[string]BusinessIDPattern{
 	"UpdateWorkerDeploymentVersionMetadata": PatternDeploymentVersion,
 
 	// namespace (deterministic routing to a single cell for the namespace)
-	// TODO(mcn): Switch to worker_grouping_key when available for load balancing
+	// TODO: Switch to worker_grouping_key when available for load balancing
 	"FetchWorkerConfig":     PatternNamespace,
 	"UpdateWorkerConfig":    PatternNamespace,
 	"DescribeWorker":        PatternNamespace,
@@ -131,7 +131,7 @@ var methodToPattern = map[string]BusinessIDPattern{
 	// workflow ID (from UpdateRef)
 	"PollWorkflowExecutionUpdate": PatternUpdateRef,
 
-	// TODO(mcn): Uncomment when poller_group_id field is added to requests
+	// TODO: Uncomment when poller_group_id field is added to requests
 	// "PollWorkflowTaskQueue": PatternPollerGroupID,
 	// "PollActivityTaskQueue": PatternPollerGroupID,
 	// "PollNexusTaskQueue":    PatternPollerGroupID,
