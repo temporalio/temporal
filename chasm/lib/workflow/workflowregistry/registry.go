@@ -1,4 +1,4 @@
-package command
+package workflowregistry
 
 import (
 	"errors"

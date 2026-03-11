@@ -7,7 +7,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 

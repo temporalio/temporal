@@ -14,7 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"

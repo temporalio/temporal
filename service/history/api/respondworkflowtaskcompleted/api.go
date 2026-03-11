@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"

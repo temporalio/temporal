@@ -3,7 +3,7 @@ package history
 import (
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/server/chasm"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	chasmcommand "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
