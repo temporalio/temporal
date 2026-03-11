@@ -5756,7 +5756,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 					wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 				}
 			}
-			s.Greater(len(wfTaskStartedEvents), 0)
+			s.NotEmpty(wfTaskStartedEvents)
 			lastStarted := wfTaskStartedEvents[len(wfTaskStartedEvents)-1]
 			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
 				"expected targetWorkerDeploymentVersionChanged=true after v2 becomes current")
@@ -5956,7 +5956,7 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 					wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 				}
 			}
-			s.Greater(len(wfTaskStartedEvents), 0)
+			s.NotEmpty(wfTaskStartedEvents)
 			lastStarted := wfTaskStartedEvents[len(wfTaskStartedEvents)-1]
 			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
 				"expected targetWorkerDeploymentVersionChanged=true after v2 becomes current")
@@ -5998,7 +5998,7 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 					wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 				}
 			}
-			s.Greater(len(wfTaskStartedEvents), 0)
+			s.NotEmpty(wfTaskStartedEvents)
 			lastStarted := wfTaskStartedEvents[len(wfTaskStartedEvents)-1]
 			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
 				"target changed from v2 to v3 — should signal true even though this is a CaN-inherited-pinned run")
@@ -6073,7 +6073,7 @@ func (s *Versioning3Suite) TestRemoveOverride_TriggersTargetVersionChangedSignal
 					wfTaskStartedEvents = append(wfTaskStartedEvents, event)
 				}
 			}
-			s.Greater(len(wfTaskStartedEvents), 0)
+			s.NotEmpty(wfTaskStartedEvents)
 			lastStarted := wfTaskStartedEvents[len(wfTaskStartedEvents)-1]
 			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
 				"override removed + target changed — signal should be true so workflow can CaN")
