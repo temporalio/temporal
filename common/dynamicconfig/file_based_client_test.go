@@ -272,8 +272,22 @@ func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
-	_, err := dynamicconfig.NewFileBasedClientWithMetrics(nil, nil, nil, nil)
+func (s *fileBasedClientSuite) TestValidateConfig_NilLogger() {
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
+	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, nil, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err)
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilConfig() {
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(nil, logger, doneCh, metrics.NoopMetricsHandler)
 	s.Error(err)
 }
 
@@ -282,6 +296,27 @@ func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
 		Filepath:     "file/not/exist.yaml",
 		PollInterval: time.Second * 10,
 	}, nil, nil, nil)
+	s.Error(err)
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilReader() {
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithReader(nil, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err)
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilDoneCh() {
+	logger := log.NewNoopLogger()
+	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
+	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, logger, nil, metrics.NoopMetricsHandler)
 	s.Error(err)
 }
 
