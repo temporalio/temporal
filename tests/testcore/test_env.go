@@ -1,10 +1,12 @@
 package testcore
 
 import (
+	"cmp"
 	"context"
 	_ "embed"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +15,11 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -22,9 +29,11 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/testvars"
 	"google.golang.org/grpc"
 )
@@ -218,10 +227,16 @@ func NewEnv(t *testing.T, opts ...TestOption) *testEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
+	// Set up per-test OTEL tracing scoped to this namespace.
+	var assertT require.TestingT = t
+	if base.spanRouter != nil {
+		assertT = setupTestOTEL(t, base.spanRouter, ns.String())
+	}
+
 	env := &testEnv{
 		FunctionalTestBase: base,
-		Assertions:         require.New(t),
-		HistoryRequire:     historyrequire.New(t),
+		Assertions:         require.New(assertT),
+		HistoryRequire:     historyrequire.New(assertT),
 		cluster:            cluster,
 		nsName:             ns,
 		nsID:               nsID,
@@ -397,6 +412,61 @@ func canBeNamespaceScoped(p dynamicconfig.Precedence) bool {
 	default:
 		return false
 	}
+}
+
+// setupTestOTEL creates per-test OTEL tracing scoped to the given namespace.
+// It creates a SpanRecorder that receives only spans for this namespace,
+// a "Client" span for recording assertion failure events, and returns a
+// TestingT wrapper that intercepts assertion failures.
+// On test failure, collected traces are written to a file.
+func setupTestOTEL(t *testing.T, router *testtelemetry.SpanRouter, ns string) *testtelemetry.AssertT {
+	// Create a per-test recorder and register it with the router for this namespace.
+	recorder := testtelemetry.NewSpanRecorder()
+	unregister := router.Register(ns, recorder)
+
+	// Use a SimpleSpanProcessor so the span is exported synchronously on End().
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithSpanProcessor(sdktrace.NewSimpleSpanProcessor(recorder)),
+		sdktrace.WithResource(resource.NewSchemaless(
+			semconv.ServiceNameKey.String("io.temporal.test"),
+		)),
+	)
+	tracer := tp.Tracer("io.temporal.test")
+	_, clientSpan := tracer.Start(
+		context.Background(),
+		t.Name(),
+		trace.WithAttributes(attribute.String(telemetry.NamespaceKey, ns)),
+	)
+
+	// Wrap t to intercept assertion failures and record them on the client span.
+	assertT := testtelemetry.NewAssertT(t, clientSpan)
+
+	t.Cleanup(func() {
+		// End the client span, marking it as error if the test failed.
+		if t.Failed() {
+			clientSpan.SetAttributes(attribute.Bool("test.failed", true))
+		}
+		clientSpan.End()
+
+		// Stop receiving new spans from the router.
+		unregister()
+
+		// Write traces to file on test failure.
+		if t.Failed() {
+			outDir := cmp.Or(os.Getenv("TEMPORAL_TEST_OTEL_OUTPUT"), "testdata/otel")
+			var validFilenameChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+			fileName := validFilenameChars.ReplaceAllString(t.Name(), "-")
+			fileName = fmt.Sprintf("traces.%s_%d.json", fileName, time.Now().Unix())
+			if filePath, err := recorder.WriteToDir(outDir, fileName); err != nil {
+				t.Logf("unable to write OTEL traces: %v", err)
+			} else {
+				t.Logf("wrote OTEL traces to %s", filePath)
+			}
+		}
+		_ = recorder.Shutdown(context.Background())
+	})
+
+	return assertT
 }
 
 // checkTestShard supports test sharding based on environment variables.

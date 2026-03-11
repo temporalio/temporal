@@ -86,6 +86,7 @@ type (
 		EnableMTLS             bool
 		EnableMetricsCapture   bool
 		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		SpanProcessors         []sdktrace.SpanProcessor
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
@@ -329,6 +330,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		TaskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverBase.metadata),
 		HostsByProtocolByService:         hostsByProtocolByService,
 		SpanExporters:                    clusterConfig.SpanExporters,
+		SpanProcessors:                  clusterConfig.SpanProcessors,
 	}
 
 	if clusterConfig.EnableMetricsCapture {

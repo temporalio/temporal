@@ -119,6 +119,7 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		taskQueueRecorder         *TaskQueueRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		spanProcessors            []sdktrace.SpanProcessor
 	}
 
 	// FrontendConfig is the config for the frontend service
@@ -175,6 +176,7 @@ type (
 		TaskCategoryRegistry     tasks.TaskCategoryRegistry
 		HostsByProtocolByService map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		SpanExporters            map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		SpanProcessors           []sdktrace.SpanProcessor
 	}
 
 	listenHostPort string
@@ -222,6 +224,7 @@ func newTemporal(t *testing.T, params *TemporalParams) *TemporalImpl {
 		grpcClientInterceptor:            grpcinject.NewInterceptor(),
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.SpanExporters,
+		spanProcessors:                   params.SpanProcessors,
 	}
 
 	// Configure output file path for on-demand logging (call WriteToLog() to write)
@@ -410,6 +413,7 @@ func (c *TemporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			c.spanProcessorDecorate(),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
@@ -505,6 +509,7 @@ func (c *TemporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			c.spanProcessorDecorate(),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -567,6 +572,7 @@ func (c *TemporalImpl) startMatching() {
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(resource.DefaultSnTaggedLoggerProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			c.spanProcessorDecorate(),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			matching.Module,
@@ -634,6 +640,7 @@ func (c *TemporalImpl) startWorker() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			c.spanProcessorDecorate(),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			worker.Module,
@@ -657,6 +664,18 @@ func (c *TemporalImpl) startWorker() {
 
 func (c *TemporalImpl) getFxOptionsForService(serviceName primitives.ServiceName) fx.Option {
 	return fx.Options(c.serviceFxOptions[serviceName]...)
+}
+
+// spanProcessorDecorate returns an fx.Option that appends additional span
+// processors (e.g. SpanRouter) to the service's processor list. These receive
+// spans synchronously via OnEnd, bypassing the BatchSpanProcessor pipeline.
+func (c *TemporalImpl) spanProcessorDecorate() fx.Option {
+	if len(c.spanProcessors) == 0 {
+		return fx.Options()
+	}
+	return fx.Decorate(func(base []sdktrace.SpanProcessor) []sdktrace.SpanProcessor {
+		return append(base, c.spanProcessors...)
+	})
 }
 
 func (c *TemporalImpl) createSystemNamespace() error {

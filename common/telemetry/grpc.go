@@ -168,6 +168,13 @@ func (c *customServerStatsHandler) annotateTags(
 		methodName = "unknown"
 	}
 
+	// annotate span with namespace
+	if nsGetter, ok := payload.(interface{ GetNamespace() string }); ok {
+		if ns := nsGetter.GetNamespace(); ns != "" {
+			span.SetAttributes(attribute.Key(NamespaceKey).String(ns))
+		}
+	}
+
 	// annotate span with workflow tags (same ones the Temporal SDKs use)
 	for _, logTag := range c.tags.Extract(payload, methodName) {
 		var k string

@@ -5,16 +5,12 @@ import (
 	"cmp"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"maps"
-	"os"
-	"regexp"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -37,7 +33,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -66,8 +61,8 @@ type (
 		historyrequire.HistoryRequire
 		updateutils.UpdateUtils
 
-		Logger       log.Logger
-		otelExporter *testtelemetry.MemoryExporter
+		Logger     log.Logger
+		spanRouter *testtelemetry.SpanRouter
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -282,17 +277,11 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.isShared = true
 	}
 
-	// Initialize the OTEL collector if OTEL is enabled.
-	// Must be done before the test cluster is created, so that the collector can be used by the test cluster.
-	if otelOutputDir := os.Getenv("TEMPORAL_TEST_OTEL_OUTPUT"); otelOutputDir != "" {
-		// Create an OTEL exporter.
-		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
-
-		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
-	}
+	// Always install the span router as a span processor so that per-test
+	// recorders (from TestEnv) receive spans synchronously via OnEnd,
+	// bypassing the BatchSpanProcessor pipeline.
+	s.spanRouter = testtelemetry.NewSpanRouter()
+	s.testClusterConfig.SpanProcessors = append(s.testClusterConfig.SpanProcessors, s.spanRouter)
 
 	var err error
 	testClusterFactory := NewTestClusterFactory()
@@ -392,24 +381,6 @@ func (s *FunctionalTestBase) setupSdk() {
 	s.NoError(err)
 }
 
-func (s *FunctionalTestBase) exportOTELTraces() {
-	if s.otelExporter == nil {
-		return
-	}
-	if s.T().Failed() {
-		var validFilenameChars = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-		fileName := s.T().Name()
-		fileName = validFilenameChars.ReplaceAllString(fileName, "-") // remove invalid characters
-		fileName = fmt.Sprintf("traces.%s_%d.json", fileName, time.Now().Unix())
-		if filePath, err := s.otelExporter.Write(fileName); err != nil {
-			s.T().Logf("unable to write OTEL traces: %v", err)
-		} else {
-			s.T().Logf("wrote OTEL traces to %s", filePath)
-		}
-	}
-	_ = s.otelExporter.Shutdown(NewContext())
-}
-
 func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ExternalNamespace()))
@@ -421,14 +392,12 @@ func (s *FunctionalTestBase) TearDownCluster() {
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
-	s.exportOTELTraces()
 	s.tearDownSdk()
 	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
 func (s *FunctionalTestBase) TearDownSubTest() {
-	s.exportOTELTraces()
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {
