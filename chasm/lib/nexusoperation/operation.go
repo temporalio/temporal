@@ -7,16 +7,14 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
 
-var (
-	_ chasm.Component                                      = (*Operation)(nil)
-	_ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
+var _ chasm.Component = (*Operation)(nil)
+var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 
-	// ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
-	ErrCancellationAlreadyRequested = errors.New("cancellation already requested")
+// ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
+var ErrCancellationAlreadyRequested = errors.New("cancellation already requested")
 
-	// ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
-	ErrOperationAlreadyCompleted = errors.New("operation already completed")
-)
+// ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
+var ErrOperationAlreadyCompleted = errors.New("operation already completed")
 
 type OperationStore any
 
