@@ -39,7 +39,7 @@ func TestWorkerHeartbeatToListInfo_AllFieldsSet(t *testing.T) {
 		fd := fields.Get(i)
 		val := resultReflect.Get(fd)
 		if fd.IsList() {
-			assert.Falsef(t, val.List().Len() == 0,
+			assert.NotEqualf(t, 0, val.List().Len(),
 				"WorkerListInfo repeated field %q is empty — "+
 					"if you added a new field to WorkerListInfo, make sure to populate it from WorkerHeartbeat",
 				fd.Name(),

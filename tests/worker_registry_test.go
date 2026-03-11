@@ -217,7 +217,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Empty(resp.GetWorkersInfo())
+		s.Empty(resp.GetWorkersInfo()) //nolint:staticcheck // testing deprecated field
 		s.Empty(resp.GetWorkers())
 	}
 }
