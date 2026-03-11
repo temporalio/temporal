@@ -2235,7 +2235,7 @@ func runNexusWorkflowTests(t *testing.T, extraOpts ...testcore.TestOption) {
 				run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 					TaskQueue: taskQueue,
 				}, callerWF, tc.outcome)
-				require.NoError(t, err)
+				s.NoError(err)
 
 				if tc.checkPendingError != nil {
 					var f *failurepb.Failure
@@ -2249,7 +2249,7 @@ func runNexusWorkflowTests(t *testing.T, extraOpts ...testcore.TestOption) {
 					}, 10*time.Second, 100*time.Millisecond)
 					s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 					tc.checkPendingError(t, converter.FailureToError(f))
-					require.NoError(t, s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test cleanup"))
+					s.NoError(s.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test cleanup"))
 				} else {
 					wfErr := run.Get(ctx, nil)
 					s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
@@ -2257,9 +2257,8 @@ func runNexusWorkflowTests(t *testing.T, extraOpts ...testcore.TestOption) {
 				}
 
 				snap := capture.Snapshot()
-				require.Len(t, snap["nexus_outbound_requests"], 1)
-				require.Subset(
-					t,
+				s.Len(snap["nexus_outbound_requests"], 1)
+				s.Subset(
 					snap["nexus_outbound_requests"][0].Tags,
 					map[string]string{
 						"namespace":      s.Namespace().String(),
@@ -2420,15 +2419,15 @@ func runNexusWorkflowTests(t *testing.T, extraOpts ...testcore.TestOption) {
 				run, err := s.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 					TaskQueue: taskQueue,
 				}, callerWF, tc.outcome, tc.action)
-				require.NoError(t, err)
+				s.NoError(err)
 
 				wfErr := run.Get(ctx, nil)
 				s.GetTestCluster().Host().CaptureMetricsHandler().StopCapture(capture)
 				tc.checkWorkflowError(t, wfErr)
 
 				snap := capture.Snapshot()
-				require.GreaterOrEqual(t, len(snap["nexus_outbound_requests"]), 1)
-				require.Subset(t, snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "pending"})
+				s.GreaterOrEqual(len(snap["nexus_outbound_requests"]), 1)
+				s.Subset(snap["nexus_outbound_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "pending"})
 			})
 
 		}
@@ -2773,7 +2772,7 @@ func runNexusWorkflowTests(t *testing.T, extraOpts ...testcore.TestOption) {
 					callerWf,
 					tc.input,
 				)
-				require.NoError(t, err)
+				s.NoError(err)
 				var res CallerWfOutput
 				err = run.Get(ctx, &res)
 				tc.checkOutput(t, res, err)
