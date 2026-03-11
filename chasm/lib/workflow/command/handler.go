@@ -10,7 +10,7 @@ import (
 )
 
 // ErrNotSupported is returned by a [Handler] when the command type is registered but not supported;
-// for example, because of a feature flag.
+// for example, because of a disabled feature flag.
 var ErrNotSupported = errors.New("command not supported")
 
 type HandlerOptions struct {
