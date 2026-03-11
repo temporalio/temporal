@@ -178,11 +178,11 @@ func NewAdminHandler(
 	)
 
 	return &AdminHandler{
-		logger:                args.Logger,
-		status:                common.DaemonStatusInitialized,
-		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
-		config:                args.Config,
-		namespaceDLQHandler:   namespaceDLQHandler,
+		logger:                     args.Logger,
+		status:                     common.DaemonStatusInitialized,
+		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
+		config:                     args.Config,
+		namespaceDLQHandler:        namespaceDLQHandler,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
