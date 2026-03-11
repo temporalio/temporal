@@ -224,6 +224,10 @@ func (tr *fairTaskReader) readTasksImpl() {
 		tr.advanceAckLevelLocked()
 	}
 
+	// If a backoff timer fired while readPending was still true, its maybeReadTasksLocked call
+	// was a no-op. Re-check now that readPending is false to avoid getting stuck.
+	tr.maybeReadTasksLocked()
+
 	// unlock before calling addTaskToMatcher
 	tr.lock.Unlock()
 
