@@ -180,6 +180,31 @@ func TestResolveSearchAttributeAlias_WithChasmMapper(t *testing.T) {
 	}
 }
 
+func TestResolveSearchAttributeAlias_ChasmOverridesSystemAttribute(t *testing.T) {
+	ns := namespace.Name("test-namespace")
+	saTypeMap := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
+		"ExecutionStatus": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	})
+	mapper := customMapper{
+		fieldToAlias: map[string]string{},
+		aliasToField: map[string]string{},
+	}
+
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalLowCardinalityKeyword01": "ExecutionStatus",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalLowCardinalityKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	fieldName, fieldType, err := ResolveSearchAttributeAlias("ExecutionStatus", ns, mapper, saTypeMap, chasmMapper)
+	require.NoError(t, err)
+	require.Equal(t, "TemporalLowCardinalityKeyword01", fieldName)
+	require.Equal(t, enumspb.INDEXED_VALUE_TYPE_KEYWORD, fieldType)
+}
+
 func TestResolveSearchAttributeAlias_ChasmPriority(t *testing.T) {
 	ns := namespace.Name("test-namespace")
 	saTypeMap := searchattribute.NewNameTypeMapStub(map[string]enumspb.IndexedValueType{
