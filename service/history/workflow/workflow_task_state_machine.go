@@ -513,12 +513,12 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		// 3. Already on target — nothing changed.
 		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
 			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
-		// 4. CaN-inherited-pinned (declined to upgrade on CAN) and target unchanged since start — decline to upgrade.
+		// 4. CaN/retry-inherited-pinned (declined to upgrade on CaN/retry) and target unchanged since start — decline to upgrade.
 		case m.ms.executionInfo.HasInheritedPinnedVersionContinueAsNewOrRetry &&
 			m.ms.executionInfo.GetTargetWorkerDeploymentVersionOnStart().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
 			m.ms.executionInfo.GetTargetWorkerDeploymentVersionOnStart().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
 		default:
-			// Otherwise — target changed + did not decline to upgrade on CAN. Signal the SDK.
+			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
 		}
 	}
