@@ -234,6 +234,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	s.NotNil(workflowRun)
 	s.NotEmpty(workflowRun.GetRunID())
 
+	var queryErr, getErr error
+	var queryResultStr string
+	var queryDuration time.Duration
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -241,16 +244,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 		startTime := time.Now()
 		queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
-		endTime := time.Now()
-		s.NoError(err)
-		var queryResultStr string
-		err = queryResult.Get(&queryResultStr)
-		s.NoError(err)
-
-		// verify query sees all signals before it
-		s.Equal("started", queryResultStr)
-
-		s.Greater(endTime.Sub(startTime), time.Second)
+		queryDuration = time.Since(startTime)
+		queryErr = err
+		if err == nil {
+			getErr = queryResult.Get(&queryResultStr)
+		}
 	}()
 
 	// delay 2s to start worker, this will block query for 2s
@@ -264,6 +262,12 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	// wait query
 	wg.Wait()
+
+	s.NoError(queryErr)
+	s.NoError(getErr)
+	// verify query sees all signals before it
+	s.Equal("started", queryResultStr)
+	s.Greater(queryDuration, time.Second)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {

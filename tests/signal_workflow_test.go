@@ -713,8 +713,10 @@ func (s *SignalWorkflowTestSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 				Identity:   identity,
 				RequestId:  uuid.NewString(),
 			})
-			s.Error(err)
-			s.ErrorIs(consts.ErrWorkflowClosing, err)
+			var resourceExhausted *serviceerror.ResourceExhausted
+			s.ErrorAs(err, &resourceExhausted)
+			s.Equal(consts.ErrWorkflowClosing.Cause, resourceExhausted.Cause)
+			s.Equal(consts.ErrWorkflowClosing.Message, resourceExhausted.Message)
 		}
 
 		attemptCount++

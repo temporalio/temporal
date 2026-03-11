@@ -109,7 +109,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 	var wfExecutionError *temporal.WorkflowExecutionError
 	s.ErrorAs(err, &wfExecutionError)
 	var activityError *temporal.ActivityError
-	s.ErrorAs(wfExecutionError.Unwrap(), &activityError)
+	s.ErrorAs(wfExecutionError, &activityError)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 
 	s.Equal(int32(2), activityCompleted.Load())
@@ -177,7 +177,7 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 	s.ErrorAs(err, &activityError)
 	s.Equal(enumspb.RETRY_STATE_TIMEOUT, activityError.RetryState())
 	var timeoutError *temporal.TimeoutError
-	s.ErrorAs(activityError.Unwrap(), &timeoutError)
+	s.ErrorAs(activityError, &timeoutError)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, timeoutError.TimeoutType())
 	// schedule to close timeout should fire while last activity is still running.
 	s.Equal(int32(2), activityCompleted.Load())
@@ -1542,10 +1542,10 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 	var wfExecutionError *temporal.WorkflowExecutionError
 	s.ErrorAs(err, &wfExecutionError)
 	var activityError *temporal.ActivityError
-	s.ErrorAs(wfExecutionError.Unwrap(), &activityError)
+	s.ErrorAs(wfExecutionError, &activityError)
 	s.Equal(enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, activityError.RetryState())
 	var applicationErr *temporal.ApplicationError
-	s.ErrorAs(activityError.Unwrap(), &applicationErr)
+	s.ErrorAs(activityError, &applicationErr)
 	s.Equal("non-retryable-error", applicationErr.Message())
 
 	history := s.GetHistory(string(s.Namespace()), &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()})

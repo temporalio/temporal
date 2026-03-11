@@ -184,7 +184,9 @@ func (s *DeploymentVersionSuite) startVersionWorkflowExpectFailAddVersion(ctx co
 		Identity:          "random",
 		DeploymentOptions: tv.WorkerDeploymentOptions(true),
 	})
-	s.ErrorIs(err, serviceerror.NewUnavailable("cannot add version, already at max versions 4"))
+	var resourceExhausted *serviceerror.ResourceExhausted
+	s.ErrorAs(err, &resourceExhausted)
+	s.Contains(resourceExhausted.Message, "maximum number of versions")
 }
 
 func (s *DeploymentVersionSuite) TestForceCAN_NoOpenWFS() {

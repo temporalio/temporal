@@ -1065,7 +1065,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSpooled(versione
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -1272,7 +1272,7 @@ func (s *VersioningIntegSuite) independentActivityTaskAssignmentSyncMatch(versio
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
 				s.Equal(wfV1, dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetBuildId())
 			} else {
-				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+				s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 				s.False(dw.GetWorkflowExecutionInfo().GetMostRecentWorkerVersionStamp().GetUseVersioning())
 			}
 			return v1 == dw.GetPendingActivities()[0].GetLastIndependentlyAssignedBuildId()
@@ -4123,7 +4123,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_Unversioned() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
+		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 		versionInfo := resp.GetVersionsInfo()[""]
 		s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
@@ -4173,7 +4173,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 		})
 		s.NoError(err)
 		s.NotNil(resp)
-		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
+		s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 		versionInfo := resp.GetVersionsInfo()[""]
 		s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 		var pollersInfo []*taskqueuepb.PollerInfo
@@ -4201,7 +4201,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
+	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 	versionInfo := resp.GetVersionsInfo()[""]
 	s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, versionInfo.GetTaskReachability())
 	for _, t := range versionInfo.GetTypesInfo() {
@@ -4219,7 +4219,7 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue")
+	s.Len(resp.GetVersionsInfo(), 1, "should be 1 because only default/unversioned queue") //nolint:staticcheck
 	versionInfo = resp.GetVersionsInfo()[""]
 	s.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, versionInfo.GetTaskReachability())
 	for _, t := range versionInfo.GetTypesInfo() {
@@ -5053,7 +5053,7 @@ func (s *VersioningIntegSuite) validateWorkflowBuildIds(
 			s.Equal(worker_versioning.AssignedBuildIdSearchAttribute(expectedBuildId), searchAttr[0])
 			s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
 		} else {
-			s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId())
+			s.Empty(dw.GetWorkflowExecutionInfo().GetAssignedBuildId()) //nolint:staticcheck
 			if expectedStampBuildId != "" {
 				s.Len(searchAttr, 1+len(extraSearchAttrBuildIds))
 				s.Contains(searchAttr, worker_versioning.VersionedBuildIdSearchAttribute(expectedBuildId))
