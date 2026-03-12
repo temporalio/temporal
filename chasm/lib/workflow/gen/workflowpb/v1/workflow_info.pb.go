@@ -22,9 +22,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// NexusOperationParentInfo contains workflow-specific data stored in a nexus operation's
-// parent_info field when the operation is embedded in a workflow.
-type NexusOperationParentInfo struct {
+// NexusOperationParentData contains workflow-specific data stored in a nexus operation's
+// parent_data field when the operation is embedded in a workflow.
+type NexusOperationParentData struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Event ID of the NEXUS_OPERATION_SCHEDULED event.
 	ScheduledEventId int64 `protobuf:"varint,1,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
@@ -34,20 +34,20 @@ type NexusOperationParentInfo struct {
 	sizeCache             protoimpl.SizeCache
 }
 
-func (x *NexusOperationParentInfo) Reset() {
-	*x = NexusOperationParentInfo{}
+func (x *NexusOperationParentData) Reset() {
+	*x = NexusOperationParentData{}
 	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NexusOperationParentInfo) String() string {
+func (x *NexusOperationParentData) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NexusOperationParentInfo) ProtoMessage() {}
+func (*NexusOperationParentData) ProtoMessage() {}
 
-func (x *NexusOperationParentInfo) ProtoReflect() protoreflect.Message {
+func (x *NexusOperationParentData) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -59,28 +59,28 @@ func (x *NexusOperationParentInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusOperationParentInfo.ProtoReflect.Descriptor instead.
-func (*NexusOperationParentInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use NexusOperationParentData.ProtoReflect.Descriptor instead.
+func (*NexusOperationParentData) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *NexusOperationParentInfo) GetScheduledEventId() int64 {
+func (x *NexusOperationParentData) GetScheduledEventId() int64 {
 	if x != nil {
 		return x.ScheduledEventId
 	}
 	return 0
 }
 
-func (x *NexusOperationParentInfo) GetScheduledEventBatchId() int64 {
+func (x *NexusOperationParentData) GetScheduledEventBatchId() int64 {
 	if x != nil {
 		return x.ScheduledEventBatchId
 	}
 	return 0
 }
 
-// NexusCancellationParentInfo contains workflow-specific data stored in a nexus cancellation's
-// parent_info field when the operation is embedded in a workflow.
-type NexusCancellationParentInfo struct {
+// NexusCancellationParentData contains workflow-specific data stored in a nexus cancellation's
+// parent_data field when the operation is embedded in a workflow.
+type NexusCancellationParentData struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event.
 	RequestedEventId int64 `protobuf:"varint,1,opt,name=requested_event_id,json=requestedEventId,proto3" json:"requested_event_id,omitempty"`
@@ -88,20 +88,20 @@ type NexusCancellationParentInfo struct {
 	sizeCache        protoimpl.SizeCache
 }
 
-func (x *NexusCancellationParentInfo) Reset() {
-	*x = NexusCancellationParentInfo{}
+func (x *NexusCancellationParentData) Reset() {
+	*x = NexusCancellationParentData{}
 	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NexusCancellationParentInfo) String() string {
+func (x *NexusCancellationParentData) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NexusCancellationParentInfo) ProtoMessage() {}
+func (*NexusCancellationParentData) ProtoMessage() {}
 
-func (x *NexusCancellationParentInfo) ProtoReflect() protoreflect.Message {
+func (x *NexusCancellationParentData) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -113,12 +113,12 @@ func (x *NexusCancellationParentInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NexusCancellationParentInfo.ProtoReflect.Descriptor instead.
-func (*NexusCancellationParentInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use NexusCancellationParentData.ProtoReflect.Descriptor instead.
+func (*NexusCancellationParentData) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *NexusCancellationParentInfo) GetRequestedEventId() int64 {
+func (x *NexusCancellationParentData) GetRequestedEventId() int64 {
 	if x != nil {
 		return x.RequestedEventId
 	}
@@ -130,10 +130,10 @@ var File_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto protore
 const file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_rawDesc = "" +
 	"\n" +
 	"?temporal/server/chasm/lib/workflow/proto/v1/workflow_info.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\"\x81\x01\n" +
-	"\x18NexusOperationParentInfo\x12,\n" +
+	"\x18NexusOperationParentData\x12,\n" +
 	"\x12scheduled_event_id\x18\x01 \x01(\x03R\x10scheduledEventId\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\"K\n" +
-	"\x1bNexusCancellationParentInfo\x12,\n" +
+	"\x1bNexusCancellationParentData\x12,\n" +
 	"\x12requested_event_id\x18\x01 \x01(\x03R\x10requestedEventIdBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
@@ -150,8 +150,8 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_rawDes
 
 var file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_goTypes = []any{
-	(*NexusOperationParentInfo)(nil),    // 0: temporal.server.chasm.lib.workflow.proto.v1.NexusOperationParentInfo
-	(*NexusCancellationParentInfo)(nil), // 1: temporal.server.chasm.lib.workflow.proto.v1.NexusCancellationParentInfo
+	(*NexusOperationParentData)(nil),    // 0: temporal.server.chasm.lib.workflow.proto.v1.NexusOperationParentData
+	(*NexusCancellationParentData)(nil), // 1: temporal.server.chasm.lib.workflow.proto.v1.NexusCancellationParentData
 }
 var file_temporal_server_chasm_lib_workflow_proto_v1_workflow_info_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

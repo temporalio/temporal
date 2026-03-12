@@ -604,12 +604,12 @@ func TestHandleScheduleCommand(t *testing.T) {
 		op := opField.Get(tcx.chasmCtx)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
-		opParentInfo := &workflowpb.NexusOperationParentInfo{}
-		require.NoError(t, proto.Unmarshal(op.ParentInfo, opParentInfo))
-		require.EqualExportedValues(t, &workflowpb.NexusOperationParentInfo{
+		opParentData := &workflowpb.NexusOperationParentData{}
+		require.NoError(t, proto.Unmarshal(op.ParentData, opParentData))
+		require.EqualExportedValues(t, &workflowpb.NexusOperationParentData{
 			ScheduledEventId:      event.EventId,
 			ScheduledEventBatchId: 1, // WorkflowTaskCompletedEventID
-		}, opParentInfo)
+		}, opParentData)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})
 
@@ -825,11 +825,11 @@ func TestHandleCancelCommand(t *testing.T) {
 		op = opField.Get(tcx.chasmCtx)
 		cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 		require.True(t, hasCancellation)
-		cancelParentInfo := &workflowpb.NexusCancellationParentInfo{}
-		require.NoError(t, proto.Unmarshal(cancellation.ParentInfo, cancelParentInfo))
-		require.EqualExportedValues(t, &workflowpb.NexusCancellationParentInfo{
+		cancelParentData := &workflowpb.NexusCancellationParentData{}
+		require.NoError(t, proto.Unmarshal(cancellation.ParentData, cancelParentData))
+		require.EqualExportedValues(t, &workflowpb.NexusCancellationParentData{
 			RequestedEventId: tcx.history.Events[1].EventId,
-		}, cancelParentInfo)
+		}, cancelParentData)
 	})
 }
 

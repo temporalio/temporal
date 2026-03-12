@@ -5,35 +5,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type NexusOperationParentInfo to the protobuf v3 wire format
-func (val *NexusOperationParentInfo) Marshal() ([]byte, error) {
+// Marshal an object of type NexusOperationParentData to the protobuf v3 wire format
+func (val *NexusOperationParentData) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type NexusOperationParentInfo from the protobuf v3 wire format
-func (val *NexusOperationParentInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type NexusOperationParentData from the protobuf v3 wire format
+func (val *NexusOperationParentData) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *NexusOperationParentInfo) Size() int {
+func (val *NexusOperationParentData) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two NexusOperationParentInfo values are equivalent by recursively
+// Equal returns whether two NexusOperationParentData values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *NexusOperationParentInfo) Equal(that interface{}) bool {
+func (this *NexusOperationParentData) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *NexusOperationParentInfo
+	var that1 *NexusOperationParentData
 	switch t := that.(type) {
-	case *NexusOperationParentInfo:
+	case *NexusOperationParentData:
 		that1 = t
-	case NexusOperationParentInfo:
+	case NexusOperationParentData:
 		that1 = &t
 	default:
 		return false
@@ -42,35 +42,35 @@ func (this *NexusOperationParentInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type NexusCancellationParentInfo to the protobuf v3 wire format
-func (val *NexusCancellationParentInfo) Marshal() ([]byte, error) {
+// Marshal an object of type NexusCancellationParentData to the protobuf v3 wire format
+func (val *NexusCancellationParentData) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type NexusCancellationParentInfo from the protobuf v3 wire format
-func (val *NexusCancellationParentInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type NexusCancellationParentData from the protobuf v3 wire format
+func (val *NexusCancellationParentData) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *NexusCancellationParentInfo) Size() int {
+func (val *NexusCancellationParentData) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two NexusCancellationParentInfo values are equivalent by recursively
+// Equal returns whether two NexusCancellationParentData values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *NexusCancellationParentInfo) Equal(that interface{}) bool {
+func (this *NexusCancellationParentData) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *NexusCancellationParentInfo
+	var that1 *NexusCancellationParentData
 	switch t := that.(type) {
-	case *NexusCancellationParentInfo:
+	case *NexusCancellationParentData:
 		that1 = t
-	case NexusCancellationParentInfo:
+	case NexusCancellationParentData:
 		that1 = &t
 	default:
 		return false

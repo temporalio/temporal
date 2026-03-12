@@ -41,7 +41,7 @@ message OperationState {
 
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The operation component itself does not interpret this field.
-  bytes parent_info = 11;
+  bytes parent_data = 11;
 
   // The number of attempts made to deliver the start operation request.
   // This number represents a minimum bound since the attempt is incremented after the request completes.
@@ -104,7 +104,7 @@ message CancellationState {
 
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The cancellation component itself does not interpret this field.
-  bytes parent_info = 7;
+  bytes parent_data = 7;
 }
 
 enum CancellationStatus {

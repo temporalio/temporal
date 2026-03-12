@@ -262,12 +262,12 @@ func (ch *commandHandler) handleScheduleCommand(
 		scheduledTime = timestamppb.Now()
 	}
 
-	parentInfo, err := proto.Marshal(&workflowpb.NexusOperationParentInfo{
+	parentData, err := proto.Marshal(&workflowpb.NexusOperationParentData{
 		ScheduledEventId:      event.GetEventId(),
 		ScheduledEventBatchId: opts.WorkflowTaskCompletedEventID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal parent info: %w", err)
+		return fmt.Errorf("failed to marshal parent data: %w", err)
 	}
 
 	op := nexusoperation.NewOperation(&nexusoperationpb.OperationState{
@@ -280,7 +280,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		StartToCloseTimeout:    attrs.StartToCloseTimeout,
 		ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
 		RequestId:              requestID,
-		ParentInfo:             parentInfo,
+		ParentData:             parentData,
 		Attempt:                1,
 	})
 
@@ -350,13 +350,13 @@ func (ch *commandHandler) handleCancelCommand(
 	}
 
 	op := operationField.Get(chasmCtx)
-	cancelParentInfo, err := proto.Marshal(&workflowpb.NexusCancellationParentInfo{
+	cancelParentData, err := proto.Marshal(&workflowpb.NexusCancellationParentData{
 		RequestedEventId: event.GetEventId(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal cancellation parent info: %w", err)
+		return fmt.Errorf("failed to marshal cancellation parent data: %w", err)
 	}
-	err = op.Cancel(chasmCtx, cancelParentInfo)
+	err = op.Cancel(chasmCtx, cancelParentData)
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,

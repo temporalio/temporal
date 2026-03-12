@@ -231,7 +231,7 @@ type OperationState struct {
 	RequestId string `protobuf:"bytes,10,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
 	// The operation component itself does not interpret this field.
-	ParentInfo []byte `protobuf:"bytes,11,opt,name=parent_info,json=parentInfo,proto3" json:"parent_info,omitempty"`
+	ParentData []byte `protobuf:"bytes,11,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
 	// The number of attempts made to deliver the start operation request.
 	// This number represents a minimum bound since the attempt is incremented after the request completes.
 	Attempt int32 `protobuf:"varint,12,opt,name=attempt,proto3" json:"attempt,omitempty"`
@@ -347,9 +347,9 @@ func (x *OperationState) GetRequestId() string {
 	return ""
 }
 
-func (x *OperationState) GetParentInfo() []byte {
+func (x *OperationState) GetParentData() []byte {
 	if x != nil {
-		return x.ParentInfo
+		return x.ParentData
 	}
 	return nil
 }
@@ -406,7 +406,7 @@ type CancellationState struct {
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
 	// The cancellation component itself does not interpret this field.
-	ParentInfo    []byte `protobuf:"bytes,7,opt,name=parent_info,json=parentInfo,proto3" json:"parent_info,omitempty"`
+	ParentData    []byte `protobuf:"bytes,7,opt,name=parent_data,json=parentData,proto3" json:"parent_data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -483,9 +483,9 @@ func (x *CancellationState) GetNextAttemptScheduleTime() *timestamppb.Timestamp 
 	return nil
 }
 
-func (x *CancellationState) GetParentInfo() []byte {
+func (x *CancellationState) GetParentData() []byte {
 	if x != nil {
-		return x.ParentInfo
+		return x.ParentData
 	}
 	return nil
 }
@@ -509,8 +509,8 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\n" +
 	"request_id\x18\n" +
 	" \x01(\tR\trequestId\x12\x1f\n" +
-	"\vparent_info\x18\v \x01(\fR\n" +
-	"parentInfo\x12\x18\n" +
+	"\vparent_data\x18\v \x01(\fR\n" +
+	"parentData\x12\x18\n" +
 	"\aattempt\x18\f \x01(\x05R\aattempt\x12W\n" +
 	"\x1alast_attempt_complete_time\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12R\n" +
 	"\x14last_attempt_failure\x18\x0e \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
@@ -523,8 +523,8 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x1alast_attempt_complete_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x17lastAttemptCompleteTime\x12R\n" +
 	"\x14last_attempt_failure\x18\x05 \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
 	"\x1anext_attempt_schedule_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12\x1f\n" +
-	"\vparent_info\x18\a \x01(\fR\n" +
-	"parentInfo*\x8f\x02\n" +
+	"\vparent_data\x18\a \x01(\fR\n" +
+	"parentData*\x8f\x02\n" +
 	"\x0fOperationStatus\x12 \n" +
 	"\x1cOPERATION_STATUS_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aOPERATION_STATUS_SCHEDULED\x10\x01\x12 \n" +
