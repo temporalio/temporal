@@ -22,15 +22,16 @@ type MockNodeBackend struct {
 	// Optional function overrides. If nil, methods return zero-values.
 	HandleGetExecutionState           func() *persistencespb.WorkflowExecutionState
 	HandleGetExecutionInfo            func() *persistencespb.WorkflowExecutionInfo
-	HandleGetApproximatePersistedSize func() int
 	HandleGetCurrentVersion           func() int64
 	HandleNextTransitionCount         func() int64
+	HandleGetApproximatePersistedSize func() int
 	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
 	HandleGetWorkflowKey              func() definition.WorkflowKey
 	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                  func() bool
 	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
+	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
 
@@ -189,6 +190,13 @@ func (m *MockNodeBackend) AddHistoryEvent(t enumspb.EventType, setAttributes fun
 		return m.HandleAddHistoryEvent(t, setAttributes)
 	}
 	return nil
+}
+
+func (m *MockNodeBackend) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+	if m.HandleHasAnyBufferedEvent != nil {
+		return m.HandleHasAnyBufferedEvent(filter)
+	}
+	return false
 }
 
 func (m *MockNodeBackend) GetNamespaceEntry() *namespace.Namespace {

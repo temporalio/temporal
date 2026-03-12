@@ -79,17 +79,20 @@ func TestCommandProtocolMessage(t *testing.T) {
 		out.ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
 		out.ms.EXPECT().GetCurrentVersion().Return(tests.LocalNamespaceEntry.FailoverVersion(tests.WorkflowID)).AnyTimes()
 
+		dcClient := dynamicconfig.StaticClient(nil)
 		if opts.chasmEnabled {
-			out.ms.EXPECT().ChasmEnabled().Return(true)
 			out.chasmCommandRegistry = chasmcommand.NewRegistry()
 			mockCtx := &chasm.MockMutableContext{}
 			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
+			dcClient = dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
+				dynamicconfig.EnableChasm.Key(): true,
+			})
 		}
 
 		out.updates = update.NewRegistry(out.ms)
 		var effects effect.Buffer
-		col := dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), logger)
+		col := dynamicconfig.NewCollection(dcClient, logger)
 		config := configs.NewConfig(col, 1)
 		mockMeta := persistence.NewMockMetadataManager(ctrl)
 		nsReg := nsregistry.NewRegistry(
