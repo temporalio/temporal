@@ -2046,7 +2046,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 
 	// Mock the CHASM tree and execute interface.
 	mockEach := &chasm.MockNodePureTask{
-		HandleExecutePureTask: func(_ context.Context, _ metrics.Handler, _ chasm.TaskAttributes, _ any) (bool, error) {
+		HandleExecutePureTask: func(_ context.Context, _ chasm.TaskAttributes, _ any) (bool, error) {
 			return true, nil
 		},
 	}

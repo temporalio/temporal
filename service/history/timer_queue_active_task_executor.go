@@ -1041,12 +1041,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		return errNoChasmMutableState
 	}
 
-	namespaceTag := metrics.NamespaceUnknownTag()
-	if ns, nsErr := t.registry.GetNamespaceByID(namespace.ID(task.GetNamespaceID())); nsErr == nil {
-		namespaceTag = metrics.NamespaceTag(ns.Name().String())
-	}
-	taskMetricsHandler := t.metricsHandler.WithTags(namespaceTag)
-
 	// Execute all fired pure tasks for a component while holding the workflow lock.
 	processedTimers := 0
 	err = t.executeChasmPureTimers(
@@ -1055,7 +1049,7 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 		func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) (bool, error) {
 			// ExecutePureTask also calls the task's validator. Invalid tasks will no-op
 			// succeed.
-			executed, err := executor.ExecutePureTask(ctx, taskMetricsHandler, taskAttributes, taskInstance)
+			executed, err := executor.ExecutePureTask(ctx, taskAttributes, taskInstance)
 			if err == nil {
 				processedTimers += 1
 

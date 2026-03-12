@@ -222,7 +222,7 @@ type (
 	// NodePureTask is intended to be implemented and used within the CHASM
 	// framework only.
 	NodePureTask interface {
-		ExecutePureTask(baseCtx context.Context, metricsHandler metrics.Handler, taskAttributes TaskAttributes, taskInstance any) (bool, error)
+		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 		ValidatePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
@@ -1481,12 +1481,6 @@ func (n *Node) executeImmediatePureTasks() error {
 	syncStructure := true
 	var err error
 
-	archetypeTag := metrics.ArchetypeTag("")
-	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
-		archetypeTag = metrics.ArchetypeTag(name)
-	}
-	handler := n.metricsHandler.WithTags(archetypeTag)
-
 	for len(n.immediatePureTasks) != 0 {
 		// Create a map in case more immediate pure tasks get
 		// added while existing ones are executed.
@@ -1512,7 +1506,7 @@ func (n *Node) executeImmediatePureTasks() error {
 				}
 
 				// Only syncStructure on next iteration if task is executed (the first return value).
-				syncStructure, err = taskNode.ExecutePureTask(context.Background(), handler, task.attributes, task.task)
+				syncStructure, err = taskNode.ExecutePureTask(context.Background(), task.attributes, task.task)
 				if err != nil {
 					return err
 				}
@@ -2931,7 +2925,6 @@ func serializeTask(
 // node's component. Executing an invalid task is a no-op (no error returned).
 func (n *Node) ExecutePureTask(
 	baseCtx context.Context,
-	metricsHandler metrics.Handler,
 	taskAttributes TaskAttributes,
 	taskInstance any,
 ) (_ bool, retErr error) {
@@ -2969,7 +2962,12 @@ func (n *Node) ExecutePureTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
+	archetypeTag := metrics.ArchetypeTag("")
+	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
+		archetypeTag = metrics.ArchetypeTag(name)
+	}
 	chasmTaskTypeTag := metrics.ChasmTaskTypeTag(registrableTask.fqType())
+	metricsHandler := n.metricsHandler.WithTags(archetypeTag)
 
 	execErr := registrableTask.pureTaskExecuteFn(
 		executionContext,
