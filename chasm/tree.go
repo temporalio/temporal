@@ -121,7 +121,7 @@ type (
 
 		// deleteAfterClose suppresses the close visibility task when an execution is being
 		// terminated as part of a delete operation. Like terminated, this is in-memory only
-		// and only needed for the current transaction.
+		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
 	}
 
@@ -2559,8 +2559,16 @@ func (n *Node) Terminate(
 	}
 
 	n.terminated = true
-	n.deleteAfterClose = request.DeleteAfterClose
 	return nil
+}
+
+// SetDeleteAfterClose suppresses the close visibility task when an execution is being
+// terminated as part of a delete operation. Must be called before Terminate.
+//
+// This is for CHASM framework use only and should not be called by component implementations.
+// Like terminated, this is in-memory only and only needed for the current transaction.
+func (n *Node) SetDeleteAfterClose(deleteAfterClose bool) {
+	n.deleteAfterClose = deleteAfterClose
 }
 
 // ArchetypeID returns the framework's internal ID for the root component's fully qualified name.

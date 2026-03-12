@@ -66,6 +66,72 @@ func (s *ChasmSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
+	nsName := s.createGlobalNamespace()
+
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	s.NoError(err)
+	nsID := nsResp.NamespaceInfo.GetId()
+
+	tv := testvars.New(s.T())
+	storeID := tv.Any().String()
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	_, err = tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      namespace.ID(nsID),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
+	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	s.True(ok)
+
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+		Archetype: archetype,
+	}
+	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		return err == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: namespace.ID(nsID),
+			StoreID:     storeID,
+			Reason:      "xdc test deletion",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	for _, cluster := range []*testcore.TestCluster{s.clusters[0], s.clusters[1]} {
+		s.Eventually(func() bool {
+			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+			return errors.As(err, new(*serviceerror.NotFound))
+		}, 10*time.Second, 100*time.Millisecond)
+	}
+}
+
 func (s *ChasmSuite) TestRetentionTimer() {
 	nsName := s.createGlobalNamespace()
 

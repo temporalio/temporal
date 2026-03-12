@@ -58,7 +58,9 @@ type Engine interface {
 	NotifyExecution(ExecutionKey)
 }
 
-// DeleteExecutionRequest is the request for Engine.DeleteExecution.
+// DeleteExecutionRequest is the request for [DeleteExecution]. TerminateComponentRequest will only be
+// used if the execution is still running. The actual deletion of the execution is async, and will return
+// after creating the DeleteExecutionTask.
 type DeleteExecutionRequest struct {
 	TerminateComponentRequest
 }

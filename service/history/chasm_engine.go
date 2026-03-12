@@ -466,7 +466,7 @@ func (e *ChasmEngine) DeleteExecution(
 				)
 			}
 
-			request.DeleteAfterClose = true
+			chasmTree.SetDeleteAfterClose(true)
 			if err := chasmTree.Terminate(request.TerminateComponentRequest); err != nil {
 				return err
 			}

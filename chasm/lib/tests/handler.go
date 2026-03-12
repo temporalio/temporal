@@ -69,6 +69,13 @@ type (
 	RemovePayloadResponse struct {
 		State *testspb.TestPayloadStore
 	}
+
+	DeletePayloadStoreRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+		Reason      string
+		Identity    string
+	}
 )
 
 func NewPayloadStoreHandler(
@@ -182,15 +189,6 @@ func GetPayloadHandler(
 		Payload: payload,
 	}, nil
 }
-
-type (
-	DeletePayloadStoreRequest struct {
-		NamespaceID namespace.ID
-		StoreID     string
-		Reason      string
-		Identity    string
-	}
-)
 
 func DeletePayloadStoreHandler(
 	ctx context.Context,
