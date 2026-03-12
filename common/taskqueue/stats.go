@@ -16,15 +16,6 @@ func MergeStats(into, from *taskqueuepb.TaskQueueStats) {
 	into.TasksDispatchRate += from.TasksDispatchRate
 }
 
-// AggregateStats merges all stats from the map into a single TaskQueueStats.
-func AggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
-	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
-	for _, s := range stats {
-		MergeStats(result, s)
-	}
-	return result
-}
-
 // DedupPollers removes duplicate pollers by identity.
 func DedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
 	allKeys := make(map[string]bool)

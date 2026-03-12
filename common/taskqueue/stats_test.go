@@ -31,6 +31,50 @@ func TestMergeStats(t *testing.T) {
 	require.InDelta(t, 4, into.TasksDispatchRate, 1e-9)
 }
 
+func TestMergeStats_NilFrom(t *testing.T) {
+	into := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(100 * time.Second),
+		TasksAddRate:            5,
+		TasksDispatchRate:       3,
+	}
+
+	MergeStats(into, nil)
+
+	require.Equal(t, int64(10), into.ApproximateBacklogCount)
+	require.Equal(t, 100*time.Second, into.ApproximateBacklogAge.AsDuration())
+	require.InDelta(t, 5, into.TasksAddRate, 1e-9)
+	require.InDelta(t, 3, into.TasksDispatchRate, 1e-9)
+}
+
+func TestMergeStats_NilBacklogAges(t *testing.T) {
+	into := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 5,
+	}
+	from := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 3,
+		ApproximateBacklogAge:   durationpb.New(10 * time.Second),
+	}
+
+	MergeStats(into, from)
+
+	require.Equal(t, int64(8), into.ApproximateBacklogCount)
+	require.Equal(t, 10*time.Second, into.ApproximateBacklogAge.AsDuration())
+}
+
+func TestMergeStats_RightOlderAge(t *testing.T) {
+	into := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogAge: durationpb.New(10 * time.Second),
+	}
+	from := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogAge: durationpb.New(50 * time.Second),
+	}
+
+	MergeStats(into, from)
+
+	require.Equal(t, 50*time.Second, into.ApproximateBacklogAge.AsDuration())
+}
+
 func TestDedupPollers(t *testing.T) {
 	pollers := []*taskqueuepb.PollerInfo{
 		{Identity: "worker-1"},
@@ -49,4 +93,19 @@ func TestDedupPollers(t *testing.T) {
 	require.True(t, idents["worker-1"])
 	require.True(t, idents["worker-2"])
 	require.True(t, idents["worker-3"])
+}
+
+func TestDedupPollers_Empty(t *testing.T) {
+	result := DedupPollers(nil)
+	require.Empty(t, result)
+}
+
+func TestDedupPollers_NoDuplicates(t *testing.T) {
+	pollers := []*taskqueuepb.PollerInfo{
+		{Identity: "worker-1"},
+		{Identity: "worker-2"},
+	}
+
+	result := DedupPollers(pollers)
+	require.Len(t, result, 2)
 }

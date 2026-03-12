@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/counter"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -946,5 +947,9 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 }
 
 func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
-	return taskqueue.AggregateStats(stats)
+	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
+	for _, s := range stats {
+		taskqueue.MergeStats(result, s)
+	}
+	return result
 }
