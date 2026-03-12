@@ -241,6 +241,13 @@ func convertYamlConstraints(key Key, m map[string]any, precedence Precedence, lr
 				lr.errorf("destination constraint must be string")
 			}
 			validConstraint = precedence == PrecedenceDestination
+		case "chasmtasktype":
+			if v, ok := v.(string); ok {
+				cs.ChasmTaskType = v
+			} else {
+				lr.errorf("chasmtasktype constraint must be string")
+			}
+			validConstraint = precedence == PrecedenceChasmTaskType
 		default:
 			lr.errorf("unknown constraint type %q", k)
 		}

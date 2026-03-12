@@ -136,6 +136,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		)
 	}
 
+	chasmTaskType, _ := t.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
 	return t.processTransfer(
 		ctx,
 		true,
@@ -144,7 +145,7 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		getStandbyPostActionFn(
 			task,
 			t.getCurrentTime,
-			t.config.StandbyTaskMissingEventsDiscardDelay(task.GetType()),
+			t.config.ChasmStandbyTaskMissingEventsDiscardDelay(chasmTaskType),
 			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
