@@ -43,7 +43,6 @@ func TestPrioritySuite(t *testing.T) {
 
 func (s *PrioritySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():  5,
 	}

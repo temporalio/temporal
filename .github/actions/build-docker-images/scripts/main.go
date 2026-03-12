@@ -14,7 +14,7 @@ import (
 var validArchs = []string{"amd64", "arm64"}
 
 // defaultCliVersion should be updated to the latest cli version
-const defaultCliVersion = "1.5.1"
+const defaultCliVersion = "1.6.1"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -23,7 +23,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  set-image-tags    - Generate Docker image tags from branch and SHA\n")
 		fmt.Fprintf(os.Stderr, "  organize-binaries - Organize binaries for Docker\n")
 		fmt.Fprintf(os.Stderr, "  download-cli      - Download Temporal CLI\n")
-		fmt.Fprintf(os.Stderr, "  extract-version   - Extract version from temporal-server binary\n")
+		fmt.Fprintf(os.Stderr, "  extract-binary-version <binary-name> <output-name> - Extract version from a binary\n")
 		os.Exit(1)
 	}
 
@@ -45,8 +45,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-	case "extract-version":
-		if err := extractVersion(); err != nil {
+	case "extract-binary-version":
+		if len(os.Args) != 4 {
+			fmt.Fprintf(os.Stderr, "Usage: %s extract-binary-version <binary-name> <output-name>\n", os.Args[0])
+			os.Exit(1)
+		}
+		if err := extractBinaryVersion(os.Args[2], os.Args[3]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -56,18 +60,37 @@ func main() {
 	}
 }
 
-// setImageTags generates Docker image tags from branch name and commit SHA
-func setImageTags() error {
-	// Get GITHUB_REF from environment
-	ref := os.Getenv("GITHUB_REF")
-	if ref == "" {
-		return fmt.Errorf("GITHUB_REF environment variable not set")
+// resolveGitInfo resolves the current git ref and SHA from the working tree.
+func resolveGitInfo() (ref string, sha string, err error) {
+	shaCmd := exec.Command("git", "rev-parse", "HEAD")
+	shaOut, err := shaCmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve git SHA: %w", err)
+	}
+	sha = strings.TrimSpace(string(shaOut))
+
+	// Use the symbolic ref (branch name) if available, otherwise fall back
+	// to a tag name or the raw SHA.
+	refCmd := exec.Command("git", "symbolic-ref", "HEAD")
+	if refOut, err := refCmd.Output(); err == nil {
+		ref = strings.TrimSpace(string(refOut))
+	} else {
+		tagCmd := exec.Command("git", "describe", "--tags", "--exact-match", "HEAD")
+		if tagOut, tagErr := tagCmd.Output(); tagErr == nil {
+			ref = strings.TrimSpace(string(tagOut))
+		} else {
+			ref = sha
+		}
 	}
 
-	// Get GITHUB_SHA from environment
-	sha := os.Getenv("GITHUB_SHA")
-	if sha == "" {
-		return fmt.Errorf("GITHUB_SHA environment variable not set")
+	return ref, sha, nil
+}
+
+// setImageTags generates Docker image tags from branch name and commit SHA
+func setImageTags() error {
+	ref, sha, err := resolveGitInfo()
+	if err != nil {
+		return err
 	}
 
 	// Remove refs/heads/ or refs/tags/ prefix
@@ -118,6 +141,9 @@ func setImageTags() error {
 	}
 	if err := setOutput("sha", shaTag); err != nil {
 		return fmt.Errorf("failed to set sha output: %w", err)
+	}
+	if err := setOutput("git-sha", sha); err != nil {
+		return fmt.Errorf("failed to set git-sha output: %w", err)
 	}
 
 	return nil
@@ -403,48 +429,55 @@ func downloadCLIForArch(arch string) error {
 	return nil
 }
 
-// extractVersion extracts the version from the temporal-server binary
-func extractVersion() error {
-	// Try to find the temporal-server binary in any available architecture directory
-	var binaryPath string
+// findBuildBinary finds a binary by name in the docker/build/{arch}/ directories.
+func findBuildBinary(name string) (string, error) {
 	for _, arch := range validArchs {
-		candidatePath := filepath.Join("docker", "build", arch, "temporal-server")
+		candidatePath := filepath.Join("docker", "build", arch, name)
 		if _, err := os.Stat(candidatePath); err == nil {
-			binaryPath = candidatePath
-			break
+			return candidatePath, nil
 		}
 	}
+	return "", fmt.Errorf("%s binary not found in docker/build/{amd64,arm64}/", name)
+}
 
-	if binaryPath == "" {
-		return fmt.Errorf("temporal-server binary not found in docker/build/{amd64,arm64}/")
+// extractBinaryVersion finds a binary, runs --version, parses the output, and sets a GitHub Actions output.
+func extractBinaryVersion(binaryName, outputName string) error {
+	binaryPath, err := findBuildBinary(binaryName)
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("Extracting version from %s\n", binaryPath)
 
-	// Run the binary with --version flag
 	cmd := exec.Command(binaryPath, "--version")
 	output, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("failed to run %s --version: %w", binaryPath, err)
 	}
 
-	// Parse the version from output like "temporal version 1.29.0"
-	outputStr := strings.TrimSpace(string(output))
-	versionRegex := regexp.MustCompile(`^temporal version (\d+\.\d+\.\d+)`)
-	matches := versionRegex.FindStringSubmatch(outputStr)
-	if len(matches) < 2 {
-		return fmt.Errorf("failed to parse version from output: %s", outputStr)
+	version, err := parseTemporalVersion(string(output))
+	if err != nil {
+		return err
 	}
-
-	version := matches[1]
 	fmt.Printf("Extracted version: %s\n", version)
 
-	// Set output for GitHub Actions
-	if err := setOutput("server-version", version); err != nil {
+	if err := setOutput(outputName, version); err != nil {
 		return fmt.Errorf("failed to set output: %w", err)
 	}
 
 	return nil
+}
+
+// parseTemporalVersion extracts the version from output like
+// "temporal version 1.29.0" or "temporal version 0.0.0-DEV (Server 1.30.1, UI 2.45.3)"
+func parseTemporalVersion(output string) (string, error) {
+	s := strings.TrimSpace(output)
+	re := regexp.MustCompile(`^temporal version\s+(\d+\.\d+\.\d+\S*)`)
+	matches := re.FindStringSubmatch(s)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("failed to parse version from output: %s", s)
+	}
+	return matches[1], nil
 }
 
 // Helper functions

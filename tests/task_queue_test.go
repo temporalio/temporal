@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -62,9 +61,7 @@ func (s *TaskQueueSuite) RunTaskQueueRateLimitTest(nPartitions, nWorkers int, ti
 }
 
 func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
-	if useNewMatching {
-		s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true)
-	}
+	s.OverrideDynamicConfig(dynamicconfig.MatchingUseNewMatcher, useNewMatching)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions)
 	s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions)
 
@@ -361,7 +358,7 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 
 	// Wait for the duration and ensure no tasks executed
 	s.False(common.AwaitWaitGroup(&wg, drainTimeout), "Some activities unexpectedly completed despite API RPS = 0")
-	s.Len(runTimes, 0, "No activities should run when API rate limit is 0")
+	s.Empty(runTimes, "No activities should run when API rate limit is 0")
 }
 
 func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
@@ -452,7 +449,7 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
 	})
 	s.NoError(err)
 
-	require.Eventually(s.T(), func() bool {
+	s.Require().Eventually(func() bool {
 		describeResp, err := s.FrontendClient().DescribeTaskQueue(context.Background(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     s.Namespace().String(),
 			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue},

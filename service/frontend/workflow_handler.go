@@ -6759,6 +6759,7 @@ func (wh *WorkflowHandler) ListWorkers(
 
 	return &workflowservice.ListWorkersResponse{
 		WorkersInfo:   resp.GetWorkersInfo(),
+		Workers:       resp.GetWorkers(),
 		NextPageToken: resp.GetNextPageToken(),
 	}, nil
 }
