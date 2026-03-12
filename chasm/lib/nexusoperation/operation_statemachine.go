@@ -161,8 +161,8 @@ var transitionSucceeded = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
-		// Terminal state - no tasks to emit
-		// The component will be deleted after this transition
+		// Terminal state - no tasks to emit.
+		// The component will be deleted after this transition.
 		return nil
 	},
 )
@@ -179,9 +179,8 @@ var transitionFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_FAILED,
 	func(o *Operation, ctx chasm.MutableContext, event EventFailed) error {
-		// Terminal state - no tasks to emit
-		// Not recording the last attempt information here since the state machine
-		// will be deleted immediately after this transition
+		// Terminal state - no tasks to emit.
+		// The component will be deleted after this transition.
 		return nil
 	},
 )
@@ -190,7 +189,7 @@ var transitionFailed = chasm.NewTransition(
 type EventCanceled struct {
 }
 
-var transitionCanceled = chasm.NewTransition(
+var TransitionCanceled = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
@@ -198,8 +197,8 @@ var transitionCanceled = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
 	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
-		// Terminal state - no tasks to emit
-		// The component will be deleted after this transition
+		// Terminal state - no tasks to emit.
+		// The component will be deleted after this transition.
 		return nil
 	},
 )
@@ -216,8 +215,8 @@ var transitionTimedOut = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
 	func(o *Operation, ctx chasm.MutableContext, event EventTimedOut) error {
-		// Terminal state - no tasks to emit
-		// The component will be deleted after this transition
+		// Terminal state - no tasks to emit.
+		// The component will be deleted after this transition.
 		return nil
 	},
 )
