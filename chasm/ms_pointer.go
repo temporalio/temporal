@@ -33,6 +33,11 @@ func (m MSPointer) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 	return m.backend.AddHistoryEvent(t, setAttributes)
 }
 
+// HasAnyBufferedEvent returns true if there is at least one buffered event that matches the provided filter.
+func (m MSPointer) HasAnyBufferedEvent(filter func(*historypb.HistoryEvent) bool) bool {
+	return m.backend.HasAnyBufferedEvent(filter)
+}
+
 // GetNexusCompletion retrieves the Nexus operation completion data for the given request ID from the underlying mutable state.
 func (m MSPointer) GetNexusCompletion(ctx Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.backend.GetNexusCompletion(ctx.goContext(), requestID)
