@@ -1112,7 +1112,7 @@ func (n *Node) deleteChildren(
 ) error {
 	for childName, childNode := range n.children {
 		if _, childToKeep := childrenToKeep[childName]; !childToKeep {
-			if err := childNode.delete(); err != nil {
+			if err := childNode.delete(false); err != nil {
 				return err
 			}
 		}
@@ -2180,6 +2180,20 @@ func (n *Node) snapshotInternal(
 	}
 }
 
+func (n *Node) ApplySystemMutation(
+	mutation NodesMutation,
+) error {
+	if err := n.applyDeletions(mutation.DeletedNodes, true); err != nil {
+		return err
+	}
+
+	if err := n.applyUpdates(mutation.UpdatedNodes, true); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ApplyMutation is used by replication stack to apply node
 // mutations from the source cluster.
 //
@@ -2189,11 +2203,11 @@ func (n *Node) snapshotInternal(
 func (n *Node) ApplyMutation(
 	mutation NodesMutation,
 ) error {
-	if err := n.applyDeletions(mutation.DeletedNodes); err != nil {
+	if err := n.applyDeletions(mutation.DeletedNodes, false); err != nil {
 		return err
 	}
 
-	if err := n.applyUpdates(mutation.UpdatedNodes); err != nil {
+	if err := n.applyUpdates(mutation.UpdatedNodes, false); err != nil {
 		return err
 	}
 
@@ -2274,6 +2288,7 @@ func (n *Node) ApplySnapshot(
 
 func (n *Node) applyDeletions(
 	deletedNodes map[string]struct{},
+	isSystemUpdates bool,
 ) error {
 	for encodedPath := range deletedNodes {
 		path, err := n.pathEncoder.Decode(encodedPath)
@@ -2291,7 +2306,7 @@ func (n *Node) applyDeletions(
 			continue
 		}
 
-		if err := node.delete(); err != nil {
+		if err := node.delete(isSystemUpdates); err != nil {
 			return err
 		}
 	}
@@ -2301,6 +2316,7 @@ func (n *Node) applyDeletions(
 
 func (n *Node) applyUpdates(
 	updatedNodes map[string]*persistencespb.ChasmNode,
+	isSystemUpdates bool,
 ) error {
 	for encodedPath, updatedNode := range updatedNodes {
 		path, err := n.pathEncoder.Decode(encodedPath)
@@ -2313,7 +2329,11 @@ func (n *Node) applyUpdates(
 			// Node doesn't exist, we need to create it.
 			newNode := n.setSerializedNode(path, encodedPath, updatedNode)
 			newNode.resetTaskStatus()
-			n.mutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+			if isSystemUpdates {
+				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+			} else {
+				n.mutation.UpdatedNodes[encodedPath] = newNode.serializedNode
+			}
 			continue
 		}
 
@@ -2338,7 +2358,11 @@ func (n *Node) applyUpdates(
 				)
 			}
 
-			n.mutation.UpdatedNodes[encodedPath] = updatedNode
+			if isSystemUpdates {
+				n.systemMutation.UpdatedNodes[encodedPath] = updatedNode
+			} else {
+				n.mutation.UpdatedNodes[encodedPath] = updatedNode
+			}
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
 			node.serializedNode = updatedNode
@@ -2435,9 +2459,9 @@ func (n *Node) findNode(
 	return childNode.findNode(path[1:])
 }
 
-func (n *Node) delete() error {
+func (n *Node) delete(isSystemDelete bool) error {
 	for _, childNode := range n.children {
-		if err := childNode.delete(); err != nil {
+		if err := childNode.delete(isSystemDelete); err != nil {
 			return err
 		}
 	}
@@ -2456,7 +2480,12 @@ func (n *Node) delete() error {
 	if err != nil {
 		return err
 	}
-	n.mutation.DeletedNodes[encodedPath] = struct{}{}
+
+	if isSystemDelete {
+		n.systemMutation.DeletedNodes[encodedPath] = struct{}{}
+	} else {
+		n.mutation.DeletedNodes[encodedPath] = struct{}{}
+	}
 
 	n.cleanupCachedTasks()
 
