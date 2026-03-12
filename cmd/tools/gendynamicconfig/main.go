@@ -115,7 +115,7 @@ var (
 				GoArgs: "chasmTaskType string",
 				Expr:   "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}",
 			},
-	}}
+		}}
 )
 
 func main() {
