@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package temporal.server.api.common.v1;
+
+option go_package = "go.temporal.io/server/api/common/v1;commonspb";
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.MethodOptions {
+  optional ApiCategoryOptions api_category = 50001;
+}
+
+message ApiCategoryOptions {
+  // The category of this API for health and observability purposes.
+  ApiCategory category = 1;
+}
+
+enum ApiCategory {
+  // Unspecified API category. Treated as standard API.
+  API_CATEGORY_UNSPECIFIED = 0;
+
+  // Standard API with typical request/response patterns.
+  API_CATEGORY_STANDARD = 1;
+
+  // Long-polling API that intentionally waits for state changes or external events.
+  // These APIs should be excluded from health signal tracking because their latency
+  // reflects client wait times and event availability rather than server health.
+  // Including them in health metrics would skew the data and could cause healthy
+  // nodes to appear unhealthy.
+  //
+  // Examples: PollMutableState, PollWorkflowExecutionUpdate, QueryWorkflow
+  API_CATEGORY_LONG_POLL = 2;
+
+  API_CATEGORY_SYSTEM = 3;
+}

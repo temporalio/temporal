@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -371,4 +372,17 @@ func (r responseBuilder) makeResponse(result *commonpb.Payloads, failure *failur
 		res.ResultFailure = &schedulespb.WatchWorkflowResponse_Failure{Failure: failure}
 	}
 	return res
+}
+
+func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) error {
+	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
+	if err != nil {
+		// Treat "already exists" as success (idempotency)
+		var alreadyExists *serviceerror.AlreadyExists
+		if errors.As(err, &alreadyExists) {
+			return nil
+		}
+		return translateError(err, "MigrateScheduleToChasm")
+	}
+	return nil
 }
