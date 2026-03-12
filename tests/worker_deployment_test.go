@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -2071,13 +2070,22 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	tv := testvars.New(s)
 
 	tqs := 10
-	var wg sync.WaitGroup
+	// Start all pollers concurrently (pollFromDeployment has no assertions, so it's safe to call from goroutines)
 	for i := range tqs {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
-		}(i)
+		go s.pollFromDeployment(ctx, tv.WithTaskQueueNumber(i))
+	}
+	// Wait for all version workflows to appear (must run in the test goroutine due to assertions)
+	for i := range tqs {
+		tvI := tv.WithTaskQueueNumber(i)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				Version:   tvI.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(tvI.DeploymentVersionString(), resp.GetWorkerDeploymentVersionInfo().GetVersion())
+		}, time.Minute, time.Second)
 	}
 
 	// set this version as current version
@@ -2087,9 +2095,6 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	for i := range tqs {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}
-
-	// wait for all goroutines to finish before the test exits, to avoid "Fail in goroutine after test completed" panics
-	wg.Wait()
 }
 
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
