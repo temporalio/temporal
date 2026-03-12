@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -322,7 +323,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		MatchingConfig:                   clusterConfig.MatchingConfig,
 		WorkerConfig:                     clusterConfig.WorkerConfig,
 		MockAdminClient:                  clusterConfig.MockAdminClient,
-		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
+		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), logger),
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
@@ -562,6 +563,11 @@ func (tc *TestCluster) HistoryClient() historyservice.HistoryServiceClient {
 // MatchingClient returns a matching client from the test cluster
 func (tc *TestCluster) MatchingClient() matchingservice.MatchingServiceClient {
 	return tc.host.MatchingClient()
+}
+
+// SchedulerClient returns a scheduler client from the test cluster
+func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
+	return tc.host.SchedulerClient()
 }
 
 // ExecutionManager returns an execution manager factory from the test cluster

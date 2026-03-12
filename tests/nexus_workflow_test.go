@@ -127,7 +127,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 							Endpoint:  endpointName,
 							Service:   "service",
 							Operation: "operation",
-							Input:     s.mustToPayload("input"),
+							Input:     testcore.MustToPayload(s.T(), "input"),
 						},
 					},
 				},
@@ -150,13 +150,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
-	s.Greater(startedEventIdx, 0)
+	s.Positive(startedEventIdx)
 
 	// Get the scheduleEventId to issue the cancel command.
 	scheduledEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationScheduledEventAttributes() != nil
 	})
-	s.Greater(scheduledEventIdx, 0)
+	s.Positive(scheduledEventIdx)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -187,7 +187,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	cancelFailedIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationCancelRequestFailedEventAttributes() != nil
 	})
-	s.Greater(cancelFailedIdx, 0)
+	s.Positive(cancelFailedIdx)
 
 	// Start new operation to successfully cancel.
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -201,7 +201,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -226,7 +226,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 			break
 		}
 	}
-	s.Greater(secondScheduledEventID, int64(0))
+	s.Positive(secondScheduledEventID)
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
@@ -247,7 +247,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		require.NoError(t, err)
-		require.Equal(t, 2, len(desc.PendingNexusOperations))
+		require.Len(t, desc.PendingNexusOperations, 2)
 		op1 := desc.PendingNexusOperations[0]
 		require.Equal(t, pollResp.History.Events[scheduledEventIdx].EventId, op1.ScheduledEventId)
 		require.Equal(t, endpointName, op1.Endpoint)
@@ -341,7 +341,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 							Endpoint:  endpointName,
 							Service:   "service",
 							Operation: "operation",
-							Input:     s.mustToPayload("input"),
+							Input:     testcore.MustToPayload(s.T(), "input"),
 						},
 					},
 				},
@@ -362,7 +362,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationCompletedEventAttributes() != nil
 	})
-	s.Greater(completedEventIdx, 0)
+	s.Positive(completedEventIdx)
 	s.Len(pollResp.History.Events[completedEventIdx].GetLinks(), 1)
 	protorequire.ProtoEqual(s.T(), handlerLink, pollResp.History.Events[completedEventIdx].GetLinks()[0].GetWorkflowEvent())
 
@@ -400,7 +400,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion() {
 		Archetype: chasm.WorkflowArchetype,
 	})
 	s.NoError(err)
-	s.Len(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType, 0)
+	s.Empty(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload() {
@@ -458,7 +458,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 							Endpoint:  endpointName,
 							Service:   "service",
 							Operation: "operation",
-							Input:     s.mustToPayload("input"),
+							Input:     testcore.MustToPayload(s.T(), "input"),
 						},
 					},
 				},
@@ -479,7 +479,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 	failedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationFailedEventAttributes() != nil
 	})
-	s.Greater(failedEventIdx, 0)
+	s.Positive(failedEventIdx)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -491,7 +491,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload()
 					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 						Result: &commonpb.Payloads{
 							Payloads: []*commonpb.Payload{
-								s.mustToPayload(pollResp.History.Events[failedEventIdx].GetNexusOperationFailedEventAttributes().Failure.Cause.Message),
+								testcore.MustToPayload(s.T(), pollResp.History.Events[failedEventIdx].GetNexusOperationFailedEventAttributes().Failure.Cause.Message),
 							},
 						},
 					},
@@ -619,7 +619,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -650,7 +650,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
-	s.Greater(startedEventIdx, 0)
+	s.Positive(startedEventIdx)
 
 	s.Len(pollResp.History.Events[startedEventIdx].Links, 1)
 	l := pollResp.History.Events[startedEventIdx].Links[0].GetWorkflowEvent()
@@ -660,7 +660,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	largeCompletion := nexusrpc.CompleteOperationOptions{
 		// Use -10 to avoid hitting MaxNexusAPIRequestBodyBytes. Actual payload will still exceed limit because of
 		// additional Content headers. See common/rpc/grpc.go:66
-		Result: s.mustToPayload(strings.Repeat("a", (2*1024*1024)-10)),
+		Result: testcore.MustToPayload(s.T(), strings.Repeat("a", (2*1024*1024)-10)),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	s.NoError(err)
@@ -668,7 +668,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_bad_request"})
 
 	invalidNamespace := testcore.RandomizeStr("ns")
@@ -682,7 +682,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	invalidCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(invalidNamespace)
 
 	completion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload("result"),
+		Result: testcore.MustToPayload(s.T(), "result"),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	_, err = s.sendNexusCompletionRequest(ctx, invalidCallbackURL, completion)
@@ -708,7 +708,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	snap, err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_not_found"})
 
 	// Request fails if the state machine reference is stale.
@@ -721,7 +721,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	snap, err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_not_found"})
 
 	callbackToken, err = gen.Tokenize(completionToken)
@@ -730,7 +730,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 
 	snap, err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 	s.NoError(err)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "success"})
 	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
 	idx := slices.IndexFunc(snap["service_requests"], func(m *metricstest.CapturedRecording) bool {
@@ -743,7 +743,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	snap, err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_not_found"})
 
 	// Poll again and verify the completion is recorded and triggers workflow progress.
@@ -759,7 +759,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion() {
 	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationCompletedEventAttributes() != nil
 	})
-	s.Greater(completedEventIdx, 0)
+	s.Positive(completedEventIdx)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -906,7 +906,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 							Endpoint:  endpointName,
 							Service:   "test-service",
 							Operation: "my-operation",
-							Input:     s.mustToPayload("input"),
+							Input:     testcore.MustToPayload(s.T(), "input"),
 						},
 					},
 				},
@@ -978,7 +978,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 						Result: &commonpb.Payloads{
 							Payloads: []*commonpb.Payload{
-								s.mustToPayload("result"),
+								testcore.MustToPayload(s.T(), "result"),
 							},
 						},
 					},
@@ -1035,7 +1035,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart() 
 		completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 			return e.GetNexusOperationCompletedEventAttributes() != nil
 		})
-		s.Greater(completedEventIdx, 0)
+		s.Positive(completedEventIdx)
 
 		// Complete start request to verify response is ignored.
 		_, err = s.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
@@ -1140,7 +1140,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 							Endpoint:  endpointName,
 							Service:   "service",
 							Operation: "operation",
-							Input:     s.mustToPayload("input"),
+							Input:     testcore.MustToPayload(s.T(), "input"),
 						},
 					},
 				},
@@ -1168,7 +1168,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
-	s.Greater(startedEventIdx, 0)
+	s.Positive(startedEventIdx)
 
 	// Send a valid - failed completion request.
 	completion := nexusrpc.CompleteOperationOptions{
@@ -1177,7 +1177,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	}
 	snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 	s.NoError(err)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "success"})
 
 	// Poll again and verify the completion is recorded and triggers workflow progress.
@@ -1193,7 +1193,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationFailedEventAttributes() != nil
 	})
-	s.Greater(completedEventIdx, 0)
+	s.Positive(completedEventIdx)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -1226,27 +1226,27 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	s.Run("ConfigDisabled", func() {
 		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
 		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
+		s.Len(snap["nexus_completion_request_preprocess_errors"], 1)
 	})
 
 	s.Run("ConfigDisabledNoIdentifier", func() {
 		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
+		s.Len(snap["nexus_completion_request_preprocess_errors"], 1)
 	})
 
 	s.Run("NamespaceNotFound", func() {
@@ -1256,14 +1256,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path("namespace-doesnt-exist")
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 			Header: nexus.Header{commonnexus.CallbackTokenHeader: tokenWithBadNamespace},
 		}
 		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
+		s.Len(snap["nexus_completion_request_preprocess_errors"], 1)
 	})
 
 	s.Run("NamespaceNotFoundNoIdentifier", func() {
@@ -1273,14 +1273,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 			Header: nexus.Header{commonnexus.CallbackTokenHeader: tokenWithBadNamespace},
 		}
 		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		s.Equal(1, len(snap["nexus_completion_request_preprocess_errors"]))
+		s.Len(snap["nexus_completion_request_preprocess_errors"], 1)
 	})
 
 	s.Run("OperationTokenTooLong", func() {
@@ -1291,7 +1291,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		validToken, err := s.generateValidCallbackToken(namespaceID, testcore.RandomizeStr("workflow"), uuid.NewString())
 		s.NoError(err)
 		completion := nexusrpc.CompleteOperationOptions{
-			Result:         s.mustToPayload("result"),
+			Result:         testcore.MustToPayload(s.T(), "result"),
 			OperationToken: strings.Repeat("long", 2000),
 			Header:         nexus.Header{commonnexus.CallbackTokenHeader: validToken},
 		}
@@ -1300,8 +1300,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
-		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Empty(snap["nexus_completion_request_preprocess_errors"])
+		s.Len(snap["nexus_completion_requests"], 1)
 		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_bad_request"})
 	})
 
@@ -1313,7 +1313,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		s.NoError(err)
 
 		completion := nexusrpc.CompleteOperationOptions{
-			Result:         s.mustToPayload("result"),
+			Result:         testcore.MustToPayload(s.T(), "result"),
 			OperationToken: strings.Repeat("long", 2000),
 			Header:         nexus.Header{commonnexus.CallbackTokenHeader: validToken},
 		}
@@ -1322,14 +1322,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-		s.Equal(0, len(snap["nexus_completion_request_preprocess_errors"]))
-		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Empty(snap["nexus_completion_request_preprocess_errors"])
+		s.Len(snap["nexus_completion_requests"], 1)
 		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "error_bad_request"})
 	})
 
 	s.Run("InvalidCallbackToken", func() {
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
 		// metrics collection is not initialized before callback validation
@@ -1344,7 +1344,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 
 	s.Run("InvalidCallbackTokenNoIdentifier", func() {
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 		}
 		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// metrics collection is not initialized before callback validation
@@ -1368,7 +1368,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		s.NoError(err)
 
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 			Header: nexus.Header{
 				commonnexus.CallbackTokenHeader: validToken,
 				"user-agent":                    "Nexus-go-sdk/v99.0.0",
@@ -1382,7 +1382,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Len(snap["nexus_completion_requests"], 1)
 		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "unsupported_client"})
 	})
 
@@ -1397,7 +1397,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		s.NoError(err)
 
 		completion := nexusrpc.CompleteOperationOptions{
-			Result: s.mustToPayload("result"),
+			Result: testcore.MustToPayload(s.T(), "result"),
 			Header: nexus.Header{
 				commonnexus.CallbackTokenHeader: validToken,
 				"user-agent":                    "Nexus-go-sdk/v99.0.0",
@@ -1412,7 +1412,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
-		s.Equal(1, len(snap["nexus_completion_requests"]))
+		s.Len(snap["nexus_completion_requests"], 1)
 		s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "unsupported_client"})
 	})
 }
@@ -1435,7 +1435,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 	s.NoError(err)
 
 	completion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload("result"),
+		Result: testcore.MustToPayload(s.T(), "result"),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 
@@ -1444,7 +1444,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors() {
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "unauthorized"})
 }
 
@@ -1466,7 +1466,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 	s.NoError(err)
 
 	completion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload("result"),
+		Result: testcore.MustToPayload(s.T(), "result"),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
@@ -1474,7 +1474,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-	s.Equal(1, len(snap["nexus_completion_requests"]))
+	s.Len(snap["nexus_completion_requests"], 1)
 	s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "outcome": "unauthorized"})
 }
 
@@ -1564,7 +1564,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 						Endpoint:  endpointName,
 						Service:   "test-service",
 						Operation: "my-operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -1590,7 +1590,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
-	s.Greater(startedEventIdx, 0)
+	s.Positive(startedEventIdx)
 
 	// Complete workflow containing callback
 	pollResp, err = s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
@@ -1612,7 +1612,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 						Result: &commonpb.Payloads{
 							Payloads: []*commonpb.Payload{
-								s.mustToPayload("result"),
+								testcore.MustToPayload(s.T(), "result"),
 							},
 						},
 					},
@@ -1635,7 +1635,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth()
 	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationCompletedEventAttributes() != nil
 	})
-	s.Greater(completedEventIdx, 0)
+	s.Positive(completedEventIdx)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -1727,7 +1727,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -1760,7 +1760,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	scheduledEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationScheduledEventAttributes() != nil
 	})
-	s.Greater(scheduledEventIdx, 0)
+	s.Positive(scheduledEventIdx)
 	scheduledEventID := pollResp.History.Events[scheduledEventIdx].EventId
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -1852,7 +1852,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 						Endpoint:  endpointName,
 						Service:   "service",
 						Operation: "operation",
-						Input:     s.mustToPayload("input"),
+						Input:     testcore.MustToPayload(s.T(), "input"),
 					},
 				},
 			},
@@ -1879,7 +1879,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationStartedEventAttributes() != nil
 	})
-	s.Greater(startedEventIdx, 0)
+	s.Positive(startedEventIdx)
 
 	// Remember the workflow task completed event ID (next after the last WFT started), we'll use it to test reset
 	// below.
@@ -1907,7 +1907,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 	}
 	s.True(seenStartedEvent)
 	completion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload("result"),
+		Result: testcore.MustToPayload(s.T(), "result"),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	_, err = s.sendNexusCompletionRequest(ctx, publicCallbackUrl, completion)
@@ -1926,7 +1926,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset() {
 	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 		return e.GetNexusOperationCompletedEventAttributes() != nil
 	})
-	s.Greater(completedEventIdx, 0)
+	s.Positive(completedEventIdx)
 
 	_, err = s.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -2046,7 +2046,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO() {
 		ev, err := history.Next()
 		s.NoError(err)
 		if attr := ev.GetNexusOperationCompletedEventAttributes(); attr != nil {
-			protorequire.ProtoEqual(s.T(), s.mustToPayload(nil), attr.GetResult())
+			protorequire.ProtoEqual(s.T(), testcore.MustToPayload(s.T(), nil), attr.GetResult())
 			break
 		}
 	}
@@ -2537,7 +2537,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure() {
 	// Old SDK path
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(handlerErr.Cause, &appErr)
-	s.Equal(appErr.Message(), "fail me")
+	s.Equal("fail me", appErr.Message())
 	var failure nexus.Failure
 	s.NoError(appErr.Details(&failure))
 	s.Equal(map[string]string{"key": "val"}, failure.Metadata)
@@ -2672,8 +2672,8 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 			input: "conflict-policy-fail",
 			checkOutput: func(t *testing.T, res CallerWfOutput, err error) {
 				require.NoError(t, err)
-				require.EqualValues(t, 1, res.CntOk)
-				require.EqualValues(t, numCalls-1, res.CntErr)
+				require.Equal(t, 1, res.CntOk)
+				require.Equal(t, numCalls-1, res.CntErr)
 
 				// check the handler workflow has the request ID infos map correct
 				descResp, err := s.SdkClient().DescribeWorkflowExecution(context.Background(), handlerWorkflowID, "")
@@ -2692,8 +2692,8 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithMultipleCallers() {
 			input: "conflict-policy-use-existing",
 			checkOutput: func(t *testing.T, res CallerWfOutput, err error) {
 				require.NoError(t, err)
-				require.EqualValues(t, numCalls, res.CntOk)
-				require.EqualValues(t, 0, res.CntErr)
+				require.Equal(t, numCalls, res.CntOk)
+				require.Equal(t, 0, res.CntErr)
 
 				// check the handler workflow has the request ID infos map correct
 				descResp, err := s.SdkClient().DescribeWorkflowExecution(context.Background(), handlerWorkflowID, "")
@@ -2784,7 +2784,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout() {
 						Endpoint:               endpointName,
 						Service:                "service",
 						Operation:              "operation",
-						Input:                  s.mustToPayload("input"),
+						Input:                  testcore.MustToPayload(s.T(), "input"),
 						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
 					},
 				},
@@ -2881,7 +2881,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToStartTimeout() {
 						Endpoint:               endpointName,
 						Service:                "service",
 						Operation:              "operation",
-						Input:                  s.mustToPayload("input"),
+						Input:                  testcore.MustToPayload(s.T(), "input"),
 						ScheduleToStartTimeout: durationpb.New(2 * time.Second),
 					},
 				},
@@ -2987,7 +2987,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout() {
 						Endpoint:            endpointName,
 						Service:             "service",
 						Operation:           "operation",
-						Input:               s.mustToPayload("input"),
+						Input:               testcore.MustToPayload(s.T(), "input"),
 						StartToCloseTimeout: durationpb.New(2 * time.Second),
 					},
 				},
@@ -3136,7 +3136,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint() {
 						Endpoint:  commonnexus.SystemEndpoint,
 						Service:   "TestService",
 						Operation: "TestOperation",
-						Input:     s.mustToPayload("Temporal"),
+						Input:     testcore.MustToPayload(s.T(), "Temporal"),
 					},
 				},
 			},
