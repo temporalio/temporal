@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
@@ -125,6 +126,7 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	activity.FrontendModule,
+	nexusoperation.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
 )
@@ -874,8 +876,8 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
-	nexusOperationHandler chasmnexus.FrontendHandler,
 	callbackValidator *callback.Validator,
+	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) Handler {
