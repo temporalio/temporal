@@ -32,6 +32,7 @@ jobs:
           single-arch: amd64
 
       - name: Build Docker images
+        id: build-docker
         uses: ./.github/actions/build-docker-images
         with:
           push: false
@@ -39,24 +40,11 @@ jobs:
           platform: linux/amd64
           load: true
 
-      - name: Get Docker image tag
-        id: image-tag
-        uses: actions/github-script@v8
-        with:
-          script: |
-            const ref = context.ref.replace('refs/heads/', '').replace('refs/tags/', '');
-            const branchName = `branch-${ref}`;
-            let safeTag = branchName.replace(/[^a-zA-Z0-9._-]/g, '-');
-            safeTag = safeTag.toLowerCase();
-            safeTag = safeTag.replace(/^[^a-z0-9]+/, '');
-            safeTag = safeTag.substring(0, 128);
-            core.setOutput('tag', safeTag);
-
       - name: Save Docker image as artifact
         run: |
-          docker save temporaliotest/server:${{ steps.image-tag.outputs.tag }} -o /tmp/temporal-server.tar
-          docker save temporaliotest/admin-tools:${{ steps.image-tag.outputs.tag }} -o /tmp/temporal-admin-tools.tar
-          echo ${{ steps.image-tag.outputs.tag }} > /tmp/image_tag
+          docker save temporaliotest/server:${{ steps.build-docker.outputs.branch-tag }} -o /tmp/temporal-server.tar
+          docker save temporaliotest/admin-tools:${{ steps.build-docker.outputs.branch-tag }} -o /tmp/temporal-admin-tools.tar
+          echo ${{ steps.build-docker.outputs.branch-tag }} > /tmp/image_tag
 
       - name: Prepare artifact
         working-directory: ${{ github.workspace }}
