@@ -7,6 +7,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
@@ -96,15 +97,42 @@ func (ni *NamespaceRateLimitInterceptorImpl) wait(ctx context.Context, namespace
 	if !ok {
 		token = NamespaceRateLimitDefaultToken
 	}
-
-	return ni.rateLimiter.Wait(ctx, quotas.NewRequest(
+	request := quotas.NewRequest(
 		methodName,
 		token,
 		namespaceName.String(),
 		headerGetter.Get(headers.CallerTypeHeaderName),
 		0,  // this interceptor layer does not throttle based on caller segment
 		"", // this interceptor layer does not throttle based on call initiation
-	))
+	)
+
+	// Try non-blocking first: if a token is available immediately, proceed regardless
+	// of how much deadline remains.
+	if ni.rateLimiter.Allow(time.Now().UTC(), request) {
+		return nil
+	}
+
+	// No immediate token. Block-wait but reserve CriticalLongPollTimeout for the actual
+	// poll execution after the token is acquired. Using CriticalLongPollTimeout (10s)
+	// rather than MinLongPollTimeout (2s) to avoid a race: ValidateLongPollContextTimeout
+	// inside the handler rejects requests with remaining < MinLongPollTimeout. Execution
+	// time between Wait() returning and that check could consume the 2s buffer, causing
+	// ErrContextTimeoutTooShort. 10s provides comfortable headroom.
+	// If no deadline is set, use the original context as-is.
+	waitCtx := ctx
+	cancel := context.CancelFunc(func() {})
+	if deadline, ok := ctx.Deadline(); ok {
+		waitCtx, cancel = context.WithDeadline(ctx, deadline.Add(-common.CriticalLongPollTimeout))
+	}
+	defer cancel()
+
+	err := ni.rateLimiter.Wait(waitCtx, request)
+	if err != nil && ctx.Err() == nil {
+		// Shortened deadline expired but caller's context is still valid —
+		// rate limiting took too long. Return ResourceExhausted, not DeadlineExceeded.
+		return ErrNamespaceRateLimitServerBusy
+	}
+	return err
 }
 
 func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
