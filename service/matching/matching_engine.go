@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/stream_batcher"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
@@ -1353,16 +1354,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							if req.GetReportStats() {
 								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-								mergedStats = &taskqueuepb.TaskQueueStats{
-									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-									ApproximateBacklogAge:   oldestBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
-									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
-									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
-								}
+								mergedStats = cloneTaskQueueStats(totalStats)
+								taskqueue.MergeStats(mergedStats, partitionStats)
 							}
 
 							physicalTqInfos[buildId][taskQueueType] = &taskqueuespb.PhysicalTaskQueueInfo{
-								Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+								Pollers:        taskqueue.DedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 								TaskQueueStats: mergedStats,
 							}
 						}
@@ -1519,8 +1516,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
-						mergeStats(taskQueueStats, priorityStats)
-						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
+						taskqueue.MergeStats(taskQueueStats, priorityStats)
+						taskqueue.MergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
 				}
 			}
@@ -1599,18 +1596,6 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	pm.PutCache(cacheKey, resp)
 	return resp, nil
-}
-
-func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
-	allKeys := make(map[string]bool)
-	var list []*taskqueuepb.PollerInfo
-	for _, item := range pollerInfos {
-		if _, value := allKeys[item.GetIdentity()]; !value {
-			allKeys[item.GetIdentity()] = true
-			list = append(list, item)
-		}
-	}
-	return list
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
