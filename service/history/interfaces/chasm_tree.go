@@ -20,7 +20,6 @@ type ChasmTree interface {
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
 	ApplySystemMutation(chasm.NodesMutation) error
 	ApplyMutation(chasm.NodesMutation) error
-	ApplySystemMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
 	RefreshTasks() error
 	IsStateDirty() bool
