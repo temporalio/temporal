@@ -296,21 +296,24 @@ message WorkflowExecutionInfo {
         temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
     }
 
-    // The latest target Worker Deployment Version that matching resolved for this
-    // workflow. Overwritten on each workflow task start. Read at continue-as-new
-    // time to pass to the new run.
-    temporal.api.deployment.v1.WorkerDeploymentVersion latest_target_worker_deployment_version = 113;
+    // The last target version for which the server set targetDeploymentVersionChanged
+    // to true on a workflow task started event. Updated on each workflow task start,
+    // set only when the server decides to set the targetDeploymentVersionChanged flag
+    // to true. Also read during continue-as-new/retry to pass to the new run.
+    temporal.api.deployment.v1.WorkerDeploymentVersion last_notified_target_version = 113;
 
-    // True when this run was initiated by continue-as-new or retry and inherited
-    // a pinned version from the previous run. Used in the
-    // targetDeploymentVersionChanged condition to detect continuation runs that
-    // declined upgrade.
-    bool has_inherited_pinned_version_continue_as_new_or_retry = 114;
+    // The target version for which setting the targetDeploymentVersionChanged flag
+    // should be suppressed. Set to the previous run's last_notified_target_version
+    // when the workflow is initiated by continue-as-new/retry and inherits a pinned
+    // version (i.e., the SDK declined to upgrade). Nil otherwise.
+    NotificationSuppressedTargetVersion notification_suppressed_target_version = 114;
+}
 
-    // The previous run's latest target version, set once during application of the
-    // WorkflowExecutionStartedEvent. Never overwritten. Used to compare against the
-    // current target to detect whether the target has changed since this run started.
-    temporal.api.deployment.v1.WorkerDeploymentVersion target_worker_deployment_version_on_start = 115;
+// Wrapper message to distinguish "not set" (nil wrapper) from "set to unversioned"
+// (non-nil wrapper with nil version). Used to track whether the SDK has previously
+// declined upgrading to a specific target version.
+message NotificationSuppressedTargetVersion {
+    temporal.api.deployment.v1.WorkerDeploymentVersion version = 1;
 }
 
 message ExecutionStats {

@@ -2605,7 +2605,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		InheritedBuildId:                               inheritedBuildId,
 		InheritedPinnedVersion:                         inheritedPinnedVersion,
 		VersioningOverride:                             pinnedOverride,
-		PreviousRunLatestTargetWorkerDeploymentVersion: previousExecutionInfo.LatestTargetWorkerDeploymentVersion,
+		LastNotifiedTargetVersion:                      previousExecutionInfo.LastNotifiedTargetVersion,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2932,24 +2932,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
 	}
 
-	// Store the previous run's latest target version as the initial anchor for
-	// this run. Used when computing targetDeploymentVersionChanged to detect
-	// whether the target has changed since this CaN run started.
-	if v := event.GetPreviousRunLatestTargetWorkerDeploymentVersion(); v != nil {
-		ms.executionInfo.TargetWorkerDeploymentVersionOnStart = v
-		ms.executionInfo.LatestTargetWorkerDeploymentVersion = v
-	}
-
-	// Derive whether this run is a continuation (CaN or retry) that inherited a pinned version.
-	// InheritedPinnedVersion is set in three places:
-	//   1. SDK-initiated CaN (mutable_state_impl.go — addWorkflowExecutionStartedEventForContinueAsNew)
-	//   2. Server-initiated retry of an already-inherited-pinned run (retry.go)
-	//   3. Child workflow inheriting from a pinned parent (transfer_queue_active_task_executor.go)
-	// We use ContinuedExecutionRunId to include cases 1 and 2 (both have a previous run)
-	// while excluding case 3 (children have no continued run ID).
-	// Crons are safe — they never set InheritedPinnedVersion.
+	// If the workflow is initiated by CaN/retry and inherited a pinned version
+	// (i.e., the SDK declined to upgrade), set the suppressed target version from
+	// the previous run's last notified target version.
 	if event.GetContinuedExecutionRunId() != "" && event.GetInheritedPinnedVersion() != nil {
-		ms.executionInfo.HasInheritedPinnedVersionContinueAsNewOrRetry = true
+		ms.executionInfo.NotificationSuppressedTargetVersion = &persistencespb.NotificationSuppressedTargetVersion{
+			Version: event.GetLastNotifiedTargetVersion(),
+		}
 	}
 
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.

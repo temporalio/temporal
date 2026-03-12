@@ -195,11 +195,15 @@ type StartWorkflowExecutionRequest struct {
 	// After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
 	// subsequent workflow tasks.
 	InheritedAutoUpgradeInfo *v16.InheritedAutoUpgradeInfo `protobuf:"bytes,16,opt,name=inherited_auto_upgrade_info,json=inheritedAutoUpgradeInfo,proto3" json:"inherited_auto_upgrade_info,omitempty"`
-	// The previous run's latest target Worker Deployment Version. Passed through
-	// during continue-as-new to be written on the WorkflowExecutionStartedEvent.
-	PreviousRunLatestTargetWorkerDeploymentVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,17,opt,name=previous_run_latest_target_worker_deployment_version,json=previousRunLatestTargetWorkerDeploymentVersion,proto3" json:"previous_run_latest_target_worker_deployment_version,omitempty"`
-	unknownFields                                  protoimpl.UnknownFields
-	sizeCache                                      protoimpl.SizeCache
+	// During the previous run of this workflow, if it exists, the server may have
+	// notified the SDK that the Target Worker Deployment Version changed, prompting
+	// a pinned workflow to continue-as-new to upgrade onto this latest target. This
+	// field records the last target version that was part of such a notification.
+	// Passed through during continue-as-new/retry to be written on the
+	// WorkflowExecutionStartedEvent.
+	LastNotifiedTargetVersion *v16.WorkerDeploymentVersion `protobuf:"bytes,17,opt,name=last_notified_target_version,json=lastNotifiedTargetVersion,proto3" json:"last_notified_target_version,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *StartWorkflowExecutionRequest) Reset() {
@@ -344,9 +348,9 @@ func (x *StartWorkflowExecutionRequest) GetInheritedAutoUpgradeInfo() *v16.Inher
 	return nil
 }
 
-func (x *StartWorkflowExecutionRequest) GetPreviousRunLatestTargetWorkerDeploymentVersion() *v16.WorkerDeploymentVersion {
+func (x *StartWorkflowExecutionRequest) GetLastNotifiedTargetVersion() *v16.WorkerDeploymentVersion {
 	if x != nil {
-		return x.PreviousRunLatestTargetWorkerDeploymentVersion
+		return x.LastNotifiedTargetVersion
 	}
 	return nil
 }
@@ -10417,7 +10421,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"task_token\x18\x06 \x01(\tR\ttaskToken\x12\x1d\n" +
 	"\n" +
 	"task_infos\x18\a \x01(\tR\ttaskInfos\x12.\n" +
-	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\xa7\f\n" +
+	"\x13chasm_component_ref\x18\b \x01(\tR\x11chasmComponentRef\"\xf9\v\n" +
 	"\x1dStartWorkflowExecutionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
 	"\rstart_request\x18\x02 \x01(\v2>.temporal.api.workflowservice.v1.StartWorkflowExecutionRequestR\fstartRequest\x12h\n" +
@@ -10435,8 +10439,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x13versioning_override\x18\r \x01(\v2,.temporal.api.workflow.v1.VersioningOverrideR\x12versioningOverride\x12.\n" +
 	"\x13child_workflow_only\x18\x0e \x01(\bR\x11childWorkflowOnly\x12m\n" +
 	"\x18inherited_pinned_version\x18\x0f \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x16inheritedPinnedVersion\x12s\n" +
-	"\x1binherited_auto_upgrade_info\x18\x10 \x01(\v24.temporal.api.deployment.v1.InheritedAutoUpgradeInfoR\x18inheritedAutoUpgradeInfo\x12\xa1\x01\n" +
-	"4previous_run_latest_target_worker_deployment_version\x18\x11 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR.previousRunLatestTargetWorkerDeploymentVersion:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_id\"\xfc\x02\n" +
+	"\x1binherited_auto_upgrade_info\x18\x10 \x01(\v24.temporal.api.deployment.v1.InheritedAutoUpgradeInfoR\x18inheritedAutoUpgradeInfo\x12t\n" +
+	"\x1clast_notified_target_version\x18\x11 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x19lastNotifiedTargetVersion:\x1f\x92\xc4\x03\x1b*\x19start_request.workflow_id\"\xfc\x02\n" +
 	"\x1eStartWorkflowExecutionResponse\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\x12?\n" +
 	"\x05clock\x18\x02 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12n\n" +
@@ -11470,7 +11474,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	178, // 9: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.versioning_override:type_name -> temporal.api.workflow.v1.VersioningOverride
 	179, // 10: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_pinned_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	180, // 11: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.inherited_auto_upgrade_info:type_name -> temporal.api.deployment.v1.InheritedAutoUpgradeInfo
-	179, // 12: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.previous_run_latest_target_worker_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	179, // 12: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.last_notified_target_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	181, // 13: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
 	182, // 14: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.eager_workflow_task:type_name -> temporal.api.workflowservice.v1.PollWorkflowTaskQueueResponse
 	183, // 15: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus

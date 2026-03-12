@@ -80,7 +80,7 @@ func (b *EventFactory) CreateWorkflowExecutionStartedEvent(
 		// We expect the API handler to unset RequestEagerExecution if eager execution cannot be accepted.
 		EagerExecutionAccepted:                         req.GetRequestEagerExecution(),
 		InheritedAutoUpgradeInfo:                       request.InheritedAutoUpgradeInfo,
-		PreviousRunLatestTargetWorkerDeploymentVersion: request.PreviousRunLatestTargetWorkerDeploymentVersion,
+		LastNotifiedTargetVersion:                      request.LastNotifiedTargetVersion,
 	}
 
 	parentInfo := request.ParentExecutionInfo

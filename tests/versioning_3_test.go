@@ -6083,10 +6083,9 @@ func (s *Versioning3Suite) TestRemoveOverride_TriggersTargetVersionChangedSignal
 
 // TestRetryOfDeclinedCaN_SignalsOnNewTarget verifies that when a CaN'd run
 // ,which declined to upgrade, fails and is retried by the server, the retry
-// run inherits TargetWorkerDeploymentVersionOnStart from the original CaN
-// decision — NOT the failed run's LatestTargetWorkerDeploymentVersion.
-// This ensures that if the target has not changed since the original CaN
-// decision, the retry correctly does not set targetDeploymentVersionChanged=true
+// run inherits NotificationSuppressedTargetVersion from the original CaN
+// decision. This ensures that if the target has not changed since the original
+// CaN decision, the retry correctly does not set targetDeploymentVersionChanged=true
 // on the WFT started event.
 //
 // Flow:
