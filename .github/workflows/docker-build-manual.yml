@@ -83,13 +83,15 @@ jobs:
       - name: Output image tags
         env:
           SHA_TAG: ${{ steps.build-docker.outputs.sha-tag || steps.push-docker.outputs.sha-tag }}
+          SHA_FULL_TAG: ${{ steps.build-docker.outputs.sha-full-tag || steps.push-docker.outputs.sha-full-tag }}
           BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag || steps.push-docker.outputs.branch-tag }}
         run: |
           {
             echo "### Docker Images Built"
             echo ""
             echo "**Branch:** ${{ github.ref_name }}"
-            echo "**SHA Tag:** ${SHA_TAG}"
+            echo "**Short SHA Tag:** ${SHA_TAG}"
+            echo "**Full SHA Tag:** ${SHA_FULL_TAG}"
             echo "**Branch Tag:** ${BRANCH_TAG}"
             echo "**Platform:** ${{ inputs.platform || 'linux/amd64,linux/arm64' }}"
             echo "**Pushed to Docker Hub:** ${{ inputs.push }}"
@@ -98,6 +100,8 @@ jobs:
             echo "**Image Tags:**"
             echo "- temporaliotest/server:${SHA_TAG}"
             echo "- temporaliotest/admin-tools:${SHA_TAG}"
+            echo "- temporaliotest/server:${SHA_FULL_TAG}"
+            echo "- temporaliotest/admin-tools:${SHA_FULL_TAG}"
             echo "- temporaliotest/server:${BRANCH_TAG}"
             echo "- temporaliotest/admin-tools:${BRANCH_TAG}"
           } >> "$GITHUB_STEP_SUMMARY"
