@@ -1,10 +1,12 @@
 package workers
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/tqid"
 )
 
 // WorkerMetricsConfig contains dynamic config flags for worker-related metrics.
@@ -19,7 +21,7 @@ type workerMetricsEmitter struct {
 	config  WorkerMetricsConfig
 }
 
-func (e *workerMetricsEmitter) emit(nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
+func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 
@@ -46,19 +48,30 @@ func (e *workerMetricsEmitter) emit(nsName namespace.Name, heartbeats []*workerp
 
 		// Poller autoscaling metrics (if enabled)
 		if enablePollerAutoscalingMetrics {
-			nsTag := metrics.NamespaceTag(nsName.String())
-			if hb.WorkflowPollerInfo.GetIsAutoscaling() {
-				metrics.PollerAutoscalingHeartbeatCount.With(e.handler).
-					Record(1, nsTag, metrics.PollerTypeTag(metrics.PollerTypeWorkflow))
-			}
-			if hb.ActivityPollerInfo.GetIsAutoscaling() {
-				metrics.PollerAutoscalingHeartbeatCount.With(e.handler).
-					Record(1, nsTag, metrics.PollerTypeTag(metrics.PollerTypeActivity))
-			}
-			if hb.NexusPollerInfo.GetIsAutoscaling() {
-				metrics.PollerAutoscalingHeartbeatCount.With(e.handler).
-					Record(1, nsTag, metrics.PollerTypeTag(metrics.PollerTypeNexus))
-			}
+			e.emitPollerAutoscaling(nsID, nsName, hb)
 		}
+	}
+}
+
+func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	family, err := tqid.NewTaskQueueFamily(nsID.String(), hb.GetTaskQueue())
+	if err != nil {
+		return
+	}
+
+	recordAutoscaling := func(taskType enumspb.TaskQueueType) {
+		tq := family.TaskQueue(taskType)
+		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, false)
+		metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
+	}
+
+	if hb.WorkflowPollerInfo.GetIsAutoscaling() {
+		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	}
+	if hb.ActivityPollerInfo.GetIsAutoscaling() {
+		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	}
+	if hb.NexusPollerInfo.GetIsAutoscaling() {
+		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
 	}
 }

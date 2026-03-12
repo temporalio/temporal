@@ -3,6 +3,7 @@ package workers
 import (
 	"testing"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"github.com/stretchr/testify/assert"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -24,9 +25,14 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 		},
 	}
 
+	testNamespaceID := namespace.ID("test-namespace-id")
+	testNamespaceName := namespace.Name("test-namespace")
+	testTaskQueue := "test-task-queue"
+
 	// Worker 1: workflow autoscaling enabled, activity disabled
 	worker1 := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "worker_1",
+		TaskQueue:         testTaskQueue,
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
 			IsAutoscaling: true,
 		},
@@ -38,6 +44,7 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 	// Worker 2: workflow, activity, and nexus all enabled
 	worker2 := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "worker_2",
+		TaskQueue:         testTaskQueue,
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
 			IsAutoscaling: true,
 		},
@@ -52,13 +59,13 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 	// Worker 3: workflow only
 	worker3 := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "worker_3",
+		TaskQueue:         testTaskQueue,
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
 			IsAutoscaling: true,
 		},
 	}
 
-	testNamespaceName := namespace.Name("test-namespace")
-	emitter.emit(testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
+	emitter.emit(testNamespaceID, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1, worker2, worker3})
 
 	snapshot := capture.Snapshot()
 	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
@@ -66,14 +73,15 @@ func TestPollerAutoscalingMetrics(t *testing.T) {
 	// Counter increments per heartbeat: workflow x3, activity x1, nexus x1 = 5 total recordings
 	assert.Len(t, autoscalingMetrics, 5, "expected 5 counter increments")
 
-	pollerTypeCounts := make(map[string]int)
+	taskTypeCounts := make(map[string]int)
 	for _, m := range autoscalingMetrics {
-		pollerTypeCounts[m.Tags[metrics.PollerTypeTagName]]++
+		taskTypeCounts[m.Tags[metrics.TaskTypeTagName]]++
 		assert.Equal(t, string(testNamespaceName), m.Tags["namespace"])
+		assert.Equal(t, "__omitted__", m.Tags["taskqueue"])
 	}
-	assert.Equal(t, 3, pollerTypeCounts[metrics.PollerTypeWorkflow], "workflow should have 3 increments")
-	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeActivity], "activity should have 1 increment")
-	assert.Equal(t, 1, pollerTypeCounts[metrics.PollerTypeNexus], "nexus should have 1 increment")
+	assert.Equal(t, 3, taskTypeCounts[enumspb.TASK_QUEUE_TYPE_WORKFLOW.String()], "workflow should have 3 increments")
+	assert.Equal(t, 1, taskTypeCounts[enumspb.TASK_QUEUE_TYPE_ACTIVITY.String()], "activity should have 1 increment")
+	assert.Equal(t, 1, taskTypeCounts[enumspb.TASK_QUEUE_TYPE_NEXUS.String()], "nexus should have 1 increment")
 }
 
 func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
@@ -91,13 +99,15 @@ func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 
 	worker1 := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "worker_1",
+		TaskQueue:         "test-task-queue",
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
 			IsAutoscaling: true,
 		},
 	}
 
+	testNamespaceID := namespace.ID("test-namespace-id")
 	testNamespaceName := namespace.Name("test-namespace")
-	emitter.emit(testNamespaceName, []*workerpb.WorkerHeartbeat{worker1})
+	emitter.emit(testNamespaceID, testNamespaceName, []*workerpb.WorkerHeartbeat{worker1})
 
 	snapshot := capture.Snapshot()
 	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]

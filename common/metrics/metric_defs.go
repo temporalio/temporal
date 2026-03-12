@@ -28,9 +28,8 @@ const (
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
-	WorkerPluginNameTagName     = "worker_plugin_name"
-	PollerTypeTagName           = "poller_type"
-	headerCallsiteTagName       = "header_callsite"
+	WorkerPluginNameTagName = "worker_plugin_name"
+	headerCallsiteTagName  = "header_callsite"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -56,9 +55,6 @@ const (
 	PassiveNamespaceStateTagValue = "passive"
 	UnknownNamespaceStateTagValue = "unknown"
 
-	PollerTypeWorkflow = "workflow"
-	PollerTypeActivity = "activity"
-	PollerTypeNexus    = "nexus"
 )
 
 // Admin Client Operations
@@ -1215,7 +1211,7 @@ var (
 	PollerAutoscalingHeartbeatCount = NewCounterDef(
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
-			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, poller_type"),
+			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
