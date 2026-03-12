@@ -309,6 +309,14 @@ func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
 	return h.engine.CancelOutstandingWorkerPolls(ctx, request)
 }
 
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+// Internal API used when fanning out from root.
+func (h *Handler) CancelOutstandingWorkerPollsPartition(ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.CancelOutstandingWorkerPollsPartition(ctx, request)
+}
+
 // DescribeTaskQueue returns information about the target task queue, right now this API returns the
 // pollers which polled this task queue in last few minutes. If includeTaskQueueStatus field is true,
 // it will also return status of task queue's ackManager (readLevel, ackLevel, backlogCountHint and taskIDBlock).

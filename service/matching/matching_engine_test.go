@@ -5698,7 +5698,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("unknown worker key succeeds", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		}
 
@@ -5716,7 +5722,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("cancels all polls for worker", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		}
 
@@ -5743,9 +5755,15 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("does not affect other workers", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		worker1Cancelled := false
 		worker2Cancelled := false
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		}
 
@@ -5770,7 +5788,13 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 	t.Run("cancels forwarded polls with same pollerID on different partitions", func(t *testing.T) {
 		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		mockNsRegistry := namespace.NewMockRegistry(ctrl)
+		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil)
 		engine := &matchingEngineImpl{
+			config:                defaultTestConfig(),
+			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		}
 
@@ -5796,5 +5820,98 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(2), resp.CancelledCount)
 		require.True(t, childCancelled, "child partition poll should be cancelled")
 		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
+
+	t.Run("root partition fans out to all partitions and aggregates CancelledCount", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		namespaceID := "test-namespace-id"
+		nsName := namespace.Name("test-namespace")
+		numPartitions := 3
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
+
+		config := defaultTestConfig()
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
+
+		// Partition 0 handled locally; RPC only for partitions 1+
+		cancelledByPartitionID := map[int32]int32{1: 2, 2: 0}
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				partitionID := req.GetTaskQueuePartition().GetNormalPartitionId()
+				count, ok := cancelledByPartitionID[partitionID]
+				require.True(t, ok, "unexpected partition ID: %d", partitionID)
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: count}, nil
+			}).
+			Times(numPartitions - 1)
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNamespaceCache,
+			matchingRawClient:     mockMatchingClient,
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       namespaceID,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(3), resp.CancelledCount, "should aggregate CancelledCount from all partitions")
+	})
+
+	t.Run("root partition fan-out continues on partition error and returns success", func(t *testing.T) {
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		namespaceID := "test-namespace-id"
+		nsName := namespace.Name("test-namespace")
+		numPartitions := 2
+
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(nsName, nil)
+
+		config := defaultTestConfig()
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
+
+		// Partition 0 handled locally; partition 1 fails (best-effort: log and continue)
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			Return(nil, errors.New("partition unavailable"))
+
+		engine := &matchingEngineImpl{
+			config:                config,
+			namespaceRegistry:     mockNamespaceCache,
+			matchingRawClient:     mockMatchingClient,
+			logger:                log.NewNoopLogger(),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		}
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+		engine.workerInstancePollers.Add("worker-key", "poller-1", func() {})
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       namespaceID,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp.CancelledCount, "should return count from successful partitions only")
 	})
 }

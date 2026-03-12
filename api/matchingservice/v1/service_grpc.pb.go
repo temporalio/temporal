@@ -32,6 +32,7 @@ const (
 	MatchingService_RespondNexusTaskFailed_FullMethodName                 = "/temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed"
 	MatchingService_CancelOutstandingPoll_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll"
 	MatchingService_CancelOutstandingWorkerPolls_FullMethodName           = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls"
+	MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName  = "/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPollsPartition"
 	MatchingService_DescribeTaskQueue_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue"
 	MatchingService_DescribeTaskQueuePartition_FullMethodName             = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueuePartition"
 	MatchingService_DescribeVersionedTaskQueues_FullMethodName            = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeVersionedTaskQueues"
@@ -104,6 +105,9 @@ type MatchingServiceClient interface {
 	// Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
 	// are issued after calling this RPC, otherwise those polls will not be cancelled.
 	CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error)
+	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+	// Internal API used when fanning out from root.
+	CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(ctx context.Context, in *DescribeTaskQueueRequest, opts ...grpc.CallOption) (*DescribeTaskQueueResponse, error)
@@ -358,6 +362,15 @@ func (c *matchingServiceClient) CancelOutstandingPoll(ctx context.Context, in *C
 func (c *matchingServiceClient) CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error) {
 	out := new(CancelOutstandingWorkerPollsResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingWorkerPolls_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error) {
+	out := new(CancelOutstandingWorkerPollsPartitionResponse)
+	err := c.cc.Invoke(ctx, MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -658,6 +671,9 @@ type MatchingServiceServer interface {
 	// Note: This only cancels polls that are currently outstanding. The caller must ensure no new polls
 	// are issued after calling this RPC, otherwise those polls will not be cancelled.
 	CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error)
+	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+	// Internal API used when fanning out from root.
+	CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
 	DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error)
@@ -842,6 +858,9 @@ func (UnimplementedMatchingServiceServer) CancelOutstandingPoll(context.Context,
 }
 func (UnimplementedMatchingServiceServer) CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingWorkerPolls not implemented")
+}
+func (UnimplementedMatchingServiceServer) CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CancelOutstandingWorkerPollsPartition not implemented")
 }
 func (UnimplementedMatchingServiceServer) DescribeTaskQueue(context.Context, *DescribeTaskQueueRequest) (*DescribeTaskQueueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeTaskQueue not implemented")
@@ -1152,6 +1171,24 @@ func _MatchingService_CancelOutstandingWorkerPolls_Handler(srv interface{}, ctx 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).CancelOutstandingWorkerPolls(ctx, req.(*CancelOutstandingWorkerPollsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_CancelOutstandingWorkerPollsPartition_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CancelOutstandingWorkerPollsPartitionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPollsPartition(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_CancelOutstandingWorkerPollsPartition_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).CancelOutstandingWorkerPollsPartition(ctx, req.(*CancelOutstandingWorkerPollsPartitionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1714,6 +1751,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelOutstandingWorkerPolls",
 			Handler:    _MatchingService_CancelOutstandingWorkerPolls_Handler,
+		},
+		{
+			MethodName: "CancelOutstandingWorkerPollsPartition",
+			Handler:    _MatchingService_CancelOutstandingWorkerPollsPartition_Handler,
 		},
 		{
 			MethodName: "DescribeTaskQueue",

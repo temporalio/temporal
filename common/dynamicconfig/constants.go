@@ -3148,6 +3148,14 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
+	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
+		"frontend.enableMatchingFanOutForPollCancellation",
+		true,
+		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
+		When enabled, frontend sends root partition only; matching fans out to all partitions.
+		When disabled, frontend iterates partitions; matching handles each partition locally.`,
+	)
+
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,

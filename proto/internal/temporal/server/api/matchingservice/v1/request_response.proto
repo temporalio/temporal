@@ -259,6 +259,19 @@ message CancelOutstandingWorkerPollsResponse {
     int32 cancelled_count = 1;
 }
 
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
+// Internal API used by matching when fanning out from root.
+message CancelOutstandingWorkerPollsPartitionRequest {
+    string namespace_id = 1;
+    temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+    string worker_instance_key = 3;
+    string worker_identity = 4;
+}
+
+message CancelOutstandingWorkerPollsPartitionResponse {
+    int32 cancelled_count = 1;
+}
+
 message DescribeTaskQueueRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.DescribeTaskQueueRequest desc_request = 2;
