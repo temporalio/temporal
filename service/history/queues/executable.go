@@ -205,7 +205,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		metricsHandler: metricsHandler.WithTags(estimateTaskMetricTags(
+		metricsHandler: metricsHandler.WithTags(taskBaseMetricTags(
 			task,
 			namespaceRegistry,
 			clusterMetadata.GetCurrentClusterName(),
@@ -299,7 +299,7 @@ func (e *executableImpl) Execute() (retErr error) {
 			// we need to guess the metrics tags here as we don't know which execution logic
 			// is actually used which is upto the executor implementation
 			e.metricsHandler = e.metricsHandler.WithTags(
-				estimateTaskMetricTags(
+				taskBaseMetricTags(
 					e.GetTask(),
 					e.namespaceRegistry,
 					e.clusterMetadata.GetCurrentClusterName(),
@@ -817,7 +817,7 @@ func (e *executableImpl) incAttempt() {
 	}
 }
 
-func estimateTaskMetricTags(
+func taskBaseMetricTags(
 	task tasks.Task,
 	namespaceRegistry namespace.Registry,
 	currentClusterName string,
