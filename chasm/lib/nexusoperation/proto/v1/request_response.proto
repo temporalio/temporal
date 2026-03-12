@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.nexusoperation.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+message StartNexusOperationRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.StartNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message StartNexusOperationResponse {
+    temporal.api.workflowservice.v1.StartNexusOperationExecutionResponse frontend_response = 1;
+}
+
+message DescribeNexusOperationRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.DescribeNexusOperationExecutionRequest frontend_request = 2;
+}
+
+message DescribeNexusOperationResponse {
+    temporal.api.workflowservice.v1.DescribeNexusOperationExecutionResponse frontend_response = 1;
+}
