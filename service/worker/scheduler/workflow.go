@@ -158,6 +158,8 @@ type (
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
 
+		EnableCHASMMigration bool // Whether to automatically migrate this schedule to CHASM (V2)
+
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
 	}
@@ -316,6 +318,9 @@ func (s *scheduler) run() error {
 			)
 		}
 
+		if s.tweakables.EnableCHASMMigration {
+			s.State.PendingMigration = true
+		}
 		if s.State.PendingMigration {
 			err := s.executeMigration()
 			if err == nil {
