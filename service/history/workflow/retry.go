@@ -330,7 +330,7 @@ func SetupNewWorkflowForRetryOrCron(
 		Attempt:                   attempt,
 		SourceVersionStamp:        sourceVersionStamp,
 		RootExecutionInfo:         rootInfo,
-		InheritedBuildId:          startAttr.InheritedBuildId,
+		InheritedBuildId:          startAttr.InheritedBuildId, //nolint:staticcheck
 		InheritedPinnedVersion:    inheritedPinnedVersion,
 		InheritedAutoUpgradeInfo:  inheritedAutoUpgradeInfo,
 		LastNotifiedTargetVersion: lastNotified,
