@@ -39,10 +39,7 @@ func registerEvents(
 	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, newCanceledEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, newTimedOutEventDefinition(config, nexusProcessor)); err != nil {
-		return err
-	}
-	return nil
+	return registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, newTimedOutEventDefinition(config, nexusProcessor))
 }
 
 // TODO: Implement these event definitions.
