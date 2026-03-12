@@ -512,6 +512,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		// 3. Already on target — nothing changed. Clear any stale declined/notified state.
 		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
 			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+			// TODO (Shivam): Revision number mechanics to strengthen this check
 			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 			m.ms.executionInfo.LastNotifiedTargetVersion = nil
 		// 4. Previously declined upgrade — target unchanged since the decline.
