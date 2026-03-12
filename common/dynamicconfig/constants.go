@@ -1714,10 +1714,10 @@ before calling remote for missing events`,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
 	)
-	ChasmStandbyTaskMissingEventsDiscardDelay = NewChasmTaskTypeDurationSetting(
-		"history.chasmStandbyTaskMissingEventsDiscardDelay",
+	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
+		"history.ChasmStandbyTaskDiscardDelay",
 		24*time.Hour,
-		`ChasmStandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster will wait
+		`ChasmStandbyTaskDiscardDelay is the amount of time standby cluster will wait
 before discarding a CHASM task. Configurable per RegistrableTask type (e.g. "activity.dispatch").
 The default is intentionally much higher than the non CHASM standby discard delay because
 discarding a CHASM task can leave the execution in a stuck state after failover. Task types

@@ -193,7 +193,7 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		getStandbyPostActionFn(
 			task,
 			t.getCurrentTime,
-			t.config.ChasmStandbyTaskMissingEventsDiscardDelay(chasmTaskType),
+			t.config.ChasmStandbyTaskDiscardDelay(chasmTaskType),
 			t.checkExecutionStillExistsOnSourceBeforeDiscard,
 		),
 	)
