@@ -25,6 +25,10 @@ func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesS
 	return chasm.NodesSnapshot{}
 }
 
+func (*noopChasmTree) ApplySystemMutation(chasm.NodesMutation) error {
+	return nil
+}
+
 func (*noopChasmTree) ApplyMutation(chasm.NodesMutation) error {
 	return nil
 }
