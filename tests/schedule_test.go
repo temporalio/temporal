@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -26,11 +28,13 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
@@ -1533,6 +1537,261 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 		}
 		return false
 	})
+}
+
+// TestScheduledWorkflow_ResetWithAdditionalCallback_HSMCallbacks verifies that after:
+//  1. A workflow is started via a schedule trigger (the schedule attaches a callback with
+//     the original start request ID),
+//  2. A second callback is manually attached to the running workflow (different request ID),
+//  3. The workflow is reset,
+//
+// ...both callbacks are preserved in the reset run with their original/distinct request IDs,
+// the schedule correctly records the completion (proving the original request ID survived the
+// reset), and the second Nexus callback is also delivered to its HTTP endpoint.
+func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflow_ResetWithAdditionalCallback_HSMCallbacks() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
+	s.runScheduledWorkflowResetWithAdditionalCallback(
+		"sched-test-reset-extra-cb-hsm",
+		"sched-test-reset-extra-cb-hsm-wf",
+		"sched-test-reset-extra-cb-hsm-wt",
+	)
+}
+
+// TestScheduledWorkflow_ResetWithAdditionalCallback_ChasmCallbacks is the same test using
+// the CHASM callback implementation (EnableCHASMCallbacks = true).
+func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflow_ResetWithAdditionalCallback_ChasmCallbacks() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	s.runScheduledWorkflowResetWithAdditionalCallback(
+		"sched-test-reset-extra-cb-chasm",
+		"sched-test-reset-extra-cb-chasm-wf",
+		"sched-test-reset-extra-cb-chasm-wt",
+	)
+}
+
+//  1. A schedule fires and starts a workflow, attaching the schedule's callback with
+//     request_id = original_start_request_id.
+//  2. A second Nexus callback is attached to the running workflow via a separate
+//     StartWorkflowExecution request (request_id = attachRequestId ≠ original_start_request_id).
+//  3. The workflow is reset. The WorkflowExecutionOptionsUpdated event (carrying the second
+//     callback) is reapplied to the reset run.
+//  4. After reset, DescribeWorkflowExecution shows 2 callbacks. WorkflowExtendedInfo confirms
+//     their request IDs are distinct: one tied to the start event, one to the options-update.
+//  5. The workflow is completed via signal.
+//  6. The schedule records the completion (original_start_request_id still matches the
+//     scheduler's BufferedStart), and the second callback is delivered to the HTTP endpoint.
+func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCallback(sid, wid, wt string) {
+	// Allow the manually-attached callback URL (httptest uses plain HTTP on 127.0.0.1).
+	s.OverrideDynamicConfig(
+		callbacks.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+
+	// HTTP completion server for the second (manually-attached) callback.
+	ch := &completionHandler{
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 1),
+		requestCompleteCh: make(chan error, 1),
+	}
+	defer func() {
+		close(ch.requestCh)
+		close(ch.requestCompleteCh)
+	}()
+	secondCallbackURL := func() string {
+		hh := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{Handler: ch})
+		srv := httptest.NewServer(hh)
+		s.T().Cleanup(func() { srv.Close() })
+		return srv.URL + "/callback"
+	}()
+
+	// Workflow blocks on a "complete" signal so we can reset it before it finishes.
+	s.worker.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		sigCh := workflow.GetSignalChannel(ctx, "complete")
+		var signal interface{}
+		sigCh.Receive(ctx, &signal)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := s.newContext()
+
+	// Step 1: create the schedule and trigger it immediately.
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(24 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		RequestId: uuid.NewString(),
+	})
+	s.NoError(err)
+	s.cleanup(sid)
+
+	// Wait for the workflow to appear as RUNNING in the schedule's visibility.
+	listEntry := s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.Info.RecentActions) >= 1 &&
+			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	})
+	a1 := listEntry.Info.RecentActions[0]
+	wfExec := &commonpb.WorkflowExecution{
+		WorkflowId: a1.StartWorkflowResult.WorkflowId,
+		RunId:      a1.StartWorkflowResult.RunId,
+	}
+
+	// Wait for the base run to complete a workflow task — this is our reset point.
+	s.WaitForHistoryEvents(`
+		1 WorkflowExecutionStarted
+		2 WorkflowTaskScheduled
+		3 WorkflowTaskStarted
+		4 WorkflowTaskCompleted`,
+		s.GetHistoryFunc(s.Namespace().String(), wfExec),
+		5*time.Second,
+		10*time.Millisecond,
+	)
+
+	// Step 2: attach a second Nexus callback to the running workflow.
+	// The USE_EXISTING conflict policy + AttachCompletionCallbacks makes the server
+	// reuse the existing run and append the callback, generating a
+	// WorkflowExecutionOptionsUpdated event with request_id = attachRequestId.
+	attachRequestId := uuid.NewString()
+	attachResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                attachRequestId,
+		Namespace:                s.Namespace().String(),
+		WorkflowId:               wfExec.WorkflowId, // The scheduler appends a time suffix to wid
+		WorkflowType:             &commonpb.WorkflowType{Name: wt},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
+		OnConflictOptions: &workflowpb.OnConflictOptions{
+			AttachRequestId:           true,
+			AttachCompletionCallbacks: true,
+		},
+		CompletionCallbacks: []*commonpb.Callback{
+			{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: secondCallbackURL,
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	s.False(attachResp.Started, "expected to attach to existing run, not start a new one")
+
+	// Wait for the WorkflowExecutionOptionsUpdated event to be persisted so that it
+	// will be reapplied by the reset.
+	s.WaitForHistoryEvents(`
+		1 WorkflowExecutionStarted
+		2 WorkflowTaskScheduled
+		3 WorkflowTaskStarted
+		4 WorkflowTaskCompleted
+		5 WorkflowExecutionOptionsUpdated`,
+		s.GetHistoryFunc(s.Namespace().String(), wfExec),
+		5*time.Second,
+		10*time.Millisecond,
+	)
+
+	// Step 3: reset the workflow to event 3 (WorkflowTaskStarted). The resetter
+	// reapplies events after the reset point, so WorkflowExecutionOptionsUpdated
+	// (event 5 in the base run) is reapplied to the reset run.
+	resetResp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.Namespace().String(),
+		WorkflowExecution:         wfExec,
+		Reason:                    "reset-with-additional-callback-test",
+		WorkflowTaskFinishEventId: 3,
+		RequestId:                 uuid.NewString(),
+	})
+	s.NoError(err)
+	resetRun := &commonpb.WorkflowExecution{
+		WorkflowId: wfExec.WorkflowId,
+		RunId:      resetResp.RunId,
+	}
+
+	// Step 4: verify the reset run has 2 callbacks with distinct request IDs.
+	//
+	// The schedule's callback has request_id = original_start_request_id (stored in
+	// executionInfo.CallbackRequestId and propagated by Rebuild). It appears in
+	// WorkflowExtendedInfo.RequestIdInfos as the key whose EventType ==
+	// WORKFLOW_EXECUTION_STARTED.
+	//
+	// The manually-attached callback has request_id = attachRequestId, which appears
+	// in RequestIdInfos as the key whose EventType ==
+	// WORKFLOW_EXECUTION_OPTIONS_UPDATED.
+	var startRequestID string
+	s.EventuallyWithT(func(col *assert.CollectT) {
+		descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: resetRun,
+		})
+		require.NoError(col, err)
+
+		// Both callbacks must be present.
+		require.Len(col, descResp.Callbacks, 2)
+
+		// Find request IDs from WorkflowExtendedInfo.
+		reqIDs := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
+
+		// attachRequestId must map to WORKFLOW_EXECUTION_OPTIONS_UPDATED.
+		attachInfo, ok := reqIDs[attachRequestId]
+		require.True(col, ok, "attachRequestId not found in RequestIdInfos")
+		require.Equal(col, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, attachInfo.GetEventType())
+
+		// There must also be a request ID for the original start event.
+		for reqID, info := range reqIDs {
+			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+				startRequestID = reqID
+				break
+			}
+		}
+		require.NotEmpty(col, startRequestID, "no request ID found for WorkflowExecutionStarted")
+		require.NotEqual(col, startRequestID, attachRequestId,
+			"schedule callback and manually-attached callback must have different request IDs")
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Step 5: signal the reset run to complete.
+	// Sending without a RunId targets the latest (reset) run.
+	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wfExec.WorkflowId,
+		},
+		SignalName: "complete",
+	})
+	s.NoError(err)
+
+	// Step 6a: the schedule must record the original action as COMPLETED, proving that
+	// the schedule's callback (with original_start_request_id) survived the reset and
+	// correctly matched the scheduler's BufferedStart.
+	s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
+		for _, action := range ent.Info.RecentActions {
+			if action.GetStartWorkflowResult().GetRunId() == wfExec.RunId {
+				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			}
+		}
+		return false
+	})
+
+	// Step 6b: the second (manually-attached) callback must be delivered to the HTTP server.
+	select {
+	case completion := <-ch.requestCh:
+		s.Equal(nexus.OperationStateSucceeded, completion.State)
+		ch.requestCompleteCh <- nil // acknowledge so the server handler can return
+	case <-time.After(10 * time.Second):
+		s.Fail("timeout waiting for second callback to be delivered")
+	}
 }
 
 // TestCreateScheduleAlreadyExists verifies that creating a schedule with the same ID
