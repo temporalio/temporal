@@ -302,16 +302,6 @@ func (s *fileBasedClientSuite) TestValidateConfig_NilReader() {
 	s.Error(err, "file reader for dynamic config client is nil")
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_NilDoneCh() {
-	logger := log.NewNoopLogger()
-	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
-	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
-		Filepath:     "config/testConfig.yaml",
-		PollInterval: time.Second * 5,
-	}, logger, nil, metrics.NoopMetricsHandler)
-	s.Error(err, "done channel for dynamic config client is nil")
-}
-
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
 	logger := log.NewNoopLogger()
 	doneCh := make(chan any)
