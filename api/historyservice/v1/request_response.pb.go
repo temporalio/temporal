@@ -195,7 +195,7 @@ type StartWorkflowExecutionRequest struct {
 	// After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
 	// subsequent workflow tasks.
 	InheritedAutoUpgradeInfo *v16.InheritedAutoUpgradeInfo `protobuf:"bytes,16,opt,name=inherited_auto_upgrade_info,json=inheritedAutoUpgradeInfo,proto3" json:"inherited_auto_upgrade_info,omitempty"`
-	// The target version that the previous run's SDK declined to upgrade to.
+	// The target version that the previous run implicitly declined to upgrade to.
 	// Computed at continue-as-new time from the previous run's last_notified_target_version
 	// (if set) or its existing declined value (CaN chain). For retries, passed through
 	// directly from the started event. Written onto the new run's
