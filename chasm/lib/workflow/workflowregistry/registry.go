@@ -47,7 +47,7 @@ func (r *Registry) CommandHandler(t enumspb.CommandType) (handler Handler, ok bo
 // Returns an [ErrDuplicateRegistration] if a handler for the given event is already registered.
 // All registration is expected to happen in a single thread on process initialization.
 func (r *Registry) RegisterEventDefinition(def EventDefinition) error {
-	if existing, ok := r.eventDefinitions[*def.Type().Enum()]; ok {
+	if existing, ok := r.eventDefinitions[def.Type()]; ok {
 		return fmt.Errorf("%w: event handler for %v: %v", ErrDuplicateRegistration, def.Type(), existing)
 	}
 	r.eventDefinitions[def.Type()] = def
