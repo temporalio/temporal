@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -71,6 +73,13 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		callbacks.AllowedAddresses.Key(): []any{map[string]any{
 			"Pattern": "*", "AllowInsecure": true,
 		}},
+		// Cap callback retry backoff to avoid long waits after failover.
+		callbacks.RetryPolicyMaximumInterval.Key(): 1 * time.Second,
+		// Set a short circuit breaker timeout so it recovers quickly from bursts of failures.
+		dynamicconfig.OutboundQueueCircuitBreakerSettings.Key(): dynamicconfig.CircuitBreakerSettings{
+			MaxRequests: 1,
+			Timeout:     1 * time.Second,
+		},
 	}
 	s.setupSuite()
 }
@@ -705,17 +714,17 @@ func (s *NexusStateReplicationSuite) waitCallback(
 	execution *commonpb.WorkflowExecution,
 	condition func(callback *workflowpb.CallbackInfo) bool,
 ) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, execution.WorkflowId, execution.RunId)
-		s.NoError(err)
-		s.Len(descResp.GetCallbacks(), 1)
-		return condition(descResp.GetCallbacks()[0])
+		require.NoError(t, err)
+		require.Len(t, descResp.GetCallbacks(), 1)
+		require.True(t, condition(descResp.GetCallbacks()[0]))
 	}, time.Second*20, time.Millisecond*100)
 }
 
 func (s *NexusStateReplicationSuite) completeNexusOperation(ctx context.Context, result any, callbackUrl, callbackToken string) {
 	completion := nexusrpc.CompleteOperationOptions{
-		Result: s.mustToPayload(result),
+		Result: testcore.MustToPayload(s.T(), result),
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
