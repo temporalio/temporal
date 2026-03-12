@@ -13,12 +13,12 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/chasm/lib/workflow/command"
+	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/proto"
@@ -262,12 +262,12 @@ func (ch *commandHandler) handleScheduleCommand(
 		scheduledTime = timestamppb.Now()
 	}
 
-	eventToken, err := proto.Marshal(&tokenspb.HistoryEventRef{
-		EventId:      event.GetEventId(),
-		EventBatchId: opts.WorkflowTaskCompletedEventID,
+	parentInfo, err := proto.Marshal(&workflowpb.NexusOperationParentInfo{
+		ScheduledEventId:      event.GetEventId(),
+		ScheduledEventBatchId: opts.WorkflowTaskCompletedEventID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal scheduled event token: %w", err)
+		return fmt.Errorf("failed to marshal parent info: %w", err)
 	}
 
 	op := nexusoperation.NewOperation(&nexusoperationpb.OperationState{
@@ -280,7 +280,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		StartToCloseTimeout:    attrs.StartToCloseTimeout,
 		ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
 		RequestId:              requestID,
-		ScheduledEventToken:    eventToken,
+		ParentInfo:             parentInfo,
 		Attempt:                1,
 	})
 
@@ -350,7 +350,13 @@ func (ch *commandHandler) handleCancelCommand(
 	}
 
 	op := operationField.Get(chasmCtx)
-	err := op.Cancel(chasmCtx, event.GetEventId())
+	cancelParentInfo, err := proto.Marshal(&workflowpb.NexusCancellationParentInfo{
+		RequestedEventId: event.GetEventId(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal cancellation parent info: %w", err)
+	}
+	err = op.Cancel(chasmCtx, cancelParentInfo)
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,

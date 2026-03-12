@@ -29,7 +29,7 @@ func newTestOperation() *Operation {
 			ScheduledTime:          timestamppb.New(defaultTime),
 			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 			RequestId:              "request-id",
-			ScheduledEventToken:    []byte("event-token"),
+			ParentInfo:             []byte("parent-info"),
 			Attempt:                0,
 		},
 	}

@@ -63,7 +63,8 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 
 // Cancel requests cancellation of the operation. It creates a Cancellation child component and, if the
 // operation has already started, schedules the cancellation request to be sent to the Nexus endpoint.
-func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) error {
+// parentInfo is opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
+func (o *Operation) Cancel(ctx chasm.MutableContext, parentInfo []byte) error {
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}
@@ -72,7 +73,7 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) err
 	}
 
 	cancellation := newCancellation(&nexusoperationpb.CancellationState{
-		RequestedEventId: requestedEventID,
+		ParentInfo: parentInfo,
 	})
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
 
