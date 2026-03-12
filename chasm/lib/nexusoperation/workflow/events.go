@@ -15,31 +15,31 @@ func registerEvents(
 	config *nexusoperation.Config,
 	nexusProcessor *chasm.NexusEndpointProcessor,
 ) error {
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, newScheduledEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newScheduledEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, newCancelRequestedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newCancelRequestedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, newCancelRequestCompletedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newCancelRequestCompletedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, newCancelRequestFailedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newCancelRequestFailedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, newStartedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newStartedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, newCompletedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newCompletedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, newFailedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newFailedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, newCanceledEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(newCanceledEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	return registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, newTimedOutEventDefinition(config, nexusProcessor))
+	return registry.RegisterEventDefinition(newTimedOutEventDefinition(config, nexusProcessor))
 }
 
 // TODO: Implement these event definitions.

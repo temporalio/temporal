@@ -10,17 +10,19 @@ import (
 // ErrDuplicateRegistration is returned by a [Registry] when it detects duplicate registration.
 var ErrDuplicateRegistration = errors.New("duplicate registration")
 
-// Registry maintains a mapping of command type to [Handler].
+// Registry maintains a the following mappings for a workflow:
+// CommandType -> Handler
+// EventType -> EventDefinition
 type Registry struct {
-	commandHandlers map[enumspb.CommandType]Handler
-	eventHandlers   map[enumspb.EventType]EventDefinition
+	commandHandlers  map[enumspb.CommandType]Handler
+	eventDefinitions map[enumspb.EventType]EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
 func NewRegistry() *Registry {
 	return &Registry{
-		commandHandlers: make(map[enumspb.CommandType]Handler),
-		eventHandlers:   make(map[enumspb.EventType]EventDefinition),
+		commandHandlers:  make(map[enumspb.CommandType]Handler),
+		eventDefinitions: make(map[enumspb.EventType]EventDefinition),
 	}
 }
 
@@ -44,16 +46,16 @@ func (r *Registry) CommandHandler(t enumspb.CommandType) (handler Handler, ok bo
 // RegisterEventDefinition registers a [EventDefinition] for a given event type.
 // Returns an [ErrDuplicateRegistration] if a handler for the given event is already registered.
 // All registration is expected to happen in a single thread on process initialization.
-func (r *Registry) RegisterEventDefinition(t enumspb.EventType, handler EventDefinition) error {
-	if existing, ok := r.eventHandlers[t]; ok {
-		return fmt.Errorf("%w: event handler for %v: %v", ErrDuplicateRegistration, t, existing)
+func (r *Registry) RegisterEventDefinition(def EventDefinition) error {
+	if existing, ok := r.eventDefinitions[*def.Type().Enum()]; ok {
+		return fmt.Errorf("%w: event handler for %v: %v", ErrDuplicateRegistration, def.Type(), existing)
 	}
-	r.eventHandlers[t] = handler
+	r.eventDefinitions[def.Type()] = def
 	return nil
 }
 
-// EventDefinition returns a [workflow.EventDefinition] for a given event type and a boolean indicating whether it was found.
+// EventDefinition returns a [EventDefinition] for a given event type and a boolean indicating whether it was found.
 func (r *Registry) EventDefinition(t enumspb.EventType) (EventDefinition, bool) {
-	def, ok := r.eventHandlers[t]
+	def, ok := r.eventDefinitions[t]
 	return def, ok
 }
