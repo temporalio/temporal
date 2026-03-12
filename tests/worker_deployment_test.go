@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2071,8 +2072,13 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	tv := testvars.New(s)
 
 	tqs := 10
+	var wg sync.WaitGroup
 	for i := range tqs {
-		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
+		}(i)
 	}
 
 	// set this version as current version
@@ -2082,6 +2088,9 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	for i := range tqs {
 		s.verifyTaskQueueVersioningInfo(ctx, tv.WithTaskQueueNumber(i).TaskQueue(), tv.DeploymentVersionString(), "", 0)
 	}
+
+	// wait for all goroutines to finish before the test exits, to avoid "Fail in goroutine after test completed" panics
+	wg.Wait()
 }
 
 func (s *WorkerDeploymentSuite) TestSetRampingVersion_Concurrent_DifferentVersions_NoUnexpectedErrors() {
