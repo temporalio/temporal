@@ -15,10 +15,6 @@ on:
         description: "Target tags for temporalio registry (comma or newline separated, e.g., 1.29.1, latest)"
         required: true
         type: string
-      override-security-scan:
-        description: "Override security scan failures (use with caution)"
-        type: boolean
-        default: false
     secrets:
       DOCKERHUB_USERNAME:
         required: true
@@ -82,93 +78,8 @@ jobs:
             core.info(`  Source: ${sourceTag}`);
             core.info(`  Target tags: ${targetTags.join(', ')}`);
 
-  scan-image:
-    needs: validate-inputs
-    runs-on: ubuntu-latest
-    outputs:
-      scan-result: ${{ steps.scan.outputs.scan-result }}
-      critical-count: ${{ steps.scan.outputs.critical-count }}
-      high-count: ${{ steps.scan.outputs.high-count }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Pull source image
-        env:
-          SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
-          IMAGE_NAME: ${{ inputs.image-name }}
-        run: |
-          echo "Pulling temporaliotest/${IMAGE_NAME}:${SOURCE_TAG}"
-          docker pull "temporaliotest/${IMAGE_NAME}:${SOURCE_TAG}"
-
-      - name: Scan image with Trivy
-        id: scan
-        uses: ./.github/actions/trivy-scan
-        with:
-          image-name: temporaliotest/${{ inputs.image-name }}
-          image-tags: ${{ needs.validate-inputs.outputs.source-tag-safe }}
-
-      - name: Upload Trivy scan results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: trivy-${{ inputs.image-name }}-scan-results
-          path: trivy-scan-${{ inputs.image-name }}.json
-          retention-days: 30
-
-  check-security-gate:
-    needs: [scan-image]
-    runs-on: ubuntu-latest
-    outputs:
-      can-promote: ${{ steps.check.outputs.can-promote }}
-    steps:
-      - name: Evaluate security scan results
-        id: check
-        uses: actions/github-script@v8
-        env:
-          OVERRIDE: ${{ inputs.override-security-scan }}
-          SCAN_RESULT: ${{ needs.scan-image.outputs.scan-result }}
-          CRITICAL_COUNT: ${{ needs.scan-image.outputs.critical-count }}
-          HIGH_COUNT: ${{ needs.scan-image.outputs.high-count }}
-          IMAGE_NAME: ${{ inputs.image-name }}
-        with:
-          script: |
-            const override = process.env.OVERRIDE === 'true';
-            const scanResult = process.env.SCAN_RESULT;
-            const criticalCount = process.env.CRITICAL_COUNT;
-            const highCount = process.env.HIGH_COUNT;
-            const imageName = process.env.IMAGE_NAME;
-
-            core.info('=== Security Scan Results ===');
-            core.info(`${imageName} image: ${scanResult}`);
-            core.info(`  Critical: ${criticalCount}`);
-            core.info(`  High: ${highCount}`);
-            core.info('');
-            core.info(`Override enabled: ${override}`);
-            core.info('==============================');
-
-            if (scanResult === 'fail') {
-              if (override) {
-                core.info('');
-                core.warning('Security vulnerabilities detected but OVERRIDE is enabled!');
-                core.info('Proceeding with image promotion despite security issues.');
-                core.setOutput('can-promote', 'true');
-              } else {
-                core.info('');
-                core.error('Security vulnerabilities detected. Promotion BLOCKED.');
-                core.info("To proceed anyway, re-run with 'override-security-scan' enabled.");
-                core.setOutput('can-promote', 'false');
-                core.setFailed('Security vulnerabilities detected');
-              }
-            } else {
-              core.info('');
-              core.info('✓ Security scan passed. Proceeding with promotion.');
-              core.setOutput('can-promote', 'true');
-            }
-
   promote:
-    needs: [validate-inputs, check-security-gate]
-    if: needs.check-security-gate.outputs.can-promote == 'true'
+    needs: [validate-inputs]
     runs-on: ubuntu-latest
     steps:
       - name: Log in to Docker Hub

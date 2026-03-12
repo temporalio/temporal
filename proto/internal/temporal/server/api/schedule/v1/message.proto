@@ -78,6 +78,8 @@ message InternalState {
     int64 conflict_token = 7;
 
     bool need_refresh = 9;
+
+    bool pending_migration = 11;
 }
 
 message StartScheduleArgs {

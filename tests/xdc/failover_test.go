@@ -2347,8 +2347,10 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 
 	s.NoError(err)
@@ -2488,8 +2490,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
@@ -2595,8 +2599,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
