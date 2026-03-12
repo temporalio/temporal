@@ -73,11 +73,13 @@ func NewClientWithParams(clientD GcloudStorageClient) (Client, error) {
 func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) (err error) {
 	bucket := s.client.Bucket(URI.Hostname())
 	writer := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewWriter(ctx)
+	defer func() {
+		closeErr := writer.Close()
+		if err == nil {
+			err = closeErr
+		}
+	}()
 	_, err = io.Copy(writer, bytes.NewReader(file))
-	if err == nil {
-		err = writer.Close()
-	}
-
 	return err
 }
 
