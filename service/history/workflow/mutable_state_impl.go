@@ -2934,10 +2934,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	// If the workflow is initiated by CaN/retry and inherited a pinned version
 	// (i.e., the SDK declined to upgrade), set the suppressed target version from
-	// the previous run's last notified target version.
-	if event.GetContinuedExecutionRunId() != "" && event.GetInheritedPinnedVersion() != nil {
+	// the previous run's last notified target version. Only set when the previous
+	// run was actually signaled (non-nil wrapper).
+	if event.GetContinuedExecutionRunId() != "" && event.GetInheritedPinnedVersion() != nil &&
+		event.GetLastNotifiedTargetVersion() != nil {
 		ms.executionInfo.NotificationSuppressedTargetVersion = &persistencespb.NotificationSuppressedTargetVersion{
-			Version: event.GetLastNotifiedTargetVersion(),
+			Version: event.GetLastNotifiedTargetVersion().GetDeploymentVersion(),
 		}
 	}
 

@@ -300,7 +300,7 @@ message WorkflowExecutionInfo {
     // to true on a workflow task started event. Updated on each workflow task start,
     // set only when the server decides to set the targetDeploymentVersionChanged flag
     // to true. Also read during continue-as-new/retry to pass to the new run.
-    temporal.api.deployment.v1.WorkerDeploymentVersion last_notified_target_version = 113;
+    temporal.api.history.v1.LastNotifiedTargetVersion last_notified_target_version = 113;
 
     // The target version for which setting the targetDeploymentVersionChanged flag
     // should be suppressed. Set to the previous run's last_notified_target_version

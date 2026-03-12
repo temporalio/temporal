@@ -515,7 +515,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		default:
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
-			m.ms.executionInfo.LastNotifiedTargetVersion = targetDeploymentVersion
+			m.ms.executionInfo.LastNotifiedTargetVersion = &historypb.LastNotifiedTargetVersion{
+				DeploymentVersion: targetDeploymentVersion,
+			}
 			m.ms.executionInfo.NotificationSuppressedTargetVersion = nil
 		}
 	}

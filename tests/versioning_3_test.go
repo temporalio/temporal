@@ -6223,6 +6223,101 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 	s.True(foundWFTStarted, "should have found at least one WFT started event in retry run")
 }
 
+// TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnversioned verifies that when a
+// pinned workflow does CaN without ever being signaled about a target change
+// (LastNotifiedTargetVersion wrapper is nil), the new run's
+// NotificationSuppressedTargetVersion is nil. When the target later becomes
+// unversioned (nil), the new run correctly receives
+// targetWorkerDeploymentVersionChanged=true.
+//
+// This specifically tests the LastNotifiedTargetVersion wrapper message semantics:
+// nil wrapper means "never signaled" (not "signaled about unversioned target").
+//
+// Flow:
+// 1. Start pinned workflow on v1, v1 is current
+// 2. CaN without AU (no target change, no signal fires)
+// 3. Unset current deployment → target becomes nil
+// 4. New run's WFT: targetDeploymentVersionChanged=true (nil target != v1)
+func (s *Versioning3Suite) TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnversioned() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+
+	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv1, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Wait for v1 to be registered, then set it as current
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf)
+	s.setCurrentDeployment(tv1)
+
+	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
+	runID := s.startWorkflow(tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	// Trigger a WFT and CaN without any target change — no signal fires.
+	// This means LastNotifiedTargetVersion is never set (nil wrapper).
+	s.triggerNormalWFT(ctx, tv1, execution)
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			// Verify no signal — target hasn't changed.
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					s.False(event.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+						"no target change happened — signal should be false")
+				}
+			}
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType: tv1.WorkflowType(),
+								TaskQueue:    tv1.TaskQueue(),
+								Input:        tv1.Any().Payloads(),
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	// Unset the current deployment — target becomes nil (unversioned).
+	s.unsetCurrentDeployment(tv1)
+
+	// New run starts on v1 (pinned, inherited). Since LastNotifiedTargetVersion
+	// was nil (wrapper absent) on the previous run, NotificationSuppressedTargetVersion
+	// on this run is nil. Target=nil != effective=v1 → signal fires.
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotEqual(execution.RunId, task.WorkflowExecution.RunId,
+				"CaN should have created a new run with a different run ID")
+
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"target changed to unversioned and previous run was never signaled — should signal true")
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
+}
+
 // TestPinnedCaN_UpgradeToUnversioned verifies that a pinned workflow can CaN
 // with AUTO_UPGRADE initial behavior when the current deployment is unset
 // (unversioned target). Matching sends nil as the target version, and history
