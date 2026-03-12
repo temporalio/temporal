@@ -2563,10 +2563,7 @@ func (n *Node) Terminate(
 }
 
 // SetDeleteAfterClose suppresses the close visibility task when an execution is being
-// terminated as part of a delete operation. Must be called before Terminate.
-//
-// This is for CHASM framework use only and should not be called by component implementations.
-// Like terminated, this is in-memory only and only needed for the current transaction.
+// terminated as part of a delete operation. Must be called before a [Terminate] call, like in DeleteExecution.
 func (n *Node) SetDeleteAfterClose(deleteAfterClose bool) {
 	n.deleteAfterClose = deleteAfterClose
 }

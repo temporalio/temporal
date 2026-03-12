@@ -450,6 +450,13 @@ func (e *ChasmEngine) DeleteExecution(
 	}()
 
 	mutableState := executionLease.GetMutableState()
+	we := mutableState.GetWorkflowKey()
+
+	log.With(shardContext.GetLogger(),
+		tag.WorkflowNamespaceID(ref.NamespaceID),
+		tag.WorkflowID(we.WorkflowID),
+		tag.WorkflowRunID(we.RunID),
+	).Info("Deleting CHASM execution")
 
 	if mutableState.IsWorkflowExecutionRunning() {
 		ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(ref.NamespaceID))
@@ -483,7 +490,6 @@ func (e *ChasmEngine) DeleteExecution(
 	}
 
 	// Execution is closed or namespace is standby: add delete task directly.
-	we := mutableState.GetWorkflowKey()
 	return deletemanager.AddDeleteExecutionTask(
 		ctx,
 		shardContext,
