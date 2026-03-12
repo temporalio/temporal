@@ -13,6 +13,7 @@ import (
 type WorkerMetricsConfig struct {
 	EnablePluginMetrics            dynamicconfig.BoolPropertyFn
 	EnablePollerAutoscalingMetrics dynamicconfig.BoolPropertyFn
+	BreakdownMetricsByTaskQueue    dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 }
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
@@ -61,7 +62,9 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 
 	recordAutoscaling := func(taskType enumspb.TaskQueueType) {
 		tq := family.TaskQueue(taskType)
-		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, false)
+		breakdownByTQ := e.config.BreakdownMetricsByTaskQueue != nil &&
+			e.config.BreakdownMetricsByTaskQueue(nsName.String(), hb.GetTaskQueue(), taskType)
+		handler := metrics.GetPerTaskQueueScope(e.handler, nsName.String(), tq, breakdownByTQ)
 		metrics.PollerAutoscalingHeartbeatCount.With(handler).Record(1)
 	}
 
