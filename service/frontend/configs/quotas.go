@@ -35,22 +35,26 @@ var (
 	// long-running. The QueryWorkflow and UpdateWorkflowExecution methods are long-running because
 	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
+		// These methods here are long-running because they block until there is a task available.
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":               1,
-		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
-		// Long-running if certain request parameters are set
+
+		// These methods are long-running because they block until a background WFT is complete.
+		"/temporal.api.workflowservice.v1.WorkflowService/QueryWorkflow":           1,
+		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkflowExecution": 1,
+
+		// These methods are blocking only if WaitNewEvent/LongPollToken are set, otherwise they are not.
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution": 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistory":     1,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeActivityExecution":       1,
 
-		// potentially long-running, depending on the operations
+		// Potentially long-running, depending on the operations.
 		"/temporal.api.workflowservice.v1.WorkflowService/ExecuteMultiOperation": 1,
 
 		// Dispatching a Nexus task is a potentially long running RPC, it's classified in the same bucket as QueryWorkflow.
