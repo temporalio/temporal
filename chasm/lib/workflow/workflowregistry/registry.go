@@ -41,10 +41,10 @@ func (r *Registry) CommandHandler(t enumspb.CommandType) (handler Handler, ok bo
 	return
 }
 
-// RegisterEvent registers a [EventDefinition] for a given event type.
+// RegisterEventDefinition registers a [EventDefinition] for a given event type.
 // Returns an [ErrDuplicateRegistration] if a handler for the given event is already registered.
 // All registration is expected to happen in a single thread on process initialization.
-func (r *Registry) RegisterEvent(t enumspb.EventType, handler EventDefinition) error {
+func (r *Registry) RegisterEventDefinition(t enumspb.EventType, handler EventDefinition) error {
 	if existing, ok := r.eventHandlers[t]; ok {
 		return fmt.Errorf("%w: event handler for %v: %v", ErrDuplicateRegistration, t, existing)
 	}
@@ -52,8 +52,8 @@ func (r *Registry) RegisterEvent(t enumspb.EventType, handler EventDefinition) e
 	return nil
 }
 
-// EventHandler returns a [workflow.EventDefinition] for a given event type and a boolean indicating whether it was found.
-func (r *Registry) EventHandler(t enumspb.EventType) (handler EventDefinition, ok bool) {
-	handler, ok = r.eventHandlers[t]
-	return
+// EventDefinition returns a [workflow.EventDefinition] for a given event type and a boolean indicating whether it was found.
+func (r *Registry) EventDefinition(t enumspb.EventType) (EventDefinition, bool) {
+	def, ok := r.eventHandlers[t]
+	return def, ok
 }

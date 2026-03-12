@@ -15,31 +15,31 @@ func registerEvents(
 	config *nexusoperation.Config,
 	nexusProcessor *chasm.NexusEndpointProcessor,
 ) error {
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, newScheduledEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, newScheduledEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, newCancelRequestedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, newCancelRequestedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, newCancelRequestCompletedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, newCancelRequestCompletedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, newCancelRequestFailedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, newCancelRequestFailedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, newStartedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, newStartedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, newCompletedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, newCompletedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, newFailedEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, newFailedEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, newCanceledEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, newCanceledEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
-	if err := registry.RegisterEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, newTimedOutEventDefinition(config, nexusProcessor)); err != nil {
+	if err := registry.RegisterEventDefinition(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, newTimedOutEventDefinition(config, nexusProcessor)); err != nil {
 		return err
 	}
 	return nil
@@ -83,7 +83,7 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 
 func (d ScheduledEventDefinition) CherryPick(ctx chasm.Context, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return workflowregistry.ErrNotCherryPickable
+	return workflowregistry.ErrEventNotCherryPickable
 }
 
 type CancelRequestedEventDefinition struct {
@@ -117,7 +117,7 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *chas
 
 func (d CancelRequestedEventDefinition) CherryPick(ctx chasm.Context, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return workflowregistry.ErrNotCherryPickable
+	return workflowregistry.ErrEventNotCherryPickable
 }
 
 type CancelRequestCompletedEventDefinition struct {
@@ -163,7 +163,7 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 
 func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.Context, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return workflowregistry.ErrNotCherryPickable
+	return workflowregistry.ErrEventNotCherryPickable
 }
 
 type CancelRequestFailedEventDefinition struct {
@@ -210,7 +210,7 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 
 func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.Context, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return workflowregistry.ErrNotCherryPickable
+	return workflowregistry.ErrEventNotCherryPickable
 }
 
 type StartedEventDefinition struct {

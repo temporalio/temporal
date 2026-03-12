@@ -9,8 +9,8 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
 
-// ErrNotCherryPickable should be returned by CherryPick if an event should not be cherry picked for whatever reason.
-var ErrNotCherryPickable = errors.New("event not cherry pickable")
+// ErrEventNotCherryPickable should be returned by CherryPick if an event should not be cherry picked for whatever reason.
+var ErrEventNotCherryPickable = errors.New("event not cherry pickable")
 
 // EventDefinition is a definition for a history event for a given event type.
 type EventDefinition interface {
@@ -22,7 +22,7 @@ type EventDefinition interface {
 	// CherryPick (a.k.a "reapply") an event from a different history branch.
 	// Implementations should apply the event to the machine state and return nil in case the event is cherry-pickable.
 	// Command events should never be cherry picked as we rely on the workflow to reschedule them.
-	// Return [ErrNotCherryPickable] to skip cherry picking. Any other error is considered fatal and will abort the
+	// Return [ErrEventNotCherryPickable] to skip cherry picking. Any other error is considered fatal and will abort the
 	// cherry pick process.
 	CherryPick(ctx chasm.Context, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
 }
