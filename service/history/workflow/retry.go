@@ -317,13 +317,13 @@ func SetupNewWorkflowForRetryOrCron(
 		ContinuedFailure:       failure,
 		ContinueAsNewInitiator: initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff: previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
-		Attempt:                  attempt,
-		SourceVersionStamp:       sourceVersionStamp,
-		RootExecutionInfo:        rootInfo,
-		InheritedBuildId:         startAttr.InheritedBuildId,
-		InheritedPinnedVersion:   inheritedPinnedVersion,
-		InheritedAutoUpgradeInfo: inheritedAutoUpgradeInfo,
+		FirstWorkflowTaskBackoff:  previousMutableState.ContinueAsNewMinBackoff(durationpb.New(backoffInterval)),
+		Attempt:                   attempt,
+		SourceVersionStamp:        sourceVersionStamp,
+		RootExecutionInfo:         rootInfo,
+		InheritedBuildId:          startAttr.InheritedBuildId,
+		InheritedPinnedVersion:    inheritedPinnedVersion,
+		InheritedAutoUpgradeInfo:  inheritedAutoUpgradeInfo,
 		LastNotifiedTargetVersion: previousExecutionInfo.GetNotificationSuppressedTargetVersion().GetVersion(),
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)

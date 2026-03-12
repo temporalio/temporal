@@ -2599,13 +2599,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinuedFailure:       command.GetFailure(),
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff:                       previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
-		SourceVersionStamp:                             sourceVersionStamp,
-		RootExecutionInfo:                              rootExecutionInfo,
-		InheritedBuildId:                               inheritedBuildId,
-		InheritedPinnedVersion:                         inheritedPinnedVersion,
-		VersioningOverride:                             pinnedOverride,
-		LastNotifiedTargetVersion:                      previousExecutionInfo.LastNotifiedTargetVersion,
+		FirstWorkflowTaskBackoff:  previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:        sourceVersionStamp,
+		RootExecutionInfo:         rootExecutionInfo,
+		InheritedBuildId:          inheritedBuildId,
+		InheritedPinnedVersion:    inheritedPinnedVersion,
+		VersioningOverride:        pinnedOverride,
+		LastNotifiedTargetVersion: previousExecutionInfo.LastNotifiedTargetVersion,
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
