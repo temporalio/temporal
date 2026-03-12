@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -864,5 +865,48 @@ func AdminReplicateWorkflow(
 
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintln(c.App.Writer, "Replication tasks generated successfully.")
+	return nil
+}
+
+var schedulerTargets = map[string]adminservice.MigrateScheduleRequest_SchedulerTarget{
+	"chasm":    adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+	"workflow": adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+}
+
+// AdminMigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM).
+func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
+	ns, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	scheduleID, err := getRequiredOption(c, FlagScheduleID)
+	if err != nil {
+		return err
+	}
+	targetStr, err := getRequiredOption(c, FlagTarget)
+	if err != nil {
+		return err
+	}
+	target, ok := schedulerTargets[strings.ToLower(targetStr)]
+	if !ok {
+		return fmt.Errorf("invalid target %q, valid values are: chasm, workflow", targetStr)
+	}
+
+	adminClient := clientFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = adminClient.MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  ns,
+		ScheduleId: scheduleID,
+		Target:     target,
+		Identity:   getCurrentUserFromEnv(),
+		RequestId:  uuid.NewString(),
+	})
+	if err != nil {
+		return fmt.Errorf("unable to migrate schedule: %w", err)
+	}
+
+	fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
 	return nil
 }
