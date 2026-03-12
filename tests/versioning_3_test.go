@@ -894,7 +894,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 		})
 
 	updateResult := <-updateResultCh
-	s.EqualValues("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
+	s.Equal("success-result-of-"+tv2.UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
 
 	// Verify that events from the speculative task are written to the history since the update was accepted
 	events := s.GetHistory(s.Namespace().String(), execution)
@@ -915,7 +915,7 @@ func (s *Versioning3Suite) TestUnpinnedWorkflow_SuccessfulUpdate_TransitionsToNe
 		Namespace: s.Namespace().String(),
 		Execution: execution,
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(describeCall)
 
 	// Since the poller accepted the update, the Worker Deployment Version that completed the last workflow task
@@ -1325,8 +1325,8 @@ func (s *Versioning3Suite) testUnpinnedWorkflowWithRamp(toUnversioned bool) {
 	}
 
 	// both versions should've got executions
-	s.Greater(counter["v1"], 0)
-	s.Greater(counter["v2"], 0)
+	s.Positive(counter["v1"])
+	s.Positive(counter["v2"])
 	s.Equal(numTests, counter["v1"]+counter["v2"])
 }
 
@@ -4263,8 +4263,8 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			Query:     query,
 		})
 		a := assert.New(t)
-		a.Nil(err)
-		a.Greater(len(resp.GetExecutions()), 0)
+		a.NoError(err)
+		a.NotEmpty(resp.GetExecutions())
 		if a.NotEmpty(resp.GetExecutions()) {
 			w := resp.GetExecutions()[0]
 			if behavior == vbPinned {
