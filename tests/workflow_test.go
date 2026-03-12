@@ -1276,7 +1276,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.EqualValues(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
-		s.Logger.Info("Activity ID", tag.WorkflowActivityID(task.ActivityId))
+		s.Logger.Info("Activity ID", tag.ActivityID(task.ActivityId))
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
