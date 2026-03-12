@@ -3031,7 +3031,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	root.setValueState(valueStateSynced)
 	expectExecute(nil)
 	expectValidate(true, nil)
-	executed, err := root.ExecutePureTask(ctx, metrics.NoopMetricsHandler, taskAttributes, pureTask)
+	executed, err := root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.True(executed)
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
@@ -3042,14 +3042,14 @@ func (s *nodeSuite) TestExecutePureTask() {
 	root.setValueState(valueStateSynced)
 	expectExecute(expectedErr)
 	expectValidate(true, nil)
-	_, err = root.ExecutePureTask(ctx, metrics.NoopMetricsHandler, taskAttributes, pureTask)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
 
 	// Fail task validation (no execution occurs).
 	root.setValueState(valueStateSynced)
 	expectValidate(false, nil)
-	executed, err = root.ExecutePureTask(ctx, metrics.NoopMetricsHandler, taskAttributes, pureTask)
+	executed, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.False(executed)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
@@ -3057,7 +3057,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	// Error during task validation (no execution occurs).
 	root.setValueState(valueStateSynced)
 	expectValidate(false, expectedErr)
-	_, err = root.ExecutePureTask(ctx, metrics.NoopMetricsHandler, taskAttributes, pureTask)
+	_, err = root.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 }
