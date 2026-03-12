@@ -74,7 +74,6 @@ service MatchingService {
     }
 
     // CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
-    // Internal API used when fanning out from root.
     rpc CancelOutstandingWorkerPollsPartition (CancelOutstandingWorkerPollsPartitionRequest) returns (CancelOutstandingWorkerPollsPartitionResponse) {
     }
 

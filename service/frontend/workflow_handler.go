@@ -2850,7 +2850,7 @@ func (wh *WorkflowHandler) ShutdownWorker(ctx context.Context, request *workflow
 			if wh.config.EnableMatchingFanOutForPollCancellation(request.GetNamespace()) {
 				wh.cancelOutstandingWorkerPollsMatchingFanOut(ctx, namespaceID.String(), request)
 			} else {
-				wh.cancelOutstandingWorkerPollsFrontendFanOut(ctx, namespaceID.String(), request)
+				wh.cancelOutstandingWorkerPolls(ctx, namespaceID.String(), request)
 			}
 		})
 	}
@@ -2957,9 +2957,9 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsMatchingFanOut(
 	}
 }
 
-// cancelOutstandingWorkerPollsFrontendFanOut iterates partitions and sends each to matching; matching handles locally.
-// Best-effort: errors are logged but don't fail shutdown.
-func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanOut(
+// cancelOutstandingWorkerPolls fans out poll cancellation to all partitions of the task queue.
+// This is a best-effort operation - errors are logged but don't fail the shutdown.
+func (wh *WorkflowHandler) cancelOutstandingWorkerPolls(
 	ctx context.Context,
 	namespaceID string,
 	request *workflowservice.ShutdownWorkerRequest,
@@ -2969,6 +2969,8 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanOut(
 	if workerInstanceKey == "" || taskQueueName == "" {
 		return
 	}
+
+	namespaceName := request.GetNamespace()
 
 	taskTypes := request.GetTaskQueueTypes()
 	if len(taskTypes) == 0 {
@@ -2986,17 +2988,20 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanOut(
 		return
 	}
 
-	nsName := request.GetNamespace()
-
+	var waitGroup sync.WaitGroup
 	var totalCancelled atomic.Int32
-	var wg sync.WaitGroup
+	var failedPartitions atomic.Int32
+
 	for _, taskType := range taskTypes {
-		numPartitions := max(1, wh.config.NumTaskQueueReadPartitions(nsName, taskQueueName, taskType))
-		for partitionID := 0; partitionID < numPartitions; partitionID++ {
-			taskType := taskType
-			partitionID := partitionID
-			wg.Go(func() {
-				partition := tqFamily.TaskQueue(taskType).NormalPartition(partitionID)
+		numPartitions := wh.config.NumTaskQueueReadPartitions(namespaceName, taskQueueName, taskType)
+		if numPartitions < 1 {
+			numPartitions = 1
+		}
+
+		tq := tqFamily.TaskQueue(taskType)
+		for partitionID := range numPartitions {
+			partition := tq.NormalPartition(partitionID)
+			waitGroup.Go(func() {
 				resp, err := wh.matchingClient.CancelOutstandingWorkerPolls(ctx, &matchingservice.CancelOutstandingWorkerPollsRequest{
 					NamespaceId: namespaceID,
 					TaskQueue: &taskqueuepb.TaskQueue{
@@ -3008,6 +3013,7 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanOut(
 					WorkerIdentity:    request.GetIdentity(),
 				})
 				if err != nil {
+					failedPartitions.Add(1)
 					wh.logger.Warn("Failed to cancel outstanding polls for worker.",
 						tag.WorkflowTaskQueueName(partition.RpcName()),
 						tag.String("worker-instance-key", workerInstanceKey),
@@ -3018,9 +3024,9 @@ func (wh *WorkflowHandler) cancelOutstandingWorkerPollsFrontendFanOut(
 			})
 		}
 	}
-	wg.Wait()
+	waitGroup.Wait()
 
-	if totalCancelled.Load() > 0 {
+	if totalCancelled.Load() > 0 || failedPartitions.Load() > 0 {
 		wh.logger.Info("Cancelled outstanding polls for worker shutdown.",
 			tag.String("worker-instance-key", workerInstanceKey),
 			tag.NewInt32("cancelled-count", totalCancelled.Load()))

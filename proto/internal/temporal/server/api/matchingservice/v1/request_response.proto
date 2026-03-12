@@ -260,7 +260,6 @@ message CancelOutstandingWorkerPollsResponse {
 }
 
 // CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
-// Internal API used by matching when fanning out from root.
 message CancelOutstandingWorkerPollsPartitionRequest {
     string namespace_id = 1;
     temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;

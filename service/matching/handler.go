@@ -310,7 +310,6 @@ func (h *Handler) CancelOutstandingWorkerPolls(ctx context.Context,
 }
 
 // CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
-// Internal API used when fanning out from root.
 func (h *Handler) CancelOutstandingWorkerPollsPartition(ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest) (_ *matchingservice.CancelOutstandingWorkerPollsPartitionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)

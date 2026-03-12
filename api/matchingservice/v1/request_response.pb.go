@@ -1655,7 +1655,6 @@ func (x *CancelOutstandingWorkerPollsResponse) GetCancelledCount() int32 {
 }
 
 // CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
-// Internal API used by matching when fanning out from root.
 type CancelOutstandingWorkerPollsPartitionRequest struct {
 	state              protoimpl.MessageState  `protogen:"open.v1"`
 	NamespaceId        string                  `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`

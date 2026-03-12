@@ -106,7 +106,6 @@ type MatchingServiceClient interface {
 	// are issued after calling this RPC, otherwise those polls will not be cancelled.
 	CancelOutstandingWorkerPolls(ctx context.Context, in *CancelOutstandingWorkerPollsRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsResponse, error)
 	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
-	// Internal API used when fanning out from root.
 	CancelOutstandingWorkerPollsPartition(ctx context.Context, in *CancelOutstandingWorkerPollsPartitionRequest, opts ...grpc.CallOption) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
@@ -672,7 +671,6 @@ type MatchingServiceServer interface {
 	// are issued after calling this RPC, otherwise those polls will not be cancelled.
 	CancelOutstandingWorkerPolls(context.Context, *CancelOutstandingWorkerPollsRequest) (*CancelOutstandingWorkerPollsResponse, error)
 	// CancelOutstandingWorkerPollsPartition cancels outstanding polls for a worker on a specific partition.
-	// Internal API used when fanning out from root.
 	CancelOutstandingWorkerPollsPartition(context.Context, *CancelOutstandingWorkerPollsPartitionRequest) (*CancelOutstandingWorkerPollsPartitionResponse, error)
 	// DescribeTaskQueue returns information about the target task queue, right now this API returns the
 	// pollers which polled this task queue in last few minutes.
