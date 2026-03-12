@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
@@ -315,15 +316,18 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 		defer r.mu.RUnlock()
 		entry := r.mu.cache[shardID]
 		return !entry.staleAt.IsZero()
-	}, 4*staleTTL, staleTTL)
+	}, 4*staleTTL, 10*time.Millisecond)
 
+	// Wait for the stale TTL to expire so clientForShardID re-resolves the shard owner.
 	s.resolver.EXPECT().
 		Lookup(convert.Int32ToString(shardID)).
 		Return(membership.NewHostInfoFromAddress(string(testAddr2)), nil).
 		Times(1)
 
-	cli, err = r.clientForShardID(shardID)
-	s.NoError(err)
-	s.Equal(mockClient, cli)
-	s.Equal(2, s.connections.resetCalls)
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		cli, err = r.clientForShardID(shardID)
+		assert.NoError(t, err)
+		assert.Equal(t, mockClient, cli)
+		assert.Equal(t, 2, s.connections.resetCalls)
+	}, 4*staleTTL, 10*time.Millisecond)
 }
