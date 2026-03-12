@@ -71,7 +71,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Sticky() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test", "test")
 	s.NoError(err)
@@ -121,7 +121,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = s.SdkClient().SignalWorkflow(ctx, id, "", "test", "pause")
 	s.NoError(err)
@@ -232,8 +232,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
+	var queryErr, getErr error
+	var queryResultStr string
+	var queryDuration time.Duration
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 	go func() {
@@ -241,16 +244,11 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 		startTime := time.Now()
 		queryResult, err := s.SdkClient().QueryWorkflow(ctx, id, "", "test")
-		endTime := time.Now()
-		s.NoError(err)
-		var queryResultStr string
-		err = queryResult.Get(&queryResultStr)
-		s.NoError(err)
-
-		// verify query sees all signals before it
-		s.Equal("started", queryResultStr)
-
-		s.True(endTime.Sub(startTime) > time.Second)
+		queryDuration = time.Since(startTime)
+		queryErr = err
+		if err == nil {
+			getErr = queryResult.Get(&queryResultStr)
+		}
 	}()
 
 	// delay 2s to start worker, this will block query for 2s
@@ -264,6 +262,12 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 
 	// wait query
 	wg.Wait()
+
+	s.NoError(queryErr)
+	s.NoError(getErr)
+	// verify query sees all signals before it
+	s.Equal("started", queryResultStr)
+	s.Greater(queryDuration, time.Second)
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
@@ -297,7 +301,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryFailedWorkflowTask() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	s.Eventually(func() bool {
 		// wait for workflow task to fail 3 times
@@ -325,7 +329,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_ClosedWithoutWorkflowTaskStarted(
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = s.SdkClient().TerminateWorkflow(ctx, id, "", "terminating to make sure query fails")
 	s.NoError(err)

@@ -115,14 +115,14 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
@@ -238,14 +238,14 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 
 	// receive the signal & cancel the timer
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")
 	s.NoError(err)
 
-	s.Nil(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
+	s.NoError(s.SendSignal(s.Namespace().String(), workflowExecution, "random signal name", payloads.EncodeString("random signal payload"), identity))
 	// complete the workflow
 	_, err = poller.PollAndProcessWorkflowTask()
 	s.Logger.Info("PollAndProcessWorkflowTask: completed")

@@ -1537,7 +1537,7 @@ func (s *taskQueueStatsSuite) validateDescribeTaskQueueWithEnhancedMode(
 		a.NotNil(resp)
 
 		//nolint:staticcheck // SA1019 deprecated
-		a.Equal(2, len(resp.GetVersionsInfo()), "should be 2: 1 default/unversioned + 1 versioned")
+		a.Len(resp.GetVersionsInfo(), 2, "should be 2: 1 default/unversioned + 1 versioned")
 		//nolint:staticcheck // SA1019 deprecated
 		for _, v := range resp.GetVersionsInfo() {
 			a.Equal(enumspb.BUILD_ID_TASK_REACHABILITY_UNSPECIFIED, v.GetTaskReachability())
