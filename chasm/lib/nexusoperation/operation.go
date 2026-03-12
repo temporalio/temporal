@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 )
@@ -8,8 +9,15 @@ import (
 var _ chasm.Component = (*Operation)(nil)
 var _ chasm.StateMachine[nexusoperationpb.OperationStatus] = (*Operation)(nil)
 
+// ErrCancellationAlreadyRequested is returned when a cancellation has already been requested for an operation.
+var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancellation already requested")
+
+// ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
+var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
+
 type OperationStore any
 
+// Operation is a CHASM component that represents a Nexus operation.
 type Operation struct {
 	chasm.UnimplementedComponent
 
@@ -19,12 +27,17 @@ type Operation struct {
 	// Pointer to an implementation of the "store". For a workflow-based Nexus operation
 	// this is a parent pointer back to the workflow. For a standalone Nexus operation this is nil.
 	Store chasm.ParentPtr[OperationStore]
+
+	// Cancellation is a child component that manages sending the cancel request to the Nexus endpoint.
+	Cancellation chasm.Field[*Cancellation]
 }
 
+// NewOperation creates a new Operation component with the given persisted state.
 func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 	return &Operation{OperationState: state}
 }
 
+// LifecycleState maps the operation's status to a CHASM lifecycle state.
 func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch o.Status {
 	case nexusoperationpb.OPERATION_STATUS_SUCCEEDED:
@@ -38,10 +51,36 @@ func (o *Operation) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	}
 }
 
+// StateMachineState returns the current operation status.
 func (o *Operation) StateMachineState() nexusoperationpb.OperationStatus {
 	return o.Status
 }
 
+// SetStateMachineState sets the operation status.
 func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus) {
 	o.Status = status
+}
+
+// Cancel requests cancellation of the operation. It creates a Cancellation child component and, if the
+// operation has already started, schedules the cancellation request to be sent to the Nexus endpoint.
+func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) error {
+	if !TransitionCanceled.Possible(o) {
+		return ErrOperationAlreadyCompleted
+	}
+	if _, ok := o.Cancellation.TryGet(ctx); ok {
+		return ErrCancellationAlreadyRequested
+	}
+
+	cancellation := newCancellation(&nexusoperationpb.CancellationState{
+		RequestedEventId: requestedEventID,
+	})
+	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
+
+	// Once started, the handler returns a token that can be used in the cancelation request.
+	// Until then, no need to schedule the cancelation.
+	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
+		return transitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
+	}
+
+	return nil
 }

@@ -46,7 +46,7 @@ func registerCommandHandlers(
 	}
 	return registry.Register(
 		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-		handleCancelCommand,
+		h.handleCancelCommand,
 	)
 }
 
@@ -66,6 +66,10 @@ func (ch *commandHandler) handleScheduleCommand(
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
 			Message: "Nexus operations disabled",
 		}
+	}
+
+	if !ch.config.ChasmNexusEnabled(nsName) {
+		return command.ErrNotSupported
 	}
 
 	attrs := cmd.GetScheduleNexusOperationCommandAttributes()
@@ -286,13 +290,89 @@ func (ch *commandHandler) handleScheduleCommand(
 	return nil
 }
 
-func handleCancelCommand(
+func (ch *commandHandler) handleCancelCommand(
 	chasmCtx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
 	validator command.Validator,
 	cmd *commandpb.Command,
 	opts command.HandlerOptions,
 ) error {
-	// TODO: Implement CHASM nexus operation cancellation
-	return serviceerror.NewUnimplemented("CHASM nexus operation cancellation not yet implemented")
+	if !ch.config.Enabled() {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED,
+			Message: "Nexus operations disabled",
+		}
+	}
+
+	nsName := chasmCtx.NamespaceEntry().Name().String()
+	if !ch.config.ChasmNexusEnabled(nsName) {
+		return command.ErrNotSupported
+	}
+
+	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
+	if attrs == nil {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: "empty CancelNexusOperationCommandAttributes",
+		}
+	}
+
+	key := strconv.FormatInt(attrs.ScheduledEventId, 10)
+	operationField, operationFound := wf.Operations[key]
+	hasBufferedEvent := func() bool {
+		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
+	}
+
+	if !operationFound && !hasBufferedEvent() {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+		}
+	}
+
+	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
+	// The event will be applied before the completion since buffered events are reordered and put at the end of the
+	// batch, after command events from the workflow task.
+	event := wf.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId:             attrs.ScheduledEventId,
+				WorkflowTaskCompletedEventId: opts.WorkflowTaskCompletedEventID,
+			},
+		}
+		he.UserMetadata = cmd.UserMetadata
+	})
+
+	if !operationFound {
+		// Operation not found but there's a buffered terminal event. The workflow couldn't know
+		// the operation completed while its task was in flight. Ignore.
+		return nil
+	}
+
+	op := operationField.Get(chasmCtx)
+	err := op.Cancel(chasmCtx, event.GetEventId())
+	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
+		return command.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
+		}
+	}
+	return err
+}
+
+func makeNexusOperationTerminalEventFilter(scheduledEventID int64) func(event *historypb.HistoryEvent) bool {
+	return func(event *historypb.HistoryEvent) bool {
+		switch event.EventType {
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
+			return event.GetNexusOperationCompletedEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
+			return event.GetNexusOperationFailedEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+			return event.GetNexusOperationCanceledEventAttributes().GetScheduledEventId() == scheduledEventID
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
+			return event.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId() == scheduledEventID
+		default:
+			return false
+		}
+	}
 }

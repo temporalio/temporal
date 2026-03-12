@@ -394,7 +394,7 @@ func TestTransitionCanceled(t *testing.T) {
 
 			event := EventCanceled{}
 
-			err := transitionCanceled.Apply(operation, ctx, event)
+			err := TransitionCanceled.Apply(operation, ctx, event)
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, operation.Status)
