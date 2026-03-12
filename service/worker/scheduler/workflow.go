@@ -110,8 +110,9 @@ type (
 		// SpecBuilder is technically a non-deterministic dependency, but it's safe as
 		// long as we only call methods on cspec inside of SideEffect (or in a query
 		// without modifying state).
-		specBuilder *SpecBuilder
-		cspec       *CompiledSpec
+		specBuilder          *SpecBuilder
+		cspec                *CompiledSpec
+		enableCHASMMigration bool
 
 		tweakables TweakablePolicies
 
@@ -155,6 +156,8 @@ type (
 		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
+
+		EnableCHASMMigration bool // Whether to automatically migrate this schedule to CHASM (V2)
 
 		// When introducing a new field with new workflow logic, consider generating a new
 		// history for TestReplays using generate_history.sh.
@@ -217,20 +220,21 @@ var (
 )
 
 func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder())
+	return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), false)
 }
 
-func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder) error {
+func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
 	scheduler := &scheduler{
-		StartScheduleArgs: args,
-		ctx:               ctx,
-		a:                 nil,
-		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
+		StartScheduleArgs:    args,
+		ctx:                  ctx,
+		a:                    nil,
+		logger:               sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
 			"namespace":                args.State.Namespace,
 			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,
 		}),
-		specBuilder: specBuilder,
+		specBuilder:          specBuilder,
+		enableCHASMMigration: enableCHASMMigration,
 	}
 	return scheduler.run()
 }
@@ -1182,7 +1186,12 @@ func (s *scheduler) checkConflict(token int64) error {
 
 func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	get := func(ctx workflow.Context) any { return CurrentTweakablePolicies }
+	enableCHASMMigration := s.enableCHASMMigration
+	get := func(ctx workflow.Context) any {
+		p := CurrentTweakablePolicies
+		p.EnableCHASMMigration = enableCHASMMigration
+		return p
+	}
 	eq := func(a, b any) bool { return a.(TweakablePolicies) == b.(TweakablePolicies) }
 	if err := workflow.MutableSideEffect(s.ctx, "tweakables", get, eq).Get(&s.tweakables); err != nil {
 		panic("can't decode TweakablePolicies:" + err.Error())

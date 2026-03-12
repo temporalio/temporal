@@ -51,6 +51,7 @@ type (
 		specBuilder              *SpecBuilder // workflow dep
 		activityDeps             activityDeps
 		enabledForNs             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableCHASMMigration     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -85,6 +86,7 @@ func NewResult(
 			specBuilder:              specBuilder,
 			activityDeps:             params,
 			enabledForNs:             dynamicconfig.WorkerEnableScheduler.Get(dc),
+			enableCHASMMigration:     dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 			globalNSStartWorkflowRPS: dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:              dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:  dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
@@ -99,8 +101,9 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
+	enableMigration := s.enableCHASMMigration(ns.Name().String()) // captured per-namespace, no global write
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder)
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 
