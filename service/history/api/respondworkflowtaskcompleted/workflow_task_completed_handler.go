@@ -20,8 +20,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -326,43 +324,33 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		return nil, handler.handleCommandProtocolMessage(ctx, command.GetProtocolMessageCommandAttributes(), msgs)
 
 	default:
-		var commandHandler chasmcommand.Handler
-		var chasmCtx chasm.MutableContext
-		var chasmWorkflow *chasmworkflow.Workflow
-
 		// TODO: need to handle migration between HSM and CHASM
 
 		handlerOpts := chasmcommand.HandlerOptions{
 			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 		}
-		if handler.mutableState.ChasmEnabled() {
-			// Use CHASM command handler.
-			chasmWorkflow, chasmCtx, err = handler.mutableState.ChasmWorkflowComponent(ctx)
-			if err != nil {
-				return nil, err
-			}
+		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
 
-			var ok bool
-			commandHandler, ok = handler.chasmCommandRegistry.Handler(command.GetCommandType())
-			if !ok {
-				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
-			}
-		} else {
-			// Use HSM command handler.
-			legacyHandler, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
-			if !ok {
-				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
-			}
-
-			// Wrap HSM command handler to match CHASM command handler signature.
-			commandHandler = func(_ chasm.MutableContext, _ *chasmworkflow.Workflow, v chasmcommand.Validator, cmd *commandpb.Command, opts chasmcommand.HandlerOptions) error {
-				return legacyHandler(ctx, handler.mutableState, v, opts.WorkflowTaskCompletedEventID, cmd)
+		// Try CHASM command handler first, fall back to HSM if not supported.
+		handledByCHASM := false
+		if handler.config.ChasmEnabled(handler.mutableState.GetNamespaceEntry().Name().String()) {
+			if chasmHandler, ok := handler.chasmCommandRegistry.Handler(command.GetCommandType()); ok {
+				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
+				if chasmErr != nil {
+					return nil, chasmErr
+				}
+				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
+				handledByCHASM = !errors.Is(err, chasmcommand.ErrNotSupported)
 			}
 		}
+		if !handledByCHASM {
+			hsmHandler, ok := handler.commandHandlerRegistry.Handler(command.GetCommandType())
+			if !ok {
+				return nil, serviceerror.NewInvalidArgumentf("Unknown command type: %v", command.GetCommandType())
+			}
+			err = hsmHandler(ctx, handler.mutableState, validator, handlerOpts.WorkflowTaskCompletedEventID, command)
+		}
 
-		// Invoke command handler.
-		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
-		err = commandHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
 		var failWFTErr chasmcommand.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.TerminateWorkflow {
