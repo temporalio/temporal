@@ -208,6 +208,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
+		nil, // Not testing nexus operation handler here
 		nil,
 		quotas.NoopRequestRateLimiter,
 	)
