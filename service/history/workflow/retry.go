@@ -309,15 +309,6 @@ func SetupNewWorkflowForRetryOrCron(
 		}
 	}
 
-	// Convert internal suppressed-target wrapper to the public LastNotifiedTargetVersion wrapper.
-	// Nil suppressed wrapper → nil (previous run was never signaled or suppression was cleared).
-	var lastNotified *historypb.LastNotifiedTargetVersion
-	if suppressed := previousExecutionInfo.GetNotificationSuppressedTargetVersion(); suppressed != nil {
-		lastNotified = &historypb.LastNotifiedTargetVersion{
-			DeploymentVersion: suppressed.GetVersion(),
-		}
-	}
-
 	req := &historyservice.StartWorkflowExecutionRequest{
 		NamespaceId:            newMutableState.GetNamespaceEntry().ID().String(),
 		StartRequest:           createRequest,
@@ -333,7 +324,8 @@ func SetupNewWorkflowForRetryOrCron(
 		InheritedBuildId:          startAttr.InheritedBuildId, //nolint:staticcheck
 		InheritedPinnedVersion:    inheritedPinnedVersion,
 		InheritedAutoUpgradeInfo:  inheritedAutoUpgradeInfo,
-		LastNotifiedTargetVersion: lastNotified,
+		// For retries, pass through the declined value from the started event directly.
+		DeclinedTargetVersionUpgrade: startAttr.GetDeclinedTargetVersionUpgrade(),
 	}
 	workflowTimeoutTime := timestamp.TimeValue(previousExecutionInfo.WorkflowExecutionExpirationTime)
 	if !workflowTimeoutTime.IsZero() {

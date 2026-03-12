@@ -356,15 +356,24 @@ type WorkflowExecutionInfo struct {
 	// The last target version for which the server set targetDeploymentVersionChanged
 	// to true on a workflow task started event. Updated on each workflow task start,
 	// set only when the server decides to set the targetDeploymentVersionChanged flag
-	// to true. Also read during continue-as-new/retry to pass to the new run.
-	LastNotifiedTargetVersion *v17.LastNotifiedTargetVersion `protobuf:"bytes,113,opt,name=last_notified_target_version,json=lastNotifiedTargetVersion,proto3" json:"last_notified_target_version,omitempty"`
-	// The target version for which setting the targetDeploymentVersionChanged flag
-	// should be suppressed. Set to the previous run's last_notified_target_version
-	// when the workflow is initiated by continue-as-new/retry and inherits a pinned
-	// version (i.e., the SDK declined to upgrade). Nil otherwise.
-	NotificationSuppressedTargetVersion *NotificationSuppressedTargetVersion `protobuf:"bytes,114,opt,name=notification_suppressed_target_version,json=notificationSuppressedTargetVersion,proto3" json:"notification_suppressed_target_version,omitempty"`
-	unknownFields                       protoimpl.UnknownFields
-	sizeCache                           protoimpl.SizeCache
+	// to true.
+	//
+	// This is a wrapper message to distinguish "never notified" (nil wrapper) from
+	// "notified about an unversioned target" (non-nil wrapper with nil deployment_version).
+	//
+	// Read at continue-as-new time: if set, it becomes the declined_target_version_upgrade
+	// for the next run. If nil, the existing declined value is preserved (CaN chain).
+	LastNotifiedTargetVersion *LastNotifiedTargetVersion `protobuf:"bytes,113,opt,name=last_notified_target_version,json=lastNotifiedTargetVersion,proto3" json:"last_notified_target_version,omitempty"`
+	// The target version that the SDK previously declined to upgrade to. Inherited
+	// from a previous run via continue-as-new or retry. At CaN time, computed as:
+	//
+	//	if last_notified_target_version != nil → use that (latest signal was declined)
+	//	else → preserve existing declined value (CaN chain, never re-signaled)
+	//
+	// Wrapper distinguishes "never declined" (nil) from "declined unversioned" (non-nil, nil version).
+	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,114,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -1122,16 +1131,16 @@ func (x *WorkflowExecutionInfo) GetLastWorkflowTaskTimedOutType() v11.TimeoutTyp
 	return v11.TimeoutType(0)
 }
 
-func (x *WorkflowExecutionInfo) GetLastNotifiedTargetVersion() *v17.LastNotifiedTargetVersion {
+func (x *WorkflowExecutionInfo) GetLastNotifiedTargetVersion() *LastNotifiedTargetVersion {
 	if x != nil {
 		return x.LastNotifiedTargetVersion
 	}
 	return nil
 }
 
-func (x *WorkflowExecutionInfo) GetNotificationSuppressedTargetVersion() *NotificationSuppressedTargetVersion {
+func (x *WorkflowExecutionInfo) GetDeclinedTargetVersionUpgrade() *v17.DeclinedTargetVersionUpgrade {
 	if x != nil {
-		return x.NotificationSuppressedTargetVersion
+		return x.DeclinedTargetVersionUpgrade
 	}
 	return nil
 }
@@ -1154,30 +1163,30 @@ func (*WorkflowExecutionInfo_LastWorkflowTaskFailureCause) isWorkflowExecutionIn
 func (*WorkflowExecutionInfo_LastWorkflowTaskTimedOutType) isWorkflowExecutionInfo_LastWorkflowTaskFailure() {
 }
 
-// Wrapper message to distinguish "not set" (nil wrapper) from "set to unversioned"
-// (non-nil wrapper with nil version). Used to track whether the SDK has previously
-// declined upgrading to a specific target version.
-type NotificationSuppressedTargetVersion struct {
-	state         protoimpl.MessageState       `protogen:"open.v1"`
-	Version       *v18.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+// Internal wrapper message to distinguish "never notified" (nil wrapper) from
+// "notified about an unversioned target" (non-nil wrapper with nil deployment_version).
+// Used only within server persistence; never flows to the public API.
+type LastNotifiedTargetVersion struct {
+	state             protoimpl.MessageState       `protogen:"open.v1"`
+	DeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
-func (x *NotificationSuppressedTargetVersion) Reset() {
-	*x = NotificationSuppressedTargetVersion{}
+func (x *LastNotifiedTargetVersion) Reset() {
+	*x = LastNotifiedTargetVersion{}
 	mi := &file_temporal_server_api_persistence_v1_executions_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *NotificationSuppressedTargetVersion) String() string {
+func (x *LastNotifiedTargetVersion) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NotificationSuppressedTargetVersion) ProtoMessage() {}
+func (*LastNotifiedTargetVersion) ProtoMessage() {}
 
-func (x *NotificationSuppressedTargetVersion) ProtoReflect() protoreflect.Message {
+func (x *LastNotifiedTargetVersion) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_persistence_v1_executions_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1189,14 +1198,14 @@ func (x *NotificationSuppressedTargetVersion) ProtoReflect() protoreflect.Messag
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NotificationSuppressedTargetVersion.ProtoReflect.Descriptor instead.
-func (*NotificationSuppressedTargetVersion) Descriptor() ([]byte, []int) {
+// Deprecated: Use LastNotifiedTargetVersion.ProtoReflect.Descriptor instead.
+func (*LastNotifiedTargetVersion) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *NotificationSuppressedTargetVersion) GetVersion() *v18.WorkerDeploymentVersion {
+func (x *LastNotifiedTargetVersion) GetDeploymentVersion() *v18.WorkerDeploymentVersion {
 	if x != nil {
-		return x.Version
+		return x.DeploymentVersion
 	}
 	return nil
 }
@@ -4651,7 +4660,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xf1B\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xdbB\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -4761,9 +4770,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\n" +
 	"pause_info\x18j \x01(\v25.temporal.server.api.persistence.v1.WorkflowPauseInfoR\tpauseInfo\x12x\n" +
 	" last_workflow_task_failure_cause\x18k \x01(\x0e2..temporal.api.enums.v1.WorkflowTaskFailedCauseH\x00R\x1clastWorkflowTaskFailureCause\x12m\n" +
-	"!last_workflow_task_timed_out_type\x18l \x01(\x0e2\".temporal.api.enums.v1.TimeoutTypeH\x00R\x1clastWorkflowTaskTimedOutType\x12s\n" +
-	"\x1clast_notified_target_version\x18q \x01(\v22.temporal.api.history.v1.LastNotifiedTargetVersionR\x19lastNotifiedTargetVersion\x12\x9c\x01\n" +
-	"&notification_suppressed_target_version\x18r \x01(\v2G.temporal.server.api.persistence.v1.NotificationSuppressedTargetVersionR#notificationSuppressedTargetVersion\x1ad\n" +
+	"!last_workflow_task_timed_out_type\x18l \x01(\x0e2\".temporal.api.enums.v1.TimeoutTypeH\x00R\x1clastWorkflowTaskTimedOutType\x12~\n" +
+	"\x1clast_notified_target_version\x18q \x01(\v2=.temporal.server.api.persistence.v1.LastNotifiedTargetVersionR\x19lastNotifiedTargetVersion\x12|\n" +
+	"\x1fdeclined_target_version_upgrade\x18r \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +
@@ -4779,9 +4788,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"&ChildrenInitializedPostResetPointEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12H\n" +
 	"\x05value\x18\x02 \x01(\v22.temporal.server.api.persistence.v1.ResetChildInfoR\x05value:\x028\x01B\x1c\n" +
-	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"t\n" +
-	"#NotificationSuppressedTargetVersion\x12M\n" +
-	"\aversion\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\aversion\"\x9d\x01\n" +
+	"\x1alast_workflow_task_failureJ\x04\b\b\x10\tJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b,\x10-J\x04\b-\x10.J\x04\b/\x100J\x04\b0\x101J\x04\b1\x102J\x04\b2\x103\"\x7f\n" +
+	"\x19LastNotifiedTargetVersion\x12b\n" +
+	"\x12deployment_version\x18\x01 \x01(\v23.temporal.api.deployment.v1.WorkerDeploymentVersionR\x11deploymentVersion\"\x9d\x01\n" +
 	"\x0eExecutionStats\x12!\n" +
 	"\fhistory_size\x18\x01 \x01(\x03R\vhistorySize\x122\n" +
 	"\x15external_payload_size\x18\x02 \x01(\x03R\x13externalPayloadSize\x124\n" +
@@ -5118,41 +5127,41 @@ func file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP() []by
 
 var file_temporal_server_api_persistence_v1_executions_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
 var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []any{
-	(*ShardInfo)(nil),                           // 0: temporal.server.api.persistence.v1.ShardInfo
-	(*WorkflowExecutionInfo)(nil),               // 1: temporal.server.api.persistence.v1.WorkflowExecutionInfo
-	(*NotificationSuppressedTargetVersion)(nil), // 2: temporal.server.api.persistence.v1.NotificationSuppressedTargetVersion
-	(*ExecutionStats)(nil),                      // 3: temporal.server.api.persistence.v1.ExecutionStats
-	(*WorkflowExecutionState)(nil),              // 4: temporal.server.api.persistence.v1.WorkflowExecutionState
-	(*RequestIDInfo)(nil),                       // 5: temporal.server.api.persistence.v1.RequestIDInfo
-	(*TransferTaskInfo)(nil),                    // 6: temporal.server.api.persistence.v1.TransferTaskInfo
-	(*ReplicationTaskInfo)(nil),                 // 7: temporal.server.api.persistence.v1.ReplicationTaskInfo
-	(*VisibilityTaskInfo)(nil),                  // 8: temporal.server.api.persistence.v1.VisibilityTaskInfo
-	(*TimerTaskInfo)(nil),                       // 9: temporal.server.api.persistence.v1.TimerTaskInfo
-	(*ArchivalTaskInfo)(nil),                    // 10: temporal.server.api.persistence.v1.ArchivalTaskInfo
-	(*OutboundTaskInfo)(nil),                    // 11: temporal.server.api.persistence.v1.OutboundTaskInfo
-	(*NexusInvocationTaskInfo)(nil),             // 12: temporal.server.api.persistence.v1.NexusInvocationTaskInfo
-	(*NexusCancelationTaskInfo)(nil),            // 13: temporal.server.api.persistence.v1.NexusCancelationTaskInfo
-	(*ActivityInfo)(nil),                        // 14: temporal.server.api.persistence.v1.ActivityInfo
-	(*TimerInfo)(nil),                           // 15: temporal.server.api.persistence.v1.TimerInfo
-	(*ChildExecutionInfo)(nil),                  // 16: temporal.server.api.persistence.v1.ChildExecutionInfo
-	(*RequestCancelInfo)(nil),                   // 17: temporal.server.api.persistence.v1.RequestCancelInfo
-	(*SignalInfo)(nil),                          // 18: temporal.server.api.persistence.v1.SignalInfo
-	(*Checksum)(nil),                            // 19: temporal.server.api.persistence.v1.Checksum
-	(*Callback)(nil),                            // 20: temporal.server.api.persistence.v1.Callback
-	(*HSMCompletionCallbackArg)(nil),            // 21: temporal.server.api.persistence.v1.HSMCompletionCallbackArg
-	(*CallbackInfo)(nil),                        // 22: temporal.server.api.persistence.v1.CallbackInfo
-	(*NexusOperationInfo)(nil),                  // 23: temporal.server.api.persistence.v1.NexusOperationInfo
-	(*NexusOperationCancellationInfo)(nil),      // 24: temporal.server.api.persistence.v1.NexusOperationCancellationInfo
-	(*ResetChildInfo)(nil),                      // 25: temporal.server.api.persistence.v1.ResetChildInfo
-	(*WorkflowPauseInfo)(nil),                   // 26: temporal.server.api.persistence.v1.WorkflowPauseInfo
-	nil,                                         // 27: temporal.server.api.persistence.v1.ShardInfo.ReplicationDlqAckLevelEntry
-	nil,                                         // 28: temporal.server.api.persistence.v1.ShardInfo.QueueStatesEntry
-	nil,                                         // 29: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SearchAttributesEntry
-	nil,                                         // 30: temporal.server.api.persistence.v1.WorkflowExecutionInfo.MemoEntry
-	nil,                                         // 31: temporal.server.api.persistence.v1.WorkflowExecutionInfo.UpdateInfosEntry
-	nil,                                         // 32: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SubStateMachinesByTypeEntry
-	nil,                                         // 33: temporal.server.api.persistence.v1.WorkflowExecutionInfo.ChildrenInitializedPostResetPointEntry
-	nil,                                         // 34: temporal.server.api.persistence.v1.WorkflowExecutionState.RequestIdsEntry
+	(*ShardInfo)(nil),                      // 0: temporal.server.api.persistence.v1.ShardInfo
+	(*WorkflowExecutionInfo)(nil),          // 1: temporal.server.api.persistence.v1.WorkflowExecutionInfo
+	(*LastNotifiedTargetVersion)(nil),      // 2: temporal.server.api.persistence.v1.LastNotifiedTargetVersion
+	(*ExecutionStats)(nil),                 // 3: temporal.server.api.persistence.v1.ExecutionStats
+	(*WorkflowExecutionState)(nil),         // 4: temporal.server.api.persistence.v1.WorkflowExecutionState
+	(*RequestIDInfo)(nil),                  // 5: temporal.server.api.persistence.v1.RequestIDInfo
+	(*TransferTaskInfo)(nil),               // 6: temporal.server.api.persistence.v1.TransferTaskInfo
+	(*ReplicationTaskInfo)(nil),            // 7: temporal.server.api.persistence.v1.ReplicationTaskInfo
+	(*VisibilityTaskInfo)(nil),             // 8: temporal.server.api.persistence.v1.VisibilityTaskInfo
+	(*TimerTaskInfo)(nil),                  // 9: temporal.server.api.persistence.v1.TimerTaskInfo
+	(*ArchivalTaskInfo)(nil),               // 10: temporal.server.api.persistence.v1.ArchivalTaskInfo
+	(*OutboundTaskInfo)(nil),               // 11: temporal.server.api.persistence.v1.OutboundTaskInfo
+	(*NexusInvocationTaskInfo)(nil),        // 12: temporal.server.api.persistence.v1.NexusInvocationTaskInfo
+	(*NexusCancelationTaskInfo)(nil),       // 13: temporal.server.api.persistence.v1.NexusCancelationTaskInfo
+	(*ActivityInfo)(nil),                   // 14: temporal.server.api.persistence.v1.ActivityInfo
+	(*TimerInfo)(nil),                      // 15: temporal.server.api.persistence.v1.TimerInfo
+	(*ChildExecutionInfo)(nil),             // 16: temporal.server.api.persistence.v1.ChildExecutionInfo
+	(*RequestCancelInfo)(nil),              // 17: temporal.server.api.persistence.v1.RequestCancelInfo
+	(*SignalInfo)(nil),                     // 18: temporal.server.api.persistence.v1.SignalInfo
+	(*Checksum)(nil),                       // 19: temporal.server.api.persistence.v1.Checksum
+	(*Callback)(nil),                       // 20: temporal.server.api.persistence.v1.Callback
+	(*HSMCompletionCallbackArg)(nil),       // 21: temporal.server.api.persistence.v1.HSMCompletionCallbackArg
+	(*CallbackInfo)(nil),                   // 22: temporal.server.api.persistence.v1.CallbackInfo
+	(*NexusOperationInfo)(nil),             // 23: temporal.server.api.persistence.v1.NexusOperationInfo
+	(*NexusOperationCancellationInfo)(nil), // 24: temporal.server.api.persistence.v1.NexusOperationCancellationInfo
+	(*ResetChildInfo)(nil),                 // 25: temporal.server.api.persistence.v1.ResetChildInfo
+	(*WorkflowPauseInfo)(nil),              // 26: temporal.server.api.persistence.v1.WorkflowPauseInfo
+	nil,                                    // 27: temporal.server.api.persistence.v1.ShardInfo.ReplicationDlqAckLevelEntry
+	nil,                                    // 28: temporal.server.api.persistence.v1.ShardInfo.QueueStatesEntry
+	nil,                                    // 29: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SearchAttributesEntry
+	nil,                                    // 30: temporal.server.api.persistence.v1.WorkflowExecutionInfo.MemoEntry
+	nil,                                    // 31: temporal.server.api.persistence.v1.WorkflowExecutionInfo.UpdateInfosEntry
+	nil,                                    // 32: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SubStateMachinesByTypeEntry
+	nil,                                    // 33: temporal.server.api.persistence.v1.WorkflowExecutionInfo.ChildrenInitializedPostResetPointEntry
+	nil,                                    // 34: temporal.server.api.persistence.v1.WorkflowExecutionState.RequestIdsEntry
 	(*TransferTaskInfo_CloseExecutionTaskDetails)(nil), // 35: temporal.server.api.persistence.v1.TransferTaskInfo.CloseExecutionTaskDetails
 	(*ActivityInfo_UseWorkflowBuildIdInfo)(nil),        // 36: temporal.server.api.persistence.v1.ActivityInfo.UseWorkflowBuildIdInfo
 	(*ActivityInfo_PauseInfo)(nil),                     // 37: temporal.server.api.persistence.v1.ActivityInfo.PauseInfo
@@ -5178,7 +5187,7 @@ var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []any{
 	(*v13.Priority)(nil),                               // 57: temporal.api.common.v1.Priority
 	(v11.WorkflowTaskFailedCause)(0),                   // 58: temporal.api.enums.v1.WorkflowTaskFailedCause
 	(v11.TimeoutType)(0),                               // 59: temporal.api.enums.v1.TimeoutType
-	(*v17.LastNotifiedTargetVersion)(nil),              // 60: temporal.api.history.v1.LastNotifiedTargetVersion
+	(*v17.DeclinedTargetVersionUpgrade)(nil),           // 60: temporal.api.history.v1.DeclinedTargetVersionUpgrade
 	(*v18.WorkerDeploymentVersion)(nil),                // 61: temporal.api.deployment.v1.WorkerDeploymentVersion
 	(v1.WorkflowExecutionState)(0),                     // 62: temporal.server.api.enums.v1.WorkflowExecutionState
 	(v11.WorkflowExecutionStatus)(0),                   // 63: temporal.api.enums.v1.WorkflowExecutionStatus
@@ -5252,9 +5261,9 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	26,  // 42: temporal.server.api.persistence.v1.WorkflowExecutionInfo.pause_info:type_name -> temporal.server.api.persistence.v1.WorkflowPauseInfo
 	58,  // 43: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_workflow_task_failure_cause:type_name -> temporal.api.enums.v1.WorkflowTaskFailedCause
 	59,  // 44: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_workflow_task_timed_out_type:type_name -> temporal.api.enums.v1.TimeoutType
-	60,  // 45: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_notified_target_version:type_name -> temporal.api.history.v1.LastNotifiedTargetVersion
-	2,   // 46: temporal.server.api.persistence.v1.WorkflowExecutionInfo.notification_suppressed_target_version:type_name -> temporal.server.api.persistence.v1.NotificationSuppressedTargetVersion
-	61,  // 47: temporal.server.api.persistence.v1.NotificationSuppressedTargetVersion.version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	2,   // 45: temporal.server.api.persistence.v1.WorkflowExecutionInfo.last_notified_target_version:type_name -> temporal.server.api.persistence.v1.LastNotifiedTargetVersion
+	60,  // 46: temporal.server.api.persistence.v1.WorkflowExecutionInfo.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
+	61,  // 47: temporal.server.api.persistence.v1.LastNotifiedTargetVersion.deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
 	62,  // 48: temporal.server.api.persistence.v1.WorkflowExecutionState.state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
 	63,  // 49: temporal.server.api.persistence.v1.WorkflowExecutionState.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
 	53,  // 50: temporal.server.api.persistence.v1.WorkflowExecutionState.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition

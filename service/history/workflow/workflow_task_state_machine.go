@@ -500,25 +500,31 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		effectiveDeploymentVersion := worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(m.ms.GetEffectiveDeployment())
 
 		switch {
-		// 1. Override active — operator controls version, don't signal.
+		// 1. Override active — operator controls version, don't signal. Clear any stale declined/notified state so that
+		// when/if the operator removes the override, we re-calculate the declined/notified state and appropriately fire the
+		// signal to upgrade to the version.
 		case m.ms.executionInfo.GetVersioningInfo().GetVersioningOverride() != nil:
+			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
+			m.ms.executionInfo.LastNotifiedTargetVersion = nil
 		// 2. AutoUpgrade — will transition naturally, no CaN needed.
 		case m.ms.GetEffectiveVersioningBehavior() == enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE:
 		// Rest of the checks are guaranteed to have the Workflow's Effective Versioning Behavior to be Pinned in nature.
-		// 3. Already on target — nothing changed.
+		// 3. Already on target — nothing changed. Clear any stale declined/notified state.
 		case effectiveDeploymentVersion.GetBuildId() == targetDeploymentVersion.GetBuildId() &&
 			effectiveDeploymentVersion.GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
+			m.ms.executionInfo.LastNotifiedTargetVersion = nil
 		// 4. Previously declined upgrade — target unchanged since the decline.
-		case m.ms.executionInfo.GetNotificationSuppressedTargetVersion() != nil &&
-			m.ms.executionInfo.GetNotificationSuppressedTargetVersion().GetVersion().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
-			m.ms.executionInfo.GetNotificationSuppressedTargetVersion().GetVersion().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
+		case m.ms.executionInfo.GetDeclinedTargetVersionUpgrade() != nil &&
+			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetBuildId() == targetDeploymentVersion.GetBuildId() &&
+			m.ms.executionInfo.GetDeclinedTargetVersionUpgrade().GetDeploymentVersion().GetDeploymentName() == targetDeploymentVersion.GetDeploymentName():
 		default:
 			// Otherwise — target changed + did not decline to upgrade on CaN/retry. Signal the SDK.
 			targetDeploymentVersionChanged = true
-			m.ms.executionInfo.LastNotifiedTargetVersion = &historypb.LastNotifiedTargetVersion{
+			m.ms.executionInfo.LastNotifiedTargetVersion = &persistencespb.LastNotifiedTargetVersion{
 				DeploymentVersion: targetDeploymentVersion,
 			}
-			m.ms.executionInfo.NotificationSuppressedTargetVersion = nil
+			m.ms.executionInfo.DeclinedTargetVersionUpgrade = nil
 		}
 	}
 	// emit metric

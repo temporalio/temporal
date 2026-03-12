@@ -6081,6 +6081,153 @@ func (s *Versioning3Suite) TestRemoveOverride_TriggersTargetVersionChangedSignal
 		})
 }
 
+// TestRemoveOverride_ClearsDeclinedState tests that when a workflow has a stale
+// declined value from a previous CaN, and an override is set then removed, the
+// declined state is cleared so the signal fires correctly.
+//
+// Flow:
+// 1. Start pinned on v1, set v2 as current → signal → CaN without AU (decline v2)
+// 2. CaN run: target=v2, declined=v2 → no signal (case 4)
+// 3. Set override on the CaN run
+// 4. Remove override — target is still v2
+// 5. Signal → assert true (declined should have been cleared by override)
+func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv1, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Wait for v1 to be registered, then set it as current
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf)
+	s.setCurrentDeployment(tv1)
+
+	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
+	runID := s.startWorkflow(tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	// Set v2 as current, trigger signal
+	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
+	s.setCurrentDeployment(tv2)
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	// Run 1: targetDeploymentVersionChanged=true → CaN without AU (decline v2)
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"expected true after v2 becomes current")
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType: tv1.WorkflowType(),
+								TaskQueue:    tv1.TaskQueue(),
+								Input:        tv1.Any().Payloads(),
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	// CaN run: declined=v2, target=v2 → case 4 suppresses
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotEqual(execution.RunId, task.WorkflowExecution.RunId,
+				"CaN should have created a new run")
+			execution = task.WorkflowExecution
+
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.False(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"declined=v2 == target=v2 — case 4 suppresses")
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Set override on the CaN run
+	override := s.makePinnedOverride(tv1)
+	_, err := s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace().String(),
+		WorkflowExecution:        execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: override},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.NoError(err)
+
+	// Trigger a WFT while override is active so case 1 fires (and should clear declined)
+	s.triggerNormalWFT(ctx, tv1, execution)
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.False(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"override active — signal suppressed")
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Remove the override
+	_, err = s.FrontendClient().UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                s.Namespace().String(),
+		WorkflowExecution:        execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{VersioningOverride: nil},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"versioning_override"}},
+	})
+	s.NoError(err)
+
+	// Trigger WFT — target is still v2, but declined should have been cleared
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"override removed — declined should have been cleared, signal should fire")
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
+}
+
 // TestRetryOfDeclinedCaN_SignalsOnNewTarget verifies that when a CaN'd run
 // ,which declined to upgrade, fails and is retried by the server, the retry
 // run inherits NotificationSuppressedTargetVersion from the original CaN
@@ -6221,6 +6368,151 @@ func (s *Versioning3Suite) TestRetryOfDeclinedCaN_SignalsOnNewTarget() {
 		}
 	}
 	s.True(foundWFTStarted, "should have found at least one WFT started event in retry run")
+}
+
+// TestPinnedCaN_RollbackResetsDeclined tests the rollback scenario: when a pinned
+// workflow declines upgrade to v2 via CaN, and then the target rolls back to v1
+// (matching effective), the declined state is cleared. When v2 becomes current
+// again, the signal fires again.
+//
+// Flow:
+// 1. Start pinned workflow on v1, v1 is current
+// 2. Set v2 as current → signal → CaN without AU (decline upgrade to v2)
+// 3. CaN run on v1: target=v2, declined=v2 → no signal (case 4) → respond empty
+// 4. Set v1 as current (rollback) → signal → target=v1, effective=v1 → no signal (case 3)
+//   - rollback clears declined → respond empty
+//
+// 5. Set v2 as current again → signal → target=v2, no declined → signal fires (assert true)
+func (s *Versioning3Suite) TestPinnedCaN_RollbackResetsDeclined() {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	tv1 := testvars.New(s).WithBuildIDNumber(1)
+	tv2 := tv1.WithBuildIDNumber(2)
+
+	// Start async poller for v1 that will handle the first WFT and declare pinned behavior
+	wftCompleted := make(chan struct{})
+	s.pollWftAndHandle(tv1, false, wftCompleted,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Wait for v1 to be registered, then set it as current
+	s.waitForDeploymentDataPropagation(tv1, versionStatusInactive, false, tqTypeWf)
+	s.setCurrentDeployment(tv1)
+
+	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
+	runID := s.startWorkflow(tv1, nil)
+	execution := tv1.WithRunID(runID).WorkflowExecution()
+	s.WaitForChannel(ctx, wftCompleted)
+	s.verifyWorkflowVersioning(s.Assertions, tv1, vbPinned, tv1.Deployment(), nil, nil)
+
+	// Register v2 poller before setting it as current
+	s.idlePollWorkflow(ctx, tv2, true, ver3MinPollTime, "should not get any tasks yet")
+	s.setCurrentDeployment(tv2)
+
+	// Trigger WFT via signal
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	// Process the WFT: verify targetDeploymentVersionChanged=true, then CaN without AU
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"expected targetDeploymentVersionChanged=true after v2 becomes current")
+
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					{
+						CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+						Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+							ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+								WorkflowType: tv1.WorkflowType(),
+								TaskQueue:    tv1.TaskQueue(),
+								Input:        tv1.Any().Payloads(),
+							},
+						},
+					},
+				},
+				VersioningBehavior: vbPinned,
+				DeploymentOptions:  tv1.WorkerDeploymentOptions(true),
+			}, nil
+		})
+
+	// Step 3: CaN run starts on v1. Target=v2, declined=v2 → case 4 suppresses signal.
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			s.NotEqual(execution.RunId, task.WorkflowExecution.RunId,
+				"CaN should have created a new run")
+			// Update execution to track the new run
+			execution = task.WorkflowExecution
+
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.False(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"declined=v2 == target=v2 — signal should be suppressed (case 4)")
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Step 4: Rollback — set v1 as current again. Target becomes v1.
+	s.setCurrentDeployment(tv1)
+	s.waitForDeploymentDataPropagation(tv1, versionStatusCurrent, false, tqTypeWf)
+
+	// Trigger WFT via signal so case 3 executes (effective=v1 == target=v1)
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.False(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"effective=v1 == target=v1 — no signal needed")
+			return respondEmptyWft(tv1, false, vbPinned), nil
+		})
+
+	// Step 5: Set v2 as current again. Target goes back to v2.
+	s.setCurrentDeployment(tv2)
+	s.waitForDeploymentDataPropagation(tv2, versionStatusCurrent, false, tqTypeWf)
+
+	// Trigger WFT via signal
+	s.triggerNormalWFT(ctx, tv1, execution)
+
+	// This is the key assertion: declined should have been cleared in step 4,
+	// so target=v2 should fire the signal again.
+	s.pollWftAndHandle(tv1, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			var lastStarted *historypb.HistoryEvent
+			for _, event := range task.History.GetEvents() {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED {
+					lastStarted = event
+				}
+			}
+			s.NotNil(lastStarted)
+			s.True(lastStarted.GetWorkflowTaskStartedEventAttributes().GetTargetWorkerDeploymentVersionChanged(),
+				"declined was cleared by rollback — target=v2 should fire signal again")
+			return respondCompleteWorkflow(tv1, vbPinned), nil
+		})
 }
 
 // TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnversioned verifies that when a

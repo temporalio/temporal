@@ -79,35 +79,35 @@ func (this *WorkflowExecutionInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-// Marshal an object of type NotificationSuppressedTargetVersion to the protobuf v3 wire format
-func (val *NotificationSuppressedTargetVersion) Marshal() ([]byte, error) {
+// Marshal an object of type LastNotifiedTargetVersion to the protobuf v3 wire format
+func (val *LastNotifiedTargetVersion) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type NotificationSuppressedTargetVersion from the protobuf v3 wire format
-func (val *NotificationSuppressedTargetVersion) Unmarshal(buf []byte) error {
+// Unmarshal an object of type LastNotifiedTargetVersion from the protobuf v3 wire format
+func (val *LastNotifiedTargetVersion) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *NotificationSuppressedTargetVersion) Size() int {
+func (val *LastNotifiedTargetVersion) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two NotificationSuppressedTargetVersion values are equivalent by recursively
+// Equal returns whether two LastNotifiedTargetVersion values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *NotificationSuppressedTargetVersion) Equal(that interface{}) bool {
+func (this *LastNotifiedTargetVersion) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *NotificationSuppressedTargetVersion
+	var that1 *LastNotifiedTargetVersion
 	switch t := that.(type) {
-	case *NotificationSuppressedTargetVersion:
+	case *LastNotifiedTargetVersion:
 		that1 = t
-	case NotificationSuppressedTargetVersion:
+	case LastNotifiedTargetVersion:
 		that1 = &t
 	default:
 		return false
