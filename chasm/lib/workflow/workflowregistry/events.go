@@ -24,5 +24,5 @@ type EventDefinition interface {
 	// Command events should never be cherry picked as we rely on the workflow to reschedule them.
 	// Return [ErrEventNotCherryPickable] to skip cherry picking. Any other error is considered fatal and will abort the
 	// cherry pick process.
-	CherryPick(ctx chasm.Context, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
+	CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
 }
