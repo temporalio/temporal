@@ -1,11 +1,17 @@
 package command
 
 import (
+	"errors"
+
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
+
+// ErrNotSupported is returned by a [Handler] when the command type is registered but not supported;
+// for example, because of a disabled feature flag.
+var ErrNotSupported = errors.New("command not supported")
 
 type HandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
