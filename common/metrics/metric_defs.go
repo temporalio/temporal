@@ -28,8 +28,8 @@ const (
 	PartitionTagName            = "partition"
 	PriorityTagName             = "priority"
 	PersistenceDBKindTagName    = "db_kind"
-	WorkerPluginNameTagName = "worker_plugin_name"
-	headerCallsiteTagName  = "header_callsite"
+	WorkerPluginNameTagName     = "worker_plugin_name"
+	headerCallsiteTagName       = "header_callsite"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -54,7 +54,6 @@ const (
 	ActiveNamespaceStateTagValue  = "active"
 	PassiveNamespaceStateTagValue = "passive"
 	UnknownNamespaceStateTagValue = "unknown"
-
 )
 
 // Admin Client Operations
@@ -605,11 +604,15 @@ const (
 
 // Schedule action types
 const (
-	ScheduleActionTypeTag       = "schedule_action"
-	ScheduleActionStartWorkflow = "start_workflow"
-	ScheduleBackendTag          = "scheduler_backend"
-	ScheduleBackendChasm        = "chasm"
-	ScheduleBackendLegacy       = "legacy"
+	ScheduleActionTypeTag                = "schedule_action"
+	ScheduleActionStartWorkflow          = "start_workflow"
+	ScheduleBackendTag                   = "scheduler_backend"
+	ScheduleBackendChasm                 = "chasm"
+	ScheduleBackendLegacy                = "legacy"
+	ScheduleBackendWorkflow              = "workflow"
+	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
+	ScheduleMigrationDirectionToChasm    = "to_chasm"
+	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
 var (
@@ -813,6 +816,15 @@ var (
 	TaskProcessingLatency = NewTimerDef(
 		"task_latency_processing",
 		WithDescription("Latency for processing a history task one time."),
+	)
+	// TaskPersistenceLatency is used only as a context key for accumulating persistence duration (ContextCounterAdd/Get); not emitted as a metric.
+	TaskPersistenceLatency = NewTimerDef(
+		"task_persistence_latency",
+		WithDescription("Context key for persistence duration; not emitted."),
+	)
+	TaskProcessingNoPersistenceLatency = NewTimerDef(
+		"task_processing_no_persistence_latency",
+		WithDescription("Latency for processing a history task one time excluding persistence."),
 	)
 	TaskLatency = NewTimerDef(
 		"task_latency",
@@ -1349,6 +1361,18 @@ var (
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
+	)
+	ScheduleMigrationStarted = NewCounterDef(
+		"schedule_migration_started",
+		WithDescription("The number of times a schedule migration is started"),
+	)
+	ScheduleMigrationCompleted = NewCounterDef(
+		"schedule_migration_completed",
+		WithDescription("The number of times a schedule migration completes successfully"),
+	)
+	ScheduleMigrationFailed = NewCounterDef(
+		"schedule_migration_failed",
+		WithDescription("The number of times a schedule migration fails"),
 	)
 
 	// Worker Versioning

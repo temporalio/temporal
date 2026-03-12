@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -25,56 +26,56 @@ var File_temporal_server_api_adminservice_v1_service_proto protoreflect.FileDesc
 
 const file_temporal_server_api_adminservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"1temporal/server/api/adminservice/v1/service.proto\x12#temporal.server.api.adminservice.v1\x1a:temporal/server/api/adminservice/v1/request_response.proto2\xfc6\n" +
-	"\fAdminService\x12\x9a\x01\n" +
-	"\x13RebuildMutableState\x12?.temporal.server.api.adminservice.v1.RebuildMutableStateRequest\x1a@.temporal.server.api.adminservice.v1.RebuildMutableStateResponse\"\x00\x12\xa6\x01\n" +
-	"\x17ImportWorkflowExecution\x12C.temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest\x1aD.temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse\"\x00\x12\x9d\x01\n" +
-	"\x14DescribeMutableState\x12@.temporal.server.api.adminservice.v1.DescribeMutableStateRequest\x1aA.temporal.server.api.adminservice.v1.DescribeMutableStateResponse\"\x00\x12\x9a\x01\n" +
-	"\x13DescribeHistoryHost\x12?.temporal.server.api.adminservice.v1.DescribeHistoryHostRequest\x1a@.temporal.server.api.adminservice.v1.DescribeHistoryHostResponse\"\x00\x12y\n" +
-	"\bGetShard\x124.temporal.server.api.adminservice.v1.GetShardRequest\x1a5.temporal.server.api.adminservice.v1.GetShardResponse\"\x00\x12\x7f\n" +
+	"1temporal/server/api/adminservice/v1/service.proto\x12#temporal.server.api.adminservice.v1\x1a:temporal/server/api/adminservice/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto2\x8d9\n" +
+	"\fAdminService\x12\xa0\x01\n" +
+	"\x13RebuildMutableState\x12?.temporal.server.api.adminservice.v1.RebuildMutableStateRequest\x1a@.temporal.server.api.adminservice.v1.RebuildMutableStateResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xac\x01\n" +
+	"\x17ImportWorkflowExecution\x12C.temporal.server.api.adminservice.v1.ImportWorkflowExecutionRequest\x1aD.temporal.server.api.adminservice.v1.ImportWorkflowExecutionResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa3\x01\n" +
+	"\x14DescribeMutableState\x12@.temporal.server.api.adminservice.v1.DescribeMutableStateRequest\x1aA.temporal.server.api.adminservice.v1.DescribeMutableStateResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa0\x01\n" +
+	"\x13DescribeHistoryHost\x12?.temporal.server.api.adminservice.v1.DescribeHistoryHostRequest\x1a@.temporal.server.api.adminservice.v1.DescribeHistoryHostResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x7f\n" +
+	"\bGetShard\x124.temporal.server.api.adminservice.v1.GetShardRequest\x1a5.temporal.server.api.adminservice.v1.GetShardResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x85\x01\n" +
 	"\n" +
-	"CloseShard\x126.temporal.server.api.adminservice.v1.CloseShardRequest\x1a7.temporal.server.api.adminservice.v1.CloseShardResponse\"\x00\x12\x91\x01\n" +
-	"\x10ListHistoryTasks\x12<.temporal.server.api.adminservice.v1.ListHistoryTasksRequest\x1a=.temporal.server.api.adminservice.v1.ListHistoryTasksResponse\"\x00\x12\x7f\n" +
+	"CloseShard\x126.temporal.server.api.adminservice.v1.CloseShardRequest\x1a7.temporal.server.api.adminservice.v1.CloseShardResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x97\x01\n" +
+	"\x10ListHistoryTasks\x12<.temporal.server.api.adminservice.v1.ListHistoryTasksRequest\x1a=.temporal.server.api.adminservice.v1.ListHistoryTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x85\x01\n" +
 	"\n" +
-	"RemoveTask\x126.temporal.server.api.adminservice.v1.RemoveTaskRequest\x1a7.temporal.server.api.adminservice.v1.RemoveTaskResponse\"\x00\x12\xc1\x01\n" +
-	" GetWorkflowExecutionRawHistoryV2\x12L.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request\x1aM.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response\"\x00\x12\xbb\x01\n" +
-	"\x1eGetWorkflowExecutionRawHistory\x12J.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest\x1aK.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse\"\x00\x12\xa3\x01\n" +
-	"\x16GetReplicationMessages\x12B.temporal.server.api.adminservice.v1.GetReplicationMessagesRequest\x1aC.temporal.server.api.adminservice.v1.GetReplicationMessagesResponse\"\x00\x12\xbe\x01\n" +
-	"\x1fGetNamespaceReplicationMessages\x12K.temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesRequest\x1aL.temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse\"\x00\x12\xac\x01\n" +
-	"\x19GetDLQReplicationMessages\x12E.temporal.server.api.adminservice.v1.GetDLQReplicationMessagesRequest\x1aF.temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse\"\x00\x12\x88\x01\n" +
-	"\rReapplyEvents\x129.temporal.server.api.adminservice.v1.ReapplyEventsRequest\x1a:.temporal.server.api.adminservice.v1.ReapplyEventsResponse\"\x00\x12\x9a\x01\n" +
-	"\x13AddSearchAttributes\x12?.temporal.server.api.adminservice.v1.AddSearchAttributesRequest\x1a@.temporal.server.api.adminservice.v1.AddSearchAttributesResponse\"\x00\x12\xa3\x01\n" +
-	"\x16RemoveSearchAttributes\x12B.temporal.server.api.adminservice.v1.RemoveSearchAttributesRequest\x1aC.temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse\"\x00\x12\x9a\x01\n" +
-	"\x13GetSearchAttributes\x12?.temporal.server.api.adminservice.v1.GetSearchAttributesRequest\x1a@.temporal.server.api.adminservice.v1.GetSearchAttributesResponse\"\x00\x12\x8e\x01\n" +
-	"\x0fDescribeCluster\x12;.temporal.server.api.adminservice.v1.DescribeClusterRequest\x1a<.temporal.server.api.adminservice.v1.DescribeClusterResponse\"\x00\x12\x85\x01\n" +
-	"\fListClusters\x128.temporal.server.api.adminservice.v1.ListClustersRequest\x1a9.temporal.server.api.adminservice.v1.ListClustersResponse\"\x00\x12\x97\x01\n" +
-	"\x12ListClusterMembers\x12>.temporal.server.api.adminservice.v1.ListClusterMembersRequest\x1a?.temporal.server.api.adminservice.v1.ListClusterMembersResponse\"\x00\x12\xa9\x01\n" +
-	"\x18AddOrUpdateRemoteCluster\x12D.temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterRequest\x1aE.temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse\"\x00\x12\x9a\x01\n" +
-	"\x13RemoveRemoteCluster\x12?.temporal.server.api.adminservice.v1.RemoveRemoteClusterRequest\x1a@.temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse\"\x00\x12\x8b\x01\n" +
-	"\x0eGetDLQMessages\x12:.temporal.server.api.adminservice.v1.GetDLQMessagesRequest\x1a;.temporal.server.api.adminservice.v1.GetDLQMessagesResponse\"\x00\x12\x91\x01\n" +
-	"\x10PurgeDLQMessages\x12<.temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest\x1a=.temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse\"\x00\x12\x91\x01\n" +
-	"\x10MergeDLQMessages\x12<.temporal.server.api.adminservice.v1.MergeDLQMessagesRequest\x1a=.temporal.server.api.adminservice.v1.MergeDLQMessagesResponse\"\x00\x12\x9d\x01\n" +
-	"\x14RefreshWorkflowTasks\x12@.temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest\x1aA.temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse\"\x00\x12\xa9\x01\n" +
-	"\x18StartAdminBatchOperation\x12D.temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest\x1aE.temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse\"\x00\x12\xa3\x01\n" +
-	"\x16ResendReplicationTasks\x12B.temporal.server.api.adminservice.v1.ResendReplicationTasksRequest\x1aC.temporal.server.api.adminservice.v1.ResendReplicationTasksResponse\"\x00\x12\x94\x01\n" +
-	"\x11GetTaskQueueTasks\x12=.temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest\x1a>.temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse\"\x00\x12\xa6\x01\n" +
-	"\x17DeleteWorkflowExecution\x12C.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest\x1aD.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse\"\x00\x12\xc8\x01\n" +
-	"!StreamWorkflowReplicationMessages\x12M.temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest\x1aN.temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse\"\x00(\x010\x01\x12\x85\x01\n" +
-	"\fGetNamespace\x128.temporal.server.api.adminservice.v1.GetNamespaceRequest\x1a9.temporal.server.api.adminservice.v1.GetNamespaceResponse\"\x00\x12\x82\x01\n" +
-	"\vGetDLQTasks\x127.temporal.server.api.adminservice.v1.GetDLQTasksRequest\x1a8.temporal.server.api.adminservice.v1.GetDLQTasksResponse\"\x00\x12\x88\x01\n" +
-	"\rPurgeDLQTasks\x129.temporal.server.api.adminservice.v1.PurgeDLQTasksRequest\x1a:.temporal.server.api.adminservice.v1.PurgeDLQTasksResponse\"\x00\x12\x88\x01\n" +
-	"\rMergeDLQTasks\x129.temporal.server.api.adminservice.v1.MergeDLQTasksRequest\x1a:.temporal.server.api.adminservice.v1.MergeDLQTasksResponse\"\x00\x12\x8b\x01\n" +
-	"\x0eDescribeDLQJob\x12:.temporal.server.api.adminservice.v1.DescribeDLQJobRequest\x1a;.temporal.server.api.adminservice.v1.DescribeDLQJobResponse\"\x00\x12\x85\x01\n" +
-	"\fCancelDLQJob\x128.temporal.server.api.adminservice.v1.CancelDLQJobRequest\x1a9.temporal.server.api.adminservice.v1.CancelDLQJobResponse\"\x00\x12y\n" +
-	"\bAddTasks\x124.temporal.server.api.adminservice.v1.AddTasksRequest\x1a5.temporal.server.api.adminservice.v1.AddTasksResponse\"\x00\x12\x7f\n" +
+	"RemoveTask\x126.temporal.server.api.adminservice.v1.RemoveTaskRequest\x1a7.temporal.server.api.adminservice.v1.RemoveTaskResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xc7\x01\n" +
+	" GetWorkflowExecutionRawHistoryV2\x12L.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Request\x1aM.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryV2Response\"\x06\x8a\xb5\x18\x02\b\x03\x12\xc1\x01\n" +
+	"\x1eGetWorkflowExecutionRawHistory\x12J.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryRequest\x1aK.temporal.server.api.adminservice.v1.GetWorkflowExecutionRawHistoryResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa9\x01\n" +
+	"\x16GetReplicationMessages\x12B.temporal.server.api.adminservice.v1.GetReplicationMessagesRequest\x1aC.temporal.server.api.adminservice.v1.GetReplicationMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xc4\x01\n" +
+	"\x1fGetNamespaceReplicationMessages\x12K.temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesRequest\x1aL.temporal.server.api.adminservice.v1.GetNamespaceReplicationMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xb2\x01\n" +
+	"\x19GetDLQReplicationMessages\x12E.temporal.server.api.adminservice.v1.GetDLQReplicationMessagesRequest\x1aF.temporal.server.api.adminservice.v1.GetDLQReplicationMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x8e\x01\n" +
+	"\rReapplyEvents\x129.temporal.server.api.adminservice.v1.ReapplyEventsRequest\x1a:.temporal.server.api.adminservice.v1.ReapplyEventsResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa0\x01\n" +
+	"\x13AddSearchAttributes\x12?.temporal.server.api.adminservice.v1.AddSearchAttributesRequest\x1a@.temporal.server.api.adminservice.v1.AddSearchAttributesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa9\x01\n" +
+	"\x16RemoveSearchAttributes\x12B.temporal.server.api.adminservice.v1.RemoveSearchAttributesRequest\x1aC.temporal.server.api.adminservice.v1.RemoveSearchAttributesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa0\x01\n" +
+	"\x13GetSearchAttributes\x12?.temporal.server.api.adminservice.v1.GetSearchAttributesRequest\x1a@.temporal.server.api.adminservice.v1.GetSearchAttributesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x94\x01\n" +
+	"\x0fDescribeCluster\x12;.temporal.server.api.adminservice.v1.DescribeClusterRequest\x1a<.temporal.server.api.adminservice.v1.DescribeClusterResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x8b\x01\n" +
+	"\fListClusters\x128.temporal.server.api.adminservice.v1.ListClustersRequest\x1a9.temporal.server.api.adminservice.v1.ListClustersResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x9d\x01\n" +
+	"\x12ListClusterMembers\x12>.temporal.server.api.adminservice.v1.ListClusterMembersRequest\x1a?.temporal.server.api.adminservice.v1.ListClusterMembersResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xaf\x01\n" +
+	"\x18AddOrUpdateRemoteCluster\x12D.temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterRequest\x1aE.temporal.server.api.adminservice.v1.AddOrUpdateRemoteClusterResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa0\x01\n" +
+	"\x13RemoveRemoteCluster\x12?.temporal.server.api.adminservice.v1.RemoveRemoteClusterRequest\x1a@.temporal.server.api.adminservice.v1.RemoveRemoteClusterResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x91\x01\n" +
+	"\x0eGetDLQMessages\x12:.temporal.server.api.adminservice.v1.GetDLQMessagesRequest\x1a;.temporal.server.api.adminservice.v1.GetDLQMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x97\x01\n" +
+	"\x10PurgeDLQMessages\x12<.temporal.server.api.adminservice.v1.PurgeDLQMessagesRequest\x1a=.temporal.server.api.adminservice.v1.PurgeDLQMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x97\x01\n" +
+	"\x10MergeDLQMessages\x12<.temporal.server.api.adminservice.v1.MergeDLQMessagesRequest\x1a=.temporal.server.api.adminservice.v1.MergeDLQMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa3\x01\n" +
+	"\x14RefreshWorkflowTasks\x12@.temporal.server.api.adminservice.v1.RefreshWorkflowTasksRequest\x1aA.temporal.server.api.adminservice.v1.RefreshWorkflowTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xaf\x01\n" +
+	"\x18StartAdminBatchOperation\x12D.temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest\x1aE.temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xa9\x01\n" +
+	"\x16ResendReplicationTasks\x12B.temporal.server.api.adminservice.v1.ResendReplicationTasksRequest\x1aC.temporal.server.api.adminservice.v1.ResendReplicationTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x9a\x01\n" +
+	"\x11GetTaskQueueTasks\x12=.temporal.server.api.adminservice.v1.GetTaskQueueTasksRequest\x1a>.temporal.server.api.adminservice.v1.GetTaskQueueTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xac\x01\n" +
+	"\x17DeleteWorkflowExecution\x12C.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionRequest\x1aD.temporal.server.api.adminservice.v1.DeleteWorkflowExecutionResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xce\x01\n" +
+	"!StreamWorkflowReplicationMessages\x12M.temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesRequest\x1aN.temporal.server.api.adminservice.v1.StreamWorkflowReplicationMessagesResponse\"\x06\x8a\xb5\x18\x02\b\x03(\x010\x01\x12\x8b\x01\n" +
+	"\fGetNamespace\x128.temporal.server.api.adminservice.v1.GetNamespaceRequest\x1a9.temporal.server.api.adminservice.v1.GetNamespaceResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x88\x01\n" +
+	"\vGetDLQTasks\x127.temporal.server.api.adminservice.v1.GetDLQTasksRequest\x1a8.temporal.server.api.adminservice.v1.GetDLQTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x8e\x01\n" +
+	"\rPurgeDLQTasks\x129.temporal.server.api.adminservice.v1.PurgeDLQTasksRequest\x1a:.temporal.server.api.adminservice.v1.PurgeDLQTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x8e\x01\n" +
+	"\rMergeDLQTasks\x129.temporal.server.api.adminservice.v1.MergeDLQTasksRequest\x1a:.temporal.server.api.adminservice.v1.MergeDLQTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x91\x01\n" +
+	"\x0eDescribeDLQJob\x12:.temporal.server.api.adminservice.v1.DescribeDLQJobRequest\x1a;.temporal.server.api.adminservice.v1.DescribeDLQJobResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x8b\x01\n" +
+	"\fCancelDLQJob\x128.temporal.server.api.adminservice.v1.CancelDLQJobRequest\x1a9.temporal.server.api.adminservice.v1.CancelDLQJobResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x7f\n" +
+	"\bAddTasks\x124.temporal.server.api.adminservice.v1.AddTasksRequest\x1a5.temporal.server.api.adminservice.v1.AddTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x85\x01\n" +
 	"\n" +
-	"ListQueues\x126.temporal.server.api.adminservice.v1.ListQueuesRequest\x1a7.temporal.server.api.adminservice.v1.ListQueuesResponse\"\x00\x12\x8e\x01\n" +
-	"\x0fDeepHealthCheck\x12;.temporal.server.api.adminservice.v1.DeepHealthCheckRequest\x1a<.temporal.server.api.adminservice.v1.DeepHealthCheckResponse\"\x00\x12\x94\x01\n" +
-	"\x11SyncWorkflowState\x12=.temporal.server.api.adminservice.v1.SyncWorkflowStateRequest\x1a>.temporal.server.api.adminservice.v1.SyncWorkflowStateResponse\"\x00\x12\xca\x01\n" +
-	"#GenerateLastHistoryReplicationTasks\x12O.temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest\x1aP.temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse\"\x00\x12\xaf\x01\n" +
-	"\x1aDescribeTaskQueuePartition\x12F.temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest\x1aG.temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse\"\x00\x12\xb8\x01\n" +
-	"\x1dForceUnloadTaskQueuePartition\x12I.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest\x1aJ.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse\"\x00\x12\x8e\x01\n" +
-	"\x0fMigrateSchedule\x12;.temporal.server.api.adminservice.v1.MigrateScheduleRequest\x1a<.temporal.server.api.adminservice.v1.MigrateScheduleResponse\"\x00B8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
+	"ListQueues\x126.temporal.server.api.adminservice.v1.ListQueuesRequest\x1a7.temporal.server.api.adminservice.v1.ListQueuesResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x94\x01\n" +
+	"\x0fDeepHealthCheck\x12;.temporal.server.api.adminservice.v1.DeepHealthCheckRequest\x1a<.temporal.server.api.adminservice.v1.DeepHealthCheckResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x9a\x01\n" +
+	"\x11SyncWorkflowState\x12=.temporal.server.api.adminservice.v1.SyncWorkflowStateRequest\x1a>.temporal.server.api.adminservice.v1.SyncWorkflowStateResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xd0\x01\n" +
+	"#GenerateLastHistoryReplicationTasks\x12O.temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest\x1aP.temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xb5\x01\n" +
+	"\x1aDescribeTaskQueuePartition\x12F.temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest\x1aG.temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\xbe\x01\n" +
+	"\x1dForceUnloadTaskQueuePartition\x12I.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest\x1aJ.temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse\"\x06\x8a\xb5\x18\x02\b\x03\x12\x94\x01\n" +
+	"\x0fMigrateSchedule\x12;.temporal.server.api.adminservice.v1.MigrateScheduleRequest\x1a<.temporal.server.api.adminservice.v1.MigrateScheduleResponse\"\x06\x8a\xb5\x18\x02\b\x03B8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
 
 var file_temporal_server_api_adminservice_v1_service_proto_goTypes = []any{
 	(*RebuildMutableStateRequest)(nil),                  // 0: temporal.server.api.adminservice.v1.RebuildMutableStateRequest

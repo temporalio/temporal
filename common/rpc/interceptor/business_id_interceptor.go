@@ -42,6 +42,20 @@ const (
 	PatternTaskToken
 	// PatternMultiOperation indicates extraction from ExecuteMultiOperationRequest
 	PatternMultiOperation
+	// PatternTaskQueueName indicates extraction via GetTaskQueue() string method
+	PatternTaskQueueName
+	// PatternTaskQueueNameFromMessage indicates extraction via GetTaskQueue().GetName() (TaskQueue message)
+	PatternTaskQueueNameFromMessage
+	// PatternDeploymentName indicates extraction via GetDeploymentName() method
+	PatternDeploymentName
+	// PatternDeploymentVersion indicates extraction via GetDeploymentVersion().GetDeploymentName()
+	PatternDeploymentVersion
+	// PatternPollerGroupID indicates extraction via GetPollerGroupId() directly
+	PatternPollerGroupID
+	// PatternNamespace indicates extraction via GetNamespace() - used when we want to send all calls to a particular api and namespace to a single cell at a time.
+	PatternNamespace
+	// PatternUpdateRef indicates extraction via GetUpdateRef().GetWorkflowExecution().GetWorkflowId()
+	PatternUpdateRef
 )
 
 // methodToPattern maps API method names to their expected business ID extraction pattern.
@@ -88,6 +102,40 @@ var methodToPattern = map[string]BusinessIDPattern{
 
 	// Pattern: ExecuteMultiOperation special handling
 	"ExecuteMultiOperation": PatternMultiOperation,
+
+	// task queue name
+	"UpdateTaskQueueConfig": PatternTaskQueueName,
+
+	// task queue name (from TaskQueue message)
+	"ListTaskQueuePartitions": PatternTaskQueueNameFromMessage,
+
+	// deployment name
+	"DescribeWorkerDeployment":          PatternDeploymentName,
+	"DeleteWorkerDeployment":            PatternDeploymentName,
+	"SetWorkerDeploymentCurrentVersion": PatternDeploymentName,
+	"SetWorkerDeploymentManager":        PatternDeploymentName,
+	"SetWorkerDeploymentRampingVersion": PatternDeploymentName,
+
+	// deployment name (from WorkerDeploymentVersion message)
+	"DescribeWorkerDeploymentVersion":       PatternDeploymentVersion,
+	"DeleteWorkerDeploymentVersion":         PatternDeploymentVersion,
+	"UpdateWorkerDeploymentVersionMetadata": PatternDeploymentVersion,
+
+	// namespace (deterministic routing to a single cell for the namespace)
+	// TODO: Switch to worker_grouping_key when available for load balancing
+	"FetchWorkerConfig":     PatternNamespace,
+	"UpdateWorkerConfig":    PatternNamespace,
+	"DescribeWorker":        PatternNamespace,
+	"RecordWorkerHeartbeat": PatternNamespace,
+
+	// workflow ID (from UpdateRef)
+	"PollWorkflowExecutionUpdate": PatternUpdateRef,
+
+	// TODO: Uncomment when poller_group_id field is added to requests
+	// "PollWorkflowTaskQueue": PatternPollerGroupID,
+	// "PollActivityTaskQueue": PatternPollerGroupID,
+	// "PollNexusTaskQueue":    PatternPollerGroupID,
+
 }
 
 // NewBusinessIDInterceptor creates a new BusinessIDInterceptor with the given extractor functions.

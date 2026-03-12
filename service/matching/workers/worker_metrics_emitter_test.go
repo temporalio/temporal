@@ -3,8 +3,8 @@ package workers
 import (
 	"testing"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"github.com/stretchr/testify/assert"
+	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
