@@ -311,13 +311,13 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes() {
 
 		snap := capture.Snapshot()
 
-		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Len(t, snap["nexus_requests"], 1)
 		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
-		require.Equal(t, 1, len(snap["nexus_latency"]))
+		require.Len(t, snap["nexus_latency"], 1)
 		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 
@@ -364,7 +364,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
 				require.Equal(t, "permission denied", handlerErr.Message)
-				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
+				require.Empty(t, snap["nexus_request_preprocess_errors"])
 			},
 		},
 		{
@@ -377,7 +377,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 				require.ErrorAs(t, err, &handlerErr)
 				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerErr.Type)
 				require.Equal(t, "unauthorized", handlerErr.Message)
-				require.Equal(t, 1, len(snap["nexus_request_preprocess_errors"]))
+				require.Len(t, snap["nexus_request_preprocess_errors"], 1)
 			},
 		},
 		{
@@ -389,7 +389,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims() {
 			assertion: func(t *testing.T, res *nexusrpc.ClientStartOperationResponse[string], err error, snap map[string][]*metricstest.CapturedRecording) {
 				require.NoError(t, err)
 				require.Equal(t, "input", res.Successful)
-				require.Equal(t, 0, len(snap["nexus_request_preprocess_errors"]))
+				require.Empty(t, snap["nexus_request_preprocess_errors"])
 			},
 		},
 	}
@@ -564,13 +564,13 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes() {
 
 		snap := capture.Snapshot()
 
-		require.Equal(t, 1, len(snap["nexus_requests"]))
+		require.Len(t, snap["nexus_requests"], 1)
 		require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_requests"][0].Tags, "nexus_endpoint")
 		require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 		require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
 
-		require.Equal(t, 1, len(snap["nexus_latency"]))
+		require.Len(t, snap["nexus_latency"], 1)
 		require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": s.Namespace().String(), "method": "CancelNexusOperation", "outcome": tc.outcome})
 		require.Contains(t, snap["nexus_latency"][0].Tags, "nexus_endpoint")
 
