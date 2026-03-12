@@ -74,10 +74,7 @@ func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName 
 	bucket := s.client.Bucket(URI.Hostname())
 	writer := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewWriter(ctx)
 	defer func() {
-		closeErr := writer.Close()
-		if err == nil {
-			err = closeErr
-		}
+		err = multierr.Combine(err, writer.Close())
 	}()
 	_, err = io.Copy(writer, bytes.NewReader(file))
 	return err
