@@ -74,7 +74,12 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 			"Pattern": "*", "AllowInsecure": true,
 		}},
 		// Cap callback retry backoff to avoid long waits after failover.
-		callbacks.RetryPolicyMaximumInterval.Key(): 100 * time.Millisecond,
+		callbacks.RetryPolicyMaximumInterval.Key(): 1 * time.Second,
+		// Set a short circuit breaker timeout so it recovers quickly from bursts of failures.
+		dynamicconfig.OutboundQueueCircuitBreakerSettings.Key(): dynamicconfig.CircuitBreakerSettings{
+			MaxRequests: 1,
+			Timeout:     1 * time.Second,
+		},
 	}
 	s.setupSuite()
 }
