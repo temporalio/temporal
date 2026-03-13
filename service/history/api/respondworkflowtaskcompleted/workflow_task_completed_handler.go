@@ -79,7 +79,7 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
-		chasmCommandRegistry   *workflowregistry.Registry
+		chasmWorkflowRegistry   *workflowregistry.Registry
 		matchingClient         matchingservice.MatchingServiceClient
 		versionMembershipCache worker_versioning.VersionMembershipCache
 	}
@@ -120,7 +120,7 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
-	chasmCommandRegistry *workflowregistry.Registry,
+	chasmWorkflowRegistry *workflowregistry.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *workflowTaskCompletedHandler {
@@ -154,7 +154,7 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
-		chasmCommandRegistry:   chasmCommandRegistry,
+		chasmWorkflowRegistry:   chasmWorkflowRegistry,
 		matchingClient:         matchingClient,
 		versionMembershipCache: versionMembershipCache,
 	}
@@ -326,7 +326,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	default:
 		// TODO: need to handle migration between HSM and CHASM
 
-		handlerOpts := workflowregistry.HandlerOptions{
+		handlerOpts := workflowregistry.CommandHandlerOptions{
 			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
@@ -334,13 +334,13 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		// Try CHASM command handler first, fall back to HSM if not supported.
 		handledByCHASM := false
 		if handler.config.ChasmEnabled(handler.mutableState.GetNamespaceEntry().Name().String()) {
-			if chasmHandler, ok := handler.chasmCommandRegistry.Handler(command.GetCommandType()); ok {
+			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-				handledByCHASM = !errors.Is(err, workflowregistry.ErrNotSupported)
+				handledByCHASM = !errors.Is(err, workflowregistry.ErrCommandNotSupported)
 			}
 		}
 		if !handledByCHASM {

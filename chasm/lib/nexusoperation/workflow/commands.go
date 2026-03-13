@@ -38,13 +38,13 @@ func registerCommandHandlers(
 ) error {
 	h := &commandHandler{config: config, nexusProcessor: nexusProcessor}
 
-	if err := registry.Register(
+	if err := registry.RegisterCommandHandler(
 		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 		h.handleScheduleCommand,
 	); err != nil {
 		return err
 	}
-	return registry.Register(
+	return registry.RegisterCommandHandler(
 		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
 		h.handleCancelCommand,
 	)
@@ -56,13 +56,13 @@ func (ch *commandHandler) handleScheduleCommand(
 	wf *chasmworkflow.Workflow,
 	validator workflowregistry.Validator,
 	cmd *commandpb.Command,
-	opts workflowregistry.HandlerOptions,
+	opts workflowregistry.CommandHandlerOptions,
 ) error {
 	ns := chasmCtx.NamespaceEntry()
 	nsName := ns.Name().String()
 
 	if !ch.config.ChasmNexusEnabled(nsName) {
-		return workflowregistry.ErrNotSupported
+		return workflowregistry.ErrCommandNotSupported
 	}
 
 	attrs := cmd.GetScheduleNexusOperationCommandAttributes()
@@ -288,11 +288,11 @@ func (ch *commandHandler) handleCancelCommand(
 	wf *chasmworkflow.Workflow,
 	validator workflowregistry.Validator,
 	cmd *commandpb.Command,
-	opts workflowregistry.HandlerOptions,
+	opts workflowregistry.CommandHandlerOptions,
 ) error {
 	nsName := chasmCtx.NamespaceEntry().Name().String()
 	if !ch.config.ChasmNexusEnabled(nsName) {
-		return workflowregistry.ErrNotSupported
+		return workflowregistry.ErrCommandNotSupported
 	}
 
 	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
