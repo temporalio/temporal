@@ -295,6 +295,33 @@ message WorkflowExecutionInfo {
         temporal.api.enums.v1.WorkflowTaskFailedCause last_workflow_task_failure_cause = 107;
         temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
     }
+
+    // The last target version for which the server set targetDeploymentVersionChanged
+    // to true on a workflow task started event. Updated on each workflow task start,
+    // set only when the server decides to set the targetDeploymentVersionChanged flag
+    // to true.
+    //
+    // This is a wrapper message to distinguish "never notified" (nil wrapper) from
+    // "notified about an unversioned target" (non-nil wrapper with nil deployment_version).
+    //
+    // Read at continue-as-new time: if set, it becomes the declined_target_version_upgrade
+    // for the next run. If nil, the existing declined value is preserved (CaN chain).
+    LastNotifiedTargetVersion last_notified_target_version = 113;
+
+    // The target version that the SDK previously declined to upgrade to. Inherited
+    // from a previous run via continue-as-new or retry. At CaN time, computed as:
+    //   if last_notified_target_version != nil → use that (latest signal was declined)
+    //   else → preserve existing declined value (CaN chain, never re-signaled)
+    //
+    // Wrapper distinguishes "never declined" (nil) from "declined unversioned" (non-nil, nil version).
+    temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 114;
+}
+
+// Internal wrapper message to distinguish "never notified" (nil wrapper) from
+// "notified about an unversioned target" (non-nil wrapper with nil deployment_version).
+// Used only within server persistence; never flows to the public API.
+message LastNotifiedTargetVersion {
+    temporal.api.deployment.v1.WorkerDeploymentVersion deployment_version = 1;
 }
 
 message ExecutionStats {

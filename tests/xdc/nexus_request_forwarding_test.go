@@ -393,7 +393,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 				completedEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
 					return e.GetNexusOperationCompletedEventAttributes() != nil
 				})
-				require.Greater(t, completedEventIdx, 0)
+				require.Positive(t, completedEventIdx)
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{
 					Identity: "test",
 					Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -424,7 +424,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 				failedEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
 					return e.GetNexusOperationFailedEventAttributes() != nil
 				})
-				require.Greater(t, failedEventIdx, 0)
+				require.Positive(t, failedEventIdx)
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{
 					Identity: "test",
 					Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -452,7 +452,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 				canceledEventIdx := slices.IndexFunc(events, func(e *historypb.HistoryEvent) bool {
 					return e.GetNexusOperationCanceledEventAttributes() != nil
 				})
-				require.Greater(t, canceledEventIdx, 0)
+				require.Positive(t, canceledEventIdx)
 				return &workflowservice.RespondWorkflowTaskCompletedRequest{
 					Identity: "test",
 					Commands: []*commandpb.Command{{CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -581,7 +581,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
 				return e.GetNexusOperationStartedEventAttributes() != nil
 			})
-			s.Greater(startedEventIdx, 0)
+			s.Positive(startedEventIdx)
 
 			// Wait for Nexus operation to be replicated
 			s.Eventually(func() bool {
@@ -600,7 +600,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			completion.Header.Set(cnexus.CallbackTokenHeader, callbackToken)
 			snap, err := s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[1], publicCallbackUrl, completion)
 			s.NoError(err)
-			s.Equal(1, len(snap["nexus_completion_requests"]))
+			s.Len(snap["nexus_completion_requests"], 1)
 			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "request_forwarded"})
 
 			// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
@@ -618,7 +618,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			var handlerErr *nexus.HandlerError
 			s.ErrorAs(err, &handlerErr)
 			s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-			s.Equal(1, len(snap["nexus_completion_requests"]))
+			s.Len(snap["nexus_completion_requests"], 1)
 			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "error_not_found"})
 
 			// Poll active cluster and verify the completion is recorded and triggers workflow progress.
@@ -700,10 +700,10 @@ func (s *NexusRequestForwardingSuite) sendNexusCompletionRequest(
 }
 
 func requireExpectedMetricsCaptured(t *testing.T, snap map[string][]*metricstest.CapturedRecording, ns string, method string, expectedOutcome string) {
-	require.Equal(t, 1, len(snap["nexus_requests"]))
+	require.Len(t, snap["nexus_requests"], 1)
 	require.Subset(t, snap["nexus_requests"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
 	require.Equal(t, int64(1), snap["nexus_requests"][0].Value)
 	require.Equal(t, metrics.MetricUnit(""), snap["nexus_requests"][0].Unit)
-	require.Equal(t, 1, len(snap["nexus_latency"]))
+	require.Len(t, snap["nexus_latency"], 1)
 	require.Subset(t, snap["nexus_latency"][0].Tags, map[string]string{"namespace": ns, "method": method, "outcome": expectedOutcome})
 }

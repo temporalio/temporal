@@ -144,7 +144,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingSimpleBacklog() {
 	})
 	s.NoError(err)
 	s.NotNil(actResp.PollerScalingDecision)
-	s.Assert().GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
+	s.GreaterOrEqual(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 
 	nexusResp, err := feClient.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
 		Namespace: s.Namespace().String(),
@@ -196,7 +196,7 @@ func (s *PollerScalingIntegSuite) TestPollerScalingDecisionsAreSeenProbabilistic
 
 	// We must have seen at least a handful of non-nil scaling decisions
 	nonNilDecisions := util.FilterSlice(allScaleDecisions, func(d *taskqueuepb.PollerScalingDecision) bool { return d != nil })
-	s.Assert().GreaterOrEqual(len(nonNilDecisions), 3)
+	s.GreaterOrEqual(len(nonNilDecisions), 3)
 }
 
 // The following tests verify poller scaling decisions work with worker-versioning based concepts.

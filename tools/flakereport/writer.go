@@ -65,25 +65,25 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	// CI Breakers section (tests that failed all retries)
 	if len(summary.CIBreakers) > 0 {
 		content += "### CI Breakers (Failed All Retries)\n\n"
-		content += generateCIBreakerTable(summary.CIBreakers, maxLinks) + "\n"
+		content += generateTestReportTable(summary.CIBreakers, "CI Break Rate", maxLinks) + "\n"
 	}
 
 	// Crashes section
 	if len(summary.Crashes) > 0 {
 		content += "### Crashes\n\n"
-		content += generateTestReportTable(summary.Crashes, maxLinks) + "\n"
+		content += generateTestReportTable(summary.Crashes, "Crash Rate", maxLinks) + "\n"
 	}
 
 	// Timeouts section
 	if len(summary.Timeouts) > 0 {
 		content += "### Timeouts\n\n"
-		content += generateTestReportTable(summary.Timeouts, maxLinks) + "\n"
+		content += generateTestReportTable(summary.Timeouts, "Flake Rate", maxLinks) + "\n"
 	}
 
 	// Flaky tests section (show ALL tests)
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
-		content += generateTestReportTable(summary.FlakyTests, maxLinks) + "\n"
+		content += generateTestReportTable(summary.FlakyTests, "Flake Rate", maxLinks) + "\n"
 	}
 
 	// Flaky suites
