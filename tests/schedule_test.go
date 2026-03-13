@@ -1611,7 +1611,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 
 	ctx := s.newContext()
 
-	// Step 1: create the schedule and trigger it immediately.
+	// create the schedule and trigger it immediately.
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
@@ -1661,7 +1661,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 		10*time.Millisecond,
 	)
 
-	// Step 2: attach a second Nexus callback to the running workflow.
+	// attach a second Nexus callback to the running workflow.
 	// The USE_EXISTING conflict policy + AttachCompletionCallbacks makes the server
 	// reuse the existing run and append the callback, generating a
 	// WorkflowExecutionOptionsUpdated event with request_id = attachRequestId.
@@ -1703,7 +1703,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 		10*time.Millisecond,
 	)
 
-	// Step 3: reset the workflow to event 3 (WorkflowTaskStarted). The resetter
+	// reset the workflow to event 3 (WorkflowTaskStarted). The resetter
 	// reapplies events after the reset point, so WorkflowExecutionOptionsUpdated
 	// (event 5 in the base run) is reapplied to the reset run.
 	resetResp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
@@ -1719,7 +1719,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 		RunId:      resetResp.RunId,
 	}
 
-	// Step 4: verify the reset run has 2 callbacks with distinct request IDs.
+	// verify the reset run has 2 callbacks with distinct request IDs.
 	//
 	// The schedule's callback has request_id = original_start_request_id (stored in
 	// RequestIds under that key with EventType=STARTED via callbackRequestIDOverride,
@@ -1760,7 +1760,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 			"schedule callback and manually-attached callback must have different request IDs")
 	}, 10*time.Second, 100*time.Millisecond)
 
-	// Step 5: signal the reset run to complete.
+	// signal the reset run to complete.
 	// Sending without a RunId targets the latest (reset) run.
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
@@ -1771,7 +1771,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 	})
 	s.NoError(err)
 
-	// Step 6a: the schedule must record the original action as COMPLETED, proving that
+	// the schedule must record the original action as COMPLETED, proving that
 	// the schedule's callback (with original_start_request_id) survived the reset and
 	// correctly matched the scheduler's BufferedStart.
 	s.getScheduleEntryFomVisibility(sid, func(ent *schedulepb.ScheduleListEntry) bool {
@@ -1783,7 +1783,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 		return false
 	})
 
-	// Step 6b: the second (manually-attached) callback must be delivered to the HTTP server.
+	// the second (manually-attached) callback must be delivered to the HTTP server.
 	select {
 	case completion := <-ch.requestCh:
 		s.Equal(nexus.OperationStateSucceeded, completion.State)

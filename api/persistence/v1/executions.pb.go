@@ -1203,7 +1203,7 @@ type WorkflowExecutionState struct {
 	Status                        v11.WorkflowExecutionStatus `protobuf:"varint,4,opt,name=status,proto3,enum=temporal.api.enums.v1.WorkflowExecutionStatus" json:"status,omitempty"`
 	LastUpdateVersionedTransition *VersionedTransition        `protobuf:"bytes,5,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
 	StartTime                     *timestamppb.Timestamp      `protobuf:"bytes,6,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`
-	// Request IDs that are attached to the workflow execution. It can the request ID that started
+	// Request IDs that are attached to the workflow execution. It can be the request ID that started
 	// the workflow execution or request IDs that were attached to an existing running workflow
 	// execution via StartWorkflowExecutionRequest.OnConflictOptions.
 	RequestIds    map[string]*RequestIDInfo `protobuf:"bytes,7,rep,name=request_ids,json=requestIds,proto3" json:"request_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
