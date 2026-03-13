@@ -1990,17 +1990,11 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled b
 	})
 	s.NoError(err)
 
-	w := worker.New(
-		env.SdkClient(),
-		callerTaskQueue,
-		worker.Options{},
-	)
-
 	svc := nexus.NewService("test")
-	wf := func(ctx workflow.Context, input nexus.NoValue) (nexus.NoValue, error) {
+	handlerWF := func(ctx workflow.Context, input nexus.NoValue) (nexus.NoValue, error) {
 		return nil, nil
 	}
-	op := temporalnexus.NewWorkflowRunOperation("op", wf, func(ctx context.Context, nv nexus.NoValue, opts nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+	op := temporalnexus.NewWorkflowRunOperation("op", handlerWF, func(ctx context.Context, nv nexus.NoValue, opts nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
 		return client.StartWorkflowOptions{
 			ID:        handlerWorkflowID,
 			TaskQueue: handlerWorkflowTaskQueue,
@@ -2018,52 +2012,27 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled b
 		return nil, fut.Get(ctx, nil)
 	}
 
-	w.RegisterNexusService(svc)
-	w.RegisterWorkflow(wf)
-	w.RegisterWorkflow(callerWF)
-	w.Start()
-	defer w.Stop()
+	callerWorker := worker.New(env.SdkClient(), callerTaskQueue, worker.Options{})
+	callerWorker.RegisterNexusService(svc)
+	callerWorker.RegisterWorkflow(callerWF)
+	s.NoError(callerWorker.Start())
+	defer callerWorker.Stop()
+
+	// Register the handler workflow on a separate worker listening on the handler task queue.
+	handlerWorker := worker.New(env.SdkClient(), handlerWorkflowTaskQueue, worker.Options{})
+	handlerWorker.RegisterWorkflow(handlerWF)
+	s.NoError(handlerWorker.Start())
+	defer handlerWorker.Stop()
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
 	}, callerWF, nil)
 	s.NoError(err)
 
-	pollRes, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: handlerWorkflowTaskQueue,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: env.Namespace().String(),
-		TaskToken: pollRes.TaskToken,
-		Identity:  "test",
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: nil, // Return nil here to verify that the conversion to nexus content works as expected.
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
-
 	s.NoError(run.Get(ctx, nil))
-	history := env.SdkClient().GetWorkflowHistory(ctx, run.GetID(), "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-	for history.HasNext() {
-		ev, err := history.Next()
-		s.NoError(err)
-		if attr := ev.GetNexusOperationCompletedEventAttributes(); attr != nil {
-			protorequire.ProtoEqual(s.T(), testcore.MustToPayload(s.T(), nil), attr.GetResult())
-			break
-		}
-	}
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	completedEvent := s.RequireSingleHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	protorequire.ProtoEqual(s.T(), testcore.MustToPayload(s.T(), nil), completedEvent.GetNexusOperationCompletedEventAttributes().GetResult())
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration(chasmEnabled bool) {
