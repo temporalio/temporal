@@ -51,7 +51,7 @@ func (t *WorkerCommandsTask) GetCategory() Category {
 }
 
 func (t *WorkerCommandsTask) GetType() enumsspb.TaskType {
-	return enumsspb.TASK_TYPE_ACTIVITY_COMMAND
+	return enumsspb.TASK_TYPE_WORKER_COMMANDS
 }
 
 // GetDestination implements HasDestination for outbound queue grouping.
