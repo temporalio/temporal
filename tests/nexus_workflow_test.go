@@ -1307,161 +1307,46 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(c
 	})
 	s.NoError(err)
 
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue: taskQueue,
-	}, "workflow")
-	s.NoError(err)
+	handlerWorkflowID := testcore.RandomizeStr(s.T().Name())
+	handlerWFTaskQueue := testcore.RandomizeStr(s.T().Name())
 
-	completionWFType := "completion_wf"
-	completionWFTaskQueue := testcore.RandomizeStr(s.T().Name())
-	completionWFStartReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:          uuid.NewString(),
-		Namespace:          env.Namespace().String(),
-		WorkflowId:         testcore.RandomizeStr(s.T().Name()),
-		WorkflowType:       &commonpb.WorkflowType{Name: completionWFType},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: completionWFTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Input:              nil,
-		WorkflowRunTimeout: durationpb.New(100 * time.Second),
-		Identity:           "test",
+	handlerWF := func(ctx workflow.Context, _ string) (string, error) {
+		return "result", nil
 	}
 
-	pollerErrCh := env.nexusTaskPoller(ctx, s.T(), taskQueue, func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
-		start := res.Request.Variant.(*nexuspb.Request_StartOperation).StartOperation
-		require.Equal(t, op.Name(), start.Operation)
-
-		completionWFStartReq.CompletionCallbacks = []*commonpb.Callback{
-			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url:    start.Callback,
-						Header: start.CallbackHeader,
-					},
-				},
-			},
-		}
-
-		_, err := env.FrontendClient().StartWorkflowExecution(ctx, completionWFStartReq)
-		if err != nil {
-			return nil, err
-		}
-
-		return &nexusTaskResponse{StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "test-token"}}, nil
+	svc := nexus.NewService("test-service")
+	nexusOp := temporalnexus.NewWorkflowRunOperation("my-operation", handlerWF, func(ctx context.Context, input string, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		return client.StartWorkflowOptions{
+			ID:        handlerWorkflowID,
+			TaskQueue: handlerWFTaskQueue,
+		}, nil
 	})
+	svc.MustRegister(nexusOp)
 
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:  endpointName,
-						Service:   "test-service",
-						Operation: "my-operation",
-						Input:     testcore.MustToPayload(s.T(), "input"),
-					},
-				},
-			},
-		},
-	})
+	callerWF := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, svc.Name)
+		fut := c.ExecuteOperation(ctx, nexusOp, "input", workflow.NexusOperationOptions{})
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
+
+	callerWorker := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	callerWorker.RegisterWorkflow(callerWF)
+	callerWorker.RegisterNexusService(svc)
+	s.NoError(callerWorker.Start())
+	defer callerWorker.Stop()
+
+	handlerWorker := worker.New(env.SdkClient(), handlerWFTaskQueue, worker.Options{})
+	handlerWorker.RegisterWorkflow(handlerWF)
+	s.NoError(handlerWorker.Start())
+	defer handlerWorker.Stop()
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, callerWF)
 	s.NoError(err)
 
-	// Poll and verify that the "started" event was recorded.
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-	})
-	s.NoError(err)
-	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationStartedEventAttributes() != nil
-	})
-	s.Positive(startedEventIdx)
-
-	// Complete workflow containing callback
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: completionWFTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: &commonpb.Payloads{
-							Payloads: []*commonpb.Payload{
-								testcore.MustToPayload(s.T(), "result"),
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
-
-	// Poll again and verify the completion is recorded and triggers workflow progress.
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationCompletedEventAttributes() != nil
-	})
-	s.Positive(completedEventIdx)
-
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-						Result: &commonpb.Payloads{
-							Payloads: []*commonpb.Payload{
-								pollResp.History.Events[completedEventIdx].GetNexusOperationCompletedEventAttributes().Result,
-							},
-						},
-					},
-				},
-			},
-		},
-	})
-
-	s.NoError(err)
-	s.NoError(<-pollerErrCh)
 	var result string
 	s.NoError(run.Get(ctx, &result))
 	s.Equal("result", result)
