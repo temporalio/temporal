@@ -145,17 +145,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 	})
 	s.NoError(err)
 
-	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationStartedEventAttributes() != nil
-	})
-	s.Positive(startedEventIdx)
+	s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	// Get the scheduleEventId to issue the cancel command.
-	scheduledEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationScheduledEventAttributes() != nil
-	})
-	s.Positive(scheduledEventIdx)
-	scheduledEventID := pollResp.History.Events[scheduledEventIdx].EventId
+	scheduledEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
 
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Identity:  "test",
@@ -165,7 +158,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
 				Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
 					RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-						ScheduledEventId: scheduledEventID,
+						ScheduledEventId: scheduledEvent.EventId,
 					},
 				},
 			},
@@ -183,10 +176,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 		Identity: "test",
 	})
 	s.NoError(err)
-	cancelFailedIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationCancelRequestFailedEventAttributes() != nil
-	})
-	s.Positive(cancelFailedIdx)
+	cancelFailedEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED)
 
 	// Start new operation to successfully cancel.
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -219,8 +209,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 	s.NoError(err)
 	// Get the second scheduleEventId to issue the cancel command.
 	var secondScheduledEventID int64
-	for _, event := range pollResp.History.Events[cancelFailedIdx:] {
-		if event.GetNexusOperationScheduledEventAttributes() != nil {
+	for _, event := range pollResp.History.Events {
+		if event.GetNexusOperationScheduledEventAttributes() != nil && event.EventId > cancelFailedEvent.EventId {
 			secondScheduledEventID = event.EventId
 			break
 		}
@@ -248,7 +238,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 		require.NoError(t, err)
 		require.Len(t, desc.PendingNexusOperations, 2)
 		op1 := desc.PendingNexusOperations[0]
-		require.Equal(t, scheduledEventID, op1.ScheduledEventId)
+		require.Equal(t, scheduledEvent.EventId, op1.ScheduledEventId)
 		require.Equal(t, endpointName, op1.Endpoint)
 		require.Equal(t, "service", op1.Service)
 		require.Equal(t, "operation", op1.Operation)
@@ -270,8 +260,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	})
-	s.ContainsHistoryEvents(`NexusOperationCancelRequestFailed`, hist)
-	s.ContainsHistoryEvents(`NexusOperationCancelRequestCompleted`, hist)
+	s.RequireSingleHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED)
+	s.RequireSingleHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled bool) {
@@ -1089,12 +1079,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 			Identity: "test",
 		})
 		s.NoError(err)
-
-		startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-			return e.GetNexusOperationStartedEventAttributes() != nil
-		})
-		s.NotEqual(-1, startedEventIdx)
-		nexusOpStartedEvent := pollResp.History.Events[startedEventIdx]
+		nexusOpStartedEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 		s.Equal(completionWFID, nexusOpStartedEvent.GetNexusOperationStartedEventAttributes().OperationToken)
 		s.Equal(
 			completionWorkflowStartTime.Truncate(time.Second),
@@ -1102,13 +1087,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 		)
 		s.Len(nexusOpStartedEvent.Links, 1)
 		s.ProtoEqual(expectedLinks[i], nexusOpStartedEvent.Links[0].GetWorkflowEvent())
-
-		completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-			return e.GetNexusOperationCompletedEventAttributes() != nil
-		})
-		s.Positive(completedEventIdx)
-		s.Less(startedEventIdx, completedEventIdx)
-		s.Empty(pollResp.History.Events[completedEventIdx].Links)
+		completedEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+		s.Less(nexusOpStartedEvent.EventId, completedEvent.EventId)
+		s.Empty(completedEvent.Links)
 
 		// Complete start request to verify response is ignored.
 		_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
@@ -1140,7 +1121,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(ch
 						CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
 							Result: &commonpb.Payloads{
 								Payloads: []*commonpb.Payload{
-									testcore.MustToPayload(s.T(), "result"),
+									completedEvent.GetNexusOperationCompletedEventAttributes().Result,
 								},
 							},
 						},
@@ -2940,11 +2921,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToStartTimeout(chasmE
 	s.NoError(err)
 
 	// Verify we got a timeout event with the correct timeout type
-	timedOutEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationTimedOutEventAttributes() != nil
-	})
-	s.Positive(timedOutEventIdx)
-	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
+	timedOutEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 
@@ -3031,10 +3008,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 	s.NoError(err)
 
 	// Verify we got a started event
-	startedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationStartedEventAttributes() != nil
-	})
-	s.Positive(startedEventIdx)
+	s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 
 	// Respond to acknowledge the started event
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -3055,11 +3029,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 	s.NoError(err)
 
 	// Verify we got a timeout event with the correct timeout type
-	timedOutEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationTimedOutEventAttributes() != nil
-	})
-	s.Positive(timedOutEventIdx)
-	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
+	timedOutEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
 	s.Contains(timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetMessage(), "operation timed out")
@@ -3171,13 +3141,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	s.NoError(err)
 
 	// Find the NexusOperationCompleted event
-	completedEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationCompletedEventAttributes() != nil
-	})
-	s.Positive(completedEventIdx, "Should have a NexusOperationCompleted event")
-
-	// Verify the result contains the echoed request ID
-	completedEvent := pollResp.History.Events[completedEventIdx]
+	completedEvent := s.RequireSingleHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
 
