@@ -5,7 +5,6 @@ package ndc
 import (
 	"context"
 
-	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
@@ -108,14 +107,14 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	// incoming replication task, after application, will become the current branch
 	// (because higher version wins), we need to Rebuild the mutable state for that
 	//
-	// Preserve the original callback request ID from the existing mutable state so that
-	// CHASM scheduler completion handlers can still correlate the rebuilt callbacks to
-	// the correct BufferedStart entry. Read from the RequestIds map; fall back to CreateRequestId otherwise.
-	callbackRequestID := findStartRequestID(r.mutableState.GetExecutionState().GetRequestIds())
-	if callbackRequestID == "" {
-		callbackRequestID = r.mutableState.GetExecutionState().GetCreateRequestId()
+	// Use the original start request ID for both the rebuild requestID and callbackRequestID.
+	// Unlike a user-initiated reset (which generates a new resetRequestID), this is an
+	// in-place replication rebuild so both should be the same value.
+	requestID := findStartRequestID(r.mutableState.GetExecutionState().GetRequestIds())
+	if requestID == "" {
+		requestID = r.mutableState.GetExecutionState().GetCreateRequestId()
 	}
-	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, uuid.NewString(), callbackRequestID)
+	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, requestID)
 	if err != nil {
 		return nil, false, err
 	}
@@ -126,7 +125,6 @@ func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
 	requestID string,
-	callbackRequestID string,
 ) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
@@ -160,7 +158,7 @@ func (r *ConflictResolverImpl) rebuild(
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		requestID,
-		callbackRequestID,
+		requestID,
 	)
 	if err != nil {
 		return nil, err
