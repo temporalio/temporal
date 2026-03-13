@@ -1,9 +1,7 @@
 package frontend
 
 import (
-	"fmt"
 	"net"
-	"os"
 	"regexp"
 	"sync"
 	"time"
@@ -482,14 +480,8 @@ func (s *Service) Start() {
 			}
 		}()
 	} else {
-		var action string
-		if os.Args[0] == "temporal" {
-			action = "To enable Nexus, start the server with: `temporal server start-dev --http-port 7243`."
-		} else {
-			action = "To enable Nexus, follow these instructions: https://github.com/temporalio/temporal/blob/main/docs/architecture/nexus.md#enabling-nexus."
-		}
-
-		s.logger.Warn(fmt.Sprintf("HTTP API port has not been set. Nexus HTTP endpoints will not be available. %s", action))
+		s.logger.Warn("HTTP API port has not been set. Nexus HTTP endpoints will not be available. " +
+			"To enable Nexus, follow these instructions: https://github.com/temporalio/temporal/blob/main/docs/architecture/nexus.md#enabling-nexus.")
 	}
 
 	go s.membershipMonitor.Start()
