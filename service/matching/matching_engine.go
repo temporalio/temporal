@@ -3197,14 +3197,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	ctx, cancel := newRecordTaskStartedContext(ctx, task)
 	defer cancel()
 
-	// Only send the target Deployment Version if it is different from the poller's version.
-	// If the poller is not versioned, we still send the target version because the workflow may be moving from an
-	// unversioned worker to a versioned worker.
-	var sentTargetVersion *deploymentpb.WorkerDeploymentVersion
-	if task.targetWorkerDeploymentVersion.GetBuildId() != pollReq.DeploymentOptions.GetBuildId() ||
-		task.targetWorkerDeploymentVersion.GetDeploymentName() != pollReq.DeploymentOptions.GetDeploymentName() {
-		sentTargetVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion)
-	}
+	sentTargetVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion)
 
 	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),

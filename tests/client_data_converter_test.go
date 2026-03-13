@@ -158,7 +158,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverter() {
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	s.NoError(err)
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.NotEmpty(we.GetRunID())
 
 	var res string
 	err = we.Get(ctx, &res)
@@ -194,7 +194,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterFailed() {
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testDataConverterWorkflow, tl)
 	s.NoError(err)
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.NotEmpty(we.GetRunID())
 
 	var res string
 	err = we.Get(ctx, &res)
@@ -243,7 +243,7 @@ func (s *ClientDataConverterTestSuite) TestClientDataConverterWithChild() {
 	we, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, testParentWorkflow)
 	s.NoError(err)
 	s.NotNil(we)
-	s.True(we.GetRunID() != "")
+	s.NotEmpty(we.GetRunID())
 
 	var res string
 	err = we.Get(ctx, &res)

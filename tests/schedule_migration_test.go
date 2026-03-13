@@ -187,6 +187,115 @@ func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestScheduleMigrationDynamicConfig(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
+	)
+
+	ctx := testcore.NewContext()
+	sid := testcore.RandomizeStr("sched-migrate-dc")
+	wid := testcore.RandomizeStr("sched-migrate-dc-wf")
+	wt := testcore.RandomizeStr("sched-migrate-dc-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(1 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	// Create the V1 (workflow-backed) scheduler directly.
+	startArgs := &schedulespb.StartScheduleArgs{
+		Schedule: sched,
+		State: &schedulespb.InternalState{
+			Namespace:     nsName,
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			ConflictToken: scheduler.InitialConflictToken,
+		},
+	}
+	inputPayloads, err := sdk.PreferProtoDataConverter.ToPayloads(startArgs)
+	require.NoError(t, err)
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                nsName,
+		WorkflowId:               v1WorkflowID,
+		WorkflowType:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                    inputPayloads,
+		Identity:                 "test",
+		RequestId:                uuid.NewString(),
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	}
+	_, err = env.GetTestCluster().HistoryClient().StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(nsID, startReq, nil, nil, time.Now().UTC()),
+	)
+	require.NoError(t, err)
+
+	// Wait for the per-namespace worker to pick up the V1 workflow.
+	require.Eventually(t, func() bool {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// V1 workflow should automatically migrate due to dynamic config and complete.
+	require.Eventually(t, func() bool {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 30*time.Second, 500*time.Millisecond)
+
+	// V2 schedule should now exist.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	require.NoError(t, err)
+}
+
 func TestScheduleMigrationV1ToV2(t *testing.T) {
 	env := testcore.NewEnv(
 		t,

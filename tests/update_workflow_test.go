@@ -5149,7 +5149,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					// poll update to ensure same outcome is returned
 					pollRes, err := pollUpdate(s, s.Tv(),
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					s.Nil(err)
+					s.NoError(err)
 					s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 					s.EqualHistoryEvents(`

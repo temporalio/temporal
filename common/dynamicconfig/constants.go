@@ -1432,6 +1432,13 @@ second per poller by one physical queue manager`,
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
+	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
+		"matching.enablePollerAutoscalingMetrics",
+		false,
+		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
+The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
+default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
+	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
 		false,
@@ -1713,6 +1720,15 @@ before calling remote for missing events`,
 		15*time.Minute,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
+	)
+	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
+		"history.ChasmStandbyTaskDiscardDelay",
+		24*time.Hour,
+		`ChasmStandbyTaskDiscardDelay is the amount of time standby cluster will wait
+before discarding a CHASM task. Configurable per RegistrableTask type (e.g. "activity.dispatch").
+The default is intentionally much higher than the non CHASM standby discard delay because
+discarding a CHASM task can leave the execution in a stuck state after failover. Task types
+that can be safely offloaded should be configured with a shorter delay.`,
 	)
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
