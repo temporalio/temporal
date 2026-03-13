@@ -2275,89 +2275,64 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToCloseTimeout(chasmE
 				Variant: &nexuspb.EndpointTarget_Worker_{
 					Worker: &nexuspb.EndpointTarget_Worker{
 						Namespace: env.Namespace().String(),
-						TaskQueue: "unreachable-for-test",
+						TaskQueue: taskQueue,
 					},
 				},
 			},
 		},
 	})
 	s.NoError(err)
+
+	// Handler workflow runs on a task queue with no worker, so it stays pending.
+	handlerWF := func(ctx workflow.Context, input string) (string, error) {
+		return "", workflow.Sleep(ctx, time.Hour)
+	}
+
+	svc := nexus.NewService("service")
+	op := temporalnexus.NewWorkflowRunOperation("operation", handlerWF, func(ctx context.Context, input string, opts nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		return client.StartWorkflowOptions{
+			TaskQueue: "unreachable-for-test",
+		}, nil
+	})
+	s.NoError(svc.Register(op))
+
+	callerWF := func(ctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpointName, svc.Name)
+		fut := c.ExecuteOperation(ctx, op, "input", workflow.NexusOperationOptions{
+			ScheduleToCloseTimeout: 10 * time.Second,
+		})
+		return fut.Get(ctx, nil)
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	w.RegisterWorkflow(handlerWF)
+	w.RegisterNexusService(svc)
+	s.NoError(w.Start())
+	defer w.Stop()
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
-	}, "workflow")
+	}, callerWF)
 	s.NoError(err)
 
-	// Schedule the operation with a short schedule-to-close timeout
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:               endpointName,
-						Service:                "service",
-						Operation:              "operation",
-						Input:                  testcore.MustToPayload(s.T(), "input"),
-						ScheduleToCloseTimeout: durationpb.New(2 * time.Second),
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	// Verify the pending operation has the expected timeout.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, descResp.PendingNexusOperations, 1)
+		require.Equal(t, 10*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
+	}, time.Second*10, time.Millisecond*200)
 
-	descResp, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
-	s.NoError(err)
-	s.Len(descResp.PendingNexusOperations, 1)
-	s.Equal(2*time.Second, descResp.PendingNexusOperations[0].ScheduleToCloseTimeout.AsDuration())
+	// Wait for the workflow to fail due to the timeout.
+	err = run.Get(ctx, nil)
+	s.Error(err)
 
-	// Now wait for the timeout event
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: taskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.NoError(err)
-
-	// Verify we got a timeout event with the correct timeout type
-	timedOutEventIdx := slices.IndexFunc(pollResp.History.Events, func(e *historypb.HistoryEvent) bool {
-		return e.GetNexusOperationTimedOutEventAttributes() != nil
-	})
-	s.Positive(timedOutEventIdx)
-	timedOutEvent := pollResp.History.Events[timedOutEventIdx]
+	// Verify the timeout event in history.
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	timedOutEvent := s.RequireSingleHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 	s.Equal(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		timedOutEvent.GetNexusOperationTimedOutEventAttributes().GetFailure().GetCause().GetTimeoutFailureInfo().GetTimeoutType())
-
-	// Complete the workflow
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-				},
-			},
-		},
-	})
-	s.NoError(err)
-	s.NoError(run.Get(ctx, nil))
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationScheduleToStartTimeout(chasmEnabled bool) {
