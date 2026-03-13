@@ -189,10 +189,10 @@ config as the other services.`,
 		false,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
-	EnableActivityCancellationNexusTask = NewGlobalBoolSetting(
-		"system.enableActivityCancellationNexusTask",
+	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
+		"system.enableCancelActivityWorkerCommand",
 		false,
-		`EnableActivityCancellationNexusTask enables pushing activity cancellation to workers via Nexus task`,
+		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
 	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",

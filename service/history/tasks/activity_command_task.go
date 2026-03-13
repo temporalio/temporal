@@ -4,69 +4,67 @@ import (
 	"fmt"
 	"time"
 
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*ActivityCommandTask)(nil)
-var _ HasDestination = (*ActivityCommandTask)(nil)
+var _ Task = (*WorkerCommandsTask)(nil)
+var _ HasDestination = (*WorkerCommandsTask)(nil)
 
 type (
-	// ActivityCommandTask sends commands to activities via Nexus.
-	ActivityCommandTask struct {
+	// WorkerCommandsTask sends commands to workers via Nexus.
+	WorkerCommandsTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
 
-		// CommandType specifies the type of command.
-		CommandType enumsspb.ActivityCommandType
-		// TaskTokens of activities to send command to (batched by worker).
-		TaskTokens [][]byte
+		// Commands to send to the worker.
+		Commands []*workerpb.WorkerCommand
 		// Destination is the worker control task queue for outbound queue grouping.
 		Destination string
 	}
 )
 
-func (t *ActivityCommandTask) GetKey() Key {
+func (t *WorkerCommandsTask) GetKey() Key {
 	return NewImmediateKey(t.TaskID)
 }
 
-func (t *ActivityCommandTask) GetTaskID() int64 {
+func (t *WorkerCommandsTask) GetTaskID() int64 {
 	return t.TaskID
 }
 
-func (t *ActivityCommandTask) SetTaskID(id int64) {
+func (t *WorkerCommandsTask) SetTaskID(id int64) {
 	t.TaskID = id
 }
 
-func (t *ActivityCommandTask) GetVisibilityTime() time.Time {
+func (t *WorkerCommandsTask) GetVisibilityTime() time.Time {
 	return t.VisibilityTimestamp
 }
 
-func (t *ActivityCommandTask) SetVisibilityTime(timestamp time.Time) {
+func (t *WorkerCommandsTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
 }
 
-func (t *ActivityCommandTask) GetCategory() Category {
+func (t *WorkerCommandsTask) GetCategory() Category {
 	return CategoryOutbound
 }
 
-func (t *ActivityCommandTask) GetType() enumsspb.TaskType {
+func (t *WorkerCommandsTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_ACTIVITY_COMMAND
 }
 
 // GetDestination implements HasDestination for outbound queue grouping.
-func (t *ActivityCommandTask) GetDestination() string {
+func (t *WorkerCommandsTask) GetDestination() string {
 	return t.Destination
 }
 
-func (t *ActivityCommandTask) String() string {
-	return fmt.Sprintf("ActivityCommandTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, CommandType: %v, TaskTokens: %d, Destination: %v}",
+func (t *WorkerCommandsTask) String() string {
+	return fmt.Sprintf("WorkerCommandsTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Commands: %d, Destination: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
-		t.CommandType,
-		len(t.TaskTokens),
+		len(t.Commands),
 		t.Destination,
 	)
 }

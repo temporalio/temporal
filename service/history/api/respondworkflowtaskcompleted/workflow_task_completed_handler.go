@@ -17,8 +17,8 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -67,7 +67,7 @@ type (
 		effects                              effect.Controller
 		initiatedChildExecutionsInBatch      map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                       update.Registry
-		pendingActivityCancelsByControlQueue map[string][][]byte // Batched activity cancel task tokens by control queue
+		pendingWorkerCommandsByControlQueue map[string][]*workerpb.WorkerCommand // Batched worker commands by control queue
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -212,7 +212,7 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		}
 	}
 
-	if err := handler.flushBatchedActivityCommandTasks(); err != nil {
+	if err := handler.flushWorkerCommandsTasks(); err != nil {
 		return nil, err
 	}
 
@@ -688,26 +688,31 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 			if err != nil {
 				return nil, err
 			}
-			if handler.pendingActivityCancelsByControlQueue == nil {
-				handler.pendingActivityCancelsByControlQueue = make(map[string][][]byte)
+			if handler.pendingWorkerCommandsByControlQueue == nil {
+				handler.pendingWorkerCommandsByControlQueue = make(map[string][]*workerpb.WorkerCommand)
 			}
-			handler.pendingActivityCancelsByControlQueue[ai.WorkerControlTaskQueue] = append(
-				handler.pendingActivityCancelsByControlQueue[ai.WorkerControlTaskQueue],
-				taskToken,
+			handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue] = append(
+				handler.pendingWorkerCommandsByControlQueue[ai.WorkerControlTaskQueue],
+				&workerpb.WorkerCommand{
+					Type: &workerpb.WorkerCommand_CancelActivity{
+						CancelActivity: &workerpb.CancelActivityCommand{
+							TaskToken: taskToken,
+						},
+					},
+				},
 			)
 		}
 	}
 	return actCancelReqEvent, nil
 }
 
-// flushBatchedActivityCommandTasks creates ActivityCommandTasks for all collected activity cancellations,
+// flushWorkerCommandsTasks creates WorkerCommandsTasks for all collected worker commands,
 // batched by control queue.
-func (handler *workflowTaskCompletedHandler) flushBatchedActivityCommandTasks() error {
-	for controlQueue, taskTokens := range handler.pendingActivityCancelsByControlQueue {
-		if err := handler.mutableState.AddActivityCommandTasks(
-			taskTokens,
+func (handler *workflowTaskCompletedHandler) flushWorkerCommandsTasks() error {
+	for controlQueue, commands := range handler.pendingWorkerCommandsByControlQueue {
+		if err := handler.mutableState.AddWorkerCommandsTasks(
+			commands,
 			controlQueue,
-			enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
 		); err != nil {
 			return err
 		}

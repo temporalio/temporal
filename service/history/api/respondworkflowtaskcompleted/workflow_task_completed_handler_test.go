@@ -16,7 +16,7 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -386,7 +386,7 @@ func mustMarshalAny(t *testing.T, pb proto.Message) *anypb.Any {
 	return &a
 }
 
-func TestFlushBatchedActivityCommandTasks(t *testing.T) {
+func TestFlushWorkerCommandsTasks(t *testing.T) {
 	t.Parallel()
 
 	token1 := []byte("token1")
@@ -394,24 +394,38 @@ func TestFlushBatchedActivityCommandTasks(t *testing.T) {
 	token3 := []byte("token3")
 	token4 := []byte("token4")
 
-	t.Run("batches activities by control queue", func(t *testing.T) {
+	makeCommands := func(tokens ...[]byte) []*workerpb.WorkerCommand {
+		commands := make([]*workerpb.WorkerCommand, 0, len(tokens))
+		for _, token := range tokens {
+			commands = append(commands, &workerpb.WorkerCommand{
+				Type: &workerpb.WorkerCommand_CancelActivity{
+					CancelActivity: &workerpb.CancelActivityCommand{
+						TaskToken: token,
+					},
+				},
+			})
+		}
+		return commands
+	}
+
+	t.Run("batches commands by control queue", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
 
-		ms.EXPECT().AddActivityCommandTasks(
-			[][]byte{token1, token2, token3},
+		expectedCommands := makeCommands(token1, token2, token3)
+		ms.EXPECT().AddWorkerCommandsTasks(
+			expectedCommands,
 			"control-queue-1",
-			gomock.Any(),
 		).Return(nil).Times(1)
 
 		handler := &workflowTaskCompletedHandler{
 			mutableState: ms,
-			pendingActivityCancelsByControlQueue: map[string][][]byte{
-				"control-queue-1": {token1, token2, token3},
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": expectedCommands,
 			},
 		}
 
-		err := handler.flushBatchedActivityCommandTasks()
+		err := handler.flushWorkerCommandsTasks()
 		require.NoError(t, err)
 	})
 
@@ -419,42 +433,40 @@ func TestFlushBatchedActivityCommandTasks(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
 
-		// Capture calls to verify both queues are processed
-		calls := make(map[string][][]byte)
-		ms.EXPECT().AddActivityCommandTasks(
+		calls := make(map[string][]*workerpb.WorkerCommand)
+		ms.EXPECT().AddWorkerCommandsTasks(
 			gomock.Any(),
 			gomock.Any(),
-			enumsspb.ACTIVITY_COMMAND_TYPE_CANCEL,
-		).DoAndReturn(func(tokens [][]byte, queue string, _ enumsspb.ActivityCommandType) error {
-			calls[queue] = tokens
+		).DoAndReturn(func(commands []*workerpb.WorkerCommand, queue string) error {
+			calls[queue] = commands
 			return nil
 		}).Times(2)
 
 		handler := &workflowTaskCompletedHandler{
 			mutableState: ms,
-			pendingActivityCancelsByControlQueue: map[string][][]byte{
-				"control-queue-1": {token1, token2},
-				"control-queue-2": {token3, token4},
+			pendingWorkerCommandsByControlQueue: map[string][]*workerpb.WorkerCommand{
+				"control-queue-1": makeCommands(token1, token2),
+				"control-queue-2": makeCommands(token3, token4),
 			},
 		}
 
-		err := handler.flushBatchedActivityCommandTasks()
+		err := handler.flushWorkerCommandsTasks()
 		require.NoError(t, err)
 
-		require.Equal(t, [][]byte{token1, token2}, calls["control-queue-1"])
-		require.Equal(t, [][]byte{token3, token4}, calls["control-queue-2"])
+		require.Len(t, calls["control-queue-1"], 2)
+		require.Len(t, calls["control-queue-2"], 2)
 	})
 
-	t.Run("does nothing when no pending cancels", func(t *testing.T) {
+	t.Run("does nothing when no pending commands", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		ms := historyi.NewMockMutableState(ctrl)
 
 		handler := &workflowTaskCompletedHandler{
-			mutableState:                         ms,
-			pendingActivityCancelsByControlQueue: nil,
+			mutableState:                        ms,
+			pendingWorkerCommandsByControlQueue: nil,
 		}
 
-		err := handler.flushBatchedActivityCommandTasks()
+		err := handler.flushWorkerCommandsTasks()
 		require.NoError(t, err)
 	})
 }

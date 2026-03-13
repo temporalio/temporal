@@ -196,8 +196,8 @@ func GetOutboundTaskTypeTagValue(
 		return prefix + "." + task.StateMachineTaskType()
 	case *tasks.ChasmTask:
 		return prefix + "." + getCHASMTaskTypeTagValue(task, chasmRegistry)
-	case *tasks.ActivityCommandTask:
-		return prefix + ".ActivityCommand." + task.CommandType.String()
+	case *tasks.WorkerCommandsTask:
+		return prefix + ".WorkerCommands"
 	default:
 		return prefix + "Unknown"
 	}

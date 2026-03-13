@@ -15,6 +15,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
+import "temporal/api/worker/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -491,18 +492,7 @@ message OutboundTaskInfo {
 
 // WorkerCommandsTask contains worker commands to dispatch via Nexus.
 message WorkerCommandsTask {
-    repeated WorkerCommand commands = 1;
-
-    message WorkerCommand {
-        oneof type {
-            CancelActivity cancel_activity = 1;
-        }
-    }
-
-    message CancelActivity {
-        // Task token identifying the activity to cancel.
-        bytes task_token = 1;
-    }
+    repeated temporal.api.worker.v1.WorkerCommand commands = 1;
 }
 
 message NexusInvocationTaskInfo {
