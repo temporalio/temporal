@@ -24,7 +24,17 @@ services:
       - "3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: root
-    command: --max-connections=500
+    command: >-
+      --max-connections=500
+      --innodb-flush-log-at-trx-commit=0
+      --innodb-flush-method=nosync
+      --innodb-doublewrite=0
+      --innodb-log-buffer-size=64M
+      --innodb-buffer-pool-size=512M
+      --sync-binlog=0
+      --skip-log-bin
+    tmpfs:
+      - /var/lib/mysql:size=2G
     volumes:
       - ./mysql-init:/docker-entrypoint-initdb.d
     healthcheck:
@@ -38,7 +48,18 @@ services:
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
-    command: postgres -c max_connections=500
+    command: >-
+      postgres
+      -c max_connections=500
+      -c synchronous_commit=off
+      -c fsync=off
+      -c full_page_writes=off
+      -c wal_level=minimal
+      -c max_wal_senders=0
+      -c shared_buffers=256MB
+      -c work_mem=16MB
+    tmpfs:
+      - /var/lib/postgresql/data:size=2G
     volumes:
       - ./postgresql-init:/docker-entrypoint-initdb.d
     healthcheck:
