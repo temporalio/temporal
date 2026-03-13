@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"strconv"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -141,6 +142,26 @@ func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 // HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.
 func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
+}
+
+// AddNexusOperationStarted adds a NexusOperationStarted history event to the workflow.
+// Called by the nexus operation executor when the handler returns a pending (async) result.
+func (w *Workflow) AddNexusOperationStarted(
+	ctx chasm.MutableContext,
+	key string,
+	op *nexusoperation.Operation,
+) {
+	scheduledEventID, _ := strconv.ParseInt(key, 10, 64)
+	w.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: scheduledEventID,
+				OperationToken:   op.GetOperationToken(),
+				OperationId:      op.GetOperationToken(),
+				RequestId:        op.GetRequestId(),
+			},
+		}
+	})
 }
 
 // RemoveNexusOperation removes a Nexus operation from the workflow.
