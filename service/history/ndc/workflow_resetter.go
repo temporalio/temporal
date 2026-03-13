@@ -440,7 +440,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
 	resetRunID string,
-	requestID string,
+	resetRequestID string,
 ) (Workflow, error) {
 
 	resetBranchToken, err := r.forkAndGenerateBranchToken(
@@ -485,7 +485,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			resetRunID,
 		),
 		resetBranchToken,
-		requestID,
+		resetRequestID,
 	)
 	if err != nil {
 		return nil, err
