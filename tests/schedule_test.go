@@ -1665,9 +1665,9 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 	// The USE_EXISTING conflict policy + AttachCompletionCallbacks makes the server
 	// reuse the existing run and append the callback, generating a
 	// WorkflowExecutionOptionsUpdated event with request_id = attachRequestId.
-	attachRequestId := uuid.NewString()
+	attachRequestID := uuid.NewString()
 	attachResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                attachRequestId,
+		RequestId:                attachRequestID,
 		Namespace:                s.Namespace().String(),
 		WorkflowId:               wfExec.WorkflowId, // The scheduler appends a time suffix to wid
 		WorkflowType:             &commonpb.WorkflowType{Name: wt},
@@ -1743,8 +1743,8 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 		// Find request IDs from WorkflowExtendedInfo.
 		reqIDs := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 
-		// attachRequestId must map to WORKFLOW_EXECUTION_OPTIONS_UPDATED.
-		attachInfo, ok := reqIDs[attachRequestId]
+		// attachRequestID must map to WORKFLOW_EXECUTION_OPTIONS_UPDATED.
+		attachInfo, ok := reqIDs[attachRequestID]
 		require.True(col, ok, "attachRequestId not found in RequestIdInfos")
 		require.Equal(col, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, attachInfo.GetEventType())
 
@@ -1756,7 +1756,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 			}
 		}
 		require.NotEmpty(col, startRequestID, "no request ID found for WorkflowExecutionStarted")
-		require.NotEqual(col, startRequestID, attachRequestId,
+		require.NotEqual(col, startRequestID, attachRequestID,
 			"schedule callback and manually-attached callback must have different request IDs")
 	}, 10*time.Second, 100*time.Millisecond)
 
