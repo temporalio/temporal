@@ -2587,6 +2587,21 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
+	// Wait for visibility to index both workflow runs before starting force-replication.
+	// Force-replication uses ListWorkflowExecutions with an empty query (all workflows in namespace),
+	// so we use the same empty query here to match exactly what force-replication will see.
+	frontendClient0 := s.clusters[0].FrontendClient()
+	s.Eventually(func() bool {
+		countResp, err := frontendClient0.CountWorkflowExecutions(testCtx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: namespace,
+		})
+		if err != nil {
+			return false
+		}
+		// Expect exactly 2 runs: original run + reset run
+		return countResp.GetCount() == 2
+	}, 15*time.Second, 200*time.Millisecond, "visibility should index both workflow runs before force-replication")
+
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2607,6 +2622,40 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
 	s.NoError(err)
+
+	// Verify the force-replication workflow actually ran VerifyReplicationTasks activities
+	// and that they verified exactly the expected number of workflow runs.
+	var totalVerifiedCount int64
+	scheduledActivityTypes := make(map[int64]string) // scheduledEventId -> activity type name
+	histIter := sysClient.GetWorkflowHistory(testCtx, forceReplicationWorkflowID, sysWfRun.GetRunID(),
+		false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for histIter.HasNext() {
+		event, err := histIter.Next()
+		s.NoError(err)
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+			attrs := event.GetActivityTaskScheduledEventAttributes()
+			scheduledActivityTypes[event.GetEventId()] = attrs.GetActivityType().GetName()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			attrs := event.GetActivityTaskCompletedEventAttributes()
+			activityType := scheduledActivityTypes[attrs.GetScheduledEventId()]
+			if activityType != "VerifyReplicationTasks" {
+				continue
+			}
+			result := attrs.GetResult()
+			if result != nil && len(result.GetPayloads()) > 0 {
+				var resp struct {
+					VerifiedWorkflowCount int64
+				}
+				s.NoError(payloads.Decode(result, &resp))
+				totalVerifiedCount += resp.VerifiedWorkflowCount
+			}
+		default:
+		}
+	}
+	// Expect exactly 2 verified workflow runs: original run + reset run
+	s.Equal(int64(2), totalVerifiedCount,
+		"force-replication should have verified exactly 2 workflow runs (original + reset run)")
 
 	s.waitForClusterSynced()
 
