@@ -15,7 +15,7 @@ import (
 //
 // NOTE: If you're using testcore.NewEnv, you can use env.Context() directly - it already
 // includes RPC headers. This function is primarily for legacy tests or creating standalone
-// contexts outside of the testEnv framework.
+// contexts outside of the TestEnv framework.
 //
 // If a parent context is provided, the returned context will be canceled when
 // either the timeout expires OR the parent is canceled.

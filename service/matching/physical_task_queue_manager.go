@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -666,7 +667,7 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 	if m := c.getDrainBacklogMgr(); m != nil {
 		drainStats := m.BacklogStatsByPriority()
 		for pri, tqs := range drainStats {
-			mergeStats(util.GetOrSetNew(stats, pri), tqs)
+			taskqueue.MergeStats(util.GetOrSetNew(stats, pri), tqs)
 		}
 	}
 
@@ -948,29 +949,7 @@ func (c *physicalTaskQueueManagerImpl) getOrCreateTaskTracker(
 func aggregateStats(stats map[int32]*taskqueuepb.TaskQueueStats) *taskqueuepb.TaskQueueStats {
 	result := &taskqueuepb.TaskQueueStats{ApproximateBacklogAge: durationpb.New(0)}
 	for _, s := range stats {
-		mergeStats(result, s)
+		taskqueue.MergeStats(result, s)
 	}
 	return result
-}
-
-func mergeStats(into, from *taskqueuepb.TaskQueueStats) {
-	into.ApproximateBacklogCount += from.ApproximateBacklogCount
-	into.ApproximateBacklogAge = oldestBacklogAge(into.ApproximateBacklogAge, from.ApproximateBacklogAge)
-	into.TasksAddRate += from.TasksAddRate
-	into.TasksDispatchRate += from.TasksDispatchRate
-}
-
-func oldestBacklogAge(left, right *durationpb.Duration) *durationpb.Duration {
-	// Treat nil as zero to keep stats aggregation defensive. It is okay here to reassign the pointer values when
-	// they are nil since a nil Duration proto is equivalent to a zero duration.
-	if left == nil {
-		left = durationpb.New(0)
-	}
-	if right == nil {
-		right = durationpb.New(0)
-	}
-	if left.AsDuration() > right.AsDuration() {
-		return left
-	}
-	return right
 }
