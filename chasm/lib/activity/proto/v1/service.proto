@@ -33,4 +33,8 @@ service ActivityService {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
+
+    rpc DeleteActivityExecution(DeleteActivityExecutionRequest) returns (DeleteActivityExecutionResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.activity_id";
+    }
 }

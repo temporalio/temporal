@@ -53,3 +53,12 @@ message RequestCancelActivityExecutionRequest {
 
 message RequestCancelActivityExecutionResponse {
 }
+
+message DeleteActivityExecutionRequest {
+    string namespace_id = 1;
+
+    temporal.api.workflowservice.v1.DeleteActivityExecutionRequest frontend_request = 2;
+}
+
+message DeleteActivityExecutionResponse {
+}

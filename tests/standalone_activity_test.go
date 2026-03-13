@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -2098,6 +2099,146 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 			require.Equal(t, "reason exceeds length limit", invalidArgErr.Message)
+		})
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestDelete() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	t.Run("DeleteScheduledActivity", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+			})
+			var notFoundErr *serviceerror.NotFound
+			assert.ErrorAs(t, err, &notFoundErr)
+		}, 5*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("DeleteRunningActivity", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+
+		_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+			})
+			var notFoundErr *serviceerror.NotFound
+			assert.ErrorAs(t, err, &notFoundErr)
+		}, 5*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("DeleteCompletedActivity", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
+		runID := startResp.RunId
+
+		pollTaskResp := s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
+		_, err := s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: s.Namespace().String(),
+			TaskToken: pollTaskResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		_, err = s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      runID,
+			})
+			var notFoundErr *serviceerror.NotFound
+			assert.ErrorAs(t, err, &notFoundErr)
+		}, 5*time.Second, 100*time.Millisecond)
+	})
+
+	t.Run("DeleteNonExistent", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+
+		_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+		})
+
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+	})
+
+	t.Run("RequestValidations", func(t *testing.T) {
+		t.Run("EmptyActivityID", func(t *testing.T) {
+			_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+				Namespace: s.Namespace().String(),
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "activity ID is required", invalidArgErr.Message)
+		})
+
+		t.Run("ActivityIDTooLong", func(t *testing.T) {
+			_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+				defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+		})
+
+		t.Run("InvalidRunID", func(t *testing.T) {
+			_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
+				Namespace:  s.Namespace().String(),
+				ActivityId: testcore.RandomizeStr(t.Name()),
+				RunId:      "invalid-run-id",
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
 		})
 	})
 }

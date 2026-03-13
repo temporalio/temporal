@@ -130,11 +130,25 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 
 // Terminate implements the chasm.RootComponent interface.
 func (a *Activity) Terminate(
-	_ chasm.MutableContext,
-	_ chasm.TerminateComponentRequest,
+	ctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// TODO: Implement terminate logic.
-	return chasm.TerminateComponentResponse{}, nil
+	// If already in a terminal state, no-op.
+	if !TransitionTerminated.Possible(a) {
+		return chasm.TerminateComponentResponse{}, nil
+	}
+	event := terminateEvent{
+		request: &activitypb.TerminateActivityExecutionRequest{
+			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+				Reason: req.Reason,
+			},
+		},
+		MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
+			Handler:                     ctx.MetricsHandler(),
+			BreakdownMetricsByTaskQueue: func(string, string, enumspb.TaskQueueType) bool { return false },
+		},
+	}
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.

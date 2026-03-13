@@ -261,6 +261,35 @@ func (h *frontendHandler) CountActivityExecutions(
 	}, nil
 }
 
+// DeleteActivityExecution terminates and schedules a standalone activity execution for deletion.
+func (h *frontendHandler) DeleteActivityExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteActivityExecutionRequest,
+) (*workflowservice.DeleteActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteActivityExecution(ctx, &activitypb.DeleteActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteActivityExecutionResponse{}, nil
+}
+
 // TerminateActivityExecution terminates a standalone activity execution
 func (h *frontendHandler) TerminateActivityExecution(
 	ctx context.Context,

@@ -154,3 +154,76 @@ func TestHandleStarted(t *testing.T) {
 		})
 	}
 }
+
+func TestActivityTerminate(t *testing.T) {
+	testCases := []struct {
+		name           string
+		activityStatus activitypb.ActivityExecutionStatus
+		expectNoOp     bool
+	}{
+		{
+			name:           "terminate scheduled activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			expectNoOp:     false,
+		},
+		{
+			name:           "terminate started activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			expectNoOp:     false,
+		},
+		{
+			name:           "terminate cancel-requested activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			expectNoOp:     false,
+		},
+		{
+			name:           "no-op on completed activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			expectNoOp:     true,
+		},
+		{
+			name:           "no-op on already terminated activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+			expectNoOp:     true,
+		},
+		{
+			name:           "no-op on failed activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			expectNoOp:     true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
+
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					Status:                 tc.activityStatus,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
+				Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+				Reason: "Delete activity execution",
+			})
+			require.NoError(t, err)
+
+			if tc.expectNoOp {
+				require.Equal(t, tc.activityStatus, activity.Status, "expected no state change for terminal activities")
+			} else {
+				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+			}
+		})
+	}
+}
