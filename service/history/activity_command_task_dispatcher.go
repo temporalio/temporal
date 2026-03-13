@@ -8,8 +8,8 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
@@ -65,25 +65,40 @@ func (d *activityCommandTaskDispatcher) execute(
 	return d.dispatchToWorker(ctx, task)
 }
 
+const (
+	workerServiceName        = "temporal.api.nexusservices.workerservice.v1.WorkerService"
+	executeCommandsOperation = "executeCommands"
+)
+
 func (d *activityCommandTaskDispatcher) dispatchToWorker(
 	ctx context.Context,
 	task *tasks.ActivityCommandTask,
 ) error {
-	notificationRequest := &workerpb.ActivityNotificationRequest{
-		NotificationType: workerpb.ActivityNotificationType(task.CommandType),
-		TaskTokens:       task.TaskTokens,
+	commands := make([]*workerservicepb.WorkerCommandsRequest_WorkerCommand, 0, len(task.TaskTokens))
+	for _, token := range task.TaskTokens {
+		commands = append(commands, &workerservicepb.WorkerCommandsRequest_WorkerCommand{
+			Type: &workerservicepb.WorkerCommandsRequest_WorkerCommand_CancelActivity{
+				CancelActivity: &workerservicepb.WorkerCommandsRequest_CancelActivity{
+					TaskToken: token,
+				},
+			},
+		})
 	}
-	requestPayload, err := payload.Encode(notificationRequest)
+
+	request := &workerservicepb.WorkerCommandsRequest{
+		Commands: commands,
+	}
+	requestPayload, err := payload.Encode(request)
 	if err != nil {
-		return fmt.Errorf("failed to encode activity command request: %w", err)
+		return fmt.Errorf("failed to encode worker commands request: %w", err)
 	}
 
 	nexusRequest := &nexuspb.Request{
 		Header: map[string]string{},
 		Variant: &nexuspb.Request_StartOperation{
 			StartOperation: &nexuspb.StartOperationRequest{
-				Service:   workerpb.WorkerService.ServiceName,
-				Operation: workerpb.WorkerService.NotifyActivity.Name(),
+				Service:   workerServiceName,
+				Operation: executeCommandsOperation,
 				Payload:   requestPayload,
 			},
 		},
