@@ -2466,7 +2466,7 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 }
 
 func (s *workflowSuite) TestMigrateDynamicConfig() {
-	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe).
+	// Enable migration via dynamic config.
 	// Mock MigrateSchedule activity to succeed.
 	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
 
@@ -2476,7 +2476,7 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+		return schedulerWorkflowWithDeps(ctx, args, NewSpecBuilder(), true)
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2500,8 +2500,7 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 }
 
 func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
-	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe),
-	// but activity fails.
+	// Enable migration via dynamic config, but activity fails.
 	migrateCalls := 0
 	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
@@ -2515,7 +2514,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+		return schedulerWorkflowWithDeps(ctx, args, NewSpecBuilder(), true)
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
