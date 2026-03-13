@@ -272,6 +272,14 @@ func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	s.Equal(expectedValue, v)
 }
 
+func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByChasmTaskType() {
+	setting := dynamicconfig.NewChasmTaskTypeDurationSetting(testGetDurationPropertyFilteredByChasmTaskTypeKey, 0, "")
+	v := setting.Get(s.collection)("activity.dispatch")
+	s.Equal(30*time.Second, v)
+	v = setting.Get(s.collection)("callback.invoke")
+	s.Equal(24*time.Hour, v)
+}
+
 func (s *fileBasedClientSuite) TestValidateConfig_NilLogger() {
 	doneCh := make(chan any)
 	defer close(doneCh)
