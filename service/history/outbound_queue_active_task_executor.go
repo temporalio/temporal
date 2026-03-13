@@ -27,7 +27,7 @@ const (
 type outboundQueueActiveTaskExecutor struct {
 	stateMachineEnvironment
 	chasmEngine                   chasm.Engine
-	activityCommandTaskDispatcher *activityCommandTaskDispatcher
+	workerCommandsTaskDispatcher *workerCommandsTaskDispatcher
 }
 
 var _ queues.Executor = &outboundQueueActiveTaskExecutor{}
@@ -52,7 +52,7 @@ func newOutboundQueueActiveTaskExecutor(
 			metricsHandler: scopedMetricsHandler,
 		},
 		chasmEngine: chasmEngine,
-		activityCommandTaskDispatcher: newActivityCommandTaskDispatcher(
+		workerCommandsTaskDispatcher: newWorkerCommandsTaskDispatcher(
 			matchingRawClient,
 			config,
 			scopedMetricsHandler,
@@ -104,8 +104,8 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		return respond(e.executeStateMachineTask(ctx, task))
 	case *tasks.ChasmTask:
 		return respond(e.executeChasmSideEffectTask(ctx, task))
-	case *tasks.ActivityCommandTask:
-		return respond(e.activityCommandTaskDispatcher.execute(ctx, task))
+	case *tasks.WorkerCommandsTask:
+		return respond(e.workerCommandsTaskDispatcher.execute(ctx, task))
 	}
 
 	return respond(queueserrors.NewUnprocessableTaskError(fmt.Sprintf("unknown task type '%T'", task)))

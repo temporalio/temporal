@@ -9,7 +9,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/tests/testcore"
@@ -19,7 +18,7 @@ import (
 // TestDispatchCancelToWorker tests that when an activity cancellation is requested,
 // the server dispatches an ActivityCommandTask to the worker's control queue via Nexus.
 func TestDispatchCancelToWorker(t *testing.T) {
-	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableActivityCancellationNexusTask, true))
+	env := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
@@ -143,7 +142,7 @@ func TestDispatchCancelToWorker(t *testing.T) {
 
 	startOp := nexusPollResp.Request.GetStartOperation()
 	env.NotNil(startOp, "Expected StartOperation in Nexus request")
-	env.Equal(workerpb.WorkerService.ServiceName, startOp.Service, "Expected WorkerService")
-	env.Equal(workerpb.WorkerService.NotifyActivity.Name(), startOp.Operation, "Expected notify-activity operation")
-	t.Log("SUCCESS: Received notify-activity Nexus request on control queue")
+	env.Equal("temporal.api.nexusservices.workerservice.v1.WorkerService", startOp.Service, "Expected WorkerService")
+	env.Equal("ExecuteCommands", startOp.Operation, "Expected ExecuteCommands operation")
+	t.Log("SUCCESS: Received ExecuteCommands Nexus request on control queue")
 }

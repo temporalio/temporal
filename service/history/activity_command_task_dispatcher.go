@@ -10,7 +10,6 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
@@ -23,24 +22,24 @@ import (
 )
 
 const (
-	activityCommandTaskTimeout = time.Second * 10 * debug.TimeoutMultiplier
+	workerCommandsTaskTimeout = time.Second * 10 * debug.TimeoutMultiplier
 )
 
-// activityCommandTaskDispatcher handles dispatching activity command tasks to workers.
-type activityCommandTaskDispatcher struct {
+// workerCommandsTaskDispatcher handles dispatching worker commands to workers via Nexus.
+type workerCommandsTaskDispatcher struct {
 	matchingRawClient resource.MatchingRawClient
 	config            *configs.Config
 	metricsHandler    metrics.Handler
 	logger            log.Logger
 }
 
-func newActivityCommandTaskDispatcher(
+func newWorkerCommandsTaskDispatcher(
 	matchingRawClient resource.MatchingRawClient,
 	config *configs.Config,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
-) *activityCommandTaskDispatcher {
-	return &activityCommandTaskDispatcher{
+) *workerCommandsTaskDispatcher {
+	return &workerCommandsTaskDispatcher{
 		matchingRawClient: matchingRawClient,
 		config:            config,
 		metricsHandler:    metricsHandler,
@@ -48,19 +47,19 @@ func newActivityCommandTaskDispatcher(
 	}
 }
 
-func (d *activityCommandTaskDispatcher) execute(
+func (d *workerCommandsTaskDispatcher) execute(
 	ctx context.Context,
-	task *tasks.ActivityCommandTask,
+	task *tasks.WorkerCommandsTask,
 ) error {
-	if !d.config.EnableActivityCancellationNexusTask() {
+	if !d.config.EnableCancelActivityWorkerCommand() {
 		return nil
 	}
 
-	if len(task.TaskTokens) == 0 {
+	if len(task.Commands) == 0 {
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, activityCommandTaskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, workerCommandsTaskTimeout)
 	defer cancel()
 
 	return d.dispatchToWorker(ctx, task)
@@ -71,23 +70,12 @@ const (
 	executeCommandsOperation = "ExecuteCommands"
 )
 
-func (d *activityCommandTaskDispatcher) dispatchToWorker(
+func (d *workerCommandsTaskDispatcher) dispatchToWorker(
 	ctx context.Context,
-	task *tasks.ActivityCommandTask,
+	task *tasks.WorkerCommandsTask,
 ) error {
-	commands := make([]*workerpb.WorkerCommand, 0, len(task.TaskTokens))
-	for _, token := range task.TaskTokens {
-		commands = append(commands, &workerpb.WorkerCommand{
-			Type: &workerpb.WorkerCommand_CancelActivity{
-				CancelActivity: &workerpb.CancelActivityCommand{
-					TaskToken: token,
-				},
-			},
-		})
-	}
-
 	request := &workerservicepb.ExecuteCommandsRequest{
-		Commands: commands,
+		Commands: task.Commands,
 	}
 	requestPayload, err := payload.Encode(request)
 	if err != nil {
@@ -114,7 +102,7 @@ func (d *activityCommandTaskDispatcher) dispatchToWorker(
 		Request: nexusRequest,
 	})
 	if err != nil {
-		d.logger.Warn("Failed to dispatch activity command to worker",
+		d.logger.Warn("Failed to dispatch worker commands",
 			tag.NewStringTag("control_queue", task.Destination),
 			tag.Error(err))
 		return err
@@ -123,26 +111,23 @@ func (d *activityCommandTaskDispatcher) dispatchToWorker(
 	return d.handleDispatchResponse(resp, task.Destination)
 }
 
-func (d *activityCommandTaskDispatcher) handleDispatchResponse(
+func (d *workerCommandsTaskDispatcher) handleDispatchResponse(
 	resp *matchingservice.DispatchNexusTaskResponse,
 	controlQueue string,
 ) error {
-	// Check for timeout (no worker polling)
 	if resp.GetRequestTimeout() != nil {
-		d.logger.Warn("No worker polling control queue for activity command",
+		d.logger.Warn("No worker polling control queue",
 			tag.NewStringTag("control_queue", controlQueue))
 		return errors.New("no worker polling control queue")
 	}
 
-	// Check for worker handler failure
 	if failure := resp.GetFailure(); failure != nil {
-		d.logger.Warn("Worker handler failed for activity command",
+		d.logger.Warn("Worker handler failed",
 			tag.NewStringTag("control_queue", controlQueue),
 			tag.NewStringTag("failure_message", failure.GetMessage()))
 		return fmt.Errorf("worker handler failed: %s", failure.GetMessage())
 	}
 
-	// Check operation-level response
 	nexusResp := resp.GetResponse()
 	if nexusResp == nil {
 		return nil
@@ -153,9 +138,8 @@ func (d *activityCommandTaskDispatcher) handleDispatchResponse(
 		return nil
 	}
 
-	// Check for operation failure (terminal - don't retry)
 	if opFailure := startOpResp.GetFailure(); opFailure != nil {
-		d.logger.Warn("Activity command operation failure",
+		d.logger.Warn("Worker command operation failure",
 			tag.NewStringTag("control_queue", controlQueue),
 			tag.NewStringTag("failure_message", opFailure.GetMessage()))
 		return nil
@@ -163,4 +147,3 @@ func (d *activityCommandTaskDispatcher) handleDispatchResponse(
 
 	return nil
 }
-
