@@ -94,7 +94,7 @@ func (s *workflowSuite) run(sched *schedulepb.Schedule, iterations int) {
 		sched.Action = s.defaultAction("myid")
 	}
 
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: sched,
 		State: &schedulespb.InternalState{
 			Namespace:     "myns",
@@ -284,7 +284,7 @@ func (s *workflowSuite) runAcrossContinue(
 
 			s.T().Logf("starting workflow with CAN every %d iterations, start time %s",
 				CurrentTweakablePolicies.IterationsBeforeContinueAsNew, startTime)
-			s.env.ExecuteWorkflow(SchedulerWorkflow, startArgs)
+			s.env.ExecuteWorkflow(schedulerWorkflow, startArgs)
 			s.T().Logf("finished workflow, time is now %s, finished is %v", s.now(), state.finished)
 
 			s.True(s.env.IsWorkflowCompleted())
@@ -379,7 +379,7 @@ func (s *workflowSuite) TestInitialPatch() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -429,7 +429,7 @@ func (s *workflowSuite) TestCatchupWindow() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Calendar: []*schedulepb.CalendarSpec{{
@@ -472,7 +472,7 @@ func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Calendar: []*schedulepb.CalendarSpec{{
@@ -2023,7 +2023,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoActions() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2058,7 +2058,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenNoNextTime() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Calendar: []*schedulepb.CalendarSpec{{
@@ -2089,7 +2089,7 @@ func (s *workflowSuite) TestExitScheduleWorkflowWhenEmpty() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Action: s.defaultAction("myid"),
 		},
@@ -2282,7 +2282,7 @@ func (s *workflowSuite) TestMigrateSuccess() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2328,7 +2328,7 @@ func (s *workflowSuite) TestMigrateFailure() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2377,7 +2377,7 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2434,7 +2434,7 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2556,7 +2556,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(schedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{

@@ -221,7 +221,7 @@ var (
 	errUpdateConflict = errors.New("conflicting concurrent update")
 )
 
-func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+func schedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 	return schedulerWorkflowWithDeps(ctx, args, NewSpecBuilder(), false)
 }
 
