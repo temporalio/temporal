@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -605,7 +604,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
 		opParentData := &workflowpb.NexusOperationParentData{}
-		require.NoError(t, proto.Unmarshal(op.ParentData, opParentData))
+		require.NoError(t, op.ParentData.UnmarshalTo(opParentData))
 		require.EqualExportedValues(t, &workflowpb.NexusOperationParentData{
 			ScheduledEventId:      event.EventId,
 			ScheduledEventBatchId: 1, // WorkflowTaskCompletedEventID
@@ -826,7 +825,7 @@ func TestHandleCancelCommand(t *testing.T) {
 		cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 		require.True(t, hasCancellation)
 		cancelParentData := &workflowpb.NexusCancellationParentData{}
-		require.NoError(t, proto.Unmarshal(cancellation.ParentData, cancelParentData))
+		require.NoError(t, cancellation.ParentData.UnmarshalTo(cancelParentData))
 		require.EqualExportedValues(t, &workflowpb.NexusCancellationParentData{
 			RequestedEventId: tcx.history.Events[1].EventId,
 		}, cancelParentData)

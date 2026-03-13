@@ -29,7 +29,7 @@ func newTestOperation() *Operation {
 			ScheduledTime:          timestamppb.New(defaultTime),
 			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
 			RequestId:              "request-id",
-			ParentData:             []byte("parent-data"),
+			// ParentData is not set; it's opaque to the operation component.
 			Attempt:                0,
 		},
 	}

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/failure/v1/message.proto";
@@ -41,7 +42,7 @@ message OperationState {
 
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The operation component itself does not interpret this field.
-  bytes parent_data = 11;
+  google.protobuf.Any parent_data = 11;
 
   // The number of attempts made to deliver the start operation request.
   // This number represents a minimum bound since the attempt is incremented after the request completes.
@@ -102,9 +103,12 @@ message CancellationState {
   // The time when the next attempt is scheduled (only set when in BACKING_OFF state).
   google.protobuf.Timestamp next_attempt_schedule_time = 6;
 
+  reserved 7;
+  reserved "requested_event_id";
+
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The cancellation component itself does not interpret this field.
-  bytes parent_data = 7;
+  google.protobuf.Any parent_data = 8;
 }
 
 enum CancellationStatus {

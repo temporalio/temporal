@@ -21,7 +21,7 @@ import (
 	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -262,7 +262,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		scheduledTime = timestamppb.Now()
 	}
 
-	parentData, err := proto.Marshal(&workflowpb.NexusOperationParentData{
+	parentData, err := anypb.New(&workflowpb.NexusOperationParentData{
 		ScheduledEventId:      event.GetEventId(),
 		ScheduledEventBatchId: opts.WorkflowTaskCompletedEventID,
 	})
@@ -350,7 +350,7 @@ func (ch *commandHandler) handleCancelCommand(
 	}
 
 	op := operationField.Get(chasmCtx)
-	cancelParentData, err := proto.Marshal(&workflowpb.NexusCancellationParentData{
+	cancelParentData, err := anypb.New(&workflowpb.NexusCancellationParentData{
 		RequestedEventId: event.GetEventId(),
 	})
 	if err != nil {
