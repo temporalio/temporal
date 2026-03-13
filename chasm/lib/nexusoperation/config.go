@@ -149,7 +149,6 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 )
 
 type Config struct {
-	Enabled                             dynamicconfig.BoolPropertyFn
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
@@ -170,7 +169,6 @@ type Config struct {
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		Enabled:                            dynamicconfig.EnableNexus.Get(dc),
 		ChasmEnabled:                       dynamicconfig.EnableChasm.Get(dc),
 		ChasmNexusEnabled:                  ChasmNexusEnabled.Get(dc),
 		RequestTimeout:                     RequestTimeout.Get(dc),

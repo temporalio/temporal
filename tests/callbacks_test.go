@@ -86,49 +86,36 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 		urls    []string
 		header  map[string]string
 		message string
-		allow   bool
 	}{
-		{
-			name:    "disabled",
-			urls:    []string{"http://some-ignored-address"},
-			allow:   false,
-			message: "attaching workflow callbacks is disabled for this namespace",
-		},
 		{
 			name:    "invalid-scheme",
 			urls:    []string{"invalid"},
-			allow:   true,
 			message: "invalid url: unknown scheme: invalid",
 		},
 		{
 			name:    "url-length-too-long",
 			urls:    []string{"http://some-very-very-very-very-very-very-very-long-url"},
-			allow:   true,
 			message: "invalid url: url length longer than max length allowed of 50",
 		},
 		{
 			name:    "header-size-too-large",
 			urls:    []string{"http://some-ignored-address"},
 			header:  map[string]string{"too": "long"},
-			allow:   true,
 			message: "invalid header: header size longer than max allowed size of 6",
 		},
 		{
 			name:    "too many callbacks",
 			urls:    []string{"http://url-1", "http://url-2", "http://url-3"},
-			allow:   true,
 			message: "cannot attach more than 2 callbacks to a workflow",
 		},
 		{
 			name:    "url not configured",
 			urls:    []string{"http://some-unconfigured-address"},
-			allow:   true,
 			message: "invalid url: url does not match any configured callback address: http://some-unconfigured-address",
 		},
 		{
 			name:    "https required",
 			urls:    []string{"http://some-secure-address"},
-			allow:   true,
 			message: "invalid url: callback address does not allow insecure connections: http://some-secure-address",
 		},
 	}
@@ -143,7 +130,6 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			s.OverrideDynamicConfig(dynamicconfig.EnableNexus, tc.allow)
 			cbs := make([]*commonpb.Callback, 0, len(tc.urls))
 			for _, url := range tc.urls {
 				cbs = append(cbs, &commonpb.Callback{
