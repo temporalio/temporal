@@ -911,13 +911,6 @@ and deployment interaction in matching and history.`,
 		true,
 		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)
-	EnableNexus = NewGlobalBoolSetting(
-		"system.enableNexus",
-		true,
-		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
-		to take effect.`,
-	)
-
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
 		false,
@@ -1431,6 +1424,13 @@ second per poller by one physical queue manager`,
 		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
+	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
+		"matching.enablePollerAutoscalingMetrics",
+		false,
+		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
+The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
+default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",

@@ -3235,7 +3235,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			SdkMetadata:                     true,
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
-			Nexus:                           wh.httpEnabled && wh.config.EnableNexusAPIs(),
+			Nexus:                           wh.httpEnabled,
 		},
 	}, nil
 }
@@ -5915,13 +5915,6 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 	ns namespace.Name,
 	callbacks []*commonpb.Callback,
 ) error {
-	if len(callbacks) > 0 && !wh.config.EnableNexusAPIs() {
-		return status.Error(
-			codes.InvalidArgument,
-			"attaching workflow callbacks is disabled for this namespace",
-		)
-	}
-
 	if len(callbacks) > wh.config.MaxCallbacksPerWorkflow(ns.String()) {
 		return status.Error(
 			codes.InvalidArgument,

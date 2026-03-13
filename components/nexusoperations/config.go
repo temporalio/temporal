@@ -163,7 +163,6 @@ NexusOperationCancelRequestFailed events. Default true.`,
 
 type Config struct {
 	NumHistoryShards                    int32
-	Enabled                             dynamicconfig.BoolPropertyFn
 	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
 	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxConcurrentOperations             dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -183,7 +182,6 @@ type Config struct {
 
 func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
-		Enabled:                             dynamicconfig.EnableNexus.Get(dc),
 		RequestTimeout:                      RequestTimeout.Get(dc),
 		MinRequestTimeout:                   MinRequestTimeout.Get(dc),
 		MaxConcurrentOperations:             MaxConcurrentOperations.Get(dc),
