@@ -3370,6 +3370,18 @@ func (mr *MockMutableStateMockRecorder) SetBaseWorkflow(baseRunID, baseRunLowest
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBaseWorkflow", reflect.TypeOf((*MockMutableState)(nil).SetBaseWorkflow), baseRunID, baseRunLowestCommonAncestorEventID, baseRunLowestCommonAncestorEventVersion)
 }
 
+// SetCallbackRequestIDOverride mocks base method.
+func (m *MockMutableState) SetCallbackRequestIDOverride(id string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCallbackRequestIDOverride", id)
+}
+
+// SetCallbackRequestIDOverride indicates an expected call of SetCallbackRequestIDOverride.
+func (mr *MockMutableStateMockRecorder) SetCallbackRequestIDOverride(id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCallbackRequestIDOverride", reflect.TypeOf((*MockMutableState)(nil).SetCallbackRequestIDOverride), id)
+}
+
 // SetChildrenInitializedPostResetPoint mocks base method.
 func (m *MockMutableState) SetChildrenInitializedPostResetPoint(children map[string]*persistence.ResetChildInfo) {
 	m.ctrl.T.Helper()
@@ -3392,18 +3404,6 @@ func (m *MockMutableState) SetContextMetadata(arg0 context.Context) {
 func (mr *MockMutableStateMockRecorder) SetContextMetadata(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetContextMetadata", reflect.TypeOf((*MockMutableState)(nil).SetContextMetadata), arg0)
-}
-
-// SetCallbackRequestIDOverride mocks base method.
-func (m *MockMutableState) SetCallbackRequestIDOverride(id string) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetCallbackRequestIDOverride", id)
-}
-
-// SetCallbackRequestIDOverride indicates an expected call of SetCallbackRequestIDOverride.
-func (mr *MockMutableStateMockRecorder) SetCallbackRequestIDOverride(id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCallbackRequestIDOverride", reflect.TypeOf((*MockMutableState)(nil).SetCallbackRequestIDOverride), id)
 }
 
 // SetCurrentBranchToken mocks base method.
