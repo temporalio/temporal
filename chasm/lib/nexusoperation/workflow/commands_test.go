@@ -15,19 +15,18 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/chasm/lib/workflow/command"
+	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -604,10 +603,12 @@ func TestHandleScheduleCommand(t *testing.T) {
 		op := opField.Get(tcx.chasmCtx)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
-		ref := &tokenspb.HistoryEventRef{}
-		require.NoError(t, proto.Unmarshal(op.ScheduledEventToken, ref))
-		require.Equal(t, event.EventId, ref.EventId)
-		require.Equal(t, int64(1), ref.EventBatchId) // WorkflowTaskCompletedEventID
+		opParentData := &workflowpb.NexusOperationParentData{}
+		require.NoError(t, op.ParentData.UnmarshalTo(opParentData))
+		require.EqualExportedValues(t, &workflowpb.NexusOperationParentData{
+			ScheduledEventId:      event.EventId,
+			ScheduledEventBatchId: 1, // WorkflowTaskCompletedEventID
+		}, opParentData)
 		require.EqualExportedValues(t, userMetadata, event.UserMetadata)
 	})
 
@@ -819,10 +820,15 @@ func TestHandleCancelCommand(t *testing.T) {
 		savedUserMetadata := tcx.history.Events[1].GetUserMetadata()
 		require.EqualExportedValues(t, userMetadata, savedUserMetadata)
 
-		// Verify cancelation child component exists.
+		// Verify cancelation child component exists and has correct parent info.
 		op = opField.Get(tcx.chasmCtx)
-		_, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
+		cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 		require.True(t, hasCancellation)
+		cancelParentData := &workflowpb.NexusCancellationParentData{}
+		require.NoError(t, cancellation.ParentData.UnmarshalTo(cancelParentData))
+		require.EqualExportedValues(t, &workflowpb.NexusCancellationParentData{
+			RequestedEventId: tcx.history.Events[1].EventId,
+		}, cancelParentData)
 	})
 }
 
