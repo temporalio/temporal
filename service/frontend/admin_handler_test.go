@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -180,13 +181,22 @@ func (s *adminHandlerSuite) SetupTest() {
 		serialization.NewSerializer(),
 		clock.NewRealTimeSource(),
 		chasmRegistry,
+		nsreplication.NewNoopDataMerger(),
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.NewString()).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
-	s.handler = NewAdminHandler(args)
+
+	namespaceDLQHandler := NamespaceDLQHandlerProvider(
+		s.mockMetadata,
+		s.mockResource.GetMetadataManager(),
+		nsreplication.NewNoopDataMerger(),
+		s.mockResource.GetNamespaceReplicationQueue(),
+		s.mockResource.GetLogger(),
+	)
+	s.handler = NewAdminHandler(args, namespaceDLQHandler)
 	s.handler.Start()
 }
 

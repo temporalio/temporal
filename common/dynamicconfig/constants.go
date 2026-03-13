@@ -1714,6 +1714,15 @@ before calling remote for missing events`,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
 	)
+	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
+		"history.ChasmStandbyTaskDiscardDelay",
+		24*time.Hour,
+		`ChasmStandbyTaskDiscardDelay is the amount of time standby cluster will wait
+before discarding a CHASM task. Configurable per RegistrableTask type (e.g. "activity.dispatch").
+The default is intentionally much higher than the non CHASM standby discard delay because
+discarding a CHASM task can leave the execution in a stuck state after failover. Task types
+that can be safely offloaded should be configured with a shorter delay.`,
+	)
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
 		9000,
@@ -2402,6 +2411,11 @@ the number of children greater than or equal to this threshold`,
 		"history.enableDropRepeatedWorkflowTaskFailures",
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
+	)
+	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
+		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
+		true,
+		`SendTransientOrSpeculativeWorkflowTaskEvents controls whether GetWorkflowExecutionHistory returns non-durable transient or speculative workflow task events. Enabled by default but can be disabled per namespace if it causes compatibility problems.`,
 	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",
