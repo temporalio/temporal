@@ -110,10 +110,8 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	//
 	// Preserve the original callback request ID from the existing mutable state so that
 	// CHASM scheduler completion handlers can still correlate the rebuilt callbacks to
-	// the correct BufferedStart entry. Fall back to CreateRequestId for older runs that
-	// pre-date the CallbackRequestId field.
-
-	callbackRequestID := r.mutableState.GetExecutionInfo().GetCallbackRequestId()
+	// the correct BufferedStart entry. Read from the RequestIds map; fall back to CreateRequestId otherwise.
+	callbackRequestID := findStartRequestID(r.mutableState.GetExecutionState().GetRequestIds())
 	if callbackRequestID == "" {
 		callbackRequestID = r.mutableState.GetExecutionState().GetCreateRequestId()
 	}

@@ -194,6 +194,12 @@ type (
 		// dynamic configuration value changes in the middle of a transaction
 		// TODO: remove this flag once transition history feature is stable.
 		transitionHistoryEnabled bool
+		// callbackRequestIDOverride is a transient field set during state rebuild only.
+		// It overrides the requestID parameter in ApplyWorkflowExecutionStartedEvent so
+		// start-event callbacks are re-registered with the original start request ID
+		// rather than the reset/rebuild request ID. Cleared after use.
+		callbackRequestIDOverride string
+
 		// following fields are for tracking if sub state machines are updated
 		// in a transaction. They are similar to field like updateActivityInfos
 		visibilityUpdated     bool
@@ -2753,6 +2759,15 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	return event, nil
 }
 
+// SetCallbackRequestIDOverride sets a transient override for the request ID used when
+// registering start-event completion callbacks. It is called by state_rebuilder before
+// replaying history so that callbacks are associated with the original start request ID
+// instead of the reset/rebuild request ID. The override is consumed and cleared by
+// ApplyWorkflowExecutionStartedEvent.
+func (ms *MutableStateImpl) SetCallbackRequestIDOverride(id string) {
+	ms.callbackRequestIDOverride = id
+}
+
 func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	parentClock *clockspb.VectorClock,
 	execution *commonpb.WorkflowExecution,
@@ -2773,8 +2788,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	}
 
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
-	ms.AttachRequestID(requestID, startEvent.EventType, startEvent.EventId)
-
 	ms.approximateSize -= ms.executionInfo.Size()
 	ms.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	ms.executionInfo.TaskQueue = event.TaskQueue.GetName()
@@ -2785,12 +2798,21 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
 
 	ms.approximateSize -= ms.executionState.Size()
-	// Determine the request ID to use for callbacks. For reset runs, Rebuild pre-populates
-	// executionInfo.CallbackRequestId with the original start request ID so it's preserved
-	// across chained resets. For normal (non-reset) starts, fall back to requestID.
-	cbRequestID := ms.executionInfo.CallbackRequestId
+	// Determine the request ID to use for callbacks. For reset/rebuild runs,
+	// callbackRequestIDOverride is pre-set with the original start request ID so
+	// it's preserved across chained resets. For normal (non-reset) starts it is "".
+	cbRequestID := ms.callbackRequestIDOverride
+	ms.callbackRequestIDOverride = "" // consume the override
 	if cbRequestID == "" {
 		cbRequestID = requestID
+	}
+	// Register the start event under cbRequestID in the RequestIds map. This lets
+	// findStartRequestID retrieve the original start request ID even after chained
+	// resets (where cbRequestID != requestID). CreateRequestId must remain the
+	// actual run-creation request ID (requestID) for correct deduplication.
+	ms.AttachRequestID(cbRequestID, startEvent.EventType, startEvent.EventId)
+	if cbRequestID != requestID {
+		ms.executionState.CreateRequestId = requestID
 	}
 	if err := ms.addCompletionCallbacks(
 		startEvent,
@@ -2798,14 +2820,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		event.GetCompletionCallbacks(),
 	); err != nil {
 		return err
-	}
-	// Persist or clear CallbackRequestId so the field stays consistent with
-	// whether this execution actually has callbacks. This ensures chained resets
-	// propagate the correct value and don't carry a stale ID for callback-free workflows.
-	if len(event.GetCompletionCallbacks()) > 0 {
-		ms.executionInfo.CallbackRequestId = cbRequestID
-	} else {
-		ms.executionInfo.CallbackRequestId = ""
 	}
 	if _, err := ms.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,

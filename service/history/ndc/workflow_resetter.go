@@ -207,11 +207,8 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	// reset workflow are associated with the original start request, not the reset request.
 	// This allows scheduler completion handlers to correlate callbacks to the original run.
 	//
-	// For chained resets, executionInfo.CallbackRequestId carries the original start
-	// request ID from the very first run. Fall back to CreateRequestId for older runs
-	// that pre-date this field (first reset will work; subsequent chained resets may not,
-	// which is the pre-existing behavior before this field was added).
-	baseCallbackRequestID := baseWorkflow.GetMutableState().GetExecutionInfo().GetCallbackRequestId()
+	// Read from the base run's RequestIds map; fall back to CreateRequestId otherwise.
+	baseCallbackRequestID := findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState().GetRequestIds())
 	if baseCallbackRequestID == "" {
 		baseCallbackRequestID = baseWorkflow.GetMutableState().GetExecutionState().GetCreateRequestId()
 	}

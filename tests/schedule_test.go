@@ -1392,10 +1392,8 @@ func (s *scheduleFunctionalSuiteBase) cleanup(sid string) {
 }
 
 // TestScheduledWorkflowDoubleReset_SchedulerSeesCompletion_HSMCallbacks verifies that
-// the CHASM scheduler correctly processes a completion after the workflow is reset TWICE,
-// using the HSM callback implementation (EnableCHASMCallbacks = false). This exercises
-// the chained-reset code path where CallbackRequestId must propagate through multiple
-// resets. A double reset inherently also tests the single-reset code path.
+// the CHASM scheduler correctly processes a completion after the workflow is reset twice,
+// using the HSM callback implementation.
 func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflowDoubleReset_SchedulerSeesCompletion_HSMCallbacks() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
 	s.runScheduledWorkflowDoubleResetSchedulerSeesCompletion(
@@ -1420,10 +1418,11 @@ func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflowDoubleReset_Schedule
 // request_id is preserved across two chained resets. After a double reset, the
 // workflow is completed via signal; the scheduler must still see the completion.
 //
-// Without the CallbackRequestId persistence field, the second reset would read
-// CallbackRequestId from the first reset run's CreateRequestId (= reset1RequestId),
-// producing a callback request_id that doesn't match the original BufferedStart.RequestId.
-// The fix stores CallbackRequestId in executionInfo and propagates it across resets.
+// Without the fix, the second reset would use the first reset run's CreateRequestId as
+// the callback request_id, which doesn't match the original BufferedStart.RequestId.
+// The fix stores the original start request ID in RequestIds (keyed by that ID with
+// EventType=STARTED) via a transient callbackRequestIDOverride, so findStartRequestID
+// retrieves it correctly across chained resets.
 func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerSeesCompletion(sid, wid, wt string) {
 	// A workflow that blocks until it receives a "complete" signal. This lets us reset
 	// it multiple times before allowing it to finish.
@@ -1723,9 +1722,9 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 	// Step 4: verify the reset run has 2 callbacks with distinct request IDs.
 	//
 	// The schedule's callback has request_id = original_start_request_id (stored in
-	// executionInfo.CallbackRequestId and propagated by Rebuild). It appears in
-	// WorkflowExtendedInfo.RequestIdInfos as the key whose EventType ==
-	// WORKFLOW_EXECUTION_STARTED.
+	// RequestIds under that key with EventType=STARTED via callbackRequestIDOverride,
+	// propagated by Rebuild). It appears in WorkflowExtendedInfo.RequestIdInfos as the
+	// key whose EventType == WORKFLOW_EXECUTION_STARTED.
 	//
 	// The manually-attached callback has request_id = attachRequestId, which appears
 	// in RequestIdInfos as the key whose EventType ==

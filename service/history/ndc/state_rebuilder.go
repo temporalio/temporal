@@ -7,6 +7,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -166,8 +167,8 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 ) (historyi.MutableState, RebuildStats, error) {
 	// Preserve the original callback request ID so that CHASM scheduler completion
 	// handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
-	// Fall back to CreateRequestId for older runs that pre-date the CallbackRequestId field.
-	callbackRequestID := currentMutableState.GetExecutionInfo().GetCallbackRequestId()
+	// Read from the RequestIds map; fall back to CreateRequestId otherwise.
+	callbackRequestID := findStartRequestID(currentMutableState.GetExecutionState().GetRequestIds())
 	if callbackRequestID == "" {
 		callbackRequestID = currentMutableState.GetExecutionState().GetCreateRequestId()
 	}
@@ -263,10 +264,10 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 		now,
 	)
 
-	// Pre-populate CallbackRequestId so ApplyWorkflowExecutionStartedEvent uses the
-	// correct request ID for callbacks without needing it as a parameter.
+	// Pre-set the transient override so ApplyWorkflowExecutionStartedEvent uses the
+	// correct request ID for start-event callbacks without needing it as a parameter.
 	if callbackRequestID != "" {
-		rebuiltMutableState.GetExecutionInfo().CallbackRequestId = callbackRequestID
+		rebuiltMutableState.SetCallbackRequestIDOverride(callbackRequestID)
 	}
 
 	var lastTxnId int64
@@ -415,4 +416,15 @@ func (r *StateRebuilderImpl) getPaginationFn(
 		}
 		return paginateItems, resp.NextPageToken, nil
 	}
+}
+
+// findStartRequestID returns the request ID associated with the WorkflowExecutionStarted
+// event from the RequestIds map, or "" if not found.
+func findStartRequestID(requestIDs map[string]*persistencespb.RequestIDInfo) string {
+	for reqID, info := range requestIDs {
+		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			return reqID
+		}
+	}
+	return ""
 }
