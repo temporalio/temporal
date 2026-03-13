@@ -604,11 +604,15 @@ const (
 
 // Schedule action types
 const (
-	ScheduleActionTypeTag       = "schedule_action"
-	ScheduleActionStartWorkflow = "start_workflow"
-	ScheduleBackendTag          = "scheduler_backend"
-	ScheduleBackendChasm        = "chasm"
-	ScheduleBackendLegacy       = "legacy"
+	ScheduleActionTypeTag                = "schedule_action"
+	ScheduleActionStartWorkflow          = "start_workflow"
+	ScheduleBackendTag                   = "scheduler_backend"
+	ScheduleBackendChasm                 = "chasm"
+	ScheduleBackendLegacy                = "legacy"
+	ScheduleBackendWorkflow              = "workflow"
+	ScheduleMigrationDirectionTag        = "schedule_migration_direction"
+	ScheduleMigrationDirectionToChasm    = "to_chasm"
+	ScheduleMigrationDirectionToWorkflow = "to_workflow"
 )
 
 var (
@@ -812,6 +816,15 @@ var (
 	TaskProcessingLatency = NewTimerDef(
 		"task_latency_processing",
 		WithDescription("Latency for processing a history task one time."),
+	)
+	// TaskPersistenceLatency is used only as a context key for accumulating persistence duration (ContextCounterAdd/Get); not emitted as a metric.
+	TaskPersistenceLatency = NewTimerDef(
+		"task_persistence_latency",
+		WithDescription("Context key for persistence duration; not emitted."),
+	)
+	TaskProcessingNoPersistenceLatency = NewTimerDef(
+		"task_processing_no_persistence_latency",
+		WithDescription("Latency for processing a history task one time excluding persistence."),
 	)
 	TaskLatency = NewTimerDef(
 		"task_latency",
@@ -1206,6 +1219,13 @@ var (
 			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand poller autoscaling adoption.
+	PollerAutoscalingHeartbeatCount = NewCounterDef(
+		"poller_autoscaling_heartbeat_count",
+		WithDescription(
+			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")
@@ -1341,6 +1361,18 @@ var (
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
+	)
+	ScheduleMigrationStarted = NewCounterDef(
+		"schedule_migration_started",
+		WithDescription("The number of times a schedule migration is started"),
+	)
+	ScheduleMigrationCompleted = NewCounterDef(
+		"schedule_migration_completed",
+		WithDescription("The number of times a schedule migration completes successfully"),
+	)
+	ScheduleMigrationFailed = NewCounterDef(
+		"schedule_migration_failed",
+		WithDescription("The number of times a schedule migration fails"),
 	)
 
 	// Worker Versioning

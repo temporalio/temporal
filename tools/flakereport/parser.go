@@ -192,17 +192,12 @@ func classifyFailures(grouped map[string][]TestFailure) (flaky, timeout, crash m
 	return flaky, timeout, crash
 }
 
-// convertToReports converts grouped failures to TestReport slice
-// testRunCounts maps test name to total number of runs (including successes)
-func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string]int, repo string, maxLinks int) []TestReport {
+// buildReports builds TestReport slice from grouped failures, sorts by FailureCount/TotalRuns descending.
+// numerator and denominator return the rate components for each test.
+func buildReports(grouped map[string][]TestFailure, numerator func(string, []TestFailure) int, denominator func(string, []TestFailure) int, repo string, maxLinks int) []TestReport {
 	var reports []TestReport
 
 	for testName, failures := range grouped {
-		totalRuns := testRunCounts[testName]
-		if totalRuns == 0 {
-			totalRuns = len(failures) // Fallback if we don't have run counts
-		}
-
 		// Find most recent failure
 		var lastFailure time.Time
 		for _, f := range failures {
@@ -213,8 +208,8 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 
 		report := TestReport{
 			TestName:     testName,
-			FailureCount: len(failures),
-			TotalRuns:    totalRuns,
+			FailureCount: numerator(testName, failures),
+			TotalRuns:    denominator(testName, failures),
 			LastFailure:  lastFailure,
 			GitHubURLs:   make([]string, 0, maxLinks),
 		}
@@ -230,14 +225,31 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 		reports = append(reports, report)
 	}
 
-	// Sort by failure rate descending (most problematic tests first)
+	// Sort by rate descending (most problematic tests first)
 	sort.Slice(reports, func(i, j int) bool {
-		ri := float64(reports[i].FailureCount) / float64(reports[i].TotalRuns)
-		rj := float64(reports[j].FailureCount) / float64(reports[j].TotalRuns)
-		return ri > rj
+		ri := float64(reports[i].FailureCount) / float64(max(reports[i].TotalRuns, 1))
+		rj := float64(reports[j].FailureCount) / float64(max(reports[j].TotalRuns, 1))
+		if ri != rj {
+			return ri > rj
+		}
+		return reports[i].FailureCount > reports[j].FailureCount
 	})
 
 	return reports
+}
+
+// convertToReports converts grouped failures to TestReport slice
+// testRunCounts maps test name to total number of runs (including successes)
+func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string]int, repo string, maxLinks int) []TestReport {
+	return buildReports(grouped,
+		func(_ string, failures []TestFailure) int { return len(failures) },
+		func(name string, failures []TestFailure) int {
+			if n := testRunCounts[name]; n > 0 {
+				return n
+			}
+			return len(failures) // Fallback if we don't have run counts
+		},
+		repo, maxLinks)
 }
 
 // filterParentTests removes top-level test names from grouped when subtests of
@@ -286,47 +298,44 @@ func analyzeArtifactForCIBreakers(artifactID string, artifactFailures []TestFail
 	return ciBreakers
 }
 
-// convertCIBreakersToReports converts CI breaker failures to TestReport slice
-// Includes the count of how many CI runs each test broke
-func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, repo string, maxLinks int) []TestReport {
-	var reports []TestReport
-
-	for testName, failures := range grouped {
-		var lastFailure time.Time
-		for _, f := range failures {
-			if f.Timestamp.After(lastFailure) {
-				lastFailure = f.Timestamp
-			}
+// convertCrashesToReports converts crash failures to TestReport slice.
+// Crashes are job-level events. The rate is unique-jobs-with-crash / total jobs of that type.
+// The crash name (e.g. "functional-test") matches the artifact name suffix, so we count
+// artifacts ending with "--<crash-name>" as the denominator.
+func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJob, repo string, maxLinks int) []TestReport {
+	// Count artifacts per type suffix (e.g. "functional-test", "unit-test")
+	artifactsByType := make(map[string]int)
+	for _, job := range jobs {
+		name := job.Artifact.Name
+		if idx := strings.LastIndex(name, "--"); idx >= 0 {
+			artifactsByType[name[idx+2:]]++
 		}
-
-		report := TestReport{
-			TestName:     testName,
-			FailureCount: len(failures),
-			CIRunsBroken: ciBreakCounts[testName],
-			LastFailure:  lastFailure,
-			GitHubURLs:   make([]string, 0, maxLinks),
-		}
-
-		// Add up to maxLinks URLs
-		for i := 0; i < len(failures) && i < maxLinks; i++ {
-			failure := failures[i]
-			runIDStr := strconv.FormatInt(failure.RunID, 10)
-			url := buildGitHubURL(repo, runIDStr, failure.JobID)
-			report.GitHubURLs = append(report.GitHubURLs, url)
-		}
-
-		reports = append(reports, report)
 	}
 
-	// Sort by number of CI runs broken descending (most problematic tests first)
-	sort.Slice(reports, func(i, j int) bool {
-		if reports[i].CIRunsBroken != reports[j].CIRunsBroken {
-			return reports[i].CIRunsBroken > reports[j].CIRunsBroken
-		}
-		return reports[i].FailureCount > reports[j].FailureCount
-	})
+	return buildReports(grouped,
+		func(_ string, failures []TestFailure) int {
+			jobIDs := make(map[string]bool, len(failures))
+			for _, f := range failures {
+				jobIDs[f.JobID] = true
+			}
+			return len(jobIDs)
+		},
+		func(name string, _ []TestFailure) int {
+			if n := artifactsByType[name]; n > 0 {
+				return n
+			}
+			return 1 // Fallback to avoid division by zero
+		},
+		repo, maxLinks)
+}
 
-	return reports
+// convertCIBreakersToReports converts CI breaker failures to TestReport slice.
+// totalWorkflowRuns is the total number of CI runs analyzed (denominator for break rate).
+func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, totalWorkflowRuns int, repo string, maxLinks int) []TestReport {
+	return buildReports(grouped,
+		func(name string, _ []TestFailure) int { return ciBreakCounts[name] },
+		func(_ string, _ []TestFailure) int { return totalWorkflowRuns },
+		repo, maxLinks)
 }
 
 // identifyCIBreakers finds tests that failed their final retry in a CI job.

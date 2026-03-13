@@ -100,6 +100,12 @@ message StartWorkflowExecutionRequest {
     // After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
     // subsequent workflow tasks.
     temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
+    // The target version that the previous run implicitly declined to upgrade to.
+    // Computed at continue-as-new time from the previous run's last_notified_target_version
+    // (if set) or its existing declined value (CaN chain). For retries, passed through
+    // directly from the started event. Written onto the new run's
+    // WorkflowExecutionStartedEvent.
+    temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
 }
 
 message StartWorkflowExecutionResponse {

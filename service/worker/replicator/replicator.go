@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -31,6 +32,7 @@ type (
 		status                           int32
 		clusterMetadata                  cluster.Metadata
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
+		customTaskHandler                func(ctx context.Context, task *replicationspb.ReplicationTask) error
 		clientBean                       client.Bean
 		logger                           log.Logger
 		metricsHandler                   metrics.Handler
@@ -77,6 +79,12 @@ func NewReplicator(
 		matchingClient:                   matchingClient,
 		namespaceRegistry:                namespaceRegistry,
 	}
+}
+
+// WithCustomTaskHandler returns a copy of the Replicator with the custom task handler set.
+func (r *Replicator) WithCustomTaskHandler(handler func(ctx context.Context, task *replicationspb.ReplicationTask) error) *Replicator {
+	r.customTaskHandler = handler
+	return r
 }
 
 // Start is called to start replicator
@@ -146,6 +154,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						remoteAdminClient,
 						r.metricsHandler,
 						r.namespaceReplicationTaskExecutor,
+						r.customTaskHandler,
 						r.hostInfo,
 						r.serviceResolver,
 						r.namespaceReplicationQueue,
