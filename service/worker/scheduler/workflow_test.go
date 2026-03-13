@@ -2466,17 +2466,18 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 }
 
 func (s *workflowSuite) TestMigrateDynamicConfig() {
-	// Enable migration via tweakable (simulating dynamic config).
-	prevTweakables := CurrentTweakablePolicies
-	CurrentTweakablePolicies.EnableCHASMMigration = true
-	defer func() { CurrentTweakablePolicies = prevTweakables }()
-
+	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe).
 	// Mock MigrateSchedule activity to succeed.
 	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
 
+	prevTweakables := CurrentTweakablePolicies
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
@@ -2499,11 +2500,8 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 }
 
 func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
-	// Enable migration via tweakable, but activity fails.
-	prevTweakables := CurrentTweakablePolicies
-	CurrentTweakablePolicies.EnableCHASMMigration = true
-	defer func() { CurrentTweakablePolicies = prevTweakables }()
-
+	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe),
+	// but activity fails.
 	migrateCalls := 0
 	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
 		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
@@ -2511,9 +2509,14 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 			return errors.New("migration failed")
 		})
 
+	prevTweakables := CurrentTweakablePolicies
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
 	s.env.SetStartTime(baseStartTime)
-	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
