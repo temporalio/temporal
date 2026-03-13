@@ -17,7 +17,7 @@ import (
 // history, fetching page 1 while a speculative WFT is active, then a signal arrives
 // before page 2 is fetched.
 //
-// Root cause (same underlying bug as the shard-reload variant):
+// Root cause:
 //
 //	GetWorkflowExecutionHistory page 1 sets continuationToken.NextEventId=8 when a
 //	speculative WFT (event 8 in memory) exists. The signal triggers
@@ -25,13 +25,17 @@ import (
 //	event 9 (WorkflowExecutionSignaled) to persistence. When page 2 is fetched with
 //	the stale token (NextEventId=8), the DB range [6, 8) returns only events 6–7.
 //
-//	Without the gap-detection fix in GetWorkflowExecutionHistory:
+//	Without the fix:
 //	  appendTransientTasks finds no transient events (speculative was committed),
-//	  assembled history = events 1..7 (N-2, missing events 8 and 9), causing premature EOS.
+//	  assembled history = events 1..7 (N-2, missing event 8), causing premature EOS.
 //
-//	With the gap-detection fix:
-//	  freshNextEventId (10) > continuationToken.NextEventId (8) → gap fetch [8, 10)
-//	  returns events 8 and 9; assembled history has 9 events (no premature EOS).
+//	With the token-based fix:
+//	  The speculative WFT events are stored in the continuation token on page 1.
+//	  On the last page, cachedTransientTasks is loaded from the token and validated
+//	  against NextEventId=8. WFT_SCHEDULED(8) passes validation and is appended,
+//	  giving 8 events total (no premature EOS). Signal(9) was committed after the
+//	  original NextEventId=8 boundary and is not included — the SDK will receive it
+//	  as part of the pending WFT response.
 //
 // This test asserts the FIXED behavior.
 func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) {
@@ -77,12 +81,9 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	defer func() { go func() { <-updateCh }() }()
 
 	// Wait until the speculative WFT is scheduled before fetching page 1.
-	// This ensures the signal (sent later) arrives while the speculative WFT exists in
-	// mutable state, so convertSpeculativeWorkflowTaskToNormal commits both event 8
-	// (WFT_SCHEDULED) and event 9 (WorkflowExecutionSignaled), giving freshNextEventId=10.
-	// Without this wait there is a race: if the update hasn't been processed yet, the signal
-	// would only add event 8 (SignalReceived) with freshNextEventId=9, producing 8 events
-	// instead of the expected 9 and causing a false test failure.
+	// The token-based fix stores the speculative events (WFT_SCHEDULED=8) in the continuation
+	// token. We must ensure the speculative WFT is visible in mutable state before page 1 is
+	// fetched, so that cachedTransientTasks is populated correctly.
 	s.Eventually(func() bool {
 		desc, descErr := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
 			&workflowservice.DescribeWorkflowExecutionRequest{
@@ -97,8 +98,8 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	// queryMutableState returns nextEventId=8 (speculative WFT scheduled; speculative events
 	// do NOT advance hBuilder.NextEventID). With maxBatchesPerPage=3, only the first 3 DB
 	// batches are returned ([1,2]+[3]+[4,5] = events 1..5), leaving batches [6] and [7] for
-	// the next page. The continuation token encodes NextEventId=8 and PersistenceToken
-	// pointing to the next DB batch — this is the "stale token" that exercises the bug.
+	// the next page. The continuation token encodes NextEventId=8, PersistenceToken pointing
+	// to the next DB batch, AND TransientWorkflowTask with the speculative WFT_SCHEDULED(8).
 	histPage1, err := s.FrontendClient().GetWorkflowExecutionHistory(
 		testcore.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -115,11 +116,12 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 	firstPageEvents := histPage1.History.Events
 	staleNextPageToken := histPage1.NextPageToken
 
-	// Send the signal. Since the speculative WFT was cleared by the shard reload, signal
-	// processing finds the pending update in the registry and schedules a normal WFT:
-	//   8: WorkflowTaskScheduled  (normal WFT scheduled to handle the pending update)
-	//   9: WorkflowExecutionSignaled  (flushed immediately: HasStartedWorkflowTask=false)
-	// After this transaction, freshNextEventId=10.
+	// Send the signal. Since the speculative WFT exists, signal processing triggers
+	// convertSpeculativeWorkflowTaskToNormal, committing both the speculative WFT to DB:
+	//   8: WorkflowTaskScheduled  (formerly speculative, now committed)
+	//   9: WorkflowExecutionSignaled
+	// The token-based fix doesn't need to detect this gap — it returns the pre-stored
+	// speculative WFT_SCHEDULED(8) from the token, ending history at event 8.
 	_, signalErr := s.FrontendClient().SignalWorkflowExecution(testcore.NewContext(),
 		&workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         s.Namespace().String(),
@@ -144,13 +146,16 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
 		nextPageToken = histResp.NextPageToken
 	}
 
-	// With the gap-detection fix: freshNextEventId (10) > stale NextEventId (8), so the
-	// gap [8..10) is fetched from DB (events 8 and 9 are now persisted after the signal).
-	// 9 events are assembled correctly — no premature EOS.
+	// With the token-based fix: speculative WFT_SCHEDULED(8) was stored in the continuation
+	// token on page 1. On the last page, cachedTransientTasks is loaded from the token and
+	// appended after the DB events — 8 events total, no premature EOS.
 	//
 	// Without the fix: DB range [6, 8) returns only events 6–7; appendTransientTasks finds
 	// no transient events (speculative was committed); assembled history = 7 events (N-2),
 	// causing premature EOS.
+	//
+	// Signal(9) is not included — it was committed after the original NextEventId=8 boundary.
+	// The SDK will receive it as part of the pending WFT response from PollWorkflowTaskQueue.
 	s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted
   2 WorkflowTaskScheduled
@@ -159,6 +164,5 @@ func Test_SpeculativeWFTEventsLostAfterSignalMidHistoryPagination(t *testing.T) 
   5 WorkflowTaskScheduled
   6 WorkflowTaskStarted
   7 WorkflowTaskCompleted
-  8 WorkflowTaskScheduled
-  9 WorkflowExecutionSignaled`, allEvents)
+  8 WorkflowTaskScheduled`, allEvents)
 }
