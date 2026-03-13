@@ -45,6 +45,27 @@ func New(t require.TestingT) HistoryRequire {
 //  - oneof support
 //  - enums as strings not as ints
 
+// RequireSingleHistoryEvent returns the single event matching the given event type.
+// It fails the test if no matching event is found or if more than one is found.
+func (h HistoryRequire) RequireSingleHistoryEvent(events []*historypb.HistoryEvent, eventType enumspb.EventType) *historypb.HistoryEvent {
+	if th, ok := h.t.(helper); ok {
+		th.Helper()
+	}
+	var match *historypb.HistoryEvent
+	for _, e := range events {
+		if e.EventType == eventType {
+			if match != nil {
+				require.Failf(h.t, "duplicate history event", "expected single %s event but found multiple", eventType)
+			}
+			match = e
+		}
+	}
+	if match == nil {
+		require.Failf(h.t, "history event not found", "expected %s event in history", eventType)
+	}
+	return match
+}
+
 func (h HistoryRequire) EqualHistoryEvents(expectedHistory string, actualHistoryEvents []*historypb.HistoryEvent) {
 	if th, ok := h.t.(helper); ok {
 		th.Helper()
