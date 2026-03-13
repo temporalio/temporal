@@ -47,7 +47,6 @@ const (
 )
 
 type Config struct {
-	Enabled                       dynamicconfig.BoolPropertyFn
 	MaxOperationTokenLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PayloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	ForwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -85,10 +84,6 @@ type completionHandler struct {
 // nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
 func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
-	if !h.Config.Enabled() {
-		h.preProcessErrorsCounter.Record(1)
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "Nexus APIs are disabled")
-	}
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
 		h.Logger.Error("failed to decode callback token", tag.Error(err))

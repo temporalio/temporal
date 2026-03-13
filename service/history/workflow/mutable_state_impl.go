@@ -380,9 +380,7 @@ func NewMutableState(
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
 	}
-	if s.config.EnableNexus() {
-		s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
-	}
+	s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
 	s.approximateSize += s.executionInfo.Size()
 
 	s.executionState = &persistencespb.WorkflowExecutionState{
@@ -7890,7 +7888,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 			return emptyTasks
 		}
 
-		// HSM() contains children also implies Nexus is enabled
+		// Skip if there are no HSM children (no outbound tasks to generate)
 		if len(ms.HSM().InternalRepr().Children) == 0 {
 			return emptyTasks
 		}

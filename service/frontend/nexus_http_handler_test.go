@@ -58,7 +58,6 @@ func newTestNexusHTTPHandler(
 		enpointRegistry:        endpointRegistry,
 		namespaceRegistry:      namespaceRegistry,
 		preprocessErrorCounter: metrics.CounterFunc(func(int64, ...metrics.Tag) {}),
-		enabled:                func() bool { return true },
 	}
 	router := mux.NewRouter()
 	h.RegisterRoutes(router)
