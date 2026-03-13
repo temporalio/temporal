@@ -178,14 +178,24 @@ func (e *outboundQueueStandbyTaskExecutor) executeChasmSideEffectTask(
 		return err
 	}
 
-	shouldRetry, err := validateChasmSideEffectTask(
-		ctx,
-		ms,
-		task,
-	)
-	if shouldRetry != nil {
-		err = consts.ErrTaskRetry
+	valid, err := validateChasmSideEffectTask(ctx, ms, task)
+	if err != nil || !valid {
+		return err
 	}
 
-	return err
+	// Task is still valid — check discard delay.
+	chasmTaskType, _ := e.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
+	discardTime := task.GetVisibilityTime().Add(e.config.ChasmStandbyTaskDiscardDelay(chasmTaskType))
+	if !e.Now().After(discardTime) {
+		return consts.ErrTaskRetry
+	}
+
+	// Past discard delay — try custom discard handler.
+	return discardChasmSideEffectTask(
+		ctx,
+		e.chasmEngine,
+		e.shardContext.ChasmRegistry(),
+		ms.ChasmTree(),
+		task,
+	)
 }

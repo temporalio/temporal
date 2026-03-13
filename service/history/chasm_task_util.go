@@ -16,26 +16,20 @@ func validateChasmSideEffectTask(
 	ctx context.Context,
 	ms historyi.MutableState,
 	task *tasks.ChasmTask,
-) (any, error) {
+) (bool, error) {
 	// Because CHASM timers can target closed workflows, we need to specifically
 	// exclude zombie workflows, instead of merely checking that the workflow is
 	// running.
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return nil, consts.ErrWorkflowZombie
+		return false, consts.ErrWorkflowZombie
 	}
 
 	tree := ms.ChasmTree()
 	if tree == nil {
-		return nil, errNoChasmTree
+		return false, errNoChasmTree
 	}
 
-	isValid, err := tree.ValidateSideEffectTask(ctx, task)
-	if err == nil && isValid {
-		// If the task is still valid, keep it around by returning a non-nil value.
-		return &struct{}{}, nil
-	}
-
-	return nil, err
+	return tree.ValidateSideEffectTask(ctx, task)
 }
 
 // executeChasmSideEffectTask completes execution of a CHASM side effect task
@@ -77,6 +71,50 @@ func executeChasmSideEffectTask(
 
 	engineCtx := chasm.NewEngineContext(ctx, engine)
 	return tree.ExecuteSideEffectTask(
+		engineCtx,
+		registry,
+		executionKey,
+		task,
+		validate,
+	)
+}
+
+// discardChasmSideEffectTask runs the discard handler for a CHASM side effect task on standby. If the task's executor
+// implements SideEffectDiscardHandler,it calls the handler. Otherwise, it returns ErrTaskDiscarded.
+func discardChasmSideEffectTask(
+	ctx context.Context,
+	engine chasm.Engine,
+	registry *chasm.Registry,
+	tree historyi.ChasmTree,
+	task *tasks.ChasmTask,
+) error {
+	rt, ok := registry.TaskByID(task.Info.TypeId)
+	if !ok || !rt.HasDiscardHandler() {
+		return consts.ErrTaskDiscarded
+	}
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: task.NamespaceID,
+		BusinessID:  task.WorkflowID,
+		RunID:       task.RunID,
+	}
+
+	validate := func(backend chasm.NodeBackend, _ chasm.Context, _ chasm.Component) error {
+		if backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
+			return consts.ErrWorkflowZombie
+		}
+
+		taskID := task.TaskID
+		tgClock := backend.GetExecutionInfo().TaskGenerationShardClockTimestamp
+		if tgClock != 0 && taskID != 0 && taskID < tgClock {
+			return consts.ErrStaleReference
+		}
+
+		return nil
+	}
+
+	engineCtx := chasm.NewEngineContext(ctx, engine)
+	return tree.ExecuteSideEffectDiscardTask(
 		engineCtx,
 		registry,
 		executionKey,

@@ -16,6 +16,9 @@ type (
 		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
 		isPureTask              bool
 
+		// executor stores the raw executor for runtime interface checks (e.g., SideEffectDiscardHandler)
+		executor any
+
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
 		taskTypeID uint32
@@ -63,6 +66,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 			return executor.Execute(ctx, componentRef, taskAttrs, taskData.(T))
 		},
 		false,
+		executor,
 		opts...,
 	)
 }
@@ -107,6 +111,7 @@ func NewRegistrablePureTask[C any, T any](
 		},
 		nil, // sideEffectTaskExecuteFn is not used for pure tasks
 		true,
+		nil,
 		opts...,
 	)
 }
@@ -118,6 +123,7 @@ func newRegistrableTask(
 	pureTaskExecuteFn pureTaskExecuteFn,
 	sideEffectTaskExecuteFn sideEffectTaskExecuteFn,
 	isPureTask bool,
+	executor any,
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	rt := &RegistrableTask{
@@ -128,6 +134,7 @@ func newRegistrableTask(
 		pureTaskExecuteFn:       pureTaskExecuteFn,
 		sideEffectTaskExecuteFn: sideEffectTaskExecuteFn,
 		isPureTask:              isPureTask,
+		executor:                executor,
 	}
 
 	for _, opt := range opts {
@@ -154,6 +161,13 @@ func (rt *RegistrableTask) registerToLibrary(
 // GoType returns the reflect.Type of the task's Go struct.
 func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
+}
+
+// HasDiscardHandler returns true if the task's executor implements SideEffectDiscardHandler, meaning it has custom
+// discard behavior for standby clusters.
+func (rt *RegistrableTask) HasDiscardHandler() bool {
+	_, ok := rt.executor.(SideEffectDiscardHandler)
+	return ok
 }
 
 // fqType returns the fully qualified name of the task, which is a combination of

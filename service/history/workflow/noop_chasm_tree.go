@@ -86,6 +86,16 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 	return nil
 }
 
+func (*noopChasmTree) ExecuteSideEffectDiscardTask(
+	ctx context.Context,
+	registry *chasm.Registry,
+	executionKey chasm.ExecutionKey,
+	task *tasks.ChasmTask,
+	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
+) error {
+	return nil
+}
+
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,

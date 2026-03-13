@@ -178,11 +178,11 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		return validateChasmSideEffectTask(
-			ctx,
-			ms,
-			task,
-		)
+		valid, err := validateChasmSideEffectTask(ctx, ms, task)
+		if err != nil || !valid {
+			return nil, err
+		}
+		return ms.ChasmTree(), nil
 	}
 
 	chasmTaskType, _ := t.shardContext.ChasmRegistry().TaskFqnByID(task.Info.GetTypeId())
@@ -194,9 +194,41 @@ func (t *timerQueueStandbyTaskExecutor) executeChasmSideEffectTimerTask(
 			task,
 			t.getCurrentTime,
 			t.config.ChasmStandbyTaskDiscardDelay(chasmTaskType),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+			t.discardChasmTask,
 		),
 	)
+}
+
+func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo any,
+	logger log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	chasmTree, ok := postActionInfo.(historyi.ChasmTree)
+	if !ok {
+		return consts.ErrTaskDiscarded
+	}
+	chasmTask, ok := taskInfo.(*tasks.ChasmTask)
+	if !ok {
+		return consts.ErrTaskDiscarded
+	}
+
+	err := discardChasmSideEffectTask(
+		ctx,
+		t.chasmEngine,
+		t.shardContext.ChasmRegistry(),
+		chasmTree,
+		chasmTask,
+	)
+	if errors.Is(err, consts.ErrTaskDiscarded) {
+		// No custom discard handler — fall back to checking if execution still exists on source.
+		return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
+	}
+	return err
 }
 
 func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(

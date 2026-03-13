@@ -21,6 +21,14 @@ type (
 		Execute(MutableContext, C, TaskAttributes, T) error
 	}
 
+	// SideEffectDiscardHandler is an optional interface that a side-effect task executor can implement to define
+	// custom discard behavior on standby clusters. When a side-effect task has been pending on standby past the
+	// discard delay, the framework calls HandleDiscard instead of silently discarding the task. For example, the
+	// activity dispatch executor implements this to spill tasks to matching. The ctx carries a read-only engine.
+	SideEffectDiscardHandler interface {
+		HandleDiscard(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error
+	}
+
 	TaskValidator[C any, T any] interface {
 		// Validate determines whether a task should proceed with execution based on the current context, component
 		// state, task attributes, and task data.

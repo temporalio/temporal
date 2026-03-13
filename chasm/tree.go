@@ -3157,6 +3157,91 @@ func (n *Node) ExecuteSideEffectTask(
 	)
 }
 
+// ExecuteSideEffectDiscardTask executes the discard handler for the given ChasmTask. This is called on standby
+// clusters when a side effect task has been pending past the discard delay, allowing custom discard behavior
+// (e.g., spilling activity tasks to matching).
+func (n *Node) ExecuteSideEffectDiscardTask(
+	ctx context.Context,
+	registry *Registry,
+	executionKey ExecutionKey,
+	chasmTask *tasks.ChasmTask,
+	validate func(NodeBackend, Context, Component) error,
+) (retErr error) {
+
+	if engineFromContext(ctx) == nil {
+		return serviceerror.NewInternal("no CHASM engine set on context")
+	}
+
+	taskInfo := chasmTask.Info
+	taskTypeID := taskInfo.TypeId
+	registrableTask, ok := registry.TaskByID(taskTypeID)
+	if !ok {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"unknown task type id",
+			fmt.Errorf("%d", taskTypeID))
+	}
+	if registrableTask.isPureTask {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"ExecuteSideEffectDiscardTask called on a Pure task, task type: ",
+			fmt.Errorf("%s", registrableTask.fqType()))
+	}
+
+	discardHandler, ok := registrableTask.executor.(SideEffectDiscardHandler)
+	if !ok {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"ExecuteSideEffectDiscardTask called on executor without SideEffectDiscardHandler",
+			fmt.Errorf("%s", registrableTask.fqType()))
+	}
+
+	defer func() {
+		if rec := recover(); rec != nil {
+			chasmTask.DeserializedTask = reflect.Value{}
+			panic(rec) //nolint:forbidigo
+		}
+		if retErr != nil && !errors.As(retErr, new(*serviceerror.NotFound)) {
+			chasmTask.DeserializedTask = reflect.Value{}
+		}
+	}()
+
+	if !chasmTask.DeserializedTask.IsValid() {
+		var err error
+		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
+		if err != nil {
+			return err
+		}
+	}
+	taskValue := chasmTask.DeserializedTask
+
+	taskAttributes := TaskAttributes{
+		ScheduledTime: chasmTask.GetVisibilityTime(),
+		Destination:   chasmTask.Destination,
+	}
+
+	ref := ComponentRef{
+		ExecutionKey:          executionKey,
+		archetypeID:           n.ArchetypeID(),
+		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
+		componentPath:         taskInfo.Path,
+		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
+
+		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
+	}
+
+	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
+
+	defer log.CapturePanic(n.logger, &retErr)
+
+	return discardHandler.HandleDiscard(
+		ctx,
+		ref,
+		taskAttributes,
+		taskValue.Interface(),
+	)
+}
+
 func (n *Node) ComponentByPath(
 	chasmContext Context,
 	path []string,
