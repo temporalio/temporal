@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -63,7 +64,7 @@ type (
 			activityScheduledEventID int64,
 		) error
 		GenerateActivityRetryTasks(activityInfo *persistencespb.ActivityInfo) error
-		GenerateActivityCommandTasks(taskTokens [][]byte, controlQueue string, commandType enumsspb.ActivityCommandType) error
+		GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error
 		GenerateChildWorkflowTasks(
 			childInitiatedEventId int64,
 		) error
@@ -584,19 +585,18 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(activityInfo *persistence
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityCommandTasks(taskTokens [][]byte, controlQueue string, commandType enumsspb.ActivityCommandType) error {
-	if !r.config.EnableActivityCancellationNexusTask() {
+func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.WorkerCommand, controlQueue string) error {
+	if !r.config.EnableCancelActivityWorkerCommand() {
 		return nil
 	}
 
-	if len(taskTokens) == 0 || controlQueue == "" {
+	if len(commands) == 0 || controlQueue == "" {
 		return nil
 	}
 
-	r.mutableState.AddTasks(&tasks.ActivityCommandTask{
+	r.mutableState.AddTasks(&tasks.WorkerCommandsTask{
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
-		CommandType: commandType,
-		TaskTokens:  taskTokens,
+		Commands:    commands,
 		Destination: controlQueue,
 	})
 	return nil
