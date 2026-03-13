@@ -10,6 +10,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	workerservicepb "go.temporal.io/api/nexusservices/workerservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
@@ -67,25 +68,25 @@ func (d *activityCommandTaskDispatcher) execute(
 
 const (
 	workerServiceName        = "temporal.api.nexusservices.workerservice.v1.WorkerService"
-	executeCommandsOperation = "executeCommands"
+	executeCommandsOperation = "ExecuteCommands"
 )
 
 func (d *activityCommandTaskDispatcher) dispatchToWorker(
 	ctx context.Context,
 	task *tasks.ActivityCommandTask,
 ) error {
-	commands := make([]*workerservicepb.WorkerCommandsRequest_WorkerCommand, 0, len(task.TaskTokens))
+	commands := make([]*workerpb.WorkerCommand, 0, len(task.TaskTokens))
 	for _, token := range task.TaskTokens {
-		commands = append(commands, &workerservicepb.WorkerCommandsRequest_WorkerCommand{
-			Type: &workerservicepb.WorkerCommandsRequest_WorkerCommand_CancelActivity{
-				CancelActivity: &workerservicepb.WorkerCommandsRequest_CancelActivity{
+		commands = append(commands, &workerpb.WorkerCommand{
+			Type: &workerpb.WorkerCommand_CancelActivity{
+				CancelActivity: &workerpb.CancelActivityCommand{
 					TaskToken: token,
 				},
 			},
 		})
 	}
 
-	request := &workerservicepb.WorkerCommandsRequest{
+	request := &workerservicepb.ExecuteCommandsRequest{
 		Commands: commands,
 	}
 	requestPayload, err := payload.Encode(request)
