@@ -1503,7 +1503,7 @@ func deserializeOutboundTask(
 			Info:                info.GetChasmTaskInfo(),
 			Destination:         info.Destination,
 		}, nil
-	case enumsspb.TASK_TYPE_ACTIVITY_COMMAND:
+	case enumsspb.TASK_TYPE_WORKER_COMMANDS:
 		return &tasks.WorkerCommandsTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				info.NamespaceId,
