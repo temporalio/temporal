@@ -168,10 +168,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	// Preserve the original callback request ID so that CHASM scheduler completion
 	// handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
 	// Read from the RequestIds map; fall back to CreateRequestId otherwise.
-	callbackRequestID := findStartRequestID(currentMutableState.GetExecutionState().GetRequestIds())
-	if callbackRequestID == "" {
-		callbackRequestID = currentMutableState.GetExecutionState().GetCreateRequestId()
-	}
+	callbackRequestID := findStartRequestID(currentMutableState.GetExecutionState())
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,
@@ -264,10 +261,12 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 		now,
 	)
 
-	// Pre-set the transient override so ApplyWorkflowExecutionStartedEvent uses the
-	// correct request ID for start-event callbacks without needing it as a parameter.
-	if callbackRequestID != "" {
-		rebuiltMutableState.SetCallbackRequestIDOverride(callbackRequestID)
+	// Pass callbackRequestID to applyEvents so ApplyWorkflowExecutionStartedEvent
+	// stores it as the STARTED entry in RequestIds. Fall back to requestID when
+	// callbackRequestID is not set (non-reset/rebuild paths).
+	effectiveRequestID := callbackRequestID
+	if effectiveRequestID == "" {
+		effectiveRequestID = requestID
 	}
 
 	var lastTxnId int64
@@ -288,12 +287,19 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 			targetWorkflowIdentifier,
 			stateBuilder,
 			history.History.Events,
-			requestID,
+			effectiveRequestID,
 		); err != nil {
 			return nil, 0, err
 		}
 
 		lastTxnId = history.TransactionID
+	}
+
+	// ApplyWorkflowExecutionStartedEvent set CreateRequestId = effectiveRequestID.
+	// Restore it to the actual rebuild requestID for correct deduplication when
+	// the two differ (i.e. reset runs).
+	if effectiveRequestID != requestID {
+		rebuiltMutableState.GetExecutionState().CreateRequestId = requestID
 	}
 
 	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {
@@ -419,12 +425,12 @@ func (r *StateRebuilderImpl) getPaginationFn(
 }
 
 // findStartRequestID returns the request ID associated with the WorkflowExecutionStarted
-// event from the RequestIds map, or "" if not found.
-func findStartRequestID(requestIDs map[string]*persistencespb.RequestIDInfo) string {
-	for reqID, info := range requestIDs {
+// event from the RequestIds map, or the create request ID if not found.
+func findStartRequestID(executionState *persistencespb.WorkflowExecutionState) string {
+	for reqID, info := range executionState.GetRequestIds() {
 		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			return reqID
 		}
 	}
-	return ""
+	return executionState.GetCreateRequestId()
 }

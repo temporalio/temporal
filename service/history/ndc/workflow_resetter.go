@@ -208,10 +208,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	// This allows scheduler completion handlers to correlate callbacks to the original run.
 	//
 	// Read from the base run's RequestIds map; fall back to CreateRequestId otherwise.
-	baseCallbackRequestID := findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState().GetRequestIds())
-	if baseCallbackRequestID == "" {
-		baseCallbackRequestID = baseWorkflow.GetMutableState().GetExecutionState().GetCreateRequestId()
-	}
+	baseCallbackRequestID := findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState())
 
 	resetWorkflow, err := r.prepareResetWorkflow(
 		ctx,

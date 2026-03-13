@@ -271,10 +271,6 @@ type (
 		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
-		// SetCallbackRequestIDOverride sets a transient override for the request ID used when
-		// registering start-event completion callbacks during state rebuild. It is consumed and
-		// cleared by ApplyWorkflowExecutionStartedEvent.
-		SetCallbackRequestIDOverride(id string)
 		SetCurrentBranchToken(branchToken []byte) error
 		SetHistoryBuilder(hBuilder *historybuilder.HistoryBuilder)
 		SetHistoryTree(executionTimeout *durationpb.Duration, runTimeout *durationpb.Duration, treeID string) error

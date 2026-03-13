@@ -110,10 +110,7 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	// Use the original start request ID for both the rebuild requestID and callbackRequestID.
 	// Unlike a user-initiated reset (which generates a new resetRequestID), this is an
 	// in-place replication rebuild so both should be the same value.
-	requestID := findStartRequestID(r.mutableState.GetExecutionState().GetRequestIds())
-	if requestID == "" {
-		requestID = r.mutableState.GetExecutionState().GetCreateRequestId()
-	}
+	requestID := findStartRequestID(r.mutableState.GetExecutionState())
 	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, requestID)
 	if err != nil {
 		return nil, false, err
