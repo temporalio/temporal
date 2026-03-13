@@ -79,7 +79,9 @@ func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(
 ) error {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope)
 	err := m.delegate.RecordWorkflowExecutionStarted(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return m.updateErrorMetric(handler, err)
 }
 
@@ -89,7 +91,9 @@ func (m *visibilityManagerMetrics) RecordWorkflowExecutionClosed(
 ) error {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope)
 	err := m.delegate.RecordWorkflowExecutionClosed(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return m.updateErrorMetric(handler, err)
 }
 
@@ -99,7 +103,9 @@ func (m *visibilityManagerMetrics) UpsertWorkflowExecution(
 ) error {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceUpsertWorkflowExecutionScope)
 	err := m.delegate.UpsertWorkflowExecution(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return m.updateErrorMetric(handler, err)
 }
 
@@ -109,7 +115,9 @@ func (m *visibilityManagerMetrics) DeleteWorkflowExecution(
 ) error {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceDeleteWorkflowExecutionScope)
 	err := m.delegate.DeleteWorkflowExecution(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return m.updateErrorMetric(handler, err)
 }
 
@@ -128,6 +136,7 @@ func (m *visibilityManagerMetrics) ListWorkflowExecutions(
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -146,6 +155,7 @@ func (m *visibilityManagerMetrics) ListChasmExecutions(
 		)
 	}
 	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -155,7 +165,9 @@ func (m *visibilityManagerMetrics) CountWorkflowExecutions(
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountWorkflowExecutionsScope)
 	response, err := m.delegate.CountWorkflowExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -165,7 +177,9 @@ func (m *visibilityManagerMetrics) CountChasmExecutions(
 ) (*chasm.CountExecutionsResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceCountChasmExecutionsScope)
 	response, err := m.delegate.CountChasmExecutions(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -175,7 +189,9 @@ func (m *visibilityManagerMetrics) GetWorkflowExecution(
 ) (*manager.GetWorkflowExecutionResponse, error) {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceGetWorkflowExecutionScope)
 	response, err := m.delegate.GetWorkflowExecution(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return response, m.updateErrorMetric(handler, err)
 }
 
@@ -185,7 +201,9 @@ func (m *visibilityManagerMetrics) AddSearchAttributes(
 ) error {
 	handler, startTime := m.tagScope(metrics.VisibilityPersistenceAddSearchAttributesScope)
 	err := m.delegate.AddSearchAttributes(ctx, request)
-	metrics.VisibilityPersistenceLatency.With(handler).Record(time.Since(startTime))
+	elapsed := time.Since(startTime)
+	metrics.VisibilityPersistenceLatency.With(handler).Record(elapsed)
+	metrics.ContextCounterAdd(ctx, metrics.TaskPersistenceLatency.Name(), elapsed.Nanoseconds())
 	return m.updateErrorMetric(handler, err)
 }
 
