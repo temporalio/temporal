@@ -352,7 +352,6 @@ func (s *stateRebuilderSuite) TestRebuild() {
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,
-		requestID,
 	)
 	s.NoError(err)
 	s.NotNil(rebuildMutableState)

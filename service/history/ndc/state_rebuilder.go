@@ -39,7 +39,6 @@ type (
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
-			callbackRequestID string,
 		) (historyi.MutableState, RebuildStats, error)
 		RebuildWithCurrentMutableState(
 			ctx context.Context,
@@ -112,7 +111,6 @@ func (r *StateRebuilderImpl) Rebuild(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
-	callbackRequestID string,
 ) (historyi.MutableState, RebuildStats, error) {
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
@@ -124,7 +122,6 @@ func (r *StateRebuilderImpl) Rebuild(
 		targetWorkflowIdentifier,
 		targetBranchToken,
 		requestID,
-		callbackRequestID,
 	)
 	if err != nil {
 		return nil, RebuildStats{}, err
@@ -165,10 +162,10 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	requestID string,
 	currentMutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, RebuildStats, error) {
-	// Preserve the original callback request ID so that CHASM scheduler completion
+	// Use the original start request ID so that CHASM scheduler completion
 	// handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
 	// Read from the RequestIds map; fall back to CreateRequestId otherwise.
-	callbackRequestID := findStartRequestID(currentMutableState.GetExecutionState())
+	startRequestID := findStartRequestID(currentMutableState.GetExecutionState())
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,
@@ -178,8 +175,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		baseLastEventVersion,
 		targetWorkflowIdentifier,
 		targetBranchToken,
-		requestID,
-		callbackRequestID,
+		startRequestID,
 	)
 	if err != nil {
 		return nil, RebuildStats{}, err
@@ -240,7 +236,6 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
-	callbackRequestID string,
 ) (historyi.MutableState, int64, error) {
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
 	if err != nil {
@@ -261,14 +256,6 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 		now,
 	)
 
-	// Pass callbackRequestID to applyEvents so ApplyWorkflowExecutionStartedEvent
-	// stores it as the STARTED entry in RequestIds. Fall back to requestID when
-	// callbackRequestID is not set (non-reset/rebuild paths).
-	effectiveRequestID := callbackRequestID
-	if effectiveRequestID == "" {
-		effectiveRequestID = requestID
-	}
-
 	var lastTxnId int64
 	for iter.HasNext() {
 		history, err := iter.Next()
@@ -287,19 +274,12 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 			targetWorkflowIdentifier,
 			stateBuilder,
 			history.History.Events,
-			effectiveRequestID,
+			requestID,
 		); err != nil {
 			return nil, 0, err
 		}
 
 		lastTxnId = history.TransactionID
-	}
-
-	// ApplyWorkflowExecutionStartedEvent set CreateRequestId = effectiveRequestID.
-	// Restore it to the actual rebuild requestID for correct deduplication when
-	// the two differ (i.e. reset runs).
-	if effectiveRequestID != requestID {
-		rebuiltMutableState.GetExecutionState().CreateRequestId = requestID
 	}
 
 	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {

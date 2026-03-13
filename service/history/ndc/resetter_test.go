@@ -169,7 +169,6 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		),
 		newBranchToken,
 		gomock.Any(),
-		gomock.Any(),
 	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
 	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)
 	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)

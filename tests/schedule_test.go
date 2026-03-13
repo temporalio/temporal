@@ -1538,7 +1538,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 	})
 }
 
-// TestScheduledWorkflow_ResetWithAdditionalCallback_HSMCallbacks verifies that after:
+// TestScheduledWorkflow_ResetWithAdditionalCallback_{HSM,CHASM}Callbacks verifies that after:
 //  1. A workflow is started via a schedule trigger (the schedule attaches a callback with
 //     the original start request ID),
 //  2. A second callback is manually attached to the running workflow (different request ID),
@@ -1556,8 +1556,6 @@ func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflow_ResetWithAdditional
 	)
 }
 
-// TestScheduledWorkflow_ResetWithAdditionalCallback_ChasmCallbacks is the same test using
-// the CHASM callback implementation (EnableCHASMCallbacks = true).
 func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflow_ResetWithAdditionalCallback_ChasmCallbacks() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 	s.runScheduledWorkflowResetWithAdditionalCallback(
