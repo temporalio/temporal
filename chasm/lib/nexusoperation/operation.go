@@ -4,6 +4,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 var _ chasm.Component = (*Operation)(nil)
@@ -63,7 +64,8 @@ func (o *Operation) SetStateMachineState(status nexusoperationpb.OperationStatus
 
 // Cancel requests cancellation of the operation. It creates a Cancellation child component and, if the
 // operation has already started, schedules the cancellation request to be sent to the Nexus endpoint.
-func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) error {
+// parentData is opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
+func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) error {
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}
@@ -72,7 +74,7 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, requestedEventID int64) err
 	}
 
 	cancellation := newCancellation(&nexusoperationpb.CancellationState{
-		RequestedEventId: requestedEventID,
+		ParentData: parentData,
 	})
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
 
