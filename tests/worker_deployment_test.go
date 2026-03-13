@@ -2084,7 +2084,7 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 				Version:   tvI.DeploymentVersionString(),
 			})
 			a.NoError(err)
-			a.True(proto.Equal(tvI.ExternalDeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion()))
+			a.Equal(tvI.ExternalDeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion())
 		}, time.Minute, time.Second)
 	}
 
