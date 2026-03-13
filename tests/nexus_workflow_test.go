@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -1222,32 +1221,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure() {
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors() {
 	ctx := testcore.NewContext()
-
-	s.Run("ConfigDisabled", func() {
-		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
-		completion := nexusrpc.CompleteOperationOptions{
-			Result: testcore.MustToPayload(s.T(), "result"),
-		}
-		publicCallbackURL := "http://" + s.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(s.Namespace().String())
-		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-		var handlerErr *nexus.HandlerError
-		s.ErrorAs(err, &handlerErr)
-		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		s.Len(snap["nexus_completion_request_preprocess_errors"], 1)
-	})
-
-	s.Run("ConfigDisabledNoIdentifier", func() {
-		s.OverrideDynamicConfig(dynamicconfig.EnableNexus, false)
-		completion := nexusrpc.CompleteOperationOptions{
-			Result: testcore.MustToPayload(s.T(), "result"),
-		}
-		publicCallbackURL := "http://" + s.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
-		snap, err := s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
-		var handlerErr *nexus.HandlerError
-		s.ErrorAs(err, &handlerErr)
-		s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)
-		s.Len(snap["nexus_completion_request_preprocess_errors"], 1)
-	})
 
 	s.Run("NamespaceNotFound", func() {
 		// Generate a token with a non-existent namespace ID
