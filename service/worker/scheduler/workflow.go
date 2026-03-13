@@ -227,10 +227,10 @@ func SchedulerWorkflow(ctx workflow.Context, args *schedulespb.StartScheduleArgs
 
 func schedulerWorkflowWithSpecBuilder(ctx workflow.Context, args *schedulespb.StartScheduleArgs, specBuilder *SpecBuilder, enableCHASMMigration bool) error {
 	scheduler := &scheduler{
-		StartScheduleArgs:    args,
-		ctx:                  ctx,
-		a:                    nil,
-		logger:               sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
+		StartScheduleArgs: args,
+		ctx:               ctx,
+		a:                 nil,
+		logger:            sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.State.Namespace, "schedule-id", args.State.ScheduleId),
 		metrics: workflow.GetMetricsHandler(ctx).WithTags(map[string]string{
 			"namespace":                args.State.Namespace,
 			metrics.ScheduleBackendTag: metrics.ScheduleBackendLegacy,

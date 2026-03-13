@@ -103,7 +103,7 @@ func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *worke
 }
 
 func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Namespace, details workercommon.RegistrationDetails) func() {
-	enableMigration := s.enableCHASMMigration(ns.Name().String()) // captured per-namespace, no global write
+	enableMigration := s.enableCHASMMigration(ns.Name().String())
 	wfFunc := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
 		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
 	}
