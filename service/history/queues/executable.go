@@ -318,6 +318,11 @@ func (e *executableImpl) Execute() (retErr error) {
 		// emit total attempt latency so that we know how much time a task will occpy a worker goroutine
 		metrics.TaskProcessingLatency.With(e.metricsHandler).Record(attemptLatency)
 
+		if persistenceDuration, ok := metrics.ContextCounterGet(ctx, metrics.TaskPersistenceLatency.Name()); ok {
+			attemptNoPersistence := attemptLatency - time.Duration(persistenceDuration)
+			metrics.TaskProcessingNoPersistenceLatency.With(e.metricsHandler).Record(attemptNoPersistence)
+		}
+
 		priorityTaggedProvider := e.metricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 		metrics.TaskRequests.With(priorityTaggedProvider).Record(1)
 		metrics.TaskScheduleLatency.With(priorityTaggedProvider).Record(e.scheduleLatency)

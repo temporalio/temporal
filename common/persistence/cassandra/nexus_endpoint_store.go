@@ -195,7 +195,7 @@ func (s *NexusEndpointStore) ListNexusEndpoints(
 	}
 
 	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailablef("ListNexusEndpoints operation failed: %v", err)
+		return nil, gocql.ConvertError("ListNexusEndpoints", err)
 	}
 
 	currentTableVersion, err := s.getTableVersion(ctx)
