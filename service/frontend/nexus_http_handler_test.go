@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
@@ -47,7 +46,7 @@ func (f *fakeNamespaceRegistry) GetNamespaceName(id namespace.ID) (namespace.Nam
 func newTestNexusHTTPHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	namespaceRegistry namespace.Registry,
-) (*NexusHTTPHandler, *mux.Router) {
+) (*NexusHTTPHandler, *http.ServeMux) {
 	logger := log.NewTestLogger()
 	h := &NexusHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -59,12 +58,12 @@ func newTestNexusHTTPHandler(
 		namespaceRegistry:      namespaceRegistry,
 		preprocessErrorCounter: metrics.CounterFunc(func(int64, ...metrics.Tag) {}),
 	}
-	router := mux.NewRouter()
+	router := http.NewServeMux()
 	h.RegisterRoutes(router)
 	return h, router
 }
 
-func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *httptest.ResponseRecorder {
+func doNexusHTTPRequest(t *testing.T, router *http.ServeMux, endpointID string) *httptest.ResponseRecorder {
 	t.Helper()
 	path := "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpointID) + "/test-service/test-operation"
 	req := httptest.NewRequest(http.MethodPost, path, nil)

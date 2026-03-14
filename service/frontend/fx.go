@@ -3,8 +3,8 @@ package frontend
 import (
 	"fmt"
 	"net"
+	"net/http"
 
-	"github.com/gorilla/mux"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -65,12 +65,9 @@ var Module = fx.Options(
 	resource.Module,
 	scheduler.Module,
 	workerdeployment.Module,
-	// Note that with this approach routes may be registered in arbitrary order.
-	// This is okay because our routes don't have overlapping matches.
-	// The only important detail is that the PathPrefix("/") route registered in the HTTPAPIServerProvider comes last.
-	// Coincidentally, this is the case today, likely because it has more dependencies that the other dependencies.
-	// This approach isn't perfect but at it allows the router to be pluggable and we have enough functional test
-	// coverage to catch misconfiguration.
+	// Routes are registered in arbitrary order. This is safe because net/http.ServeMux uses
+	// specificity-based matching (more specific patterns win), not first-registered-wins.
+	// The "/" catch-all registered in HTTPAPIServerProvider is always the least specific pattern.
 	// A more robust approach would require using fx groups but we shouldn't overcomplicate until this becomes an issue.
 	fx.Provide(MuxRouterProvider),
 	fx.Provide(ConfigProvider),
@@ -874,7 +871,7 @@ func RegisterNexusHTTPHandler(
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
-	router *mux.Router,
+	router *http.ServeMux,
 	httpTraceProvider nexus.HTTPClientTraceProvider,
 ) {
 	h := NewNexusHTTPHandler(
@@ -902,7 +899,7 @@ func RegisterNexusHTTPHandler(
 func RegisterOpenAPIHTTPHandler(
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	logger log.Logger,
-	router *mux.Router,
+	router *http.ServeMux,
 ) *OpenAPIHTTPHandler {
 	h := NewOpenAPIHTTPHandler(
 		rateLimitInterceptor,
@@ -912,9 +909,8 @@ func RegisterOpenAPIHTTPHandler(
 	return h
 }
 
-func MuxRouterProvider() *mux.Router {
-	// Instantiate a router to support additional route prefixes.
-	return mux.NewRouter().UseEncodedPath()
+func MuxRouterProvider() *http.ServeMux {
+	return http.NewServeMux()
 }
 
 func httpEnabled(cfg *config.Config, serviceName primitives.ServiceName) bool {
@@ -940,7 +936,7 @@ func HTTPAPIServerProvider(
 	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
-	router *mux.Router,
+	router *http.ServeMux,
 ) (*HTTPAPIServer, error) {
 	if !httpEnabled(cfg, serviceName) {
 		return nil, nil

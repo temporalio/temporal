@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -129,13 +128,8 @@ func (h *completionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.C
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer rCtx.capturePanicAndRecordMetrics(&ctx, &retErr)
 	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
-		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
-		nsName, err := url.PathUnescape(nsNameEscaped)
-		if err != nil {
-			h.Logger.Error("failed to extract namespace from request", tag.Error(err))
-			h.preProcessErrorsCounter.Record(1)
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
-		}
+		// PathValue returns already-decoded values from net/http routing.
+		nsName := commonnexus.RouteCompletionCallback.DeserializeRequest(r.HTTPRequest)
 		if nsName != ns.Name().String() {
 			logger.Error(
 				"namespace ID in token doesn't match the token",

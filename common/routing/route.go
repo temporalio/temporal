@@ -2,7 +2,7 @@
 //
 //  1. Used by servers to...
 //
-//     1.a. Register with [github.com/gorilla/mux.Router] instances via the [Route.Representation] method.
+//     1.a. Register with [http.ServeMux] instances via the [Route.Representation] method.
 //
 //     1.b. Deserialize HTTP path variables into a struct with the [Route.Deserialize] method.
 //
@@ -10,6 +10,7 @@
 package routing
 
 import (
+	"net/http"
 	"net/url"
 	"strings"
 )
@@ -22,8 +23,7 @@ type Route[T any] struct {
 // Component represents a single HTTP path component, either a constant slug or a variable parameter.
 type Component[T any] interface {
 	// Representation is the string representation of the component for usage in a path definition, e.g. "v1" for a
-	// constant slug or "{namespace}" for a variable. This should be compatible with the format specified in
-	// the [github.com/gorilla/mux] package.
+	// constant slug or "{namespace}" for a variable. This should be compatible with the format used by [http.ServeMux].
 	Representation() string
 	// Serialize returns the actual value of the slug when used in an HTTP path, e.g. "v1" for a constant slug or
 	// "test-namespace" for a variable.
@@ -70,7 +70,7 @@ func (r *RouteBuilder[T]) Build() Route[T] {
 	return NewRoute[T](r.components...)
 }
 
-// Representation returns the [github.com/gorilla/mux] compatible string representation of the route for usage in a
+// Representation returns the [http.ServeMux] compatible string representation of the route for usage in a
 // path definition. It does not add a leading or trailing slash to the representation, but it won't remove them if
 // they're present in the components. We do this because it's easier to add a slash depending on the context than to
 // remove it.
@@ -104,6 +104,19 @@ func (r Route[T]) Deserialize(vars map[string]string) T {
 	var t T
 	for _, c := range r.components {
 		c.Deserialize(vars, &t)
+	}
+	return t
+}
+
+// DeserializeRequest extracts path values from an [http.Request] using [http.Request.PathValue]
+// and deserializes them into a new instance of the params type, T.
+func (r Route[T]) DeserializeRequest(req *http.Request) T {
+	var t T
+	for _, c := range r.components {
+		if sv, ok := c.(stringVariable[T]); ok {
+			vars := map[string]string{sv.name: req.PathValue(sv.name)}
+			c.Deserialize(vars, &t)
+		}
 	}
 	return t
 }

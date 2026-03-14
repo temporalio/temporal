@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
@@ -75,7 +74,7 @@ func NewHTTPAPIServer(
 	operatorHandler *OperatorHandlerImpl,
 	interceptors []grpc.UnaryServerInterceptor,
 	metricsHandler metrics.Handler,
-	router *mux.Router,
+	router *http.ServeMux,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 ) (*HTTPAPIServer, error) {
@@ -175,7 +174,8 @@ func NewHTTPAPIServer(
 	}
 
 	// Set the / handler as our function that wraps serve mux.
-	router.PathPrefix("/").HandlerFunc(h.serveHTTP)
+	// In net/http, a "/" pattern matches all paths not matched by more specific patterns.
+	router.HandleFunc("/", h.serveHTTP)
 	// Register the router as the HTTP server handler.
 	h.server.Handler = router
 

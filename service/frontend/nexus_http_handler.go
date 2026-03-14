@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
-	"path"
+	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -104,11 +102,11 @@ func NewNexusHTTPHandler(
 	}
 }
 
-func (h *NexusHTTPHandler) RegisterRoutes(r *mux.Router) {
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByNamespaceAndTaskQueue)
-	r.PathPrefix("/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Representation() + "/").
-		HandlerFunc(h.dispatchNexusTaskByEndpoint)
+func (h *NexusHTTPHandler) RegisterRoutes(r *http.ServeMux) {
+	r.HandleFunc("/"+commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Representation()+"/{nexusPath...}",
+		h.dispatchNexusTaskByNamespaceAndTaskQueue)
+	r.HandleFunc("/"+commonnexus.RouteDispatchNexusTaskByEndpoint.Representation()+"/{nexusPath...}",
+		h.dispatchNexusTaskByEndpoint)
 }
 
 func (h *NexusHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, err error) {
@@ -118,21 +116,13 @@ func (h *NexusHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Requ
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByNamespaceAndTaskQueue].
 func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
-	var err error
 	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, r.Header)
+	// PathValue returns already-decoded values from net/http routing.
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
+	nc.taskQueue = params.TaskQueue
+	nc.namespaceName = params.Namespace
 
-	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
-		return
-	}
-	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
-		return
-	}
-	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
+	if err := h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
 		h.logger.Error("invalid namespace name", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "%v", err.Error()))
 		return
@@ -146,26 +136,14 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 	}
 	r = rWithAuthCtx
 
-	u, err := mux.CurrentRoute(r).URL("namespace", params.Namespace, "task_queue", params.TaskQueue)
-	if err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
-		return
-	}
-
-	h.serveResolvedURL(w, r, u, nc)
+	h.serveNexusHandler(w, r, nc)
 }
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
 func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
-	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
+	// PathValue returns already-decoded values from net/http routing.
+	endpointID := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
 
-	endpointID, err := url.PathUnescape(endpointIDEscaped)
-	if err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
-		return
-	}
 	endpointEntry, err := h.enpointRegistry.GetByID(r.Context(), endpointID)
 	if err != nil {
 		h.logger.Error("invalid Nexus endpoint ID", tag.Error(err))
@@ -206,14 +184,7 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 	}
 	r = rWithAuthCtx
 
-	u, err := mux.CurrentRoute(r).URL("endpoint", endpointIDEscaped)
-	if err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
-		return
-	}
-
-	h.serveResolvedURL(w, r, u, nc)
+	h.serveNexusHandler(w, r, nc)
 }
 
 func (h *NexusHTTPHandler) baseNexusContext(apiName string, header http.Header) *nexusContext {
@@ -269,8 +240,7 @@ func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *htt
 	// limit is enforced on top of this in the nexusHandler.StartOperation method.
 	r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 
-	vars := mux.Vars(r)
-	return route.Deserialize(vars)
+	return route.DeserializeRequest(r)
 }
 
 func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext) (*http.Request, error) {
@@ -299,20 +269,21 @@ func (h *NexusHTTPHandler) parseTlsAndAuthInfo(r *http.Request, nc *nexusContext
 	return r, nil
 }
 
-func (h *NexusHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *http.Request, u *url.URL, nc *nexusContext) {
+func (h *NexusHTTPHandler) serveNexusHandler(w http.ResponseWriter, r *http.Request, nc *nexusContext) {
 	// Attach Nexus context to response writer and request context.
 	nc.originalRequestHeaders = r.Header.Clone()
 	w = newNexusHTTPResponseWriter(w, nc)
 	r = r.WithContext(context.WithValue(r.Context(), nexusContextKey{}, nc))
 
-	// This whole mess is required to support escaped path vars.
-	prefix, err := url.PathUnescape(u.Path)
-	if err != nil {
-		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
-		return
+	// Strip the route prefix, preserving any percent-encoding in the original URL.
+	// PathValue returns a decoded value, so we derive the new path from the raw URL instead.
+	escapedPath := r.URL.EscapedPath()
+	nexusPath := r.PathValue("nexusPath")
+	if idx := strings.Index(escapedPath, nexusPath); idx >= 0 {
+		r.URL.RawPath = "/" + escapedPath[idx:]
+	} else {
+		r.URL.RawPath = ""
 	}
-	prefix = path.Dir(prefix)
-	r.URL.RawPath = ""
-	http.StripPrefix(prefix, h.nexusHandler).ServeHTTP(w, r)
+	r.URL.Path = "/" + nexusPath
+	h.nexusHandler.ServeHTTP(w, r)
 }

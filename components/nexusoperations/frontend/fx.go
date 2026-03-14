@@ -3,7 +3,6 @@ package frontend
 import (
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -30,7 +29,7 @@ func ConfigProvider(coll *dynamicconfig.Collection) *Config {
 	}
 }
 
-func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.Router) {
+func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *http.ServeMux) {
 	h := nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 		Handler: &completionHandler{
 			options,
@@ -40,14 +39,14 @@ func RegisterHTTPHandler(options HandlerOptions, logger log.Logger, router *mux.
 		Logger:     log.NewSlogLogger(logger),
 		Serializer: commonnexus.PayloadSerializer,
 	})
-	router.Path("/" + commonnexus.RouteCompletionCallback.Representation()).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/"+commonnexus.RouteCompletionCallback.Representation(), func(w http.ResponseWriter, r *http.Request) {
 		// Limit the request body to max allowed Payload size.
 		// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
 		// limit is enforced on top of this in the CompleteOperation method.
 		r.Body = http.MaxBytesReader(w, r.Body, rpc.MaxNexusAPIRequestBodyBytes)
 		h.ServeHTTP(w, r)
 	})
-	router.Path(commonnexus.PathCompletionCallbackNoIdentifier).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc(commonnexus.PathCompletionCallbackNoIdentifier, func(w http.ResponseWriter, r *http.Request) {
 		// Limit the request body to max allowed Payload size.
 		// Content headers are transformed to Payload metadata and contribute to the Payload size as well. A separate
 		// limit is enforced on top of this in the CompleteOperation method.

@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/gorilla/mux"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/routing"
 )
@@ -32,9 +31,9 @@ func ExampleRoute() {
 		Constant("workflows").
 		StringVariable("workflowID", func(params *QualifiedWorkflow) *string { return &params.WorkflowID }).
 		Build()
-	router := mux.NewRouter()
+	router := http.NewServeMux()
 	router.HandleFunc("/"+route.Representation(), func(w http.ResponseWriter, r *http.Request) {
-		params := route.Deserialize(mux.Vars(r))
+		params := route.DeserializeRequest(r)
 		_, _ = fmt.Fprintf(w, "Namespace: %s, WorkflowID: %s\n", params.Namespace, params.WorkflowID)
 	})
 	recorder := httptest.NewRecorder()
@@ -65,7 +64,7 @@ func ExampleRoute_Path() {
 
 func ExampleRoute_Deserialize() {
 	route := newWorkflowRoute()
-	// Would usually be mux.Vars(r) in a real application
+	// Would usually use route.DeserializeRequest(r) in a real application
 	vars := map[string]string{
 		"namespace":  "TEST-NAMESPACE",
 		"workflowID": "TEST-WORKFLOW-ID",
