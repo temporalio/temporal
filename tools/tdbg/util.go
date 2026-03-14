@@ -14,6 +14,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/olekukonko/tablewriter"
+	"github.com/olekukonko/tablewriter/tw"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
@@ -262,11 +263,12 @@ func printTable(items []any, writer io.Writer) error {
 		}
 	}
 
-	table := tablewriter.NewWriter(writer)
-	table.SetBorder(false)
-	table.SetColumnSeparator("|")
-	table.SetHeader(fields)
-	table.SetHeaderLine(false)
+	table := tablewriter.NewTable(writer,
+		tablewriter.WithRendition(tw.Rendition{
+			Borders: tw.Border{Left: tw.Off, Right: tw.Off, Top: tw.Off, Bottom: tw.Off},
+		}),
+	)
+	table.Header(toAny(fields)...)
 	for i := range items {
 		item := reflect.ValueOf(items[i])
 		for item.Type().Kind() == reflect.Ptr {
@@ -277,12 +279,20 @@ func printTable(items []any, writer io.Writer) error {
 			col := item.Field(j)
 			columns = append(columns, fmt.Sprintf("%v", col.Interface()))
 		}
-		table.Append(columns)
+		_ = table.Append(columns)
 	}
-	table.Render()
-	table.ClearRows()
+	_ = table.Render()
+	table.Reset()
 
 	return nil
+}
+
+func toAny[T any](s []T) []any {
+	result := make([]any, len(s))
+	for i, v := range s {
+		result[i] = v
+	}
+	return result
 }
 
 func showNextPage(wr io.Writer) bool {
