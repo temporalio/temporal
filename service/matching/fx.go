@@ -206,7 +206,9 @@ func WorkersRegistryProvider(
 		EvictionInterval: serviceConfig.WorkerRegistryEvictionInterval,
 		MetricsHandler:   metricsHandler,
 		MetricsConfig: workers.WorkerMetricsConfig{
-			EnablePluginMetrics: serviceConfig.EnableWorkerPluginMetrics,
+			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
+			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,
+			BreakdownMetricsByTaskQueue:    serviceConfig.BreakdownMetricsByTaskQueue,
 		},
 	})
 }

@@ -842,13 +842,11 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			activityIDs,
 			targetClusters,
 		)...)
-		if r.config.EnableNexus() {
-			taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
-				WorkflowKey: workflowKey,
-				// TaskID and VisibilityTimestamp are set by shard
-				TargetClusters: targetClusters,
-			})
-		}
+		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
+			WorkflowKey: workflowKey,
+			// TaskID and VisibilityTimestamp are set by shard
+			TargetClusters: targetClusters,
+		})
 	}
 
 	if r.mutableState.IsTransitionHistoryEnabled() &&
