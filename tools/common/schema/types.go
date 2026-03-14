@@ -104,52 +104,52 @@ const (
 	// CLIOptForce is the cli option for force mode
 	CLIOptForce = "force"
 
-	// CLIFlagEndpoint is the cli flag for endpoint
-	CLIFlagEndpoint = CLIOptEndpoint + ", ep"
-	// CLIFlagPort is the cli flag for port
-	CLIFlagPort = CLIOptPort + ", p"
-	// CLIFlagUser is the cli flag for user
-	CLIFlagUser = CLIOptUser + ", u"
-	// CLIFlagPassword is the cli flag for password
-	CLIFlagPassword = CLIOptPassword + ", pw"
-	// CLIFlagAllowedAuthenticators is the cli flag for allowed authenticators
-	CLIFlagAllowedAuthenticators = CLIOptAllowedAuthenticators + ", aa"
-	// CLIFlagTimeout is the cli flag for timeout
-	CLIFlagTimeout = CLIOptTimeout + ", t"
-	// CLIFlagKeyspace is the cli flag for keyspace
-	CLIFlagKeyspace = CLIOptKeyspace + ", k"
-	// CLIFlagDatabase is the cli flag for database
-	CLIFlagDatabase = CLIOptDatabase + ", db"
-	// CLIFlagPluginName is the cli flag for plugin name
-	CLIFlagPluginName = CLIOptPluginName + ", pl"
-	// CLIFlagConnectAttributes allows arbitrary connect attributes
-	CLIFlagConnectAttributes = CLIOptConnectAttributes + ", ca"
-	// CLIFlagVersion is the cli flag for version
-	CLIFlagVersion = CLIOptVersion + ", v"
-	// CLIFlagSchemaFile is the cli flag for schema file
-	CLIFlagSchemaFile = CLIOptSchemaFile + ", f"
-	// CLIFlagOverwrite is the cli flag for overwrite
-	CLIFlagOverwrite = CLIOptOverwrite + ", o"
-	// CLIFlagDisableVersioning is the cli flag for disabling versioning
-	CLIFlagDisableVersioning = CLIOptDisableVersioning + ", d"
-	// CLIFlagTargetVersion is the cli flag for target version
-	CLIFlagTargetVersion = CLIOptTargetVersion + ", v"
-	// CLIFlagSchemaDir is the cli flag for schema directory
-	CLIFlagSchemaDir = CLIOptSchemaDir + ", d"
-	// CLIFlagSchemaName is the cli flag that says which pre-embedded schema to use
-	CLIFlagSchemaName = CLIOptSchemaName + ", s"
-	// CLIFlagReplicationFactor is the cli flag for replication factor
-	CLIFlagReplicationFactor = CLIOptReplicationFactor + ", rf"
-	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter
-	CLIFlagDatacenter = CLIOptDatacenter + ", dc"
-	// CLIFlagAddressTranslator is the cli option for address translator for Cassandra
-	CLIFlagAddressTranslator = CLIOptAddressTranslator + ", at"
+	// CLIFlagEndpoint is the cli flag for endpoint (alias: ep)
+	CLIFlagEndpoint = CLIOptEndpoint
+	// CLIFlagPort is the cli flag for port (alias: p)
+	CLIFlagPort = CLIOptPort
+	// CLIFlagUser is the cli flag for user (alias: u)
+	CLIFlagUser = CLIOptUser
+	// CLIFlagPassword is the cli flag for password (alias: pw)
+	CLIFlagPassword = CLIOptPassword
+	// CLIFlagAllowedAuthenticators is the cli flag for allowed authenticators (alias: aa)
+	CLIFlagAllowedAuthenticators = CLIOptAllowedAuthenticators
+	// CLIFlagTimeout is the cli flag for timeout (alias: t)
+	CLIFlagTimeout = CLIOptTimeout
+	// CLIFlagKeyspace is the cli flag for keyspace (alias: k)
+	CLIFlagKeyspace = CLIOptKeyspace
+	// CLIFlagDatabase is the cli flag for database (alias: db)
+	CLIFlagDatabase = CLIOptDatabase
+	// CLIFlagPluginName is the cli flag for plugin name (alias: pl)
+	CLIFlagPluginName = CLIOptPluginName
+	// CLIFlagConnectAttributes allows arbitrary connect attributes (alias: ca)
+	CLIFlagConnectAttributes = CLIOptConnectAttributes
+	// CLIFlagVersion is the cli flag for version (alias: v)
+	CLIFlagVersion = CLIOptVersion
+	// CLIFlagSchemaFile is the cli flag for schema file (alias: f)
+	CLIFlagSchemaFile = CLIOptSchemaFile
+	// CLIFlagOverwrite is the cli flag for overwrite (alias: o)
+	CLIFlagOverwrite = CLIOptOverwrite
+	// CLIFlagDisableVersioning is the cli flag for disabling versioning (alias: d)
+	CLIFlagDisableVersioning = CLIOptDisableVersioning
+	// CLIFlagTargetVersion is the cli flag for target version (alias: v)
+	CLIFlagTargetVersion = CLIOptTargetVersion
+	// CLIFlagSchemaDir is the cli flag for schema directory (alias: d)
+	CLIFlagSchemaDir = CLIOptSchemaDir
+	// CLIFlagSchemaName is the cli flag that says which pre-embedded schema to use (alias: s)
+	CLIFlagSchemaName = CLIOptSchemaName
+	// CLIFlagReplicationFactor is the cli flag for replication factor (alias: rf)
+	CLIFlagReplicationFactor = CLIOptReplicationFactor
+	// CLIFlagDatacenter is the cli option for NetworkTopologyStrategy datacenter (alias: dc)
+	CLIFlagDatacenter = CLIOptDatacenter
+	// CLIFlagAddressTranslator is the cli option for address translator for Cassandra (alias: at)
+	CLIFlagAddressTranslator = CLIOptAddressTranslator
 	// CLIFlagAddressTranslatorOptions is the cli option for address translator of Cassandra
-	CLIFlagAddressTranslatorOptions
-	// CLIFlagQuiet is the cli flag for quiet mode
-	CLIFlagQuiet = CLIOptQuiet + ", q"
-	// CLIFlagForce is the cli flag for force mode
-	CLIFlagForce = CLIOptForce + ", f"
+	CLIFlagAddressTranslatorOptions = CLIOptAddressTranslatorOptions
+	// CLIFlagQuiet is the cli flag for quiet mode (alias: q)
+	CLIFlagQuiet = CLIOptQuiet
+	// CLIFlagForce is the cli flag for force mode (alias: f)
+	CLIFlagForce = CLIOptForce
 	// CLIFlagDisableInitialHostLookup is the cli flag for only using supplied hosts to connect to the database
 	CLIFlagDisableInitialHostLookup = "disable-initial-host-lookup"
 

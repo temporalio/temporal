@@ -121,9 +121,9 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	}
 
 	// extracting the task queue partition id
-	partitionID := 0
+	var partitionID int64
 	if c.IsSet(FlagPartitionID) {
-		partitionID = c.Int(FlagPartitionID)
+		partitionID = c.Int64(FlagPartitionID)
 	}
 
 	// extracting the task queue partition sticky name
@@ -212,9 +212,9 @@ func AdminForceUnloadTaskQueuePartition(c *cli.Context, clientFactory ClientFact
 	}
 
 	// extracting the task queue partition id
-	partitionID := 0
+	var partitionID int64
 	if c.IsSet(FlagPartitionID) {
-		partitionID = c.Int(FlagPartitionID)
+		partitionID = c.Int64(FlagPartitionID)
 	}
 
 	// extracting the task queue partition sticky name

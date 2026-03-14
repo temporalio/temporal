@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -95,14 +95,14 @@ func ping(cli *cli.Context, logger log.Logger) error {
 func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	cfg := new(esclient.Config)
 
-	u, err := url.Parse(cli.GlobalString(commonschema.CLIOptEndpoint))
+	u, err := url.Parse(cli.String(commonschema.CLIOptEndpoint))
 	if err != nil {
-		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", cli.GlobalString(commonschema.CLIOptEndpoint), err)
+		return nil, fmt.Errorf("invalid elasticsearch URL %q: %w", cli.String(commonschema.CLIOptEndpoint), err)
 	}
 
 	cfg.URL = *u
-	cfg.Username = cli.GlobalString(commonschema.CLIOptUser)
-	cfg.Password = cli.GlobalString(commonschema.CLIOptPassword)
+	cfg.Username = cli.String(commonschema.CLIOptUser)
+	cfg.Password = cli.String(commonschema.CLIOptPassword)
 	cfg.Version = "v7" // Fixed schema version 7
 	cfg.Indices = map[string]string{}
 
@@ -110,25 +110,25 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 		cfg.Indices[esclient.VisibilityAppName] = cli.String(CLIOptVisibilityIndex)
 	}
 
-	if cli.GlobalString(CLIOptAWSCredentials) != "" {
-		cfg.AWSRequestSigning.CredentialProvider = cli.GlobalString(CLIOptAWSCredentials)
+	if cli.String(CLIOptAWSCredentials) != "" {
+		cfg.AWSRequestSigning.CredentialProvider = cli.String(CLIOptAWSCredentials)
 		cfg.AWSRequestSigning.Enabled = true
 
 		if cfg.AWSRequestSigning.CredentialProvider == "static" {
 			cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username
 			cfg.AWSRequestSigning.Static.SecretAccessKey = cfg.Password
-			cfg.AWSRequestSigning.Static.Token = cli.GlobalString(CLIOptAWSToken)
+			cfg.AWSRequestSigning.Static.Token = cli.String(CLIOptAWSToken)
 		}
 	}
 
-	if cli.GlobalBool(commonschema.CLIFlagEnableTLS) {
+	if cli.Bool(commonschema.CLIFlagEnableTLS) {
 		cfg.TLS = &auth.TLS{
 			Enabled:                true,
-			CertFile:               cli.GlobalString(commonschema.CLIFlagTLSCertFile),
-			KeyFile:                cli.GlobalString(commonschema.CLIFlagTLSKeyFile),
-			CaFile:                 cli.GlobalString(commonschema.CLIFlagTLSCaFile),
-			ServerName:             cli.GlobalString(commonschema.CLIFlagTLSHostName),
-			EnableHostVerification: !cli.GlobalBool(commonschema.CLIFlagTLSDisableHostVerification),
+			CertFile:               cli.String(commonschema.CLIFlagTLSCertFile),
+			KeyFile:                cli.String(commonschema.CLIFlagTLSKeyFile),
+			CaFile:                 cli.String(commonschema.CLIFlagTLSCaFile),
+			ServerName:             cli.String(commonschema.CLIFlagTLSHostName),
+			EnableHostVerification: !cli.Bool(commonschema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 

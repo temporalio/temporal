@@ -49,8 +49,8 @@ func AdminShowWorkflow(c *cli.Context, clientFactory ClientFactory) error {
 	rid := c.String(FlagRunID)
 	startEventId := c.Int64(FlagMinEventID)
 	endEventId := c.Int64(FlagMaxEventID)
-	startEventVerion := int64(c.Int(FlagMinEventVersion))
-	endEventVersion := int64(c.Int(FlagMaxEventVersion))
+	startEventVerion := c.Int64(FlagMinEventVersion)
+	endEventVersion := c.Int64(FlagMaxEventVersion)
 	outputFileName := c.String(FlagOutputFilename)
 	decode := c.Bool(FlagDecode)
 
