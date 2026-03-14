@@ -1,10 +1,11 @@
 package circuitbreaker
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 
-	"github.com/sony/gobreaker"
+	gobreaker "github.com/sony/gobreaker/v2"
 	"go.temporal.io/server/common/dynamicconfig"
 )
 
@@ -25,7 +26,7 @@ type (
 		readyToTrip   func(counts gobreaker.Counts) bool
 		onStateChange func(name string, from gobreaker.State, to gobreaker.State)
 
-		cb       atomic.Pointer[gobreaker.TwoStepCircuitBreaker]
+		cb       atomic.Pointer[gobreaker.TwoStepCircuitBreaker[struct{}]]
 		cbLock   sync.Mutex
 		settings dynamicconfig.CircuitBreakerSettings
 	}
@@ -60,7 +61,7 @@ func (c *TwoStepCircuitBreakerWithDynamicSettings) UpdateSettings(
 		return // no change
 	}
 	c.settings = ds
-	c.cb.Store(gobreaker.NewTwoStepCircuitBreaker(gobreaker.Settings{
+	c.cb.Store(gobreaker.NewTwoStepCircuitBreaker[struct{}](gobreaker.Settings{
 		Name:          c.name,
 		MaxRequests:   uint32(ds.MaxRequests),
 		Interval:      ds.Interval,
@@ -83,5 +84,15 @@ func (c *TwoStepCircuitBreakerWithDynamicSettings) Counts() gobreaker.Counts {
 }
 
 func (c *TwoStepCircuitBreakerWithDynamicSettings) Allow() (done func(success bool), err error) {
-	return c.cb.Load().Allow()
+	doneFn, err := c.cb.Load().Allow()
+	if err != nil {
+		return nil, err
+	}
+	return func(success bool) {
+		if success {
+			doneFn(nil)
+		} else {
+			doneFn(errors.New("circuit breaker recorded failure"))
+		}
+	}, nil
 }
