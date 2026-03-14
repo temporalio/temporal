@@ -297,7 +297,7 @@ func (s *localStoreCertProvider) fetchCertificate(
 
 	cert, err := tls.X509KeyPair(certBytes, keyBytes)
 	if err != nil {
-		return nil, fmt.Errorf("loading tls certificate failed: %v", err)
+		return nil, fmt.Errorf("loading tls certificate failed: %w", err)
 	}
 
 	return &cert, nil

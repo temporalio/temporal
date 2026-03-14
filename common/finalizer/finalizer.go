@@ -5,7 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
+
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
