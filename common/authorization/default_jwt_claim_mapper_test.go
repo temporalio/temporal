@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/config"
@@ -361,10 +361,6 @@ type (
 		jwt.RegisteredClaims
 	}
 )
-
-func (CustomClaims) Valid() error {
-	return nil
-}
 
 func (tg *tokenGenerator) generateRSAToken(subject string, permissions []string, options errorTestOptions) (string, error) {
 	return tg.generateToken(RSA, subject, permissions, options)

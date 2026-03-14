@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -152,7 +152,14 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 
 func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
 
-	parser := jwt.NewParser(jwt.WithValidMethods(keyProvider.SupportedMethods()))
+	parserOpts := []jwt.ParserOption{jwt.WithValidMethods(keyProvider.SupportedMethods())}
+	// In jwt/v5, audience is validated by the parser when WithAudience is set.
+	// When no audience is expected, omit the option to preserve the v4 behavior
+	// of accepting tokens regardless of their aud claim.
+	if strings.TrimSpace(audience) != "" {
+		parserOpts = append(parserOpts, jwt.WithAudience(audience))
+	}
+	parser := jwt.NewParser(parserOpts...)
 
 	var keyFunc jwt.Keyfunc
 	if provider, _ := keyProvider.(RawTokenKeyProvider); provider != nil {
@@ -190,12 +197,6 @@ func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audi
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
 		return nil, serviceerror.NewPermissionDenied("invalid token with no claims", "")
-	}
-	if err := claims.Valid(); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(audience) != "" && !claims.VerifyAudience(audience, true) {
-		return nil, serviceerror.NewPermissionDenied("audience mismatch", "")
 	}
 	return claims, nil
 }
