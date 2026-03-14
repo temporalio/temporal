@@ -4445,7 +4445,7 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowScheduledEventID(scheduledEventID),
-			tag.WorkflowActivityID(ai.ActivityId),
+			tag.ActivityID(ai.ActivityId),
 			tag.WorkflowStartedEventID(ai.StartedEventId))
 		return nil, ms.createInternalServerError(opTag)
 	}
