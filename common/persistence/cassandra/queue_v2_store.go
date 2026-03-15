@@ -160,7 +160,7 @@ func (s *queueV2Store) ReadMessages(
 		0,
 		int(minMessageID),
 		request.PageSize,
-	).WithContext(ctx).Iter()
+	).WithContext(ctx).PageSize(request.PageSize).Iter()
 
 	var (
 		messages []persistence.QueueV2Message
