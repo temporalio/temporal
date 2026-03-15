@@ -98,6 +98,10 @@ func (q failingQuery) Iter() gocql.Iter {
 	return failingIter{}
 }
 
+func (q failingQuery) PageSize(int) gocql.Query {
+	return q
+}
+
 func (q failingQuery) Scan(...any) error {
 	return assert.AnError
 }
