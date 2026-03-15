@@ -1059,7 +1059,9 @@ func (d *MutableStateStore) ListConcreteExecutions(
 	).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
-	response := &p.InternalListConcreteExecutionsResponse{}
+	response := &p.InternalListConcreteExecutionsResponse{
+		States: make([]*p.InternalWorkflowMutableState, 0, request.PageSize),
+	}
 	result := make(map[string]any)
 	for iter.MapScan(result) {
 		if execution, ok := result["execution"]; ok {
