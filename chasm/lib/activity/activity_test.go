@@ -191,6 +191,16 @@ func TestActivityTerminate(t *testing.T) {
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
 			expectNoOp:     true,
 		},
+		{
+			name:           "no-op on timed out activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			expectNoOp:     true,
+		},
+		{
+			name:           "no-op on canceled activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+			expectNoOp:     true,
+		},
 	}
 
 	for _, tc := range testCases {

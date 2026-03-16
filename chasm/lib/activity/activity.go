@@ -133,7 +133,6 @@ func (a *Activity) Terminate(
 	ctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// If already in a terminal state, no-op.
 	if !TransitionTerminated.Possible(a) {
 		return chasm.TerminateComponentResponse{}, nil
 	}
