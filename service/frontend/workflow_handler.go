@@ -6733,7 +6733,7 @@ func (wh *WorkflowHandler) ListWorkers(
 	ctx context.Context, request *workflowservice.ListWorkersRequest,
 ) (*workflowservice.ListWorkersResponse, error) {
 	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ListWorkers not supported")
+		return &workflowservice.ListWorkersResponse{}, nil
 	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
@@ -6842,7 +6842,7 @@ func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workfl
 func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflowservice.DescribeWorkerRequest,
 ) (*workflowservice.DescribeWorkerResponse, error) {
 	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("DescribeWorker command is not enabled.")
+		return &workflowservice.DescribeWorkerResponse{}, nil
 	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
