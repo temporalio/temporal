@@ -196,7 +196,7 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		branchToken:          currentVersionHistory.BranchToken,
 		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
 		dbRecordVersion:      resp.DBRecordVersion,
-		requestID:            mutableState.ExecutionState.CreateRequestId,
+		requestID:            ndc.FindStartRequestID(mutableState.ExecutionState),
 		mutableState:         resp.State,
 	}, nil
 }
