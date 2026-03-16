@@ -3245,6 +3245,161 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	s.False(chasmTask.DeserializedTask.IsValid())
 }
 
+func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
+	setup := func() (*Node, *tasks.ChasmTask, ExecutionKey, context.Context, Context) {
+		persistenceNodes := map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+						},
+					},
+				},
+			},
+		}
+
+		root, err := s.newTestTree(persistenceNodes)
+		s.NoError(err)
+		s.NotNil(root)
+
+		workflowKey := definition.NewWorkflowKey(
+			primitives.NewUUID().String(),
+			primitives.NewUUID().String(),
+			primitives.NewUUID().String(),
+		)
+		chasmTask := &tasks.ChasmTask{
+			WorkflowKey:         workflowKey,
+			VisibilityTimestamp: s.timeSource.Now(),
+			TaskID:              123,
+			Category:            tasks.CategoryOutbound,
+			Destination:         "destination",
+			Info: &persistencespb.ChasmTaskInfo{
+				ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount: 1,
+				},
+				ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount: 1,
+				},
+				Path:   rootPath,
+				TypeId: testDiscardableSideEffectTaskTypeID,
+				Data: &commonpb.DataBlob{
+					Data:         nil,
+					EncodingType: enumspb.ENCODING_TYPE_PROTO3,
+				},
+			},
+		}
+		executionKey := ExecutionKey{
+			NamespaceID: chasmTask.NamespaceID,
+			BusinessID:  chasmTask.WorkflowID,
+			RunID:       chasmTask.RunID,
+		}
+
+		mockEngine := NewMockEngine(s.controller)
+		ctx := NewEngineContext(context.Background(), mockEngine)
+		chasmContext := NewMutableContext(ctx, root)
+
+		return root, chasmTask, executionKey, ctx, chasmContext
+	}
+
+	s.Run("Success", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		var validationFnCalled bool
+		dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+			validationFnCalled = true
+			return nil
+		}
+
+		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(true, nil).Times(1)
+		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+		) error {
+			s.NotNil(ref.validationFn)
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+		s.NoError(err)
+		s.True(validationFnCalled)
+		s.True(chasmTask.DeserializedTask.IsValid())
+	})
+
+	s.Run("InvalidTask", func() {
+		root, chasmTask, executionKey, ctx, _ := setup()
+
+		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(false, nil).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		s.Error(err)
+		s.IsType(&serviceerror.NotFound{}, err)
+	})
+
+	s.Run("ValidationError", func() {
+		root, chasmTask, executionKey, ctx, _ := setup()
+
+		validationErr := errors.New("validation error")
+		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(false, validationErr).Times(1)
+
+		err := root.ExecuteSideEffectDiscardTask(
+			ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		s.ErrorIs(validationErr, err)
+	})
+
+	s.Run("DiscardHandlerError", func() {
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
+
+		var validationFnCalled bool
+		dummyValidationFn := func(_ NodeBackend, _ Context, _ Component) error {
+			validationFnCalled = true
+			return nil
+		}
+
+		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).Return(true, nil).Times(1)
+		discardErr := errors.New("discard error")
+		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+		) error {
+			s.NotNil(ref.validationFn)
+			if _, err := root.Component(chasmContext, ref); err != nil {
+				return err
+			}
+			return discardErr
+		}
+
+		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+		s.ErrorIs(discardErr, err)
+		s.True(validationFnCalled)
+	})
+}
+
+func (s *nodeSuite) TestHasDiscardHandler() {
+	// The discardable side effect task has an executor that implements SideEffectDiscardHandler.
+	discardableTask, ok := s.registry.TaskByID(testDiscardableSideEffectTaskTypeID)
+	s.True(ok)
+	s.True(discardableTask.HasDiscardHandler())
+
+	// The regular side effect task does not.
+	regularTask, ok := s.registry.TaskByID(testSideEffectTaskTypeID)
+	s.True(ok)
+	s.False(regularTask.HasDiscardHandler())
+
+	// Pure tasks do not.
+	pureTask, ok := s.registry.TaskByID(testPureTaskTypeID)
+	s.True(ok)
+	s.False(pureTask.HasDiscardHandler())
+}
+
 func (s *nodeSuite) TestValidateSideEffectTask() {
 	taskInfo := &persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{

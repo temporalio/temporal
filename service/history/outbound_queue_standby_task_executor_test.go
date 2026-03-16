@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -273,6 +274,65 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_PreValidationFails()
 			s.NotEmpty(result.ExecutionMetricTags)
 		})
 	}
+}
+
+func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() {
+	chasmDiscardDuration := s.mockShard.GetConfig().ChasmStandbyTaskDiscardDelay("")
+
+	setupDiscard := func(lib chasm.Library, taskName string, treeMockFn func(*historyi.MockChasmTree)) *tasks.ChasmTask {
+		registry := chasm.NewRegistry(s.logger)
+		s.NoError(registry.Register(lib))
+		s.mockShard.SetChasmRegistry(registry)
+		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
+
+		s.mockChasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		treeMockFn(s.mockChasmTree)
+
+		s.mockMutableState.EXPECT().ChasmTree().Return(s.mockChasmTree).AnyTimes()
+
+		task := &tasks.ChasmTask{
+			WorkflowKey:         tests.WorkflowKey,
+			TaskID:              s.mustGenerateTaskID(),
+			Category:            tasks.CategoryOutbound,
+			Destination:         "test-destination",
+			VisibilityTimestamp: s.now.Add(-chasmDiscardDuration - time.Second),
+			Info: &persistencespb.ChasmTaskInfo{
+				TypeId:      typeID,
+				ArchetypeId: tests.ArchetypeID,
+			},
+		}
+
+		s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any(),
+		).Return(s.mockWorkflowContext, func(error) {}, nil)
+
+		s.mockWorkflowContext.EXPECT().
+			LoadMutableState(gomock.Any(), gomock.Any()).
+			Return(s.mockMutableState, nil)
+
+		s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
+
+		return task
+	}
+
+	s.Run("WithHandler", func() {
+		setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
+			tree.EXPECT().ExecuteSideEffectDiscardTask(
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+			).Return(nil).Times(1)
+		})
+		result := s.executor.Execute(context.Background(), s.mockExecutable)
+		s.NoError(result.ExecutionErr)
+		s.False(result.ExecutedAsActive)
+	})
+
+	s.Run("WithoutHandler", func() {
+		setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(_ *historyi.MockChasmTree) {})
+		// Without a discard handler, discardChasmSideEffectTask returns ErrTaskDiscarded directly.
+		result := s.executor.Execute(context.Background(), s.mockExecutable)
+		s.ErrorIs(consts.ErrTaskDiscarded, result.ExecutionErr)
+		s.False(result.ExecutedAsActive)
+	})
 }
 
 func (s *outboundQueueStandbyTaskExecutorSuite) mustGenerateTaskID() int64 {
