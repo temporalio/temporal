@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -18,8 +19,9 @@ type (
 	// queue_messages tables that implement the QueueV2 interface. The schema is located at:
 	//	schema/cassandra/temporal/versioned/v1.9/queues.cql
 	queueV2Store struct {
-		session gocql.Session
-		logger  log.Logger
+		session    gocql.Session
+		logger     log.Logger
+		queueCache sync.Map // caches *Queue by "queueType:queueName"
 	}
 
 	Queue struct {
@@ -113,7 +115,6 @@ func (s *queueV2Store) EnqueueMessage(
 	request *persistence.InternalEnqueueMessageRequest,
 ) (*persistence.InternalEnqueueMessageResponse, error) {
 	// TODO: add concurrency control around this method to avoid things like QueueMessageIDConflict.
-	// TODO: cache the queue in memory to avoid querying the database every time.
 	_, err := s.getQueue(ctx, request.QueueType, request.QueueName)
 	if err != nil {
 		return nil, err
@@ -255,7 +256,7 @@ func (s *queueV2Store) RangeDeleteMessages(
 	}
 	queueType := request.QueueType
 	queueName := request.QueueName
-	q, err := s.getQueue(ctx, queueType, queueName)
+	q, err := GetQueue(ctx, s.session, queueName, queueType)
 	if err != nil {
 		return nil, err
 	}
@@ -297,6 +298,8 @@ func (s *queueV2Store) RangeDeleteMessages(
 	if err != nil {
 		return nil, err
 	}
+	// Invalidate cached queue so ReadMessages sees the updated MinMessageId.
+	s.queueCache.Delete(queueCacheKey(queueType, queueName))
 	return &persistence.InternalRangeDeleteMessagesResponse{
 		MessagesDeleted: deleteRange.MessagesToDelete,
 	}, nil
@@ -372,7 +375,21 @@ func (s *queueV2Store) getQueue(
 	queueType persistence.QueueV2Type,
 	name string,
 ) (*Queue, error) {
-	return GetQueue(ctx, s.session, name, queueType)
+	cacheKey := queueCacheKey(queueType, name)
+	if cached, ok := s.queueCache.Load(cacheKey); ok {
+		return cached.(*Queue), nil
+	}
+	q, err := GetQueue(ctx, s.session, name, queueType)
+	if err != nil {
+		return nil, err
+	}
+	s.queueCache.Store(cacheKey, q)
+	return q, nil
+}
+
+// queueCacheKey builds the queueCache key for a queue type and name.
+func queueCacheKey(queueType persistence.QueueV2Type, name string) string {
+	return fmt.Sprintf("%d:%s", queueType, name)
 }
 
 func GetQueue(
