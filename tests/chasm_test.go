@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -583,6 +585,69 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 0
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+}
+
+func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	visQuery := fmt.Sprintf("WorkflowId = '%s'", storeID)
+
+	// Wait for visibility record to appear.
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			require.NoError(t, err)
+			assert.Len(t, resp.Executions, 1)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			Reason:      "test deletion",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	// Validate execution is fully deleted (both mutable state and visibility record).
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			require.NoError(t, err)
+			assert.Empty(t, resp.Executions)
 		},
 		testcore.WaitForESToSettle,
 		100*time.Millisecond,

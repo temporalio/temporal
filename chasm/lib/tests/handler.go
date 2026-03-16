@@ -76,6 +76,13 @@ type (
 	RemovePayloadResponse struct {
 		State *testspb.TestPayloadStore
 	}
+
+	DeletePayloadStoreRequest struct {
+		NamespaceID namespace.ID
+		StoreID     string
+		Reason      string
+		Identity    string
+	}
 )
 
 func NewPayloadStoreHandler(
@@ -206,6 +213,25 @@ func GetPayloadHandler(
 	return GetPayloadResponse{
 		Payload: payload,
 	}, nil
+}
+
+func DeletePayloadStoreHandler(
+	ctx context.Context,
+	request DeletePayloadStoreRequest,
+) error {
+	return chasm.DeleteExecution[*PayloadStore](
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: request.NamespaceID.String(),
+			BusinessID:  request.StoreID,
+		},
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:   request.Reason,
+				Identity: request.Identity,
+			},
+		},
+	)
 }
 
 func RemovePayloadHandler(
