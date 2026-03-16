@@ -1125,10 +1125,6 @@ func (e *ChasmEngine) convertError(
 		return nil
 	}
 
-	if convertedErr := e.convertNotFoundError(err, ref); convertedErr != nil {
-		return convertedErr
-	}
-
 	if solErr, ok := errors.AsType[*persistence.ShardOwnershipLostError](err); ok {
 		hostInfo := e.hostInfoProvider.HostInfo()
 		e.logger.Error("chasm ShardOwnershipLostError", tag.Error(err), tag.RequestID(requestID))
@@ -1162,14 +1158,14 @@ func (e *ChasmEngine) convertError(
 		return serviceerror.NewDeadlineExceededf("persistence operation timed out (request ID: %s)", requestID)
 	}
 
-	return err
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
+		return err
+	}
+
+	return e.convertNotFoundError(err, ref)
 }
 
 func (e *ChasmEngine) convertNotFoundError(err error, ref chasm.ComponentRef) error {
-	if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
-		return nil
-	}
-
 	archID, archErr := ref.ArchetypeID(e.registry)
 	if archErr != nil {
 		return err
