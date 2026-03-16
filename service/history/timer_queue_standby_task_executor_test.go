@@ -2348,7 +2348,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		s.NotNil(resp)
 		// Without a discard handler, the task falls back to checkExecutionStillExistsOnSourceBeforeDiscard,
 		// which ultimately discards the task.
-		s.ErrorIs(consts.ErrTaskDiscarded, resp.ExecutionErr)
+		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
 	})
 }
 

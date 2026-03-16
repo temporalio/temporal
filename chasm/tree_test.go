@@ -3362,7 +3362,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 
 		err := root.ExecuteSideEffectDiscardTask(
 			ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
-		s.ErrorIs(validationErr, err)
+		s.ErrorIs(err, validationErr)
 	})
 
 	s.Run("DiscardHandlerError", func() {
@@ -3389,7 +3389,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		}
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
-		s.ErrorIs(discardErr, err)
+		s.ErrorIs(err, discardErr)
 		s.True(validationFnCalled)
 	})
 }

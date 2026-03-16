@@ -3184,7 +3184,7 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 	if registrableTask.isPureTask {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
-			"ExecuteSideEffectDiscardTask called on a Pure task, task type: ",
+			"ExecuteSideEffectDiscardTask called on a Pure task",
 			fmt.Errorf("%s", registrableTask.fqType()))
 	}
 
