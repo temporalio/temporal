@@ -1,4 +1,7 @@
-# Syntax is here:
-# https://docs.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
-
-*                @temporalio/server @temporalio/cgs
+# require review from:
+#
+# * a director; an eng director must approve every patch. as of 2026-01-06 this
+#   group is maintained manually in Entra and synced from there, so new
+#   directors require an ask in #it-support
+# * a member of releng, who owns (and gates) the patch process.
+* @temporalio/engineering-directors-vps @temporalio/release-engineering
