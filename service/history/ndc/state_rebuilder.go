@@ -49,7 +49,6 @@ type (
 			baseLastEventVersion *int64,
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
-			requestID string,
 			currentMutableState *persistencespb.WorkflowMutableState,
 		) (historyi.MutableState, RebuildStats, error)
 	}
@@ -159,11 +158,11 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	baseLastEventVersion *int64,
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
-	requestID string,
 	currentMutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, RebuildStats, error) {
 	// Use the original start request ID so that CHASM scheduler completion
 	// handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
+	// Read from the RequestIds map; fall back to CreateRequestId otherwise.
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,
@@ -173,7 +172,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 		baseLastEventVersion,
 		targetWorkflowIdentifier,
 		targetBranchToken,
-		requestID,
+		findStartRequestID(currentMutableState.GetExecutionState()),
 	)
 	if err != nil {
 		return nil, RebuildStats{}, err
@@ -402,9 +401,9 @@ func (r *StateRebuilderImpl) getPaginationFn(
 	}
 }
 
-// FindStartRequestID returns the request ID associated with the WorkflowExecutionStarted
+// findStartRequestID returns the request ID associated with the WorkflowExecutionStarted
 // event from the RequestIds map, or the create request ID if not found.
-func FindStartRequestID(executionState *persistencespb.WorkflowExecutionState) string {
+func findStartRequestID(executionState *persistencespb.WorkflowExecutionState) string {
 	for reqID, info := range executionState.GetRequestIds() {
 		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			return reqID

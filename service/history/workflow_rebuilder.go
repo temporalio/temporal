@@ -28,7 +28,6 @@ type (
 		branchToken          []byte
 		stateTransitionCount int64
 		dbRecordVersion      int64
-		requestID            string
 		mutableState         *persistencespb.WorkflowMutableState
 	}
 	workflowRebuilder interface {
@@ -96,7 +95,6 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.branchToken,
 		rebuildSpec.stateTransitionCount,
 		rebuildSpec.dbRecordVersion,
-		rebuildSpec.requestID,
 		rebuildSpec.mutableState,
 	)
 	if err != nil {
@@ -196,7 +194,6 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 		branchToken:          currentVersionHistory.BranchToken,
 		stateTransitionCount: mutableState.ExecutionInfo.StateTransitionCount,
 		dbRecordVersion:      resp.DBRecordVersion,
-		requestID:            ndc.FindStartRequestID(mutableState.ExecutionState),
 		mutableState:         resp.State,
 	}, nil
 }
@@ -207,7 +204,6 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	branchToken []byte,
 	stateTransitionCount int64,
 	dbRecordVersion int64,
-	requestID string,
 	mutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, error) {
 	rebuildMutableState, rebuildStats, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
@@ -219,7 +215,6 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 		nil,             // skip event ID & version check
 		workflowKey,
 		branchToken,
-		requestID,
 		mutableState,
 	)
 	if err != nil {

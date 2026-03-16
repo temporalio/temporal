@@ -207,7 +207,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	// be used consistently across resets.
 	//
 	// Read from the base run's RequestIds map; fall back to CreateRequestId otherwise.
-	startRequestID := FindStartRequestID(baseWorkflow.GetMutableState().GetExecutionState())
+	startRequestID := findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState())
 
 	resetWorkflow, err := r.prepareResetWorkflow(
 		ctx,

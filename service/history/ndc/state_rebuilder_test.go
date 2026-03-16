@@ -373,7 +373,6 @@ func (s *stateRebuilderSuite) TestRebuild() {
 }
 
 func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
-	requestID := uuid.NewString()
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
@@ -479,7 +478,6 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		util.Ptr(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
-		requestID,
 		currentMutableState,
 	)
 	s.NoError(err)
