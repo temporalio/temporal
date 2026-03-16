@@ -14,7 +14,9 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 	case *historyservice.AddTasksResponse:
 		return nil
 	case *historyservice.CancelNexusOperationRequest:
-		return nil
+		return []tag.Tag{
+			tag.OperationID(r.GetRequest().GetOperationId()),
+		}
 	case *historyservice.CancelNexusOperationResponse:
 		return nil
 	case *historyservice.CloseShardRequest:

@@ -69,6 +69,7 @@ func closeShard(s testcore.Env, wid string) {
 }
 
 func TestWorkflowUpdateSuite(t *testing.T) {
+	t.Parallel()
 	t.Run("EmptySpeculativeWorkflowTask_AcceptComplete", func(t *testing.T) {
 		testCases := []struct {
 			name     string
@@ -5149,7 +5150,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 					// poll update to ensure same outcome is returned
 					pollRes, err := pollUpdate(s, s.Tv(),
 						&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
-					s.Nil(err)
+					s.NoError(err)
 					s.Equal(updateRep.Outcome.String(), pollRes.Outcome.String())
 
 					s.EqualHistoryEvents(`

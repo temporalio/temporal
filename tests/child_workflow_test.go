@@ -514,7 +514,7 @@ func (s *ChildWorkflowSuite) TestCronChildWorkflowExecution() {
 			WorkflowId: childID,
 		},
 	})
-	s.Nil(terminateErr)
+	s.NoError(terminateErr)
 
 	// Process ChildExecution terminated event and complete parent execution
 	_, err = pollerParent.PollAndProcessWorkflowTask()
@@ -944,7 +944,7 @@ func (s *ChildWorkflowSuite) TestRetryFailChildWorkflowExecution() {
 	// Child failure should be present in completion event
 	s.NotNil(completedEvent)
 	attrs := completedEvent.GetChildWorkflowExecutionFailedEventAttributes()
-	s.Equal(attrs.Failure.Message, "Failed attempt 3")
+	s.Equal("Failed attempt 3", attrs.Failure.Message)
 }
 
 func (s *ChildWorkflowSuite) TestStartChildWorkflowWithInternalTaskQueue_Blocked() {

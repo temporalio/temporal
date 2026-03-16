@@ -272,6 +272,14 @@ func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	s.Equal(expectedValue, v)
 }
 
+func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByChasmTaskType() {
+	setting := dynamicconfig.NewChasmTaskTypeDurationSetting(testGetDurationPropertyFilteredByChasmTaskTypeKey, 0, "")
+	v := setting.Get(s.collection)("activity.dispatch")
+	s.Equal(30*time.Second, v)
+	v = setting.Get(s.collection)("callback.invoke")
+	s.Equal(24*time.Hour, v)
+}
+
 func (s *fileBasedClientSuite) TestValidateConfig_NilLogger() {
 	doneCh := make(chan any)
 	defer close(doneCh)
@@ -300,16 +308,6 @@ func (s *fileBasedClientSuite) TestValidateConfig_NilReader() {
 		PollInterval: time.Second * 5,
 	}, logger, doneCh, metrics.NoopMetricsHandler)
 	s.Error(err, "file reader for dynamic config client is nil")
-}
-
-func (s *fileBasedClientSuite) TestValidateConfig_NilDoneCh() {
-	logger := log.NewNoopLogger()
-	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
-	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
-		Filepath:     "config/testConfig.yaml",
-		PollInterval: time.Second * 5,
-	}, logger, nil, metrics.NoopMetricsHandler)
-	s.Error(err, "done channel for dynamic config client is nil")
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {

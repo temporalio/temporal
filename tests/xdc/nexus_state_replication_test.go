@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -71,6 +73,13 @@ func (s *NexusStateReplicationSuite) SetupSuite() {
 		callbacks.AllowedAddresses.Key(): []any{map[string]any{
 			"Pattern": "*", "AllowInsecure": true,
 		}},
+		// Cap callback retry backoff to avoid long waits after failover.
+		callbacks.RetryPolicyMaximumInterval.Key(): 1 * time.Second,
+		// Set a short circuit breaker timeout so it recovers quickly from bursts of failures.
+		dynamicconfig.OutboundQueueCircuitBreakerSettings.Key(): dynamicconfig.CircuitBreakerSettings{
+			MaxRequests: 1,
+			Timeout:     1 * time.Second,
+		},
 	}
 	s.setupSuite()
 }
@@ -200,7 +209,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationEventsReplicated() {
 	s.Eventually(func() bool {
 		describeRes, err := sdkClient1.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		s.Equal(1, len(describeRes.PendingNexusOperations))
+		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		return op.State == enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED
 	}, time.Second*20, time.Millisecond*100)
@@ -359,7 +368,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationCancelationReplicated() {
 	s.Eventually(func() bool {
 		describeRes, err := sdkClient0.DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
 		s.NoError(err)
-		s.Equal(1, len(describeRes.PendingNexusOperations))
+		s.Len(describeRes.PendingNexusOperations, 1)
 		op := describeRes.PendingNexusOperations[0]
 		fmt.Println(op.CancellationInfo)
 		s.NotNil(op.CancellationInfo)
@@ -590,7 +599,7 @@ func (s *NexusStateReplicationSuite) TestNexusOperationBufferedCompletionReplica
 			break
 		}
 	}
-	s.Greater(scheduledEventID, int64(0))
+	s.Positive(scheduledEventID)
 
 	// Allow operation to complete synchronously during next retry attempt
 	allowCompletion.Store(true)
@@ -705,11 +714,11 @@ func (s *NexusStateReplicationSuite) waitCallback(
 	execution *commonpb.WorkflowExecution,
 	condition func(callback *workflowpb.CallbackInfo) bool,
 ) {
-	s.Eventually(func() bool {
+	s.EventuallyWithT(func(t *assert.CollectT) {
 		descResp, err := sdkClient.DescribeWorkflowExecution(ctx, execution.WorkflowId, execution.RunId)
-		s.NoError(err)
-		s.Len(descResp.GetCallbacks(), 1)
-		return condition(descResp.GetCallbacks()[0])
+		require.NoError(t, err)
+		require.Len(t, descResp.GetCallbacks(), 1)
+		require.True(t, condition(descResp.GetCallbacks()[0]))
 	}, time.Second*20, time.Millisecond*100)
 }
 

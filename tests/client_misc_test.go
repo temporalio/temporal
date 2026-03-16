@@ -477,7 +477,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	s.NoError(err)
 	s.NotNil(task)
 	s.NotNil(task.History)
-	s.True(len(task.History.Events) > 0)
+	s.NotEmpty(task.History.Events)
 	s.Equal(int64(1), task.History.Events[0].EventId)
 }
 
@@ -672,7 +672,7 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	err = workflowRun.Get(ctx, nil)
 	s.NoError(err)
@@ -757,7 +757,7 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	// wait until workflow close (it will be timeout)
 	err = workflowRun.Get(ctx, nil)
@@ -775,10 +775,10 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 
 	// assert workflow task retried 3 times
-	s.Equal(3, len(startedTime))
+	s.Len(startedTime, 3)
 
-	s.True(startedTime[1].Sub(startedTime[0]) < time.Second)   // retry immediately
-	s.True(startedTime[2].Sub(startedTime[1]) > time.Second*3) // retry after WorkflowTaskTimeout
+	s.Less(startedTime[1].Sub(startedTime[0]), time.Second)      // retry immediately
+	s.Greater(startedTime[2].Sub(startedTime[1]), time.Second*3) // retry after WorkflowTaskTimeout
 }
 
 func (s *ClientMiscTestSuite) Test_BufferedQuery() {
@@ -824,7 +824,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 
 	// wait until first wf task started
 	wfStarted.Wait()
@@ -932,7 +932,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
-	s.True(workflowRun.GetRunID() != "")
+	s.NotEmpty(workflowRun.GetRunID())
 	tv = tv.WithRunID(workflowRun.GetRunID())
 
 	// block until first workflow task started
