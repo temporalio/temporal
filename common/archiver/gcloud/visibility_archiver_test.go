@@ -480,3 +480,62 @@ func (s *visibilityArchiverSuite) TestQuery_Success_WorkflowIDOnly() {
 	s.Len(response.Executions, 1)
 	s.Equal(testWorkflowID, response.Executions[0].Execution.GetWorkflowId())
 }
+
+func (s *visibilityArchiverSuite) TestQuery_Fail_TimeBasedQuery_WithRunID() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+
+	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+	s.NoError(err)
+
+	visibilityArchiver.queryParser = NewQueryParser()
+
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "CloseTime = '2020-02-05T11:00:00Z' AND SearchPrecision = 'Day' AND RunId = '" + testRunID + "'",
+	}
+
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
+	s.Error(err)
+	s.Nil(response)
+	s.Contains(err.Error(), "RunId is not supported")
+}
+
+func (s *visibilityArchiverSuite) TestQuery_Success_WorkflowID_WithTimeFilter() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+
+	expectedPrefix := constructVisibilityFilenamePrefix(testNamespaceID, indexKeyWorkflowID)
+	expectedPrefix = fmt.Sprintf("%s_%s", expectedPrefix, hash(testWorkflowID))
+
+	filename := expectedPrefix + "_2020-02-05T09:56:14Z_" + hash(testWorkflowTypeName) + "_" + hash(testWorkflowID) + "_" + hash(testRunID) + ".visibility"
+
+	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, expectedPrefix, 10, 0, gomock.Any()).Return([]string{
+		filename,
+	}, true, 1, nil)
+	storageWrapper.EXPECT().Get(gomock.Any(), URI, testNamespaceID+"/"+filepath.Base(filename)).Return([]byte(exampleVisibilityRecord), nil)
+
+	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+	s.NoError(err)
+
+	visibilityArchiver.queryParser = NewQueryParser()
+
+	request := &archiver.QueryVisibilityRequest{
+		NamespaceID: testNamespaceID,
+		PageSize:    10,
+		Query:       "WorkflowId = '" + testWorkflowID + "' AND CloseTime = '2020-02-05T09:56:14Z' AND SearchPrecision = 'Day'",
+	}
+
+	response, err := visibilityArchiver.Query(ctx, URI, request, searchattribute.TestNameTypeMap())
+	s.NoError(err)
+	s.NotNil(response)
+	s.Len(response.Executions, 1)
+	s.Equal(testWorkflowID, response.Executions[0].Execution.GetWorkflowId())
+}

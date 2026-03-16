@@ -46,7 +46,7 @@ namespaceDefaults:
 ## Visibility query syntax
 You can query the visibility store by using the `temporal workflow list --archived` command
 
-The syntax for the query is based on SQL
+The syntax for the query is based on SQL with some limitations.
 
 Supported column names are
 - `WorkflowId` *String*
@@ -56,43 +56,11 @@ Supported column names are
 - `CloseTime` *Date*
 - `SearchPrecision` *String - Day, Hour, Minute, Second*
 
+But not all columns can be used together. More on that in the following secions.
+
 There are two types of queries:
-- WorkflowId based queries
 - Time based queries
-
-### WorkflowId based queries
-
-You can query for a set of workflows by providing the WorkflowId. Since a workflow ID does not have to be unique, the query can return  multiple workflow history records.
-
-If you run a WorkflowId based query, you can also add the following fields to the query to reduce the number of archived workflow history recrords returned:
-- `CloseTime`
-- `SearchPrecision` (must be used with `StartTime`)
-- `WorkflowType`
-- `RunId`
-
-*Simple Example:*
-
-```
-./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id'"
-```
-
-*_IMPORTANT_*: If you need to reduce the results using a workflowID based query as suggested above, please note that you have to provide a time based query first before you can use WorkflowType and if you want to use RunId, you have to specify a time based query and WorkflowType.
-
-*Examples:*
-
-Valid query:
-```
-./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id' AND StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day' AND WorkflowType = 'workflow-type' AND RunId = 'run-id'"
-```
-
-Queries that may return with zero results (although there may be archived workflows matching the criteria):
-```
-./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id' AND StartTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day' AND RunId = 'run-id'"
-```
-or
-```
-./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id' AND WorkflowType = 'workflow-type' AND RunId = 'run-id'"`
-```
+- WorkflowId based queries
 
 ### Time based queries
 
@@ -109,22 +77,56 @@ To perform a time based query, one of the following fields are required: `StartT
 - `ms` as two digits milliseconds (`00` to `99`)
 - `Z` indicating the Zuu timezone
 
-SearchPrecision specifies what range you want to search for records. If you use `SearchPrecision = 'Day'`
-it, for example, will search all records starting from `2020-01-21T00:00:00Z` to `2020-01-21T59:59:59Z` 
+SearchPrecision specifies what range you want to search for records. If you provide a `CloseTime` of `2025-01-21T00:00:00.00Z` and use `SearchPrecision = 'Day'`
+it will search all records starting from `2025-01-21T00:00:00.00Z` to `2025-01-21T23:59:59.99Z` 
 
-To further limit the results, you can add the following fields to the query using the AND clause:
+To further limit the results, you can add the following columns to the query using an `AND` clause:
 - `WorkflowType`
 - `WorkflowId`
 - `RunId`
 
-Similar to the WorflowId based queries, if you want to filter by `RunId` you will have to provide a `WorkflowType` *and* a `WorkflowId` and if you want to just filter by `WorkflowId` you have to provide a `WorkflowType`. More on this is explained below in the limitations.
+If you want to filter by `RunId` you will have to provide a `WorkflowType` *and* a `WorkflowId` and if you want to just filter by `WorkflowId` you have to provide a `WorkflowType`. More on this is explained below in the limitations.
+
+### WorkflowId based queries
+
+You can query for a set of workflows by providing the WorkflowId. Since a workflow ID does not have to be unique, the query may return  multiple workflow history records.
+
+If you run a WorkflowId based query, you can also add the following columns to the query to reduce the number of archived workflow history recrords returned:
+- `CloseTime`
+- `SearchPrecision` (must be provided when `CloseTime` is used)
+- `WorkflowType`
+- `RunId`
+
+*Simple Example:*
+
+```
+./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id'"
+```
+
+*_IMPORTANT_*: If you need to reduce the results using a workflowID based query as suggested above, please note that you have to add `CloseTime` before you can use `WorkflowType` and if you want to use `RunId`, you have to specify `CloseTime` and `WorkflowType`.
+
+*Examples:*
+
+Valid query:
+```
+./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id' AND CloseTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day' AND WorkflowType = 'workflow-type' AND RunId = 'run-id'"
+```
+
+Queries that may return an error or zero results (although there may be archived workflows matching the criteria):
+```
+./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id' AND CloseTime = '2020-01-21T00:00:00Z' AND SearchPrecision='Day' AND RunId = 'run-id'"
+```
+or
+```
+./temporal workflow list -n samples-namespace --archived --page-size=20 -q "WorkflowID = 'workflow-id' AND WorkflowType = 'workflow-type' AND RunId = 'run-id'"`
+```
 
 ### Limitations
 
 #### *_IMPORTANT_* limitation on filtering by specific columns:
 
-With the gcloud archiver, visibility and history records are stored as generic objects into a specified bucket. In Google Cloud Storage, an object is identified by a unique name inside the bucket. There is no hierarchy, such as folders. Although the Google Cloud Console may visualize a "folder" structure, these are technically not folders. The console simply interprets a name that uses a forward slash (`/`) in its name as folder delimiter.
-To support the documented search query, the gcloud archiver is creating three different index files in the visibility archive:
+With the gcloud archiver, visibility and history records are stored as generic objects into a specified bucket. In Google Cloud Storage, an object is identified by a unique name inside the bucket. There is no hierarchy, such as folders. Although the Google Cloud Console may visualize a "folder" structure, these are technically not folders. The console simply interprets a name containing a forward slash (`/`) as folder delimiter.
+To support the documented search queries, the gcloud archiver is creating three different index files in the visibility archive:
 
 1. for `StartTime` search,
 2. for `CloseTime` search, and
@@ -138,11 +140,12 @@ The object naming for
 
 #3 is `<namespace-id>/workflowID_hash(WorkflowId)_yyyy-mm-ddTHH-MM-ss-msZ_hash(WorkflowType)_hash(RunId).visibility`
 
-To search for a specific object, the gcloud API provides a prefix-search. That means that we can "search" for objects whose name starts with a given prefix similar to a wildcard search on a file system using `filename*`. This results in the requirement to provide certain query fields in order to filter on others that are placed further towards the end of the object name.
+To search for a specific object, the gcloud API provides a prefix-search. That means that we can "search" for objects whose names starts with a given prefix similar to a wildcard search on a file system using `filename*`. This results in the requirement to provide certain query fields in order to filter on others that are placed further towards the end of the object name.
 
 #### Other Limitations
 
 - The only operator supported is `=`
+- The only supported logical operator is `AND`
 - Currently It's not possible to guarantee the resulSet order, specially if the pageSize it's fullfilled.  
 
 ### Example
