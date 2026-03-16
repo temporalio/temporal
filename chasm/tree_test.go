@@ -3330,24 +3330,35 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 	})
 
 	s.Run("InvalidTask", func() {
-		root, chasmTask, executionKey, ctx, _ := setup()
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
 
 		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, nil).Times(1)
+		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+		) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}
 
 		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
-		s.Error(err)
-		s.IsType(&serviceerror.NotFound{}, err)
+		s.ErrorAs(err, new(*serviceerror.NotFound))
 	})
 
 	s.Run("ValidationError", func() {
-		root, chasmTask, executionKey, ctx, _ := setup()
+		root, chasmTask, executionKey, ctx, chasmContext := setup()
 
 		validationErr := errors.New("validation error")
 		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, validationErr).Times(1)
+		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+		) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		}
 
 		err := root.ExecuteSideEffectDiscardTask(
 			ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
