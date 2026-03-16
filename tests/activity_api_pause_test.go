@@ -19,13 +19,13 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-type ActivityApiPauseClientTestSuite struct{}
+type ActivityAPIPauseClientTestSuite struct{}
 
-func TestActivityApiPauseClientTestSuite(t *testing.T) {
-	testcore.RunSuite(t, new(ActivityApiPauseClientTestSuite))
+func TestActivityAPIPauseClientTestSuite(t *testing.T) {
+	testcore.RunSuite(t, new(ActivityAPIPauseClientTestSuite))
 }
 
-func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning(t *testing.T) {
+func (*ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRunning(t *testing.T) {
 	s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
 	initialRetryInterval := 1 * time.Second
@@ -163,7 +163,7 @@ func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRunning(t *tes
 	s.NoError(err)
 }
 
-func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsOnFailure(t *testing.T) {
+func (*ActivityAPIPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsOnFailure(t *testing.T) {
 	/*
 	 * 1. Run an activity that runs forever
 	 * 2. Pause the activity
@@ -305,7 +305,7 @@ func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_IncreaseAttemptsOnF
 	s.NoError(err)
 }
 
-func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting(t *testing.T) {
+func (*ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileWaiting(t *testing.T) {
 	// In this case, pause happens when activity is in retry state.
 	// Make sure that activity is paused and then unpaused.
 	// Also check that activity will not be retried while unpaused.
@@ -420,7 +420,7 @@ func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileWaiting(t *tes
 	s.NoError(err)
 }
 
-func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(t *testing.T) {
+func (*ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(t *testing.T) {
 	// In this case, pause can happen when activity is in retry state.
 	// Make sure that activity is paused and then unpaused.
 	// Also tests noWait flag.
@@ -517,7 +517,7 @@ func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WhileRetryNoWait(t 
 	s.NoError(err)
 }
 
-func (*ActivityApiPauseClientTestSuite) TestActivityPauseApi_WithReset(t *testing.T) {
+func (*ActivityAPIPauseClientTestSuite) TestActivityPauseApi_WithReset(t *testing.T) {
 	// pause/unpause the activity with reset option and noWait flag
 	s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
