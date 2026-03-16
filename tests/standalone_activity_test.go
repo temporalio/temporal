@@ -2103,11 +2103,25 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestDelete() {
-	s.T().Run("DeleteScheduledActivity", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		defer cancel()
+func (s *standaloneActivityTestSuite) eventuallyDeleted(ctx context.Context, t *testing.T, activityID, runID string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  s.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		var notFoundErr *serviceerror.NotFound
+		return errors.As(err, &notFoundErr)
+	}, 5*time.Second, 100*time.Millisecond)
+}
 
+func (s *standaloneActivityTestSuite) TestDelete() {
+	t := s.T()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	t.Run("DeleteScheduledActivity", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -2121,21 +2135,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 		require.NoError(t, err)
 
-		s.Eventually(func() bool {
-			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      runID,
-			})
-			var notFoundErr *serviceerror.NotFound
-			return errors.As(err, &notFoundErr)
-		}, 5*time.Second, 100*time.Millisecond)
+		s.eventuallyDeleted(ctx, t, activityID, runID)
 	})
 
-	s.T().Run("DeleteRunningActivity", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		defer cancel()
-
+	t.Run("DeleteRunningActivity", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -2151,21 +2154,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 		require.NoError(t, err)
 
-		s.Eventually(func() bool {
-			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      runID,
-			})
-			var notFoundErr *serviceerror.NotFound
-			return errors.As(err, &notFoundErr)
-		}, 5*time.Second, 100*time.Millisecond)
+		s.eventuallyDeleted(ctx, t, activityID, runID)
 	})
 
-	s.T().Run("DeleteCompletedActivity", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		defer cancel()
-
+	t.Run("DeleteCompletedActivity", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -2188,21 +2180,10 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 		require.NoError(t, err)
 
-		s.Eventually(func() bool {
-			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-				Namespace:  s.Namespace().String(),
-				ActivityId: activityID,
-				RunId:      runID,
-			})
-			var notFoundErr *serviceerror.NotFound
-			return errors.As(err, &notFoundErr)
-		}, 5*time.Second, 100*time.Millisecond)
+		s.eventuallyDeleted(ctx, t, activityID, runID)
 	})
 
-	s.T().Run("DeleteNonExistent", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-		defer cancel()
-
+	t.Run("DeleteNonExistent", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 
 		_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
@@ -2212,13 +2193,11 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
+		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
 	})
 
-	s.T().Run("RequestValidations", func(t *testing.T) {
+	t.Run("RequestValidations", func(t *testing.T) {
 		t.Run("EmptyActivityID", func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
 			_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
 				Namespace: s.Namespace().String(),
 			})
@@ -2229,9 +2208,6 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 
 		t.Run("ActivityIDTooLong", func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
 			_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
@@ -2244,9 +2220,6 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 
 		t.Run("InvalidRunID", func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			defer cancel()
-
 			_, err := s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: testcore.RandomizeStr(t.Name()),

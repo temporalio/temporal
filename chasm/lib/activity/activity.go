@@ -107,6 +107,7 @@ type requestCancelEvent struct {
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
 
+// terminateRequestEvent wraps the TerminateActivityExecutionRequest with context-specific data
 type terminateRequestEvent struct {
 	request                     *activitypb.TerminateActivityExecutionRequest
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
@@ -394,7 +395,9 @@ func (a *Activity) Terminate(
 	event := terminateEvent{
 		request: &activitypb.TerminateActivityExecutionRequest{
 			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-				Reason: req.Reason,
+				Reason:    req.Reason,
+				Identity:  req.Identity,
+				RequestId: req.RequestID,
 			},
 		},
 		metricsHandler: metricsHandler,
