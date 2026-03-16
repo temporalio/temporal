@@ -160,9 +160,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	targetBranchToken []byte,
 	currentMutableState *persistencespb.WorkflowMutableState,
 ) (historyi.MutableState, RebuildStats, error) {
-	// Use the original start request ID so that CHASM scheduler completion
-	// handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
-	// Read from the RequestIds map; fall back to CreateRequestId otherwise.
+	// Use the original start request ID handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
 		now,

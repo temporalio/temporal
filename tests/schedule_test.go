@@ -1484,6 +1484,22 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 		10*time.Millisecond,
 	)
 
+	// Capture the original run's start request ID before any reset.
+	// We assert it is preserved through both resets.
+	origDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: wfExec,
+	})
+	s.NoError(err)
+	var originalStartReqID string
+	for reqID, info := range origDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
+		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			originalStartReqID = reqID
+			break
+		}
+	}
+	s.NotEmpty(originalStartReqID, "original run must have a request ID for WorkflowExecutionStarted")
+
 	// First reset: base run → reset run 1.
 	// We reset with WorkflowTaskFinishEventId: 3 (WorkflowTaskStarted). resetRun1 is
 	// created by replaying history up to and including event 3 from the base run.
@@ -1500,21 +1516,23 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 		RunId:      resp1.RunId,
 	}
 
-	// Capture the original run's start request ID before it's terminated by the second reset.
-	// We use this to assert the ID is preserved all the way through to reset run 2.
-	origDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
-		Execution: wfExec,
-	})
-	s.NoError(err)
-	var originalStartReqID string
-	for reqID, info := range origDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
-		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			originalStartReqID = reqID
-			break
+	// Verify the original start request ID is preserved on reset run 1.
+	s.EventuallyWithT(func(col *assert.CollectT) {
+		resetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: resetRun1,
+		})
+		require.NoError(col, err)
+		var resetStartReqID string
+		for reqID, info := range resetDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
+			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+				resetStartReqID = reqID
+				break
+			}
 		}
-	}
-	s.NotEmpty(originalStartReqID, "original run must have a request ID for WorkflowExecutionStarted")
+		require.Equal(col, originalStartReqID, resetStartReqID,
+			"start request ID must be preserved across first reset")
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Second reset: reset run 1 → reset run 2.
 	// resetRun1 already has event 3 (WorkflowTaskStarted) from the replay performed by
