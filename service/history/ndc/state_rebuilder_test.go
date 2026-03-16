@@ -462,7 +462,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 	currentMutableState := &persistencespb.WorkflowMutableState{
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RequestIds: map[string]*persistencespb.RequestIDInfo{
-				startRequestID:   {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+				startRequestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 			},
 		},
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
