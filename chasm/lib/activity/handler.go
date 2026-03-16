@@ -221,6 +221,11 @@ func (h *handler) DeleteActivityExecution(
 ) (*activitypb.DeleteActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
 
+	namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(req.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
 	key := chasm.ExecutionKey{
 		NamespaceID: req.GetNamespaceId(),
 		BusinessID:  frontendReq.GetActivityId(),
@@ -229,7 +234,8 @@ func (h *handler) DeleteActivityExecution(
 
 	if err := chasm.DeleteExecution[*Activity](ctx, key, chasm.DeleteExecutionRequest{
 		TerminateComponentRequest: chasm.TerminateComponentRequest{
-			Reason: "Delete activity execution",
+			Reason:        "Delete activity execution",
+			NamespaceName: namespaceName.String(),
 		},
 	}); err != nil {
 		return nil, err
@@ -260,7 +266,7 @@ func (h *handler) TerminateActivityExecution(
 		ctx,
 		ref,
 		(*Activity).handleTerminated,
-		terminateEvent{
+		terminateRequestEvent{
 			request: req,
 			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
 				Handler:                     h.metricsHandler,

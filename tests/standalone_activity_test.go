@@ -2,12 +2,12 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -2121,14 +2121,14 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 		require.NoError(t, err)
 
-		s.EventuallyWithT(func(t *assert.CollectT) {
+		s.Eventually(func() bool {
 			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 			})
 			var notFoundErr *serviceerror.NotFound
-			assert.ErrorAs(t, err, &notFoundErr)
+			return errors.As(err, &notFoundErr)
 		}, 5*time.Second, 100*time.Millisecond)
 	})
 
@@ -2151,14 +2151,14 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 		require.NoError(t, err)
 
-		s.EventuallyWithT(func(t *assert.CollectT) {
+		s.Eventually(func() bool {
 			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 			})
 			var notFoundErr *serviceerror.NotFound
-			assert.ErrorAs(t, err, &notFoundErr)
+			return errors.As(err, &notFoundErr)
 		}, 5*time.Second, 100*time.Millisecond)
 	})
 
@@ -2188,14 +2188,14 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		})
 		require.NoError(t, err)
 
-		s.EventuallyWithT(func(t *assert.CollectT) {
+		s.Eventually(func() bool {
 			_, err := s.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
 				Namespace:  s.Namespace().String(),
 				ActivityId: activityID,
 				RunId:      runID,
 			})
 			var notFoundErr *serviceerror.NotFound
-			assert.ErrorAs(t, err, &notFoundErr)
+			return errors.As(err, &notFoundErr)
 		}, 5*time.Second, 100*time.Millisecond)
 	})
 

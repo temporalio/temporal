@@ -107,8 +107,7 @@ type requestCancelEvent struct {
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
 
-// terminateEvent wraps the TerminateActivityExecutionRequest with context-specific data.
-type terminateEvent struct {
+type terminateRequestEvent struct {
 	request                     *activitypb.TerminateActivityExecutionRequest
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
@@ -126,28 +125,6 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
-}
-
-// Terminate implements the chasm.RootComponent interface.
-func (a *Activity) Terminate(
-	ctx chasm.MutableContext,
-	req chasm.TerminateComponentRequest,
-) (chasm.TerminateComponentResponse, error) {
-	if !TransitionTerminated.Possible(a) {
-		return chasm.TerminateComponentResponse{}, nil
-	}
-	event := terminateEvent{
-		request: &activitypb.TerminateActivityExecutionRequest{
-			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-				Reason: req.Reason,
-			},
-		},
-		MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
-			Handler:                     ctx.MetricsHandler(),
-			BreakdownMetricsByTaskQueue: func(string, string, enumspb.TaskQueueType) bool { return false },
-		},
-	}
-	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
@@ -398,7 +375,35 @@ func (a *Activity) HandleCanceled(
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateEvent) (
+// Terminate implements the chasm.RootComponent interface.
+func (a *Activity) Terminate(
+	ctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// If already in a terminal state, no-op.
+	if !TransitionTerminated.Possible(a) {
+		return chasm.TerminateComponentResponse{}, nil
+	}
+	metricsHandler := enrichMetricsHandler(
+		a,
+		ctx.MetricsHandler(),
+		req.NamespaceName,
+		metrics.ActivityTerminatedScope,
+		func(string, string, enumspb.TaskQueueType) bool { return false },
+	)
+	event := terminateEvent{
+		request: &activitypb.TerminateActivityExecutionRequest{
+			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+				Reason: req.Reason,
+			},
+		},
+		metricsHandler: metricsHandler,
+		fromStatus:     a.GetStatus(),
+	}
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)
+}
+
+func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateRequestEvent) (
 	*activitypb.TerminateActivityExecutionResponse, error,
 ) {
 	frontendReq := req.request.GetFrontendRequest()
@@ -416,7 +421,18 @@ func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateEvent
 		return &activitypb.TerminateActivityExecutionResponse{}, nil
 	}
 
-	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
+	metricsHandler := enrichMetricsHandler(
+		a,
+		req.MetricsHandlerBuilderParams.Handler,
+		req.MetricsHandlerBuilderParams.NamespaceName,
+		metrics.ActivityTerminatedScope,
+		req.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue,
+	)
+	if err := TransitionTerminated.Apply(a, ctx, terminateEvent{
+		request:        req.request,
+		metricsHandler: metricsHandler,
+		fromStatus:     a.GetStatus(),
+	}); err != nil {
 		return nil, err
 	}
 
@@ -917,6 +933,24 @@ func (a *Activity) emitOnFailedMetrics(ctx chasm.Context, handler metrics.Handle
 
 	metrics.ActivityTaskFail.With(handler).Record(1)
 	metrics.ActivityFail.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnTerminatedMetrics(
+	ctx chasm.Context,
+	handler metrics.Handler,
+	fromStatus activitypb.ActivityExecutionStatus,
+) {
+	// Only record start-to-close latency if a current attempt was running. If it is in scheduled status, it means the current attempt never started.
+	if fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
+		startedTime := a.LastAttempt.Get(ctx).GetStartedTime().AsTime()
+		startToCloseLatency := time.Since(startedTime)
+		metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
+	}
+
+	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
+	metrics.ActivityScheduleToCloseLatency.With(handler).Record(scheduleToCloseLatency)
+
+	metrics.ActivityTerminate.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnCanceledMetrics(
