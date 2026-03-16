@@ -221,7 +221,7 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 	// Verify HandleDiscard fired on cluster 1 (standby) by checking that the activity task was pushed into cluster 1's
 	// matching backlog
 	s.Eventually(func() bool {
-		for partitionID := int32(0); partitionID < int32(dynamicconfig.GlobalDefaultNumTaskQueuePartitions); partitionID++ {
+		for partitionID := range int32(dynamicconfig.GlobalDefaultNumTaskQueuePartitions) {
 			res, err := s.clusters[1].AdminClient().DescribeTaskQueuePartition(ctx,
 				&adminservice.DescribeTaskQueuePartitionRequest{
 					Namespace: nsName,
