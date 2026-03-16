@@ -1500,11 +1500,27 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 		RunId:      resp1.RunId,
 	}
 
+	// Capture the original run's start request ID before it's terminated by the second reset.
+	// We use this to assert the ID is preserved all the way through to reset run 2.
+	origDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: wfExec,
+	})
+	s.NoError(err)
+	var originalStartReqID string
+	for reqID, info := range origDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
+		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			originalStartReqID = reqID
+			break
+		}
+	}
+	s.NotEmpty(originalStartReqID, "original run must have a request ID for WorkflowExecutionStarted")
+
 	// Second reset: reset run 1 → reset run 2.
 	// resetRun1 already has event 3 (WorkflowTaskStarted) from the replay performed by
 	// the first reset, so WorkflowTaskFinishEventId: 3 is valid immediately. We do not
 	// need to wait for resetRun1 to complete a new workflow task before resetting it.
-	_, err = s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+	resp2, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         resetRun1,
 		Reason:                    "double-reset-test-second",
@@ -1512,6 +1528,30 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 		RequestId:                 uuid.NewString(),
 	})
 	s.NoError(err)
+	resetRun2 := &commonpb.WorkflowExecution{
+		WorkflowId: wfExec.WorkflowId,
+		RunId:      resp2.RunId,
+	}
+
+	// Verify the original start request ID is preserved on reset run 2.
+	// Without the fix, the second reset would use resetRun1's CreateRequestId,
+	// breaking the callback → BufferedStart matching in the CHASM scheduler.
+	s.EventuallyWithT(func(col *assert.CollectT) {
+		resetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: resetRun2,
+		})
+		require.NoError(col, err)
+		var resetStartReqID string
+		for reqID, info := range resetDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
+			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+				resetStartReqID = reqID
+				break
+			}
+		}
+		require.Equal(col, originalStartReqID, resetStartReqID,
+			"start request ID must be preserved across double reset")
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Signal the latest run (reset run 2) to complete.
 	// Sending without a RunId targets the current/latest run.
@@ -1556,6 +1596,8 @@ func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflow_ResetWithAdditional
 	)
 }
 
+// TestScheduledWorkflow_ResetWithAdditionalCallback_ChasmCallbacks verifies the
+// same reset-with-additional-callback fix using the CHASM callback implementation (EnableCHASMCallbacks = true).
 func (s *ScheduleCHASMFunctionalSuite) TestScheduledWorkflow_ResetWithAdditionalCallback_ChasmCallbacks() {
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
 	s.runScheduledWorkflowResetWithAdditionalCallback(
