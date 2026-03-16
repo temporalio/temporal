@@ -834,6 +834,10 @@ func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
 	return c.queue
 }
 
+func (c *physicalTaskQueueManagerImpl) TestHooks() testhooks.TestHooks {
+	return c.partitionMgr.engine.testHooks
+}
+
 func (c *physicalTaskQueueManagerImpl) UnloadFromPartitionManager(unloadCause unloadCause) {
 	c.partitionMgr.unloadPhysicalQueue(c, unloadCause)
 }

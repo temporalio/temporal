@@ -18,6 +18,7 @@ import (
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
+	testhooks "go.temporal.io/server/common/testing/testhooks"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -354,6 +355,20 @@ func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) Stop(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Stop), arg0)
+}
+
+// TestHooks mocks base method.
+func (m *MockphysicalTaskQueueManager) TestHooks() testhooks.TestHooks {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TestHooks")
+	ret0, _ := ret[0].(testhooks.TestHooks)
+	return ret0
+}
+
+// TestHooks indicates an expected call of TestHooks.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) TestHooks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TestHooks", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).TestHooks))
 }
 
 // TrySyncMatch mocks base method.

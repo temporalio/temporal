@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/emirpasic/gods/maps/treemap"
@@ -17,9 +18,11 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/util"
 	"golang.org/x/sync/semaphore"
 )
@@ -64,6 +67,10 @@ type (
 		inGC       bool
 		numToGC    int       // counts approximately how many tasks we can delete with a GC
 		lastGCTime time.Time // last time GCed
+
+		// initialLoadSignaled tracks whether we've already signaled initial load completion.
+		// Used to call testhook only once when draining tasks are loaded.
+		initialLoadSignaled atomic.Bool
 	}
 
 	mergeMode int
@@ -246,6 +253,12 @@ func (tr *fairTaskReader) readTasksImpl() {
 
 	for _, task := range newTasks {
 		tr.addTaskToMatcher(task)
+	}
+
+	// Signal initial load completion for draining backlogs (used by tests)
+	if tr.backlogMgr.isDraining && tr.initialLoadSignaled.CompareAndSwap(false, true) {
+		namespaceID := tr.backlogMgr.pqMgr.QueueKey().NamespaceId()
+		testhooks.Call(tr.backlogMgr.pqMgr.TestHooks(), testhooks.MatchingMigrationDrainTasksLoaded, namespace.ID(namespaceID))
 	}
 }
 
