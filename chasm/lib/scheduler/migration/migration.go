@@ -112,7 +112,10 @@ func LegacyToCreateFromMigrationStateRequest(
 	}
 }
 
-func CHASMToSchedulerMigrationState(
+// CHASMToLegacyStartScheduleArgs converts CHASM scheduler state to V1 StartScheduleArgs.
+// This is the primary V2-to-V1 migration function. The migrationTime parameter is used
+// to initialize missing timestamps.
+func CHASMToLegacyStartScheduleArgs(
 	scheduler *schedulerpb.SchedulerState,
 	generator *schedulerpb.GeneratorState,
 	invoker *schedulerpb.InvokerState,
@@ -120,29 +123,9 @@ func CHASMToSchedulerMigrationState(
 	lastCompletionResult *schedulerpb.LastCompletionResult,
 	searchAttributes map[string]*commonpb.Payload,
 	memo map[string]*commonpb.Payload,
-) *schedulerpb.SchedulerMigrationState {
-	return &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       common.CloneProto(scheduler),
-		GeneratorState:       common.CloneProto(generator),
-		InvokerState:         common.CloneProto(invoker),
-		Backfillers:          common.CloneProtoMap(backfillers),
-		LastCompletionResult: common.CloneProto(lastCompletionResult),
-		SearchAttributes:     searchAttributes,
-		Memo:                 memo,
-	}
-}
-
-// SchedulerMigrationStateToLegacyStartScheduleArgs converts migration state to V1 StartScheduleArgs.. The migrationTime parameter is used to initialize
-// missing timestamps.
-func SchedulerMigrationStateToLegacyStartScheduleArgs(
-	migrationState *schedulerpb.SchedulerMigrationState,
 	migrationTime time.Time,
 ) *schedulespb.StartScheduleArgs {
-	if migrationState == nil {
-		migrationState = &schedulerpb.SchedulerMigrationState{}
-	}
-
-	schedulerState := common.CloneProto(migrationState.GetSchedulerState())
+	schedulerState := common.CloneProto(scheduler)
 	if schedulerState == nil {
 		schedulerState = &schedulerpb.SchedulerState{}
 	}
@@ -158,23 +141,23 @@ func SchedulerMigrationStateToLegacyStartScheduleArgs(
 	}
 
 	var invokerBuffered []*schedulespb.BufferedStart
-	if migrationState.GetInvokerState() != nil {
-		invokerBuffered = migrationState.GetInvokerState().GetBufferedStarts()
+	if invoker != nil {
+		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
-	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(migrationState.GetBackfillers(), migrationTime)
+	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
 	bufferedStarts = append(bufferedStarts, triggerStarts...)
 
 	var generatorLastProcessed *timestamppb.Timestamp
-	if migrationState.GetGeneratorState() != nil {
-		generatorLastProcessed = migrationState.GetGeneratorState().GetLastProcessedTime()
+	if generator != nil {
+		generatorLastProcessed = generator.GetLastProcessedTime()
 	}
 	lastProcessedTime := common.CloneProto(generatorLastProcessed)
 	if lastProcessedTime == nil {
 		lastProcessedTime = timestamppb.New(migrationTime)
 	}
 
-	resultPayloads, continuedFailure := convertLastCompletionCHASMToLegacy(migrationState.GetLastCompletionResult())
+	resultPayloads, continuedFailure := convertLastCompletionCHASMToLegacy(lastCompletionResult)
 
 	info.RunningWorkflows = running
 	info.RecentActions = recent

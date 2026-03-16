@@ -27,6 +27,7 @@ const (
 	SchedulerService_DescribeSchedule_FullMethodName          = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/DescribeSchedule"
 	SchedulerService_ListScheduleMatchingTimes_FullMethodName = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/ListScheduleMatchingTimes"
 	SchedulerService_CreateFromMigrationState_FullMethodName  = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/CreateFromMigrationState"
+	SchedulerService_MigrateToWorkflow_FullMethodName         = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/MigrateToWorkflow"
 )
 
 // SchedulerServiceClient is the client API for SchedulerService service.
@@ -40,6 +41,7 @@ type SchedulerServiceClient interface {
 	DescribeSchedule(ctx context.Context, in *DescribeScheduleRequest, opts ...grpc.CallOption) (*DescribeScheduleResponse, error)
 	ListScheduleMatchingTimes(ctx context.Context, in *ListScheduleMatchingTimesRequest, opts ...grpc.CallOption) (*ListScheduleMatchingTimesResponse, error)
 	CreateFromMigrationState(ctx context.Context, in *CreateFromMigrationStateRequest, opts ...grpc.CallOption) (*CreateFromMigrationStateResponse, error)
+	MigrateToWorkflow(ctx context.Context, in *MigrateToWorkflowRequest, opts ...grpc.CallOption) (*MigrateToWorkflowResponse, error)
 }
 
 type schedulerServiceClient struct {
@@ -113,6 +115,15 @@ func (c *schedulerServiceClient) CreateFromMigrationState(ctx context.Context, i
 	return out, nil
 }
 
+func (c *schedulerServiceClient) MigrateToWorkflow(ctx context.Context, in *MigrateToWorkflowRequest, opts ...grpc.CallOption) (*MigrateToWorkflowResponse, error) {
+	out := new(MigrateToWorkflowResponse)
+	err := c.cc.Invoke(ctx, SchedulerService_MigrateToWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchedulerServiceServer is the server API for SchedulerService service.
 // All implementations must embed UnimplementedSchedulerServiceServer
 // for forward compatibility
@@ -124,6 +135,7 @@ type SchedulerServiceServer interface {
 	DescribeSchedule(context.Context, *DescribeScheduleRequest) (*DescribeScheduleResponse, error)
 	ListScheduleMatchingTimes(context.Context, *ListScheduleMatchingTimesRequest) (*ListScheduleMatchingTimesResponse, error)
 	CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error)
+	MigrateToWorkflow(context.Context, *MigrateToWorkflowRequest) (*MigrateToWorkflowResponse, error)
 	mustEmbedUnimplementedSchedulerServiceServer()
 }
 
@@ -151,6 +163,9 @@ func (UnimplementedSchedulerServiceServer) ListScheduleMatchingTimes(context.Con
 }
 func (UnimplementedSchedulerServiceServer) CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateFromMigrationState not implemented")
+}
+func (UnimplementedSchedulerServiceServer) MigrateToWorkflow(context.Context, *MigrateToWorkflowRequest) (*MigrateToWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MigrateToWorkflow not implemented")
 }
 func (UnimplementedSchedulerServiceServer) mustEmbedUnimplementedSchedulerServiceServer() {}
 
@@ -291,6 +306,24 @@ func _SchedulerService_CreateFromMigrationState_Handler(srv interface{}, ctx con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SchedulerService_MigrateToWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MigrateToWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchedulerServiceServer).MigrateToWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SchedulerService_MigrateToWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchedulerServiceServer).MigrateToWorkflow(ctx, req.(*MigrateToWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SchedulerService_ServiceDesc is the grpc.ServiceDesc for SchedulerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -325,6 +358,10 @@ var SchedulerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateFromMigrationState",
 			Handler:    _SchedulerService_CreateFromMigrationState_Handler,
+		},
+		{
+			MethodName: "MigrateToWorkflow",
+			Handler:    _SchedulerService_MigrateToWorkflow_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -220,6 +220,43 @@ func (*BackfillerTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
 }
 
+// Triggers migration from CHASM (V2) to workflow-backed (V1) scheduler.
+type SchedulerMigrateToWorkflowTask struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SchedulerMigrateToWorkflowTask) Reset() {
+	*x = SchedulerMigrateToWorkflowTask{}
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SchedulerMigrateToWorkflowTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SchedulerMigrateToWorkflowTask) ProtoMessage() {}
+
+func (x *SchedulerMigrateToWorkflowTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SchedulerMigrateToWorkflowTask.ProtoReflect.Descriptor instead.
+func (*SchedulerMigrateToWorkflowTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP(), []int{5}
+}
+
 var File_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = "" +
@@ -230,7 +267,8 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = ""
 	"\rGeneratorTask\"\x1a\n" +
 	"\x18InvokerProcessBufferTask\"\x14\n" +
 	"\x12InvokerExecuteTask\"\x10\n" +
-	"\x0eBackfillerTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x0eBackfillerTask\" \n" +
+	"\x1eSchedulerMigrateToWorkflowTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -244,17 +282,18 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescGZIP()
 	return file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_goTypes = []any{
-	(*SchedulerIdleTask)(nil),        // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerIdleTask
-	(*GeneratorTask)(nil),            // 1: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorTask
-	(*InvokerProcessBufferTask)(nil), // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerProcessBufferTask
-	(*InvokerExecuteTask)(nil),       // 3: temporal.server.chasm.lib.scheduler.proto.v1.InvokerExecuteTask
-	(*BackfillerTask)(nil),           // 4: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerTask
-	(*durationpb.Duration)(nil),      // 5: google.protobuf.Duration
+	(*SchedulerIdleTask)(nil),              // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerIdleTask
+	(*GeneratorTask)(nil),                  // 1: temporal.server.chasm.lib.scheduler.proto.v1.GeneratorTask
+	(*InvokerProcessBufferTask)(nil),       // 2: temporal.server.chasm.lib.scheduler.proto.v1.InvokerProcessBufferTask
+	(*InvokerExecuteTask)(nil),             // 3: temporal.server.chasm.lib.scheduler.proto.v1.InvokerExecuteTask
+	(*BackfillerTask)(nil),                 // 4: temporal.server.chasm.lib.scheduler.proto.v1.BackfillerTask
+	(*SchedulerMigrateToWorkflowTask)(nil), // 5: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerMigrateToWorkflowTask
+	(*durationpb.Duration)(nil),            // 6: google.protobuf.Duration
 }
 var file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_depIdxs = []int32{
-	5, // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerIdleTask.idle_time_total:type_name -> google.protobuf.Duration
+	6, // 0: temporal.server.chasm.lib.scheduler.proto.v1.SchedulerIdleTask.idle_time_total:type_name -> google.protobuf.Duration
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -273,7 +312,7 @@ func file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

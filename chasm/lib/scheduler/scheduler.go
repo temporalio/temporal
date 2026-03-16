@@ -90,6 +90,7 @@ var (
 	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
+	ErrMigrationPending      = serviceerror.NewFailedPrecondition("schedule has a pending migration to workflow; unpause is not allowed")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -675,6 +676,33 @@ func (s *Scheduler) Delete(
 	}, nil
 }
 
+// MigrateToWorkflow pauses the schedule and schedules a side-effect task to
+// start the V1 workflow. This is the CHASM-side operation for V2-to-V1 migration.
+// It is idempotent: if the schedule is already paused for migration, it still
+// succeeds and schedules another task.
+func (s *Scheduler) MigrateToWorkflow(
+	ctx chasm.MutableContext,
+	req *schedulerpb.MigrateToWorkflowRequest,
+) (*schedulerpb.MigrateToWorkflowResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
+
+	// Save pre-migration paused state, mark migration as pending, then pause.
+	if !s.MigrationToWorkflowPending {
+		s.PreMigrationPaused = s.Schedule.State.Paused
+		s.PreMigrationNotes = s.Schedule.State.Notes
+		s.MigrationToWorkflowPending = true
+	}
+	s.Schedule.State.Paused = true
+	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
+
+	// Schedule a side-effect task to export state and start the V1 workflow.
+	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
+
+	return &schedulerpb.MigrateToWorkflowResponse{}, nil
+}
+
 // Update replaces the schedule with a new one for UpdateSchedule requests.
 func (s *Scheduler) Update(
 	ctx chasm.MutableContext,
@@ -708,6 +736,13 @@ func (s *Scheduler) Update(
 
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
+
+	// If a migration is pending, prevent the update from unpausing the schedule.
+	if s.MigrationToWorkflowPending {
+		s.Schedule.State.Paused = true
+		s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
+	}
+
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
@@ -734,6 +769,9 @@ func (s *Scheduler) Patch(
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
+		if s.MigrationToWorkflowPending {
+			return nil, ErrMigrationPending
+		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
 	}

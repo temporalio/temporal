@@ -107,6 +107,11 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
 		}),
+		scheduler.NewSchedulerMigrateToWorkflowTaskExecutor(scheduler.SchedulerMigrateToWorkflowTaskExecutorOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
+		}),
 	)
 }
 

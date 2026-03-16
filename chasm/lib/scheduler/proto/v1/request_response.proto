@@ -81,3 +81,10 @@ message CreateFromMigrationStateRequest {
 }
 
 message CreateFromMigrationStateResponse {}
+
+message MigrateToWorkflowRequest {
+    string namespace_id = 1;
+    string schedule_id = 2;
+}
+
+message MigrateToWorkflowResponse {}

@@ -211,15 +211,7 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		Failure: &failurepb.Failure{Message: "last failure"},
 	}
 
-	migrationState := &schedulerpb.SchedulerMigrationState{
-		SchedulerState:       scheduler,
-		GeneratorState:       generator,
-		InvokerState:         invoker,
-		Backfillers:          backfillers,
-		LastCompletionResult: lastCompletion,
-	}
-
-	args := SchedulerMigrationStateToLegacyStartScheduleArgs(migrationState, now)
+	args := CHASMToLegacyStartScheduleArgs(scheduler, generator, invoker, backfillers, lastCompletion, nil, nil, now)
 
 	require.Equal(t, "ns-id", args.State.NamespaceId)
 	require.Equal(t, "sched-id", args.State.ScheduleId)

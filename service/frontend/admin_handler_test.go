@@ -182,6 +182,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		clock.NewRealTimeSource(),
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
+		nil, // schedulerClient - not needed for most admin handler tests
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
