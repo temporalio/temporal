@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -124,12 +125,23 @@ func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
 	)
 	s.NoError(err)
 
-	for _, cluster := range []*testcore.TestCluster{s.clusters[0], s.clusters[1]} {
-		s.Eventually(func() bool {
-			_, err = cluster.AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	// Active cluster should fully delete the execution.
+	s.Eventually(func() bool {
+		_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		return errors.As(err, new(*serviceerror.NotFound))
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Standby cluster receives the close via replication but won't process
+	// the DeleteExecutionTask itself; it will be cleaned up by the retention timer.
+	// Verify the execution is terminated on the standby.
+	s.Eventually(func() bool {
+		resp, err := s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		if err != nil {
+			// Execution may already be gone if replication of delete happened.
 			return errors.As(err, new(*serviceerror.NotFound))
-		}, 10*time.Second, 100*time.Millisecond)
-	}
+		}
+		return resp.GetDatabaseMutableState().GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (s *ChasmSuite) TestRetentionTimer() {
