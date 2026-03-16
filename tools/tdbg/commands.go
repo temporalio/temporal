@@ -868,11 +868,6 @@ func AdminReplicateWorkflow(
 	return nil
 }
 
-var schedulerTargets = map[string]adminservice.MigrateScheduleRequest_SchedulerTarget{
-	"chasm":    adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
-	"workflow": adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
-}
-
 // AdminMigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM).
 func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 	ns, err := getRequiredOption(c, FlagNamespace)
@@ -887,8 +882,13 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 	if err != nil {
 		return err
 	}
-	target, ok := schedulerTargets[strings.ToLower(targetStr)]
-	if !ok {
+	var target adminservice.MigrateScheduleRequest_SchedulerTarget
+	switch strings.ToLower(targetStr) {
+	case "chasm":
+		target = adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM
+	case "workflow":
+		target = adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW
+	default:
 		return fmt.Errorf("invalid target %q, valid values are: chasm, workflow", targetStr)
 	}
 
@@ -907,6 +907,6 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 		return fmt.Errorf("unable to migrate schedule: %w", err)
 	}
 
-	fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
+	_, _ = fmt.Fprintf(c.App.Writer, "Successfully initiated migration of schedule %q in namespace %q to %s.\n", scheduleID, ns, targetStr)
 	return nil
 }
