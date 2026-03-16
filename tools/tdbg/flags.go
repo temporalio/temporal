@@ -76,4 +76,7 @@ var (
 	FlagVisibilityQuery            = "query"
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"
+	FlagScheduleID                 = "schedule-id"
+	FlagScheduleIDAlias            = []string{"sid"}
+	FlagTarget                     = "target"
 )
