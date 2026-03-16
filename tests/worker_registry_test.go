@@ -29,7 +29,6 @@ func TestWorkerRegistryTestSuite(t *testing.T) {
 }
 
 func (s *WorkerRegistryTestSuite) SetupTest() {
-	s.OverrideDynamicConfig(dynamicconfig.ListWorkersEnabled, true)
 	s.OverrideDynamicConfig(dynamicconfig.WorkerHeartbeatsEnabled, true)
 	s.FunctionalTestBase.SetupTest()
 
@@ -116,6 +115,32 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorker() {
 		s.Equal(taskQueue2, workerHeartbeat.GetTaskQueue())
 		s.Equal(int32(2), workerHeartbeat.GetTotalStickyCacheHit())
 	}
+}
+
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersWithNoHeartbeats() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Empty(resp.GetWorkersInfo()) //nolint:staticcheck // testing deprecated field
+	s.Empty(resp.GetWorkers())
+}
+
+func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorkerWithNoHeartbeats() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	_, err := s.FrontendClient().DescribeWorker(ctx, &workflowservice.DescribeWorkerRequest{
+		Namespace:         s.Namespace().String(),
+		WorkerInstanceKey: "nonexistent-worker",
+	})
+	s.Error(err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {

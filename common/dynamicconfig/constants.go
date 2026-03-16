@@ -3163,12 +3163,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
-	ListWorkersEnabled = NewNamespaceBoolSetting(
-		"frontend.ListWorkersEnabled",
-		true,
-		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
-	)
-
 	WorkerCommandsEnabled = NewNamespaceBoolSetting(
 		"frontend.WorkerCommandsEnabled",
 		false,
