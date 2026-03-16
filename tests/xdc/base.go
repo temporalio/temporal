@@ -476,11 +476,11 @@ func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity stri
 // executions in the given namespace before proceeding. This is important before starting
 // force-replication, which uses ListWorkflowExecutions with an empty query to discover all
 // workflows in a namespace.
-func (s *xdcBaseSuite) waitForVisibilityCount(ctx context.Context, namespace string, expectedCount int64) {
+func (s *xdcBaseSuite) waitForVisibilityCount(ctx context.Context, ns string, expectedCount int64) {
 	frontendClient := s.clusters[0].FrontendClient()
 	s.Eventually(func() bool {
 		countResp, err := frontendClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: namespace,
+			Namespace: ns,
 		})
 		if err != nil {
 			return false
