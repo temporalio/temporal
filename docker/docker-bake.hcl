@@ -10,7 +10,11 @@ variable "IMAGE_REPO" {
   default = "temporaliotest"
 }
 
-variable "IMAGE_SHA_TAG" {
+variable "IMAGE_SHA_SHORT_TAG" {
+  default = ""
+}
+
+variable "IMAGE_SHA_FULL_TAG" {
   default = ""
 }
 
@@ -46,7 +50,8 @@ target "admin-tools" {
     ALPINE_TAG = "${ALPINE_TAG}"
   }
   tags = compact([
-    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_TAG}",
+    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_SHORT_TAG}",
+    "${IMAGE_REPO}/admin-tools:${IMAGE_SHA_FULL_TAG}",
     "${IMAGE_REPO}/admin-tools:${SAFE_IMAGE_BRANCH_TAG}",
     TAG_LATEST ? "${IMAGE_REPO}/admin-tools:latest" : "",
   ])
@@ -71,7 +76,8 @@ target "server" {
     ALPINE_TAG = "${ALPINE_TAG}"
   }
   tags = compact([
-    "${IMAGE_REPO}/server:${IMAGE_SHA_TAG}",
+    "${IMAGE_REPO}/server:${IMAGE_SHA_SHORT_TAG}",
+    "${IMAGE_REPO}/server:${IMAGE_SHA_FULL_TAG}",
     "${IMAGE_REPO}/server:${SAFE_IMAGE_BRANCH_TAG}",
     TAG_LATEST ? "${IMAGE_REPO}/server:latest" : "",
   ])
