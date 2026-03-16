@@ -4,10 +4,12 @@ name: Manual Docker Build
 on:
   workflow_dispatch:
     inputs:
+      cli-version:
+        description: "Temporal CLI version to include in images"
+        default: ""
       alpine-tag:
         description: "Alpine base image tag (e.g., 3.23.3)"
-        required: true
-        default: "3.23.3"
+        default: ""
       push:
         description: "Push images to Docker Hub"
         required: true
