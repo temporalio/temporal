@@ -135,7 +135,8 @@ func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int
 		result.Failures = append(result.Failures, failures...)
 
 		// Extract all test runs for failure rate calculation
-		testRuns := extractAllTestRuns(suites, job.RunID)
+		_, jobID, matrixName := parseArtifactName(job.Artifact.Name)
+		testRuns := extractAllTestRuns(suites, job.RunID, jobID, matrixName)
 		result.AllRuns = append(result.AllRuns, testRuns...)
 	}
 

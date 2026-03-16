@@ -59,7 +59,6 @@ type Config struct {
 	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
 	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
 	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
-	EnableNexus                           dynamicconfig.BoolPropertyFn
 	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -96,6 +95,7 @@ type Config struct {
 	StandbyClusterDelay                  dynamicconfig.DurationPropertyFn
 	StandbyTaskMissingEventsResendDelay  dynamicconfig.DurationPropertyFnWithTaskTypeFilter
 	StandbyTaskMissingEventsDiscardDelay dynamicconfig.DurationPropertyFnWithTaskTypeFilter
+	ChasmStandbyTaskDiscardDelay         dynamicconfig.DurationPropertyFnWithChasmTaskTypeFilter
 
 	QueuePendingTaskCriticalCount     dynamicconfig.IntPropertyFn
 	QueueReaderStuckCriticalAttempts  dynamicconfig.IntPropertyFn
@@ -259,6 +259,8 @@ type Config struct {
 	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// TODO seankane: Added on 3/10/2026, if this is never used we should remove it at a later date
+	SendTransientOrSpeculativeWorkflowTaskEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
@@ -471,7 +473,6 @@ func NewConfig(
 		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
 		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
 		HistoryCacheBackgroundEvict:           dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
-		EnableNexus:                           dynamicconfig.EnableNexus.Get(dc),
 		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
@@ -506,6 +507,7 @@ func NewConfig(
 		StandbyClusterDelay:                  dynamicconfig.StandbyClusterDelay.Get(dc),
 		StandbyTaskMissingEventsResendDelay:  dynamicconfig.StandbyTaskMissingEventsResendDelay.Get(dc),
 		StandbyTaskMissingEventsDiscardDelay: dynamicconfig.StandbyTaskMissingEventsDiscardDelay.Get(dc),
+		ChasmStandbyTaskDiscardDelay:         dynamicconfig.ChasmStandbyTaskDiscardDelay.Get(dc),
 
 		QueuePendingTaskCriticalCount:     dynamicconfig.QueuePendingTaskCriticalCount.Get(dc),
 		QueueReaderStuckCriticalAttempts:  dynamicconfig.QueueReaderStuckCriticalAttempts.Get(dc),
@@ -664,6 +666,7 @@ func NewConfig(
 		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
+		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),

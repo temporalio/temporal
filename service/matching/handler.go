@@ -587,16 +587,39 @@ func (h *Handler) ListWorkers(
 	if err != nil {
 		return nil, err
 	}
-	var workersInfo []*workerpb.WorkerInfo
-	for _, heartbeat := range resp.Workers {
-		workersInfo = append(workersInfo, &workerpb.WorkerInfo{
+	// TODO: Stop populating workersInfo once all callers migrate to the Workers field.
+	workersInfo := make([]*workerpb.WorkerInfo, len(resp.Workers))
+	workersList := make([]*workerpb.WorkerListInfo, len(resp.Workers))
+	for i, heartbeat := range resp.Workers {
+		workersInfo[i] = &workerpb.WorkerInfo{
 			WorkerHeartbeat: heartbeat,
-		})
+		}
+		workersList[i] = workerHeartbeatToListInfo(heartbeat)
 	}
 	return &matchingservice.ListWorkersResponse{
 		WorkersInfo:   workersInfo,
+		Workers:       workersList,
 		NextPageToken: resp.NextPageToken,
 	}, nil
+}
+
+func workerHeartbeatToListInfo(hb *workerpb.WorkerHeartbeat) *workerpb.WorkerListInfo {
+	hostInfo := hb.GetHostInfo()
+	return &workerpb.WorkerListInfo{
+		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
+		WorkerIdentity:    hb.GetWorkerIdentity(),
+		TaskQueue:         hb.GetTaskQueue(),
+		DeploymentVersion: hb.GetDeploymentVersion(),
+		SdkName:           hb.GetSdkName(),
+		SdkVersion:        hb.GetSdkVersion(),
+		Status:            hb.GetStatus(),
+		StartTime:         hb.GetStartTime(),
+		HostName:          hostInfo.GetHostName(),
+		WorkerGroupingKey: hostInfo.GetWorkerGroupingKey(),
+		ProcessId:         hostInfo.GetProcessId(),
+		Plugins:           hb.GetPlugins(),
+		Drivers:           hb.GetDrivers(),
+	}
 }
 
 func (h *Handler) UpdateFairnessState(

@@ -523,7 +523,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
-		require.NoError(s.T(), err)
+		s.Require().NoError(err)
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
@@ -532,7 +532,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
 			})
-			require.NoError(s.T(), err)
+			s.Require().NoError(err)
 			events = append(events, historyResponse.History.Events...)
 		}
 
@@ -590,6 +590,11 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	return s.testCluster.host.injectHook(s.T(), hook, scope)
 }
 
+// Context returns a context with RPC headers for use in this test.
+func (s *FunctionalTestBase) Context() context.Context {
+	return NewContext()
+}
+
 // CloseShard closes the shard that contains the given workflow.
 // This is a cluster-global operation and cannot be called on shared clusters.
 func (s *FunctionalTestBase) CloseShard(namespaceID string, workflowID string) {
@@ -612,55 +617,18 @@ func (s *FunctionalTestBase) GetNamespaceID(namespace string) string {
 }
 
 func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
-	for _, forcePollForward := range []bool{false, true} {
-		for _, forceTaskForward := range []bool{false, true} {
-			for _, forceAsync := range []bool{false, true} {
-				name := "NoTaskForward"
-				if forceTaskForward {
-					// force two levels of forwarding
-					name = "ForceTaskForward"
-				}
-				if forcePollForward {
-					name += "ForcePollForward"
-				} else {
-					name += "NoPollForward"
-				}
-				if forceAsync {
-					name += "ForceAsync"
-				} else {
-					name += "AllowSync"
-				}
-
-				s.Run(
-					name, func() {
-						if forceTaskForward || forcePollForward {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
-						} else {
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
-							s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
-						}
-						if forceTaskForward {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 11))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 0))
-						}
-						if forcePollForward {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 5))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 0))
-						}
-						if forceAsync {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, true))
-						} else {
-							s.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
-						}
-
-						subtest()
-					},
-				)
+	for _, behavior := range AllMatchingBehaviors() {
+		s.Run(behavior.Name(), func() {
+			if behavior.ForceTaskForward || behavior.ForcePollForward {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 13)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 13)
+			} else {
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+				s.OverrideDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
 			}
-		}
+			behavior.InjectHooks(s)
+			subtest()
+		})
 	}
 }
 

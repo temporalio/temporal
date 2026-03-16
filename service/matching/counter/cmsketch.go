@@ -30,14 +30,19 @@ type (
 		params CMSketchParams
 		seed0  maphash.Seed
 		seeds  []uint64
-		// TODO: use uint32 with a sliding window
-		cells []int64
+		// cells stores offsets from base. The actual value for a cell is base + int64(cells[i]).
+		// This allows us to use uint32 for storage while supporting the full int64 range.
+		base  int64
+		cells []uint32
 
 		skips, incs int // used to calculate skip rate
 
 		topKProvider topKFunc // callback to get top-K entries on resize
 	}
 )
+
+// slideHeadroom is how much space to leave in the sliding window when we need to slide
+const slideHeadroom = math.MaxUint32 / 2
 
 var _ Counter = (*cmSketch)(nil)
 
@@ -49,7 +54,7 @@ func NewCMSketchCounter(params CMSketchParams, src rand.Source, topKProvider top
 		params:       params,
 		seed0:        maphash.MakeSeed(),
 		seeds:        makeSeeds(params.D, src),
-		cells:        make([]int64, params.W*params.D),
+		cells:        make([]uint32, params.W*params.D),
 		topKProvider: topKProvider,
 	}
 }
@@ -82,8 +87,8 @@ func (s *cmSketch) SkipRate() float64 {
 func (s *cmSketch) EstimateDistinctKeys() int {
 	// TODO: improve this estimate with more math
 	count := 0
-	for _, d := range s.cells {
-		if d > 0 {
+	for _, c := range s.cells {
+		if c > 0 {
 			count++
 		}
 	}
@@ -124,7 +129,8 @@ func (s *cmSketch) maybeGrow() {
 
 	s.params.W = min(int(float64(s.params.W)*s.params.Grow.Ratio), s.params.Grow.MaxW)
 	s.seed0 = maphash.MakeSeed()
-	s.cells = make([]int64, s.params.W*s.params.D)
+	s.base = 0
+	s.cells = make([]uint32, s.params.W*s.params.D)
 	s.skips, s.incs = 0, 0
 
 	if len(topK) > 0 {
@@ -142,22 +148,58 @@ func (s *cmSketch) maybeGrow() {
 
 func (s *cmSketch) getByIndexes(indexes []int) int64 {
 	// TODO: consider using better estimator: https://dl.acm.org/doi/pdf/10.1145/3219819.3219975
-	minVal := int64(math.MaxInt64)
+	minVal := uint32(math.MaxUint32)
 	for _, idx := range indexes {
 		minVal = min(minVal, s.cells[idx])
 	}
-	return minVal
+	return s.base + int64(minVal)
 }
 
 func (s *cmSketch) ensureByIndexes(indexes []int, target int64) (skips int) {
+	offset := target - s.base
+	if offset < 0 {
+		// target is below base, all cells are already high enough
+		return len(indexes)
+	}
+	if offset > math.MaxUint32 {
+		// would overflow uint32, need to slide the base up first
+		s.slideBase(offset + slideHeadroom - math.MaxUint32)
+		offset = math.MaxUint32 - slideHeadroom
+	}
+
+	uoffset := uint32(offset)
 	for _, idx := range indexes {
-		if s.cells[idx] < target {
-			s.cells[idx] = target
+		if s.cells[idx] < uoffset {
+			s.cells[idx] = uoffset
 		} else {
 			skips++
 		}
 	}
 	return
+}
+
+// slideBase increases the base by delta, subtracting delta from all cells.
+// Cells that would go negative are clamped to 0 (those keys are "dragged up").
+func (s *cmSketch) slideBase(delta int64) {
+	if delta <= 0 {
+		return
+	}
+	s.base += delta
+	if delta >= math.MaxUint32 {
+		for i := range s.cells {
+			s.cells[i] = 0
+		}
+		return
+	}
+	// delta fits in uint32
+	udelta := uint32(delta)
+	for i := range s.cells {
+		if s.cells[i] > udelta {
+			s.cells[i] -= udelta
+		} else {
+			s.cells[i] = 0
+		}
+	}
 }
 
 func makeSeeds(d int, src rand.Source) []uint64 {

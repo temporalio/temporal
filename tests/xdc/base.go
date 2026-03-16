@@ -10,12 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -185,7 +183,7 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 
 		shard := resp.Shards[0]
 		require.NotNil(c, shard)
-		require.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		require.Positive(c, shard.MaxReplicationTaskId)
 		require.NotNil(c, shard.ShardLocalTime)
 		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
 		require.NotNil(c, shard.RemoteClusters)
@@ -458,13 +456,6 @@ func (s *xdcBaseSuite) failover(
 	}, replicationWaitTime, replicationCheckInterval)
 
 	s.waitForClusterSynced()
-}
-
-func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload(v)
-	s.NoError(err)
-	return payload
 }
 
 func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {

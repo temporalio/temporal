@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -148,6 +149,7 @@ type (
 		EventSerializer                     serialization.Serializer
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
+		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -163,13 +165,8 @@ var (
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
+	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
-	namespaceReplicationTaskExecutor := nsreplication.NewTaskExecutor(
-		args.ClusterMetadata.GetCurrentClusterName(),
-		args.PersistenceMetadataManager,
-		args.Logger,
-	)
-
 	historyHealthChecker := NewHealthChecker(
 		primitives.HistoryService,
 		args.MembershipMonitor,
@@ -182,15 +179,11 @@ func NewAdminHandler(
 	)
 
 	return &AdminHandler{
-		logger:                args.Logger,
-		status:                common.DaemonStatusInitialized,
-		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
-		config:                args.Config,
-		namespaceDLQHandler: nsreplication.NewDLQMessageHandler(
-			namespaceReplicationTaskExecutor,
-			args.NamespaceReplicationQueue,
-			args.Logger,
-		),
+		logger:                     args.Logger,
+		status:                     common.DaemonStatusInitialized,
+		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
+		config:                     args.Config,
+		namespaceDLQHandler:        namespaceDLQHandler,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
 		persistenceExecutionName:   args.PersistenceExecutionManager.GetName(),
@@ -2404,4 +2397,51 @@ func convertFailoverHistoryToReplicationProto(
 	}
 
 	return replicationProto
+}
+
+func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminservice.MigrateScheduleRequest) (_ *adminservice.MigrateScheduleResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespace() == "" {
+		return nil, errNamespaceNotSet
+	}
+	if request.GetScheduleId() == "" {
+		return nil, errScheduleIDNotSet
+	}
+	if request.GetTarget() == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED {
+		return nil, errMigrationTargetNotSet
+	}
+	// TODO: support SCHEDULER_TARGET_WORKFLOW for CHASM-to-V1 migration.
+	if request.GetTarget() != adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
+		return nil, serviceerror.NewUnimplemented("Only migration to CHASM is currently supported.")
+	}
+	if request.GetIdentity() == "" {
+		return nil, errIdentityNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	workflowID := scheduler.WorkflowIDPrefix + request.GetScheduleId()
+
+	_, err = adh.historyClient.SignalWorkflowExecution(ctx,
+		&historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: namespaceID.String(),
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				SignalName:        scheduler.SignalNameMigrateToChasm,
+				Identity:          request.Identity,
+				RequestId:         request.RequestId,
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.MigrateScheduleResponse{}, nil
 }
