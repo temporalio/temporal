@@ -16,7 +16,14 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
-type OperationStore any
+// TODO:
+// Both nexus operation and workflow implement this. In nexus this is just a state transition.
+type OperationStore interface {
+	OnNexsusOperationStarted(ctx chasm.MutableContext, operation *Operation)
+	OnNexsusOperationCancelled(ctx chasm.MutableContext, operation *Operation)
+	OnNexsusOperationFailed(ctx chasm.MutableContext, operation *Operation)
+	OnNexsusOperationCompleted(ctx chasm.MutableContext, operation *Operation)
+}
 
 // Operation is a CHASM component that represents a Nexus operation.
 type Operation struct {
@@ -85,4 +92,8 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	}
 
 	return nil
+}
+
+func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) {
+	transitionStarted.Apply(o, ctx, EventStarted{})
 }

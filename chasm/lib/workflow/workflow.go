@@ -144,9 +144,9 @@ func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter
 	return w.MSPointer.HasAnyBufferedEvent(filter)
 }
 
-// AddNexusOperationStarted adds a NexusOperationStarted history event to the workflow.
+// OnNexusOperationStarted adds a NexusOperationStarted history event to the workflow.
 // Called by the nexus operation executor when the handler returns a pending (async) result.
-func (w *Workflow) AddNexusOperationStarted(
+func (w *Workflow) OnNexusOperationStarted(
 	ctx chasm.MutableContext,
 	key string,
 	op *nexusoperation.Operation,
