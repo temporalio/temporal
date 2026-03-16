@@ -2190,11 +2190,7 @@ func (n *Node) ApplySystemMutation(
 		return err
 	}
 
-	if err := n.applyUpdates(mutation.UpdatedNodes, true); err != nil {
-		return err
-	}
-
-	return nil
+	return n.applyUpdates(mutation.UpdatedNodes, true)
 }
 
 // ApplyMutation is used by replication stack to apply node
