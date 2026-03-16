@@ -1114,8 +1114,8 @@ func (e *ChasmEngine) getExecutionLease(
 // Known persistence errors are converted to service errors with a request ID for correlation.
 // All other errors (service errors, context errors, chasm errors, unknown errors) pass through unchanged.
 // When the component ref has a known archetype and businessID, NotFound errors get enriched messages.
-// NOTE: Keep in sync with Handler.convertError in handler.go. The CHASM engine variant
-// additionally includes a request ID in error messages for debugging correlation.
+// NOTE: Keep in sync with Handler.convertError in handler.go. The CHASM engine is a superset that additionally handles
+// ConditionFailedError and includes a request ID in error messages for debugging correlation.
 func (e *ChasmEngine) convertError(
 	err error,
 	ref chasm.ComponentRef,
