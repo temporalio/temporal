@@ -385,13 +385,6 @@ func (a *Activity) Terminate(
 	if !TransitionTerminated.Possible(a) {
 		return chasm.TerminateComponentResponse{}, nil
 	}
-	metricsHandler := enrichMetricsHandler(
-		a,
-		ctx.MetricsHandler(),
-		req.NamespaceName,
-		metrics.ActivityTerminatedScope,
-		func(string, string, enumspb.TaskQueueType) bool { return false },
-	)
 	event := terminateEvent{
 		request: &activitypb.TerminateActivityExecutionRequest{
 			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
@@ -400,7 +393,9 @@ func (a *Activity) Terminate(
 				RequestId: req.RequestID,
 			},
 		},
-		metricsHandler: metricsHandler,
+		// ctx.MetricsHandler() has no namespace tag; namespace-enriched metrics are only
+		// available when Terminate is called from the gRPC handler path via handleTerminated.
+		metricsHandler: ctx.MetricsHandler(),
 		fromStatus:     a.GetStatus(),
 	}
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)

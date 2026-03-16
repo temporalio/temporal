@@ -29,11 +29,10 @@ type TerminableComponent interface {
 }
 
 type TerminateComponentRequest struct {
-	Identity      string
-	Reason        string
-	Details       *commonpb.Payloads
-	RequestID     string
-	NamespaceName string
+	Identity  string
+	Reason    string
+	Details   *commonpb.Payloads
+	RequestID string
 }
 
 type TerminateComponentResponse struct{}
