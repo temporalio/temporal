@@ -106,8 +106,7 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 	// task.getVersion() > currentLastItem
 	// incoming replication task, after application, will become the current branch
 	// (because higher version wins), we need to Rebuild the mutable state for that
-	requestID := findStartRequestID(r.mutableState.GetExecutionState())
-	rebuiltMutableState, err := r.rebuild(ctx, branchIndex, requestID)
+	rebuiltMutableState, err := r.rebuild(ctx, branchIndex)
 	if err != nil {
 		return nil, false, err
 	}
@@ -117,7 +116,6 @@ func (r *ConflictResolverImpl) getOrRebuildMutableStateByIndex(
 func (r *ConflictResolverImpl) rebuild(
 	ctx context.Context,
 	branchIndex int32,
-	requestID string,
 ) (historyi.MutableState, error) {
 
 	versionHistories := r.mutableState.GetExecutionInfo().GetVersionHistories()
@@ -150,7 +148,7 @@ func (r *ConflictResolverImpl) rebuild(
 		util.Ptr(lastItem.GetVersion()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
-		requestID,
+		findStartRequestID(executionState),
 	)
 	if err != nil {
 		return nil, err
