@@ -2180,6 +2180,9 @@ func (n *Node) snapshotInternal(
 	}
 }
 
+// ApplySystemMutation should only used by internal persistence layer logic to force apply
+// cluster specific chasm tree changes.
+// DO NOT USE if you don't know why this method is introduced.
 func (n *Node) ApplySystemMutation(
 	mutation NodesMutation,
 ) error {
