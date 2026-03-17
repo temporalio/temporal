@@ -156,3 +156,7 @@ func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operatio
 func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) {
 	TransitionCanceled.Apply(o, ctx, EventCanceled{})
 }
+
+func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation) {
+	transitionTimedOut.Apply(o, ctx, EventTimedOut{})
+}
