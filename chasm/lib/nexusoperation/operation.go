@@ -16,8 +16,8 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
-// TODO:
-// Both nexus operation and workflow implement this. In nexus this is just a state transition.
+// OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
+// It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation)
 	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation)
