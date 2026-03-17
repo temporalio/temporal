@@ -1661,4 +1661,3 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
 	s.NotNil(newRunBranch)
 }
-
