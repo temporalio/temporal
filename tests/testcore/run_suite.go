@@ -61,8 +61,13 @@ func RunSuite(t *testing.T, suite any) {
 		testCount++
 		fn := method.Func
 
+		// Create a shallow copy so each test method gets its own instance,
+		// preventing data races if a method accidentally mutates suite fields.
+		copy := reflect.New(structType)
+		copy.Elem().Set(v.Elem())
+
 		t.Run(name, func(t *testing.T) {
-			fn.Call([]reflect.Value{v, reflect.ValueOf(t)})
+			fn.Call([]reflect.Value{copy, reflect.ValueOf(t)})
 		})
 	}
 
