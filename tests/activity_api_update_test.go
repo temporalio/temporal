@@ -22,15 +22,16 @@ import (
 )
 
 const (
-	defaultMaximumAttempts = 100
+	defaultMaximumAttempts   = 100
+	activityUpdateWorkflowID = "activity-update-workflow-id"
 )
 
 type (
 	ActivityFunctions func() (string, error)
-	WorkflowFunction  func(context2 workflow.Context) error
+	WorkflowFunction  func(workflow.Context) error
 )
 
-func makeUpdateWorkflowFunc(
+func makeActivityUpdateWorkflowFunc(
 	activityFunction ActivityFunctions,
 	scheduleToCloseTimeout time.Duration,
 	initialRetryInterval time.Duration,
@@ -56,6 +57,7 @@ func makeUpdateWorkflowFunc(
 }
 
 func TestActivityApiUpdateClientTestSuite(t *testing.T) {
+	t.Parallel()
 	t.Run("TestActivityUpdateApi_ChangeRetryInterval", func(t *testing.T) {
 		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 
@@ -79,13 +81,13 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 
 		scheduleToCloseTimeout := 30 * time.Minute
 		retryTimeout := 10 * time.Minute
-		workflowFn := makeUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, retryTimeout)
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, retryTimeout)
 
 		s.SdkWorker().RegisterWorkflow(workflowFn)
 		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
-			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}
 
@@ -154,13 +156,13 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 		scheduleToCloseTimeout := 30 * time.Minute
 		retryTimeout := 10 * time.Minute
 
-		workflowFn := makeUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, retryTimeout)
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, retryTimeout)
 
 		s.SdkWorker().RegisterWorkflow(workflowFn)
 		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
-			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}
 
@@ -237,14 +239,14 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 		scheduleToCloseTimeout := 8 * time.Second
 		retryInterval := 5 * time.Second
 
-		workflowFn := makeUpdateWorkflowFunc(
+		workflowFn := makeActivityUpdateWorkflowFunc(
 			activityFunction, scheduleToCloseTimeout, retryInterval)
 
 		s.SdkWorker().RegisterWorkflow(workflowFn)
 		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
-			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}
 
@@ -324,13 +326,13 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 
 		scheduleToCloseTimeout := 30 * time.Minute
 		retryTimeout := 10 * time.Minute
-		workflowFn := makeUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, retryTimeout)
+		workflowFn := makeActivityUpdateWorkflowFunc(activityFunction, scheduleToCloseTimeout, retryTimeout)
 
 		s.SdkWorker().RegisterWorkflow(workflowFn)
 		s.SdkWorker().RegisterActivity(activityFunction)
 
 		workflowOptions := sdkclient.StartWorkflowOptions{
-			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			ID:        activityUpdateWorkflowID,
 			TaskQueue: s.WorkerTaskQueue(),
 		}
 
