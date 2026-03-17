@@ -1,4 +1,4 @@
-package command
+package workflowregistry
 
 import (
 	"errors"
@@ -11,9 +11,9 @@ import (
 
 // ErrNotSupported is returned by a [Handler] when the command type is registered but not supported;
 // for example, because of a disabled feature flag.
-var ErrNotSupported = errors.New("command not supported")
+var ErrCommandNotSupported = errors.New("command not supported")
 
-type HandlerOptions struct {
+type CommandHandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
 }
 
@@ -24,7 +24,7 @@ type Handler func(
 	wf *chasmworkflow.Workflow,
 	validator Validator,
 	command *commandpb.Command,
-	opts HandlerOptions,
+	opts CommandHandlerOptions,
 ) error
 
 // Validator is a helper for validating workflow commands.
