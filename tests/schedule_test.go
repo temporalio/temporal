@@ -1662,7 +1662,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowResetWithAdditionalCa
 	// Workflow blocks on a "complete" signal so we can reset it before it finishes.
 	s.worker.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		sigCh := workflow.GetSignalChannel(ctx, "complete")
-		var signal interface{}
+		var signal any
 		sigCh.Receive(ctx, &signal)
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
