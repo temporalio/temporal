@@ -67,7 +67,7 @@ func GetTransferTaskEventID(
 	case *CloseExecutionTask:
 		eventID = common.FirstEventID
 	case *DeleteExecutionTask:
-		eventID = common.FirstEventID
+		return getChasmTaskEventID()
 	case *CancelExecutionTask:
 		eventID = task.InitiatedEventID
 	case *SignalExecutionTask:
