@@ -8,10 +8,10 @@ on:
         description: "Temporal CLI version to include in images"
         default: ""
       alpine-tag:
-        description: "Alpine base image tag (e.g., 3.23.3)"
+        description: "Optional Alpine base image tag override (leave empty to use default from docker-bake.hcl)"
         default: ""
       push:
-        description: "Push images to Docker Hub"
+        description: "Push images to Docker Hub (temporaliotest/server and temporaliotest/admin-tools)"
         required: true
         type: boolean
         default: false
@@ -20,15 +20,6 @@ on:
         required: true
         type: boolean
         default: false
-      platform:
-        description: "Platform to build (leave empty for multi-arch, or specify linux/amd64 or linux/arm64)"
-        required: false
-        default: ""
-      snapshot:
-        description: "Build in snapshot mode (for non-release builds)"
-        required: true
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -42,24 +33,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine single-arch parameter
-        id: arch-param
-        env:
-          PLATFORM: ${{ inputs.platform }}
-        run: |
-          if [ -n "${PLATFORM}" ]; then
-            # Extract arch from platform (e.g., linux/amd64 -> amd64)
-            ARCH=$(echo "${PLATFORM}" | cut -d'/' -f2)
-            echo "single-arch=${ARCH}" >> "$GITHUB_OUTPUT"
-          else
-            echo "single-arch=" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build binaries
         uses: ./.github/actions/build-binaries
         with:
-          snapshot: ${{ inputs.snapshot }}
-          single-arch: ${{ steps.arch-param.outputs.single-arch }}
+          snapshot: true
 
       - name: Build Docker images
         id: build-docker
@@ -68,9 +45,7 @@ jobs:
         with:
           push: false
           tag-latest: ${{ inputs.tag-latest }}
-          platform: ${{ inputs.platform }}
           alpine-tag: ${{ inputs.alpine-tag }}
-          load: ${{ inputs.platform == 'linux/amd64' || inputs.platform == '' }}
 
       - name: Build and push Docker images
         id: push-docker
@@ -79,7 +54,6 @@ jobs:
         with:
           push: true
           tag-latest: ${{ inputs.tag-latest }}
-          platform: ${{ inputs.platform }}
           alpine-tag: ${{ inputs.alpine-tag }}
           dockerhub-username: ${{ secrets.DOCKERHUB_USERNAME }}
           dockerhub-token: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -90,7 +64,6 @@ jobs:
           SHA_FULL_TAG: ${{ steps.build-docker.outputs.sha-full-tag || steps.push-docker.outputs.sha-full-tag }}
           BRANCH_TAG: ${{ steps.build-docker.outputs.branch-tag || steps.push-docker.outputs.branch-tag }}
           REF_NAME: ${{ github.ref_name }}
-          PLATFORM: ${{ inputs.platform || 'linux/amd64,linux/arm64' }}
           PUSHED: ${{ inputs.push }}
           TAG_LATEST: ${{ inputs.tag-latest }}
         run: |
@@ -101,7 +74,7 @@ jobs:
             echo "**Short SHA Tag:** ${SHA_TAG}"
             echo "**Full SHA Tag:** ${SHA_FULL_TAG}"
             echo "**Branch Tag:** ${BRANCH_TAG}"
-            echo "**Platform:** ${PLATFORM}"
+            echo "**Platform:** linux/amd64,linux/arm64"
             echo "**Pushed to Docker Hub:** ${PUSHED}"
             echo "**Tagged as latest:** ${TAG_LATEST}"
             echo ""
