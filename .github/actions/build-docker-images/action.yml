@@ -120,6 +120,8 @@ runs:
         TEMPORAL_SHA: ${{ steps.image-tags.outputs.git-sha }}
         TAG_LATEST: ${{ inputs.tag-latest }}
         ALPINE_TAG: ${{ inputs.alpine-tag }}
+        PLATFORM: ${{ inputs.platform }}
+        LOAD: ${{ inputs.load }}
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
         CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
@@ -127,15 +129,15 @@ runs:
           unset ALPINE_TAG
         fi
 
-        if [ -n "${{ inputs.platform }}" ]; then
+        if [ -n "${PLATFORM}" ]; then
           docker buildx bake \
-            --set "*.platform=${{ inputs.platform }}" \
-            ${{ inputs.load == 'true' && '--load' || '' }} \
+            --set "*.platform=${PLATFORM}" \
+            $( [ "${LOAD}" = "true" ] && echo --load ) \
             -f docker/docker-bake.hcl \
             server admin-tools
         else
           docker buildx bake \
-            ${{ inputs.load == 'true' && '--load' || '' }} \
+            $( [ "${LOAD}" = "true" ] && echo --load ) \
             -f docker/docker-bake.hcl \
             server admin-tools
         fi
