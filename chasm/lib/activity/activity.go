@@ -383,7 +383,12 @@ func (a *Activity) Terminate(
 ) (chasm.TerminateComponentResponse, error) {
 	// If already in a terminal state, no-op.
 	if !TransitionTerminated.Possible(a) {
-		return chasm.TerminateComponentResponse{}, nil
+		if a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
+			return chasm.TerminateComponentResponse{}, nil
+		}
+		return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("cannot terminate activity in state %s", a.StateMachineState().String()),
+		)
 	}
 	event := terminateEvent{
 		request: &activitypb.TerminateActivityExecutionRequest{
@@ -938,16 +943,8 @@ func (a *Activity) emitOnTerminatedMetrics(
 	handler metrics.Handler,
 	fromStatus activitypb.ActivityExecutionStatus,
 ) {
-	// Only record start-to-close latency if a current attempt was running. If it is in scheduled status, it means the current attempt never started.
-	if fromStatus != activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED {
-		startedTime := a.LastAttempt.Get(ctx).GetStartedTime().AsTime()
-		startToCloseLatency := time.Since(startedTime)
-		metrics.ActivityStartToCloseLatency.With(handler).Record(startToCloseLatency)
-	}
-
-	scheduleToCloseLatency := time.Since(a.GetScheduleTime().AsTime())
-	metrics.ActivityScheduleToCloseLatency.With(handler).Record(scheduleToCloseLatency)
-
+	// Terminated activities do not count as properly finished activities so we do not
+	// record any of the latency metrics.
 	metrics.ActivityTerminate.With(handler).Record(1)
 }
 
