@@ -373,6 +373,9 @@ forLoop:
 }
 
 func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
+	if tm.config.EmitTaskDispatchLatencyAtPoll() {
+		return // metric will be emitted at poll response
+	}
 	if task.event.Data.CreateTime == nil {
 		return // should not happen but for safety
 	}
