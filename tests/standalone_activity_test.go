@@ -2355,7 +2355,9 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 			ActivityId: activityID,
 			RunId:      runID,
 		})
-		require.NoError(t, err)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
+		require.ErrorContains(t, err, fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("DeleteActivityNoRunID", func(t *testing.T) {
@@ -2393,7 +2395,7 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, err, &notFoundErr)
-		require.Equal(t, fmt.Sprintf("activity not found for ID: %s", activityID), notFoundErr.Message)
+		require.ErrorContains(t, err, fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("RequestValidations", func(t *testing.T) {
