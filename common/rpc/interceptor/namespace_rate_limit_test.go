@@ -105,18 +105,14 @@ func (s *namespaceRateLimitInterceptorSuite) TestWait_ShortenedDeadlineExpires_O
 
 func (s *namespaceRateLimitInterceptorSuite) TestWait_OriginalCtxCancelled() {
 	// When the original context is cancelled, Wait() should propagate ctx.Err().
+	ctx, cancel := context.WithCancel(context.Background())
 	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(false)
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(ctx context.Context, _ quotas.Request) error {
+			cancel()
 			<-ctx.Done()
 			return ctx.Err()
 		})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		cancel()
-	}()
 
 	ni := s.newImpl(true)
 	err := ni.Wait(ctx, testNamespace, pollWorkflowTaskQueueMethod, noopHeaderGetter{})
