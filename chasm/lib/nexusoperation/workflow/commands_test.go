@@ -122,9 +122,9 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 		MSPointer: chasm.NewMSPointer(backend),
 	}
 
-	scheduleHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
+	scheduleHandler, ok := chReg.CommandHandler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
 	require.True(t, ok)
-	cancelHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION)
+	cancelHandler, ok := chReg.CommandHandler(enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION)
 	require.True(t, ok)
 
 	return testContext{
