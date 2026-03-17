@@ -85,6 +85,8 @@ message CreateFromMigrationStateResponse {}
 message MigrateToWorkflowRequest {
     string namespace_id = 1;
     string schedule_id = 2;
+    string identity = 3;
+    string request_id = 4;
 }
 
 message MigrateToWorkflowResponse {}

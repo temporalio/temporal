@@ -443,6 +443,13 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 				},
 			},
 		},
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			CatchupWindow: durationpb.New(time.Minute),
+		},
+		State: &schedulepb.ScheduleState{
+			Notes: "original notes",
+		},
 	}
 
 	// Create CHASM schedule directly.
@@ -461,8 +468,8 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Verify CHASM schedule exists.
-	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+	// Describe the CHASM schedule before migration to capture its state.
+	v2Desc, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
 		ctx,
 		&schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
@@ -470,6 +477,8 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+	v2Schedule := v2Desc.GetFrontendResponse().GetSchedule()
+	v2ConflictToken := v2Desc.GetFrontendResponse().GetConflictToken()
 
 	// Migrate from V2 (CHASM) to V1 (workflow).
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
@@ -481,35 +490,60 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Verify V1 workflow is running.
-	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+	// Wait for V1 workflow to start and become describable via the frontend.
+	var v1Desc *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
-		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
-			ctx,
-			&historyservice.DescribeWorkflowExecutionRequest{
-				NamespaceId: nsID,
-				Request: &workflowservice.DescribeWorkflowExecutionRequest{
-					Namespace: nsName,
-					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
-				},
-			},
-		)
-		if err != nil {
-			return false
-		}
-		return desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+		v1Desc, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		return err == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Verify CHASM schedule is paused.
-	descResp, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+	v1Schedule := v1Desc.GetSchedule()
+
+	// Validate the schedule spec is preserved across migration.
+	require.Equal(t, len(v2Schedule.GetSpec().GetInterval()), len(v1Schedule.GetSpec().GetInterval()))
+	require.Equal(t,
+		v2Schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration(),
+		v1Schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration(),
+	)
+
+	// Validate the action is preserved.
+	v2Action := v2Schedule.GetAction().GetStartWorkflow()
+	v1Action := v1Schedule.GetAction().GetStartWorkflow()
+	require.Equal(t, v2Action.GetWorkflowId(), v1Action.GetWorkflowId())
+	require.Equal(t, v2Action.GetWorkflowType().GetName(), v1Action.GetWorkflowType().GetName())
+	require.Equal(t, v2Action.GetTaskQueue().GetName(), v1Action.GetTaskQueue().GetName())
+
+	// Validate policies are preserved.
+	require.Equal(t,
+		v2Schedule.GetPolicies().GetOverlapPolicy(),
+		v1Schedule.GetPolicies().GetOverlapPolicy(),
+	)
+	require.Equal(t,
+		v2Schedule.GetPolicies().GetCatchupWindow().AsDuration(),
+		v1Schedule.GetPolicies().GetCatchupWindow().AsDuration(),
+	)
+
+	// Validate the paused state is correctly restored (not the migration-imposed pause).
+	require.Equal(t, v2Schedule.GetState().GetPaused(), v1Schedule.GetState().GetPaused())
+	require.Equal(t, v2Schedule.GetState().GetNotes(), v1Schedule.GetState().GetNotes())
+
+	// Validate the conflict token is preserved.
+	require.Equal(t, v2ConflictToken, v1Desc.GetConflictToken())
+
+	// Verify the CHASM scheduler is closed after migration.
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
 		ctx,
 		&schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		},
 	)
-	require.NoError(t, err)
-	require.True(t, descResp.GetFrontendResponse().GetSchedule().GetState().GetPaused())
+	// Closed CHASM schedulers return ErrClosed (FailedPrecondition).
+	var failedPreconditionErr *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPreconditionErr)
 }
 
 func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {

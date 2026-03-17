@@ -2470,6 +2470,8 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 		&schedulerpb.MigrateToWorkflowRequest{
 			NamespaceId: namespaceID,
 			ScheduleId:  request.GetScheduleId(),
+			Identity:    request.GetIdentity(),
+			RequestId:   request.GetRequestId(),
 		},
 	)
 	if err != nil {

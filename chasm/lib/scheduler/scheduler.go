@@ -687,13 +687,17 @@ func (s *Scheduler) MigrateToWorkflow(
 	if s.Sentinel {
 		return nil, ErrSentinel
 	}
+	if s.Closed {
+		return nil, ErrClosed
+	}
+	if s.MigrationToWorkflowPending {
+		return &schedulerpb.MigrateToWorkflowResponse{}, nil
+	}
 
 	// Save pre-migration paused state, mark migration as pending, then pause.
-	if !s.MigrationToWorkflowPending {
-		s.PreMigrationPaused = s.Schedule.State.Paused
-		s.PreMigrationNotes = s.Schedule.State.Notes
-		s.MigrationToWorkflowPending = true
-	}
+	s.PreMigrationPaused = s.Schedule.State.Paused
+	s.PreMigrationNotes = s.Schedule.State.Notes
+	s.MigrationToWorkflowPending = true
 	s.Schedule.State.Paused = true
 	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
 
