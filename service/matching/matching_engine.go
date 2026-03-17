@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -69,6 +70,14 @@ const (
 	// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
+
+	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
+	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
+	// workers shut down. Even with aggressive autoscaling, a single matching node is
+	// unlikely to see more than a few hundred worker shutdowns within the TTL window.
+	// LRU eviction ensures the oldest entries (least likely to re-poll) are evicted first.
+	shutdownWorkersCacheMaxSize = 10000
+	shutdownWorkersCacheTTL     = 30 * time.Second
 	// If a compatible poller hasn't been seen for this time, we fail the CommitBuildId
 	// Set to 70s so that it's a little over the max time a poller should be kept waiting.
 	versioningPollerSeenWindow        = 70 * time.Second
@@ -166,6 +175,10 @@ type (
 		outstandingPollers collection.SyncMap[string, context.CancelFunc]
 		// workerInstancePollers tracks pollers by worker instance key for bulk cancellation during shutdown.
 		workerInstancePollers workerPollerTracker
+		// shutdownWorkers is a TTL cache of recently-shutdown worker instance keys.
+		// Polls from workers in this cache are rejected immediately to prevent
+		// zombie re-polls from stealing tasks after ShutdownWorker.
+		shutdownWorkers cache.Cache
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -294,6 +307,7 @@ func NewEngine(
 		nexusResults:              collection.NewSyncMap[string, chan *nexusResult](),
 		outstandingPollers:        collection.NewSyncMap[string, context.CancelFunc](),
 		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+		shutdownWorkers:           cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
@@ -1218,6 +1232,9 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	if request.WorkerInstanceKey != "" {
+		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
 	e.removePollerFromHistory(ctx, request)
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
@@ -2861,6 +2878,9 @@ func (e *matchingEngineImpl) pollTask(
 		workerInstanceKey := pollMetadata.workerInstanceKey
 		pollerTrackerKey := uuid.NewString()
 		if workerInstanceKey != "" {
+			if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+				return nil, false, errNoTasks
+			}
 			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
 		}
 
