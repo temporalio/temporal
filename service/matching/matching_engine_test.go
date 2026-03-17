@@ -5815,4 +5815,3 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
 }
-
