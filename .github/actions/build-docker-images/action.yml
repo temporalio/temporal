@@ -29,7 +29,7 @@ inputs:
   alpine-tag:
     description: "Alpine base image tag"
     required: false
-    default: "3.23.3"
+    default: ""
   dockerhub-username:
     description: "Docker Hub username"
     required: false
@@ -123,6 +123,10 @@ runs:
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
         CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
+        if [ -z "${ALPINE_TAG}" ]; then
+          unset ALPINE_TAG
+        fi
+
         if [ -n "${{ inputs.platform }}" ]; then
           docker buildx bake \
             --set "*.platform=${{ inputs.platform }}" \
@@ -151,6 +155,10 @@ runs:
         SERVER_VERSION: ${{ steps.extract-version.outputs.server-version }}
         CLI_VERSION: ${{ steps.extract-cli-version.outputs.cli-version }}
       run: |
+        if [ -z "${ALPINE_TAG}" ]; then
+          unset ALPINE_TAG
+        fi
+
         docker buildx bake \
           --push \
           -f docker/docker-bake.hcl \
