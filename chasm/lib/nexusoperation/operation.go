@@ -19,11 +19,11 @@ var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
-	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation)
-	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation)
-	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation)
-	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation)
-	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation)
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation) error
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -106,22 +106,22 @@ func (o *Operation) StoreProcessor(ctx chasm.Context) OperationStore {
 	return o
 }
 
-func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) {
-	transitionStarted.Apply(o, ctx, EventStarted{})
+func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) error {
+	return transitionStarted.Apply(o, ctx, EventStarted{OperationToken: o.GetOperationToken()})
 }
 
-func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation) {
-	transitionSucceeded.Apply(o, ctx, EventSucceeded{})
+func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation) error {
+	return transitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
-func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation) {
-	transitionFailed.Apply(o, ctx, EventFailed{})
+func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation) error {
+	return transitionFailed.Apply(o, ctx, EventFailed{})
 }
 
-func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) {
-	TransitionCanceled.Apply(o, ctx, EventCanceled{})
+func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) error {
+	return TransitionCanceled.Apply(o, ctx, EventCanceled{})
 }
 
-func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation) {
-	transitionTimedOut.Apply(o, ctx, EventTimedOut{})
+func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation) error {
+	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
