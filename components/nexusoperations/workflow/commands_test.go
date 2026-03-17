@@ -50,7 +50,6 @@ type testContext struct {
 }
 
 var defaultConfig = &nexusoperations.Config{
-	Enabled:                            dynamicconfig.GetBoolPropertyFn(true),
 	MaxServiceNameLength:               dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("service")),
 	MaxOperationNameLength:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(len("op")),
 	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
@@ -118,18 +117,6 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 }
 
 func TestHandleScheduleCommand(t *testing.T) {
-	t.Run("feature disabled", func(t *testing.T) {
-		tcx := newTestContext(t, &nexusoperations.Config{
-			Enabled: dynamicconfig.GetBoolPropertyFn(false),
-		})
-		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
-		var failWFTErr workflow.FailWorkflowTaskError
-		require.ErrorAs(t, err, &failWFTErr)
-		require.False(t, failWFTErr.TerminateWorkflow)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
-	})
-
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
@@ -625,18 +612,6 @@ func TestHandleScheduleCommand(t *testing.T) {
 }
 
 func TestHandleCancelCommand(t *testing.T) {
-	t.Run("feature disabled", func(t *testing.T) {
-		tcx := newTestContext(t, &nexusoperations.Config{
-			Enabled: dynamicconfig.GetBoolPropertyFn(false),
-		})
-		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})
-		var failWFTErr workflow.FailWorkflowTaskError
-		require.ErrorAs(t, err, &failWFTErr)
-		require.False(t, failWFTErr.TerminateWorkflow)
-		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_FEATURE_DISABLED, failWFTErr.Cause)
-		require.Equal(t, 0, len(tcx.history.Events))
-	})
-
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		err := tcx.cancelHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, &commandpb.Command{})

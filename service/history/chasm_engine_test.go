@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -485,8 +486,8 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 
 func (s *chasmEngineSuite) newTestExecutionFn(
 	activityID string,
-) func(ctx chasm.MutableContext) (chasm.Component, error) {
-	return func(ctx chasm.MutableContext) (chasm.Component, error) {
+) func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error) {
+	return func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 		return &testComponent{
 			ActivityInfo: &persistencespb.ActivityInfo{
 				ActivityId: activityID,
@@ -556,6 +557,113 @@ func (s *chasmEngineSuite) currentRunConditionFailedErr(
 	}
 }
 
+func (s *chasmEngineSuite) TestDeleteExecution_RunningExecution() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+				ActivityId: tv.ActivityID(),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.UpdateWorkflowExecutionRequest,
+		) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			s.Equal(
+				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+				request.UpdateWorkflowMutation.ExecutionState.State,
+			)
+			s.Equal(
+				enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+				request.UpdateWorkflowMutation.ExecutionState.Status,
+			)
+
+			transferTasks := request.UpdateWorkflowMutation.Tasks[tasks.CategoryTransfer]
+			var foundDeleteTask bool
+			for _, t := range transferTasks {
+				if _, ok := t.(*tasks.DeleteExecutionTask); ok {
+					foundDeleteTask = true
+					break
+				}
+			}
+			s.True(foundDeleteTask, "expected DeleteExecutionTask in transfer tasks")
+
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	err := s.engine.DeleteExecution(
+		context.Background(),
+		ref,
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:    "test deletion",
+				Identity:  "test-identity",
+				RequestID: tv.Any().String(),
+			},
+		},
+	)
+	s.NoError(err)
+}
+
+func (s *chasmEngineSuite) TestDeleteExecution_ClosedExecution() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       tv.RunID(),
+		},
+	)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{
+				ActivityId: tv.ActivityID(),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, nil),
+		}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.AddHistoryTasksRequest,
+		) error {
+			transferTasks := request.Tasks[tasks.CategoryTransfer]
+			s.Len(transferTasks, 1)
+			deleteTask, ok := transferTasks[0].(*tasks.DeleteExecutionTask)
+			s.True(ok)
+			s.Equal(s.archetypeID, deleteTask.ArchetypeID)
+			return nil
+		},
+	).Times(1)
+
+	err := s.engine.DeleteExecution(
+		context.Background(),
+		ref,
+		chasm.DeleteExecutionRequest{
+			TerminateComponentRequest: chasm.TerminateComponentRequest{
+				Reason:    "test deletion",
+				Identity:  "test-identity",
+				RequestID: tv.Any().String(),
+			},
+		},
+	)
+	s.NoError(err)
+}
+
 func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -600,6 +708,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 		func(
 			ctx chasm.MutableContext,
 			component chasm.Component,
+			_ *chasm.Registry,
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -636,6 +745,7 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 		func(
 			ctx chasm.Context,
 			component chasm.Component,
+			_ *chasm.Registry,
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -674,7 +784,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 	newSerializedRef, err := s.engine.PollComponent(
 		context.Background(),
 		ref,
-		func(ctx chasm.Context, component chasm.Component) (bool, error) {
+		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) (bool, error) {
 			return true, nil
 		},
 	)
@@ -772,7 +882,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		newSerializedRef, err := s.engine.PollComponent(
 			ctx,
 			pollRef,
-			func(ctx chasm.Context, component chasm.Component) (bool, error) {
+			func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) (bool, error) {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
 				satisfied := tc.ActivityInfo.ActivityId == activityID
@@ -786,7 +896,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		_, err := s.engine.UpdateComponent(
 			context.Background(),
 			updateRef,
-			func(ctx chasm.MutableContext, component chasm.Component) error {
+			func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
 				if satisfyPredicate {
@@ -833,6 +943,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		func(
 			ctx chasm.Context,
 			component chasm.Component,
+			_ *chasm.Registry,
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -888,7 +999,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	_, err = s.engine.PollComponent(
 		context.Background(),
 		staleRef,
-		func(ctx chasm.Context, component chasm.Component) (bool, error) {
+		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) (bool, error) {
 			s.Fail("predicate should not be called with stale ref")
 			return false, nil
 		},
@@ -932,6 +1043,7 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 		func(
 			ctx chasm.Context,
 			component chasm.Component,
+			_ *chasm.Registry,
 		) error {
 			// Verify CloseTime returns non-zero time when component is completed
 			closeTime := ctx.ExecutionCloseTime()
@@ -974,7 +1086,7 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 	_, err := s.engine.UpdateComponent(
 		context.Background(),
 		ref,
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
 			tc.ActivityInfo.ActivityId = tv.ActivityID()
@@ -986,7 +1098,7 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 	err = s.engine.ReadComponent(
 		context.Background(),
 		ref,
-		func(ctx chasm.Context, component chasm.Component) error {
+		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) error {
 			s.Equal(initialCount+1, ctx.StateTransitionCount())
 			return nil
 		},
@@ -1055,11 +1167,11 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			s.Fail("newFn should not be called when execution exists and is running")
 			return nil, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
 			tc.ActivityInfo.ActivityId = "updated-" + tc.ActivityInfo.ActivityId
@@ -1122,7 +1234,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			newFnCalled = true
 			return &testComponent{
 				ActivityInfo: &persistencespb.ActivityInfo{
@@ -1130,7 +1242,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 				},
 			}, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			updateFnCalled = true
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -1212,7 +1324,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			newFnCalled = true
 			return &testComponent{
 				ActivityInfo: &persistencespb.ActivityInfo{
@@ -1220,7 +1332,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 				},
 			}, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			updateFnCalled = true
 			// Apply the "update" to the newly created component
 			tc, ok := component.(*testComponent)
@@ -1280,11 +1392,11 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			s.Fail("newFn should not be called")
 			return nil, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			return expectedErr
 		},
 	)
@@ -1307,10 +1419,10 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NewFnError() {
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			return nil, expectedErr
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			s.Fail("updateFn should not be called when newFn fails")
 			return nil
 		},
@@ -1335,7 +1447,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnErrorOnCreate() 
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			newFnCalled = true
 			return &testComponent{
 				ActivityInfo: &persistencespb.ActivityInfo{
@@ -1343,7 +1455,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnErrorOnCreate() 
 				},
 			}, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			return expectedErr
 		},
 	)
@@ -1401,11 +1513,11 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.Component, error) {
+		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
 			s.Fail("newFn should not be called when execution exists")
 			return nil, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
+		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
 			// updateFn is called before the version conflict is detected during persist.
 			updateFnCalled = true
 			tc, ok := component.(*testComponent)
@@ -1434,7 +1546,7 @@ func (s *chasmEngineSuite) TestReadComponent_NotFound() {
 				RunID:       "11111111-2222-3333-4444-555555555555",
 			},
 		),
-		func(ctx chasm.Context, component chasm.Component) error {
+		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) error {
 			s.Fail("readFn should not be called")
 			return nil
 		},
@@ -1531,6 +1643,13 @@ type testComponent struct {
 
 func (l *testComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
+}
+
+func (l *testComponent) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 func (l *testComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {

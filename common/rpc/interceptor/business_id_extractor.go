@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/namespace"
@@ -57,6 +60,34 @@ type (
 	taskTokenGetter interface {
 		GetTaskToken() []byte
 	}
+
+	taskQueueNameGetter interface {
+		GetTaskQueue() string
+	}
+
+	taskQueueNameFromMessageGetter interface {
+		GetTaskQueue() *taskqueuepb.TaskQueue
+	}
+
+	deploymentNameGetter interface {
+		GetDeploymentName() string
+	}
+
+	deploymentVersionGetter interface {
+		GetDeploymentVersion() *deploymentpb.WorkerDeploymentVersion
+	}
+
+	pollerGroupIDGetter interface {
+		GetPollerGroupId() string
+	}
+
+	namespaceGetter interface {
+		GetNamespace() string
+	}
+
+	updateRefGetter interface {
+		GetUpdateRef() *updatepb.UpdateRef
+	}
 )
 
 // Extract extracts business ID from the request using the specified pattern.
@@ -98,6 +129,45 @@ func (e BusinessIDExtractor) Extract(req any, pattern BusinessIDPattern) string 
 
 	case PatternMultiOperation:
 		return e.extractMultiOperation(req)
+
+	case PatternTaskQueueName:
+		if getter, ok := req.(taskQueueNameGetter); ok {
+			return getter.GetTaskQueue()
+		}
+
+	case PatternTaskQueueNameFromMessage:
+		if getter, ok := req.(taskQueueNameFromMessageGetter); ok {
+			if tq := getter.GetTaskQueue(); tq != nil {
+				return tq.GetName()
+			}
+		}
+
+	case PatternDeploymentName:
+		if getter, ok := req.(deploymentNameGetter); ok {
+			return getter.GetDeploymentName()
+		}
+
+	case PatternDeploymentVersion:
+		if getter, ok := req.(deploymentVersionGetter); ok {
+			if dv := getter.GetDeploymentVersion(); dv != nil {
+				return dv.GetDeploymentName()
+			}
+		}
+
+	case PatternPollerGroupID:
+		if getter, ok := req.(pollerGroupIDGetter); ok {
+			return getter.GetPollerGroupId()
+		}
+
+	case PatternNamespace:
+		if getter, ok := req.(namespaceGetter); ok {
+			return getter.GetNamespace()
+		}
+
+	case PatternUpdateRef:
+		if getter, ok := req.(updateRefGetter); ok {
+			return getter.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()
+		}
 
 	case PatternNone:
 		// No extraction needed

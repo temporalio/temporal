@@ -2,127 +2,101 @@ package flakereport
 
 import (
 	"fmt"
+	"math"
 	"strings"
+	"time"
 )
 
-// generateFlakyReport creates flaky test report (>3 failures)
-// Markdown shows ALL tests, Slack text limited to top 10
-// Returns: markdown content, slack plain text, total count
-func generateFlakyReport(reports []TestReport, maxLinks int) (markdown, slackText string, totalCount int) {
-	if len(reports) == 0 {
-		return "", "", 0
+const boldFlakeRateThreshold = 5.0
+
+// hoursAgo formats a timestamp as "Xh ago" relative to now.
+func hoursAgo(t time.Time) string {
+	h := math.Round(time.Since(t).Hours())
+	if h < 1 {
+		h = 1
 	}
-
-	totalCount = len(reports)
-
-	var mdLines []string
-	var slackLines []string
-
-	// Markdown: show ALL tests
-	for i := 0; i < totalCount; i++ {
-		report := reports[i]
-		mdLine := formatTestReportMarkdown(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate, report.GitHubURLs, maxLinks)
-		mdLines = append(mdLines, mdLine)
-	}
-
-	// Slack: limit to top 10 to keep message concise
-	slackDisplayCount := totalCount
-	if slackDisplayCount > 10 {
-		slackDisplayCount = 10
-	}
-
-	for i := 0; i < slackDisplayCount; i++ {
-		report := reports[i]
-		slackLine := formatTestReportPlainText(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate)
-		slackLines = append(slackLines, slackLine)
-	}
-
-	markdown = strings.Join(mdLines, "\n")
-	slackText = strings.Join(slackLines, "\n")
-
-	return markdown, slackText, totalCount
+	return fmt.Sprintf("%dh ago", int(h))
 }
 
-// generateStandardReport creates a report for a list of tests with failures
-// Used for timeouts, crashes, and other categorized test failures
-func generateStandardReport(reports []TestReport, maxLinks int) string {
-	if len(reports) == 0 {
-		return ""
-	}
-
+// formatReportLines returns a plain-text bullet line per report.
+func formatReportLines(reports []TestReport) []string {
 	var lines []string
-	for _, report := range reports {
-		line := formatTestReportMarkdown(report.TestName, report.FailureCount, report.TotalRuns, report.FailureRate, report.GitHubURLs, maxLinks)
-		lines = append(lines, line)
+	for _, r := range reports {
+		pct := 0.0
+		if r.TotalRuns > 0 {
+			pct = float64(r.FailureCount) / float64(r.TotalRuns) * 100.0
+		}
+		lines = append(lines, fmt.Sprintf("• %.1f%% (%d/%d): `%s`",
+			pct, r.FailureCount, r.TotalRuns, r.TestName))
 	}
-
-	return strings.Join(lines, "\n")
+	return lines
 }
 
-// formatTestReportMarkdown formats a single test report line with markdown links
-// Format: * {count} failures / {total} runs ({rate}/1000): `{test_name}` [1](url1) [2](url2) [3](url3)
-func formatTestReportMarkdown(testName string, failureCount, totalRuns int, failureRate float64, urls []string, maxLinks int) string {
-	var sb strings.Builder
-
-	sb.WriteString(fmt.Sprintf("* %d failures / %d runs (%.1f/1000): `%s`",
-		failureCount, totalRuns, failureRate, testName))
-
-	// Add numbered links
+// formatLinks formats GitHub URLs as numbered markdown links
+func formatLinks(urls []string, maxLinks int) string {
 	linkCount := len(urls)
 	if linkCount > maxLinks {
 		linkCount = maxLinks
 	}
-
+	var parts []string
 	for i := 0; i < linkCount; i++ {
-		sb.WriteString(fmt.Sprintf(" [%d](%s)", i+1, urls[i]))
+		parts = append(parts, fmt.Sprintf("[%d](%s)", i+1, urls[i]))
+	}
+	return strings.Join(parts, " ")
+}
+
+// generateSuiteBreakdownTable creates a markdown table of per-suite flake data
+func generateSuiteBreakdownTable(suiteReports []SuiteReport) string {
+	if len(suiteReports) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("| Suite | Flake Rate | Last Failure |\n")
+	sb.WriteString("|-------|------------|-------------|\n")
+
+	for _, sr := range suiteReports {
+		lastFailure := "-"
+		if sr.FailedRuns > 0 && !sr.LastFailure.IsZero() {
+			lastFailure = hoursAgo(sr.LastFailure)
+		}
+		rate := fmt.Sprintf("%.1f%% (%d/%d)", sr.FlakeRate, sr.FailedRuns, sr.TotalRuns)
+		if sr.FlakeRate > boldFlakeRateThreshold {
+			rate = "**" + rate + "**"
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s |\n", sr.SuiteName, rate, lastFailure))
 	}
 
 	return sb.String()
 }
 
-// formatTestReportPlainText formats a single test report line without links (for Slack)
-// Format: • {count} failures / {total} runs ({rate}/1000): `{test_name}`
-func formatTestReportPlainText(testName string, failureCount, totalRuns int, failureRate float64) string {
-	return fmt.Sprintf("• %d failures / %d runs (%.1f/1000): `%s`",
-		failureCount, totalRuns, failureRate, testName)
-}
-
-// generateCIBreakerReport creates CI breaker report (tests that failed all retries)
-// Returns markdown and plain text versions
-func generateCIBreakerReport(reports []TestReport, maxLinks int) (markdown, slackText string) {
+// generateTestReportTable creates a markdown table of test reports with rate column.
+func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks int) string {
 	if len(reports) == 0 {
-		return "", ""
+		return ""
 	}
 
-	var mdLines []string
-	var slackLines []string
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("| Test | %s | Last Failure | Links |\n", rateHeader))
+	sb.WriteString("|------|------------|-------------|-------|\n")
 
 	for _, report := range reports {
-		// Use the pre-calculated CI runs broken count
-		brokenRuns := report.CIRunsBroken
-
-		mdLine := fmt.Sprintf("* %d CI run(s) broken: `%s` (%d total failures)",
-			brokenRuns, report.TestName, report.FailureCount)
-
-		// Add numbered links
-		linkCount := len(report.GitHubURLs)
-		if linkCount > maxLinks {
-			linkCount = maxLinks
+		pct := 0.0
+		if report.TotalRuns > 0 {
+			pct = float64(report.FailureCount) / float64(report.TotalRuns) * 100.0
 		}
-		for i := 0; i < linkCount; i++ {
-			mdLine += fmt.Sprintf(" [%d](%s)", i+1, report.GitHubURLs[i])
+		links := formatLinks(report.GitHubURLs, maxLinks)
+		lastFailure := "N/A"
+		if !report.LastFailure.IsZero() {
+			lastFailure = hoursAgo(report.LastFailure)
 		}
-
-		mdLines = append(mdLines, mdLine)
-
-		// Plain text version for Slack
-		slackLine := fmt.Sprintf("• %d CI run(s) broken: `%s` (%d total failures)",
-			brokenRuns, report.TestName, report.FailureCount)
-		slackLines = append(slackLines, slackLine)
+		rate := fmt.Sprintf("%.1f%% (%d/%d)", pct, report.FailureCount, report.TotalRuns)
+		if pct > boldFlakeRateThreshold {
+			rate = "**" + rate + "**"
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
+			report.TestName, rate, lastFailure, links))
 	}
 
-	markdown = strings.Join(mdLines, "\n")
-	slackText = strings.Join(slackLines, "\n")
-
-	return markdown, slackText
+	return sb.String()
 }

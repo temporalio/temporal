@@ -131,6 +131,19 @@ func Invoke(
 		}
 	}
 
+	// NOTE: the deletion is best effort, for sql visibility implementation,
+	// we can't guarantee there's no update or record close request for this workflow since
+	// visibility queue processing is async. Operator can call this api again to delete visibility
+	// record again if this happens.
+	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: namespace.ID(request.GetNamespaceId()),
+		WorkflowID:  execution.GetWorkflowId(),
+		RunID:       execution.GetRunId(),
+		TaskID:      math.MaxInt64,
+	}); err != nil {
+		return nil, err
+	}
+
 	return &historyservice.ForceDeleteWorkflowExecutionResponse{
 		Response: &adminservice.DeleteWorkflowExecutionResponse{
 			Warnings: warnings,

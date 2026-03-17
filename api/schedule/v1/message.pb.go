@@ -252,10 +252,11 @@ type InternalState struct {
 	LastCompletionResult *v12.Payloads `protobuf:"bytes,5,opt,name=last_completion_result,json=lastCompletionResult,proto3" json:"last_completion_result,omitempty"`
 	ContinuedFailure     *v13.Failure  `protobuf:"bytes,6,opt,name=continued_failure,json=continuedFailure,proto3" json:"continued_failure,omitempty"`
 	// conflict token is implemented as simple sequence number
-	ConflictToken int64 `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
-	NeedRefresh   bool  `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3" json:"need_refresh,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ConflictToken    int64 `protobuf:"varint,7,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
+	NeedRefresh      bool  `protobuf:"varint,9,opt,name=need_refresh,json=needRefresh,proto3" json:"need_refresh,omitempty"`
+	PendingMigration bool  `protobuf:"varint,11,opt,name=pending_migration,json=pendingMigration,proto3" json:"pending_migration,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *InternalState) Reset() {
@@ -354,6 +355,13 @@ func (x *InternalState) GetConflictToken() int64 {
 func (x *InternalState) GetNeedRefresh() bool {
 	if x != nil {
 		return x.NeedRefresh
+	}
+	return false
+}
+
+func (x *InternalState) GetPendingMigration() bool {
+	if x != nil {
+		return x.PendingMigration
 	}
 	return false
 }
@@ -1057,7 +1065,7 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\x0fCompletedResult\x12F\n" +
 	"\x06status\x18\x01 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x129\n" +
 	"\n" +
-	"close_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\"\xdf\x04\n" +
+	"close_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tcloseTime\"\x8c\x05\n" +
 	"\rInternalState\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12!\n" +
 	"\fnamespace_id\x18\x02 \x01(\tR\vnamespaceId\x12\x1f\n" +
@@ -1070,7 +1078,8 @@ const file_temporal_server_api_schedule_v1_message_proto_rawDesc = "" +
 	"\x16last_completion_result\x18\x05 \x01(\v2 .temporal.api.common.v1.PayloadsR\x14lastCompletionResult\x12M\n" +
 	"\x11continued_failure\x18\x06 \x01(\v2 .temporal.api.failure.v1.FailureR\x10continuedFailure\x12%\n" +
 	"\x0econflict_token\x18\a \x01(\x03R\rconflictToken\x12!\n" +
-	"\fneed_refresh\x18\t \x01(\bR\vneedRefresh\"\xa3\x02\n" +
+	"\fneed_refresh\x18\t \x01(\bR\vneedRefresh\x12+\n" +
+	"\x11pending_migration\x18\v \x01(\bR\x10pendingMigration\"\xa3\x02\n" +
 	"\x11StartScheduleArgs\x12>\n" +
 	"\bschedule\x18\x01 \x01(\v2\".temporal.api.schedule.v1.ScheduleR\bschedule\x12:\n" +
 	"\x04info\x18\x02 \x01(\v2&.temporal.api.schedule.v1.ScheduleInfoR\x04info\x12L\n" +

@@ -380,9 +380,7 @@ func NewMutableState(
 		ExecutionStats:         &persistencespb.ExecutionStats{HistorySize: 0},
 		SubStateMachinesByType: make(map[string]*persistencespb.StateMachineMap),
 	}
-	if s.config.EnableNexus() {
-		s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
-	}
+	s.executionInfo.TaskGenerationShardClockTimestamp = shard.CurrentVectorClock().GetClock()
 	s.approximateSize += s.executionInfo.Size()
 
 	s.executionState = &persistencespb.WorkflowExecutionState{
@@ -415,6 +413,7 @@ func NewMutableState(
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
+			shard.GetMetricsHandler(),
 		)
 	}
 
@@ -562,6 +561,7 @@ func NewMutableStateFromDB(
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
+			shard.GetMetricsHandler(),
 		)
 		if err != nil {
 			return nil, err
@@ -2597,12 +2597,13 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		ContinuedFailure:       command.GetFailure(),
 		ContinueAsNewInitiator: command.Initiator,
 		// enforce minimal interval between runs to prevent tight loop continue as new spin.
-		FirstWorkflowTaskBackoff: previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
-		SourceVersionStamp:       sourceVersionStamp,
-		RootExecutionInfo:        rootExecutionInfo,
-		InheritedBuildId:         inheritedBuildId,
-		InheritedPinnedVersion:   inheritedPinnedVersion,
-		VersioningOverride:       pinnedOverride,
+		FirstWorkflowTaskBackoff:     previousExecutionState.ContinueAsNewMinBackoff(command.BackoffStartInterval),
+		SourceVersionStamp:           sourceVersionStamp,
+		RootExecutionInfo:            rootExecutionInfo,
+		InheritedBuildId:             inheritedBuildId,
+		InheritedPinnedVersion:       inheritedPinnedVersion,
+		VersioningOverride:           pinnedOverride,
+		DeclinedTargetVersionUpgrade: computeDeclinedTargetVersionUpgrade(previousExecutionInfo),
 	}
 	if command.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY {
 		req.Attempt = previousExecutionState.GetExecutionInfo().Attempt + 1
@@ -2648,6 +2649,20 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		),
 	).Record(1)
 	return event, nil
+}
+
+// computeDeclinedTargetVersionUpgrade determines what declined-upgrade value to
+// pass to the next run at continue-as-new time:
+//   - If the current run was signaled about a target change (last_notified is set),
+//     that becomes the declined value (the SDK saw it and chose not to upgrade).
+//   - Otherwise, preserve the existing declined value from a prior CaN chain.
+func computeDeclinedTargetVersionUpgrade(info *persistencespb.WorkflowExecutionInfo) *historypb.DeclinedTargetVersionUpgrade {
+	if lastNotified := info.GetLastNotifiedTargetVersion(); lastNotified != nil {
+		return &historypb.DeclinedTargetVersionUpgrade{
+			DeploymentVersion: lastNotified.GetDeploymentVersion(),
+		}
+	}
+	return info.GetDeclinedTargetVersionUpgrade()
 }
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
@@ -2927,6 +2942,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		}
 		ms.executionInfo.VersioningInfo.DeploymentVersion = event.GetInheritedPinnedVersion()
 		ms.executionInfo.VersioningInfo.Behavior = enumspb.VERSIONING_BEHAVIOR_PINNED
+	}
+
+	// If the workflow inherited a pinned version from CaN/retry, set the declined
+	// target version upgrade from the started event. This is the same public API
+	// type, so no conversion needed.
+	if event.GetContinuedExecutionRunId() != "" && event.GetInheritedPinnedVersion() != nil {
+		ms.executionInfo.DeclinedTargetVersionUpgrade = event.GetDeclinedTargetVersionUpgrade()
 	}
 
 	// Populate the versioningInfo if the inheritedAutoUpgradeInfo is present.
@@ -4423,7 +4445,7 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowScheduledEventID(scheduledEventID),
-			tag.WorkflowActivityID(ai.ActivityId),
+			tag.ActivityID(ai.ActivityId),
 			tag.WorkflowStartedEventID(ai.StartedEventId))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6677,6 +6699,12 @@ func (ms *MutableStateImpl) AddTasks(
 ) {
 	now := ms.timeSource.Now()
 	for _, task := range newTasks {
+		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
+			chasmTask.GetCategory() == tasks.CategoryVisibility &&
+			ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			softassert.Fail(ms.logger, "CHASM visibility task added on already-closed execution")
+		}
+
 		category := task.GetCategory()
 		if category.Type() == tasks.CategoryTypeScheduled &&
 			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {
@@ -7866,7 +7894,7 @@ func (ms *MutableStateImpl) dirtyHSMToReplicationTask(
 			return emptyTasks
 		}
 
-		// HSM() contains children also implies Nexus is enabled
+		// Skip if there are no HSM children (no outbound tasks to generate)
 		if len(ms.HSM().InternalRepr().Children) == 0 {
 			return emptyTasks
 		}

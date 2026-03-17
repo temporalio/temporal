@@ -114,6 +114,7 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 type testEnv struct {
 	t             *testing.T // only used within these setup helpers
 	Ctrl          *gomock.Controller
+	Registry      *chasm.Registry
 	Node          *chasm.Node
 	NodeBackend   *chasm.MockNodeBackend
 	TimeSource    *clock.EventTimeSource
@@ -208,7 +209,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		},
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), node)
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	if err != nil {
@@ -230,6 +231,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	env := &testEnv{
 		t:             t,
 		Ctrl:          ctrl,
+		Registry:      registry,
 		Node:          node,
 		NodeBackend:   nodeBackend,
 		TimeSource:    timeSource,
@@ -289,8 +291,8 @@ func (e *testEnv) ExpectReadComponent(ctx chasm.Context, returnedComponent chasm
 		e.t.Fatal("ExpectReadComponent requires withMockEngine() option")
 	}
 	e.MockEngine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
-			return readFn(ctx, returnedComponent)
+		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, _ ...chasm.TransitionOption) error {
+			return readFn(ctx, returnedComponent, e.Registry)
 		}).Times(1)
 }
 
@@ -300,8 +302,8 @@ func (e *testEnv) ExpectUpdateComponent(ctx chasm.MutableContext, componentToUpd
 		e.t.Fatal("ExpectUpdateComponent requires withMockEngine() option")
 	}
 	e.MockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
-			err := updateFn(ctx, componentToUpdate)
+		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, _ ...chasm.TransitionOption) ([]byte, error) {
+			err := updateFn(ctx, componentToUpdate, e.Registry)
 			return nil, err
 		}).Times(1)
 }
@@ -343,7 +345,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 		}
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	return &testInfra{
 		node:        node,
 		nodeBackend: nodeBackend,

@@ -180,7 +180,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			})
 			s.NoError(err)
 			s.Len(readRawTasksResponse.Tasks, 1)
-			s.Assert().Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
+			s.Equal(int64(persistence.FirstQueueMessageID+2), readRawTasksResponse.Tasks[0].MessageMetadata.ID)
 		})
 	}
 }

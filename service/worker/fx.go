@@ -6,6 +6,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/batcher"
@@ -47,6 +49,7 @@ var Module = fx.Options(
 	workerdeployment.Module,
 	dlq.Module,
 	dummy.Module,
+	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c
@@ -79,18 +82,21 @@ var Module = fx.Options(
 	fx.Provide(func(
 		clusterMetadata cluster.Metadata,
 		metadataManager persistence.MetadataManager,
+		dataMerger nsreplication.NamespaceDataMerger,
 		logger log.Logger,
 	) nsreplication.TaskExecutor {
 		return nsreplication.NewTaskExecutor(
 			clusterMetadata.GetCurrentClusterName(),
 			metadataManager,
+			dataMerger,
 			logger,
 		)
 	}),
+	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
 	fx.Provide(fx.Annotate(NewWorkerManager, fx.ParamTags(workercommon.WorkerComponentTag))),
-	fx.Provide(NewPerNamespaceWorkerManager),
+	fx.Provide(PerNamespaceWorkerManagerProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -178,6 +184,30 @@ func VisibilityManagerProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+type perNamespaceWorkerManagerInitParams struct {
+	fx.In
+	Logger            log.Logger
+	SdkClientFactory  sdk.ClientFactory
+	NamespaceRegistry namespace.Registry
+	HostName          resource.HostName
+	Config            *Config
+	ClusterMetadata   cluster.Metadata
+	Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
+}
+
+func PerNamespaceWorkerManagerProvider(params perNamespaceWorkerManagerInitParams) *PerNamespaceWorkerManager {
+	return NewPerNamespaceWorkerManager(
+		params.Logger,
+		params.SdkClientFactory,
+		params.NamespaceRegistry,
+		params.HostName,
+		params.Config,
+		params.ClusterMetadata,
+		params.Components,
+		primitives.PerNSWorkerTaskQueue,
+	)
 }
 
 func ServerProvider(rpcFactory common.RPCFactory, logger log.Logger) *grpc.Server {

@@ -44,6 +44,9 @@ var (
 		dynamicconfig.ExecutionsScannerEnabled.Key():                            false,
 		dynamicconfig.BuildIdScavengerEnabled.Key():                             false,
 
+		// TODO: remove after setting true by default
+		dynamicconfig.MatchingUseNewMatcher.Key(): true,
+
 		// Better to read through in tests than add artificial sleeps (which is what we previously had).
 		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): true,
 
