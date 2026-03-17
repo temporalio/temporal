@@ -99,7 +99,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
-			expectedErrMessage:              "ActivityId is not set",
+			expectedErrMessage:              "activityId is not set",
 		},
 		{
 			name:                            "Empty ActivityType",
@@ -111,7 +111,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
-			expectedErrMessage:              "ActivityType is not set",
+			expectedErrMessage:              "activityType is not set",
 		},
 		{
 			name:                            "ActivityId exceeds length limit",
@@ -123,7 +123,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
-			expectedErrMessage:              fmt.Sprintf("ActivityId exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
+			expectedErrMessage:              fmt.Sprintf("activityId exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
 		},
 		{
 			name:                            "ActivityType exceeds length limit",
@@ -135,7 +135,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &defaultPriority,
 			runTimeout:                      nil,
-			expectedErrMessage:              fmt.Sprintf("ActivityType exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
+			expectedErrMessage:              fmt.Sprintf("activityType exceeds length limit. Length=%d Limit=%d", 1001, defaultMaxIDLengthLimit),
 		},
 		{
 			name:                            "Negative ScheduleToCloseTimeout",
@@ -150,7 +150,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			},
 			priority:           &defaultPriority,
 			runTimeout:         nil,
-			expectedErrMessage: "Invalid ScheduleToCloseTimeout",
+			expectedErrMessage: "invalid ScheduleToCloseTimeout",
 		},
 		{
 			name:                            "Negative ScheduleToStartTimeout",
@@ -166,7 +166,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			},
 			priority:           &defaultPriority,
 			runTimeout:         nil,
-			expectedErrMessage: "Invalid ScheduleToStartTimeout",
+			expectedErrMessage: "invalid ScheduleToStartTimeout",
 		},
 		{
 			name:                            "Negative StartToCloseTimeout",
@@ -181,7 +181,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			},
 			priority:           &defaultPriority,
 			runTimeout:         nil,
-			expectedErrMessage: "Invalid StartToCloseTimeout",
+			expectedErrMessage: "invalid StartToCloseTimeout",
 		},
 		{
 			name:                            "Negative HeartbeatTimeout",
@@ -197,7 +197,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			},
 			priority:           &defaultPriority,
 			runTimeout:         nil,
-			expectedErrMessage: "Invalid HeartbeatTimeout",
+			expectedErrMessage: "invalid HeartbeatTimeout",
 		},
 		{
 			name:                            "Invalid Priority",
@@ -209,7 +209,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 			options:                         &defaultActivityOptions,
 			priority:                        &commonpb.Priority{FairnessKey: string(make([]byte, 1001))},
 			runTimeout:                      nil,
-			expectedErrMessage:              "Invalid Priorities",
+			expectedErrMessage:              "invalid priorities",
 		},
 	}
 
@@ -259,7 +259,7 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 			},
 			priority:           &defaultPriority,
 			runTimeout:         nil,
-			expectedErrMessage: fmt.Sprintf("cannot use internal per namespace task queue:%s", primitives.PerNSWorkerTaskQueue),
+			expectedErrMessage: fmt.Sprintf("cannot use internal per-namespace task queue:%s", primitives.PerNSWorkerTaskQueue),
 		},
 		{
 			name:                            "Disallow Internal TaskQueue Prefix",

@@ -189,7 +189,7 @@ func TestNormalizeAndValidateUserDefined(t *testing.T) {
 			parentTaskQueue:  nil,
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "cannot use internal per namespace task queue",
+			expectedError:    "cannot use internal per-namespace task queue",
 		},
 		{
 			name:             "Internal per-ns task queue with non-internal parent",
@@ -197,7 +197,7 @@ func TestNormalizeAndValidateUserDefined(t *testing.T) {
 			parentTaskQueue:  &taskqueuepb.TaskQueue{Name: "user-parent-tq"},
 			defaultVal:       "",
 			maxIDLengthLimit: 100,
-			expectedError:    "cannot use internal per namespace task queue",
+			expectedError:    "cannot use internal per-namespace task queue",
 		},
 		{
 			name:             "Reserved /_sys/ prefix task queue with non-internal parent",
