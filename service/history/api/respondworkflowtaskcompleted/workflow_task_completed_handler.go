@@ -20,7 +20,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
@@ -79,7 +79,7 @@ type (
 		shard                  historyi.ShardContext
 		tokenSerializer        *tasktoken.Serializer
 		commandHandlerRegistry *workflow.CommandHandlerRegistry
-		chasmCommandRegistry   *chasmcommand.Registry
+		chasmWorkflowRegistry  *workflowregistry.Registry
 		matchingClient         matchingservice.MatchingServiceClient
 		versionMembershipCache worker_versioning.VersionMembershipCache
 	}
@@ -120,7 +120,7 @@ func newWorkflowTaskCompletedHandler(
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	hasBufferedEventsOrMessages bool,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
-	chasmCommandRegistry *chasmcommand.Registry,
+	chasmWorkflowRegistry *workflowregistry.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 	versionMembershipCache worker_versioning.VersionMembershipCache,
 ) *workflowTaskCompletedHandler {
@@ -154,7 +154,7 @@ func newWorkflowTaskCompletedHandler(
 		shard:                  shard,
 		tokenSerializer:        tasktoken.NewSerializer(),
 		commandHandlerRegistry: commandHandlerRegistry,
-		chasmCommandRegistry:   chasmCommandRegistry,
+		chasmWorkflowRegistry:  chasmWorkflowRegistry,
 		matchingClient:         matchingClient,
 		versionMembershipCache: versionMembershipCache,
 	}
@@ -326,7 +326,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 	default:
 		// TODO: need to handle migration between HSM and CHASM
 
-		handlerOpts := chasmcommand.HandlerOptions{
+		handlerOpts := workflowregistry.CommandHandlerOptions{
 			WorkflowTaskCompletedEventID: handler.workflowTaskCompletedID,
 		}
 		validator := commandValidator{sizeChecker: handler.sizeLimitChecker, commandType: command.GetCommandType()}
@@ -334,13 +334,13 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		// Try CHASM command handler first, fall back to HSM if not supported.
 		handledByCHASM := false
 		if handler.config.ChasmEnabled(handler.mutableState.GetNamespaceEntry().Name().String()) {
-			if chasmHandler, ok := handler.chasmCommandRegistry.Handler(command.GetCommandType()); ok {
+			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-				handledByCHASM = !errors.Is(err, chasmcommand.ErrNotSupported)
+				handledByCHASM = !errors.Is(err, workflowregistry.ErrCommandNotSupported)
 			}
 		}
 		if !handledByCHASM {
@@ -351,7 +351,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			err = hsmHandler(ctx, handler.mutableState, validator, handlerOpts.WorkflowTaskCompletedEventID, command)
 		}
 
-		var failWFTErr chasmcommand.FailWorkflowTaskError
+		var failWFTErr workflowregistry.FailWorkflowTaskError
 		if errors.As(err, &failWFTErr) {
 			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
@@ -1531,7 +1531,7 @@ func (c *workflowTaskFailedCause) Message() string {
 	return fmt.Sprintf("%v: %v", c.failedCause, c.causeErr.Error())
 }
 
-// commandValidator implements [chasmcommand.Validator] for use in registered command handlers.
+// commandValidator implements [workflowregistry.Validator] for use in registered command handlers.
 type commandValidator struct {
 	sizeChecker *workflowSizeChecker
 	commandType enumspb.CommandType

@@ -17,8 +17,8 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/chasm/lib/workflow/command"
 	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -32,19 +32,19 @@ type commandHandler struct {
 }
 
 func registerCommandHandlers(
-	registry *command.Registry,
+	registry *workflowregistry.Registry,
 	config *nexusoperation.Config,
 	nexusProcessor *chasm.NexusEndpointProcessor,
 ) error {
 	h := &commandHandler{config: config, nexusProcessor: nexusProcessor}
 
-	if err := registry.Register(
+	if err := registry.RegisterCommandHandler(
 		enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 		h.handleScheduleCommand,
 	); err != nil {
 		return err
 	}
-	return registry.Register(
+	return registry.RegisterCommandHandler(
 		enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
 		h.handleCancelCommand,
 	)
@@ -54,20 +54,20 @@ func registerCommandHandlers(
 func (ch *commandHandler) handleScheduleCommand(
 	chasmCtx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
-	validator command.Validator,
+	validator workflowregistry.Validator,
 	cmd *commandpb.Command,
-	opts command.HandlerOptions,
+	opts workflowregistry.CommandHandlerOptions,
 ) error {
 	ns := chasmCtx.NamespaceEntry()
 	nsName := ns.Name().String()
 
 	if !ch.config.ChasmNexusEnabled(nsName) {
-		return command.ErrNotSupported
+		return workflowregistry.ErrCommandNotSupported
 	}
 
 	attrs := cmd.GetScheduleNexusOperationCommandAttributes()
 	if attrs == nil {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: "empty ScheduleNexusOperationCommandAttributes",
 		}
@@ -78,7 +78,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	// Skip endpoint registry lookup for __temporal_system endpoint
 	if attrs.Endpoint == commonnexus.SystemEndpoint {
 		if len(attrs.NexusHeader) > 0 {
-			return command.FailWorkflowTaskError{
+			return workflowregistry.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader must be empty when using %s endpoint", commonnexus.SystemEndpoint),
 			}
@@ -95,7 +95,7 @@ func (ch *commandHandler) handleScheduleCommand(
 				//nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
-					return command.FailWorkflowTaskError{
+					return workflowregistry.FailWorkflowTaskError{
 						Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 						Message: handlerErr.Message,
 					}
@@ -107,13 +107,13 @@ func (ch *commandHandler) handleScheduleCommand(
 		endpoint, err := chasmCtx.EndpointByName(attrs.Endpoint)
 		if err != nil {
 			if errors.As(err, new(*serviceerror.NotFound)) {
-				return command.FailWorkflowTaskError{
+				return workflowregistry.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("endpoint %q not found", attrs.Endpoint),
 				}
 			}
 			if errors.As(err, new(*serviceerror.PermissionDenied)) {
-				return command.FailWorkflowTaskError{
+				return workflowregistry.FailWorkflowTaskError{
 					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 					Message: fmt.Sprintf("caller namespace %q unauthorized for %q", ns.Name(), attrs.Endpoint),
 				}
@@ -124,7 +124,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if len(attrs.Service) > ch.config.MaxServiceNameLength(nsName) {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
 				"ScheduleNexusOperationCommandAttributes.Service exceeds length limit of %d",
@@ -134,7 +134,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if len(attrs.Operation) > ch.config.MaxOperationNameLength(nsName) {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
 				"ScheduleNexusOperationCommandAttributes.Operation exceeds length limit of %d",
@@ -144,7 +144,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToCloseTimeout); err != nil {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
 				"ScheduleNexusOperationCommandAttributes.ScheduleToCloseTimeout is invalid: %v", err),
@@ -152,7 +152,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attrs.ScheduleToStartTimeout); err != nil {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
 				"ScheduleNexusOperationCommandAttributes.ScheduleToStartTimeout is invalid: %v", err),
@@ -160,7 +160,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if err := timestamp.ValidateAndCapProtoDuration(attrs.StartToCloseTimeout); err != nil {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf(
 				"ScheduleNexusOperationCommandAttributes.StartToCloseTimeout is invalid: %v", err),
@@ -168,7 +168,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if !validator.IsValidPayloadSize(attrs.Input.Size()) {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message:           "ScheduleNexusOperationCommandAttributes.Input exceeds size limit",
 			TerminateWorkflow: true,
@@ -182,7 +182,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		lowerCaseHeader[lowerK] = v
 		headerLength += len(lowerK) + len(v)
 		if slices.Contains(ch.config.DisallowedOperationHeaders(), lowerK) {
-			return command.FailWorkflowTaskError{
+			return workflowregistry.FailWorkflowTaskError{
 				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
 			}
@@ -190,7 +190,7 @@ func (ch *commandHandler) handleScheduleCommand(
 	}
 
 	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
 			Message: "ScheduleNexusOperationCommandAttributes.NexusHeader exceeds size limit",
 		}
@@ -198,7 +198,7 @@ func (ch *commandHandler) handleScheduleCommand(
 
 	maxPendingOperations := ch.config.MaxConcurrentOperations(nsName)
 	if wf.PendingNexusOperationCount() >= maxPendingOperations {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED,
 			Message: fmt.Sprintf("workflow has reached the pending nexus operation limit of %d for this namespace", maxPendingOperations),
 		}
@@ -286,18 +286,18 @@ func (ch *commandHandler) handleScheduleCommand(
 func (ch *commandHandler) handleCancelCommand(
 	chasmCtx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
-	validator command.Validator,
+	validator workflowregistry.Validator,
 	cmd *commandpb.Command,
-	opts command.HandlerOptions,
+	opts workflowregistry.CommandHandlerOptions,
 ) error {
 	nsName := chasmCtx.NamespaceEntry().Name().String()
 	if !ch.config.ChasmNexusEnabled(nsName) {
-		return command.ErrNotSupported
+		return workflowregistry.ErrCommandNotSupported
 	}
 
 	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
 	if attrs == nil {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 			Message: "empty CancelNexusOperationCommandAttributes",
 		}
@@ -310,7 +310,7 @@ func (ch *commandHandler) handleCancelCommand(
 	}
 
 	if !operationFound && !hasBufferedEvent() {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
 		}
@@ -344,7 +344,7 @@ func (ch *commandHandler) handleCancelCommand(
 	}
 	err = op.Cancel(chasmCtx, cancelParentData)
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
-		return command.FailWorkflowTaskError{
+		return workflowregistry.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
 		}
