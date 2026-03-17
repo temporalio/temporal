@@ -887,6 +887,11 @@ and deployment interaction in matching and history.`,
 		false,
 		`EnableSuggestCaNOnNewTargetVersion lets Pinned workflows receive SuggestContinueAsNew when a new target version is available.`,
 	)
+	EnableSendTargetVersionChanged = NewNamespaceBoolSetting(
+		"system.enableSendTargetVersionChanged",
+		true,
+		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
+	)
 	EnableNexus = NewGlobalBoolSetting(
 		"system.enableNexus",
 		true,
@@ -1253,6 +1258,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Second,
 		`How often to update ephemeral data (e.g. backlog size for forwarding sticky polls).
 Set to zero to disable ephemeral data updates.`,
+	)
+	MatchingBacklogMetricsEmitInterval = NewTaskQueueDurationSetting(
+		"matching.backlogMetricsEmitInterval",
+		time.Minute,
+		`How often to emit version-attributed backlog metrics. Done on an interval because accurate attribution requires checking the routing config of a task queue to correctly attribute the default queue's tasks to the appropriate current or ramping versions. Set to zero to disable version-attributed backlog metrics.`,
 	)
 	MatchingPriorityBacklogForwarding = NewTaskQueueBoolSetting(
 		"matching.priorityBacklogForwarding",
@@ -2734,6 +2744,39 @@ instead of the previous HSM backed implementation.`,
 		"history.versionMembershipCacheMaxSize",
 		10000,
 		`Maximum number of entries in the version membership cache.`,
+	)
+
+	VersionReactivationSignalCacheTTL = NewGlobalDurationSetting(
+		"history.versionReactivationSignalCacheTTL",
+		10*time.Second,
+		`TTL for caching drainage reactivation signals to version workflows. These signals are sent from the history service to update the version workflow's 
+		draining status to DRAINING from DRAINED/INACTIVE states.`,
+	)
+
+	VersionReactivationSignalCacheMaxSize = NewGlobalIntSetting(
+		"history.versionReactivationSignalCacheMaxSize",
+		10000,
+		`Maximum number of entries in the version reactivation signal cache.`,
+	)
+
+	EnableVersionReactivationSignals = NewGlobalBoolSetting(
+		"history.enableVersionReactivationSignals",
+		true,
+		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
+		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
+		globally if load becomes problematic.`,
+	)
+
+	RoutingInfoCacheTTL = NewGlobalDurationSetting(
+		"history.routingInfoCacheTTL",
+		1*time.Second,
+		`TTL for caching task queue routing info (deployment versions and ramping state).`,
+	)
+
+	RoutingInfoCacheMaxSize = NewGlobalIntSetting(
+		"history.routingInfoCacheMaxSize",
+		10000,
+		`Maximum number of entries in the routing info cache.`,
 	)
 
 	ExternalPayloadsEnabled = NewNamespaceBoolSetting(

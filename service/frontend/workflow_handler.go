@@ -6556,3 +6556,7 @@ func (wh *WorkflowHandler) UnpauseWorkflowExecution(ctx context.Context, request
 
 	return &workflowservice.UnpauseWorkflowExecutionResponse{}, nil
 }
+
+func (wh *WorkflowHandler) CountSchedules(ctx context.Context, request *workflowservice.CountSchedulesRequest) (*workflowservice.CountSchedulesResponse, error) {
+	return nil, serviceerror.NewUnimplemented("CountSchedules is not implemented")
+}

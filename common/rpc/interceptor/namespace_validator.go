@@ -79,6 +79,7 @@ var (
 		"ScanWorkflowExecutions":         {},
 		"CountWorkflowExecutions":        {},
 		"ListSchedules":                  {},
+		"CountSchedules":                 {},
 		"ListBatchOperations":            {},
 		// Matching
 		"ShutdownWorker": {},

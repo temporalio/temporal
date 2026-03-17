@@ -129,6 +129,7 @@ var (
 		"ListScheduleMatchingTimes":             {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"DeleteSchedule":                        {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"ListSchedules":                         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
+		"CountSchedules":                        {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"UpdateWorkerBuildIdCompatibility":      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"GetWorkerBuildIdCompatibility":         {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"UpdateWorkerVersioningRules":           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
