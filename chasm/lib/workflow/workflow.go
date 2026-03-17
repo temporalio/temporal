@@ -19,6 +19,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// EventRegistry provides access to event definitions by event type.
+type EventRegistry interface {
+	EventDefinition(t enumspb.EventType) (EventDefinition, bool)
+}
+
 type Workflow struct {
 	chasm.UnimplementedComponent
 
@@ -28,6 +33,9 @@ type Workflow struct {
 
 	// MSPointer is a special in-memory field for accessing the underlying mutable state.
 	chasm.MSPointer
+
+	// EventRegistry provides access to event definitions for applying history events.
+	EventRegistry EventRegistry
 
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
