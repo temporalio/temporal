@@ -1,4 +1,4 @@
-package command
+package workflowregistry
 
 import (
 	"errors"
@@ -22,10 +22,10 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register registers a [Handler] for a given command type.
+// RegisterCommandHandler registers a [Handler] for a given command type.
 // Returns an [ErrDuplicateRegistration] if a handler for the given command is already registered.
 // All registration is expected to happen in a single thread on process initialization.
-func (r *Registry) Register(t enumspb.CommandType, handler Handler) error {
+func (r *Registry) RegisterCommandHandler(t enumspb.CommandType, handler Handler) error {
 	if existing, ok := r.handlers[t]; ok {
 		return fmt.Errorf("%w: command handler for %v: %v", ErrDuplicateRegistration, t, existing)
 	}
@@ -33,8 +33,8 @@ func (r *Registry) Register(t enumspb.CommandType, handler Handler) error {
 	return nil
 }
 
-// Handler returns a [Handler] for a given type and a boolean indicating whether it was found.
-func (r *Registry) Handler(t enumspb.CommandType) (handler Handler, ok bool) {
+// CommandHandler returns a [Handler] for a given type and a boolean indicating whether it was found.
+func (r *Registry) CommandHandler(t enumspb.CommandType) (handler Handler, ok bool) {
 	handler, ok = r.handlers[t]
 	return
 }
