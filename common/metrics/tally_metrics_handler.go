@@ -2,11 +2,17 @@ package metrics
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
 )
+
+// scopeCacheMaxSize is the approximate upper bound on cached scope entries.
+// The bound may be slightly exceeded under high concurrency due to
+// check-then-store races, which is acceptable.
+const scopeCacheMaxSize = 1024
 
 var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
 	NameCharacters:       tally.ValidCharacters{Ranges: tally.AlphanumericRange, Characters: tally.UnderscoreCharacters},
@@ -23,6 +29,8 @@ type (
 		perUnitBuckets map[MetricUnit]tally.Buckets
 		excludeTags    excludeTags
 		childCache     sync.Map // tagsCacheKey(tags) -> *tallyMetricsHandler
+		scopeCache     sync.Map // tagsCacheKey(normalized tags) -> tally.Scope
+		scopeCacheSize atomic.Int64
 	}
 )
 
@@ -84,47 +92,86 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 	return actual.(*tallyMetricsHandler)
 }
 
+// cachedTaggedScope returns a tally.Scope tagged with the given tags, caching
+// the result so that repeated calls with the same tag combination avoid
+// allocating a new map and tally scope lookup. Tags are normalized through
+// excludeTags before cache key computation so that different raw values which
+// map to the same excluded placeholder share a single cache entry. The cache
+// is bounded to scopeCacheMaxSize entries; beyond that, scopes are created
+// but not cached.
+func (tmh *tallyMetricsHandler) cachedTaggedScope(tags []Tag) tally.Scope {
+	if len(tags) == 0 {
+		return tmh.scope
+	}
+	key := tagsCacheKey(normalizeTagsForCaching(tags, tmh.excludeTags))
+	if v, ok := tmh.scopeCache.Load(key); ok {
+		return v.(tally.Scope)
+	}
+	scope := tmh.scope.Tagged(tagsToMap(tags, tmh.excludeTags))
+	if tmh.scopeCacheSize.Load() >= scopeCacheMaxSize {
+		return scope
+	}
+	actual, loaded := tmh.scopeCache.LoadOrStore(key, scope)
+	if !loaded {
+		tmh.scopeCacheSize.Add(1)
+	}
+	return actual.(tally.Scope)
+}
+
+// normalizeTagsForCaching applies excludeTags substitution to produce
+// canonical tag values for cache key computation. Returns the original slice
+// unchanged if no tags need normalization (zero-alloc fast path).
+func normalizeTagsForCaching(tags []Tag, excl excludeTags) []Tag {
+	if len(excl) == 0 {
+		return tags
+	}
+	var normalized []Tag
+	for i, t := range tags {
+		if vals, ok := excl[t.Key]; ok {
+			if _, ok := vals[t.Value]; !ok {
+				if normalized == nil {
+					normalized = make([]Tag, len(tags))
+					copy(normalized, tags[:i])
+				}
+				normalized[i] = Tag{Key: t.Key, Value: tagExcludedValue}
+				continue
+			}
+		}
+		if normalized != nil {
+			normalized[i] = t
+		}
+	}
+	if normalized != nil {
+		return normalized
+	}
+	return tags
+}
+
 // Counter obtains a counter for the given name.
 func (tmh *tallyMetricsHandler) Counter(counter string) CounterIface {
 	return CounterFunc(func(i int64, t ...Tag) {
-		scope := tmh.scope
-		if len(t) > 0 {
-			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
-		}
-		scope.Counter(counter).Inc(i)
+		tmh.cachedTaggedScope(t).Counter(counter).Inc(i)
 	})
 }
 
 // Gauge obtains a gauge for the given name.
 func (tmh *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
 	return GaugeFunc(func(f float64, t ...Tag) {
-		scope := tmh.scope
-		if len(t) > 0 {
-			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
-		}
-		scope.Gauge(gauge).Update(f)
+		tmh.cachedTaggedScope(t).Gauge(gauge).Update(f)
 	})
 }
 
 // Timer obtains a timer for the given name.
 func (tmh *tallyMetricsHandler) Timer(timer string) TimerIface {
 	return TimerFunc(func(d time.Duration, t ...Tag) {
-		scope := tmh.scope
-		if len(t) > 0 {
-			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
-		}
-		scope.Timer(timer).Record(d)
+		tmh.cachedTaggedScope(t).Timer(timer).Record(d)
 	})
 }
 
 // Histogram obtains a histogram for the given name.
 func (tmh *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
 	return HistogramFunc(func(i int64, t ...Tag) {
-		scope := tmh.scope
-		if len(t) > 0 {
-			scope = tmh.scope.Tagged(tagsToMap(t, tmh.excludeTags))
-		}
-		scope.Histogram(histogram, tmh.perUnitBuckets[unit]).RecordValue(float64(i))
+		tmh.cachedTaggedScope(t).Histogram(histogram, tmh.perUnitBuckets[unit]).RecordValue(float64(i))
 	})
 }
 
