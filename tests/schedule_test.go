@@ -1428,7 +1428,7 @@ func (s *ScheduleCHASMFunctionalSuite) runScheduledWorkflowDoubleResetSchedulerS
 	// it multiple times before allowing it to finish.
 	s.worker.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		ch := workflow.GetSignalChannel(ctx, "complete")
-		var signal interface{}
+		var signal any
 		ch.Receive(ctx, &signal)
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
