@@ -591,14 +591,6 @@ func TestTransitionTerminated(t *testing.T) {
 	controller := gomock.NewController(t)
 	metricsHandler := metrics.NewMockHandler(controller)
 
-	timerStartToCloseLatency := metrics.NewMockTimerIface(controller)
-	timerStartToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
-	metricsHandler.EXPECT().Timer(metrics.ActivityStartToCloseLatency.Name()).Return(timerStartToCloseLatency)
-
-	timerScheduleToCloseLatency := metrics.NewMockTimerIface(controller)
-	timerScheduleToCloseLatency.EXPECT().Record(gomock.Any()).Times(1)
-	metricsHandler.EXPECT().Timer(metrics.ActivityScheduleToCloseLatency.Name()).Return(timerScheduleToCloseLatency)
-
 	counterTerminate := metrics.NewMockCounterIface(controller)
 	counterTerminate.EXPECT().Record(int64(1)).Times(1)
 	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
