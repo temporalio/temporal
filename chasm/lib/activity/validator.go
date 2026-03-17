@@ -97,10 +97,10 @@ func validateAndNormalizeActivityAttributes(
 	runTimeout *durationpb.Duration,
 ) error {
 	if activityID == "" {
-		return serviceerror.NewInvalidArgument("ActivityId is not set")
+		return serviceerror.NewInvalidArgument("activityId is not set")
 	}
 	if activityType == "" {
-		return serviceerror.NewInvalidArgument("ActivityType is not set")
+		return serviceerror.NewInvalidArgument("activityType is not set")
 	}
 
 	if err := validateActivityRetryPolicy(namespaceID, options.RetryPolicy, getDefaultActivityRetrySettings); err != nil {
@@ -108,16 +108,16 @@ func validateAndNormalizeActivityAttributes(
 	}
 
 	if len(activityID) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("ActivityId exceeds length limit. Length=%d Limit=%d",
+		return serviceerror.NewInvalidArgumentf("activityId exceeds length limit. Length=%d Limit=%d",
 			len(activityID), maxIDLengthLimit)
 	}
 	if len(activityType) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("ActivityType exceeds length limit. Length=%d Limit=%d",
+		return serviceerror.NewInvalidArgumentf("activityType exceeds length limit. Length=%d Limit=%d",
 			len(activityType), maxIDLengthLimit)
 	}
 
 	if err := priorities.Validate(priority); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid Priorities: %v", err)
+		return serviceerror.NewInvalidArgumentf("invalid priorities: %v", err)
 	}
 
 	return normalizeAndValidateTimeouts(activityID,
@@ -148,16 +148,16 @@ func normalizeAndValidateTimeouts(
 ) error {
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToCloseTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToCloseTimeout: %v", err)
+		return serviceerror.NewInvalidArgumentf("invalid ScheduleToCloseTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetScheduleToStartTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid ScheduleToStartTimeout: %v", err)
+		return serviceerror.NewInvalidArgumentf("invalid ScheduleToStartTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetStartToCloseTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid StartToCloseTimeout: %v", err)
+		return serviceerror.NewInvalidArgumentf("invalid StartToCloseTimeout: %v", err)
 	}
 	if err := timestamp.ValidateAndCapProtoDuration(options.GetHeartbeatTimeout()); err != nil {
-		return serviceerror.NewInvalidArgumentf("Invalid HeartbeatTimeout: %v", err)
+		return serviceerror.NewInvalidArgumentf("invalid HeartbeatTimeout: %v", err)
 	}
 
 	scheduleToCloseSet := options.GetScheduleToCloseTimeout().AsDuration() > 0
@@ -183,7 +183,7 @@ func normalizeAndValidateTimeouts(
 		}
 	} else {
 		// Deduction failed as there's not enough information to fill in missing timeouts.
-		return serviceerror.NewInvalidArgumentf("A valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s",
+		return serviceerror.NewInvalidArgumentf("a valid StartToClose or ScheduleToCloseTimeout is not set on ScheduleActivityTaskCommand. ActivityId=%s ActivityType=%s",
 			activityID, activityType)
 	}
 	// ensure activity timeout never larger than workflow timeout

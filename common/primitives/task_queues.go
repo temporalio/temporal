@@ -35,7 +35,7 @@ func CheckInternalPerNsTaskQueueAllowed(targetTaskQueue, parentTaskQueue string)
 		return nil
 	}
 	if !IsInternalPerNsTaskQueue(parentTaskQueue) {
-		errMessage := fmt.Sprintf("cannot use internal per namespace task queue:%s", targetTaskQueue)
+		errMessage := fmt.Sprintf("cannot use internal per-namespace task queue:%s", targetTaskQueue)
 		if parentTaskQueue != "" {
 			errMessage += fmt.Sprintf(" (in parent component task queue: %s)", parentTaskQueue)
 		}
