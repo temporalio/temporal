@@ -288,7 +288,7 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(ctx, token)
-	s.Equal(false, cancelResponse.Canceled)
+	s.False(cancelResponse.Canceled)
 }
 
 // This test executes actual workflows for which we've set up an executor wrapper to return a terminal error. This
@@ -337,7 +337,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 
 	// Try to cancel completed workflow
 	cancelResponse := s.cancelJob(ctx, token)
-	s.Equal(false, cancelResponse.Canceled)
+	s.False(cancelResponse.Canceled)
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
@@ -353,7 +353,7 @@ func (s *DLQSuite) TestCancelRunningMerge() {
 
 	// Try to cancel running workflow
 	cancelResponse := s.cancelJob(ctx, token)
-	s.Equal(true, cancelResponse.Canceled)
+	s.True(cancelResponse.Canceled)
 	// Unblock waiting tests on Delete
 	close(s.deleteBlockCh)
 	// Delete the workflow task from the DLQ.

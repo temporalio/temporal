@@ -523,7 +523,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 			Execution:       execution,
 			MaximumPageSize: 5, // Use small page size to force pagination code path
 		})
-		require.NoError(s.T(), err)
+		s.Require().NoError(err)
 
 		events := historyResponse.History.Events
 		for historyResponse.NextPageToken != nil {
@@ -532,7 +532,7 @@ func (s *FunctionalTestBase) GetHistoryFunc(namespace string, execution *commonp
 				Execution:     execution,
 				NextPageToken: historyResponse.NextPageToken,
 			})
-			require.NoError(s.T(), err)
+			s.Require().NoError(err)
 			events = append(events, historyResponse.History.Events...)
 		}
 
@@ -588,6 +588,11 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 		s.T().Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
 	return s.testCluster.host.injectHook(s.T(), hook, scope)
+}
+
+// Context returns a context with RPC headers for use in this test.
+func (s *FunctionalTestBase) Context() context.Context {
+	return NewContext()
 }
 
 // CloseShard closes the shard that contains the given workflow.

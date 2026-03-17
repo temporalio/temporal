@@ -254,6 +254,7 @@ func (d *namespaceHandler) RegisterNamespace(
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err
@@ -594,6 +595,7 @@ func (d *namespaceHandler) UpdateNamespace(
 		failoverVersion,
 		isGlobalNamespace,
 		failoverHistory,
+		false, // forceReplicate
 	)
 	if err != nil {
 		return nil, err

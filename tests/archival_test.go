@@ -322,7 +322,7 @@ func (s *ArchivalSuite) startAndFinishWorkflow(
 		if activityCounter < activityCount {
 			activityCounter++
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityCounter))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityCounter))
 			return []*commandpb.Command{{
 				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{

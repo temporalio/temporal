@@ -9,6 +9,8 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -23,6 +25,7 @@ func register(
 // httpCallerProviderProvider provides an HTTPCallerProvider for CHASM callbacks.
 func httpCallerProviderProvider(
 	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
@@ -32,12 +35,15 @@ func httpCallerProviderProvider(
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
 	defaultClient := &http.Client{}
+	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
 	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		return func(r *http.Request) (*http.Response, error) {
 			return routeRequest(r,
 				clusterMetadata,
+				namespaceRegistry,
 				httpClientCache,
+				callbackTokenGenerator,
 				defaultClient,
 				localClient,
 				logger,

@@ -62,12 +62,12 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
-		require.Greater(t, internalWorkflow.startedActivityCount.Load(), int32(0))
+		require.Positive(t, internalWorkflow.startedActivityCount.Load())
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// pause activities in both workflows
@@ -139,13 +139,13 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
 		require.True(t, description.PendingActivities[0].Paused)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
 		require.True(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 100*time.Millisecond)
 
@@ -168,14 +168,14 @@ func (s *ActivityApiBatchUpdateOptionsClientTestSuite) TestActivityBatchUpdateOp
 		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun1.GetID(), workflowRun1.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
-		require.Equal(t, description.PendingActivities[0].Paused, false)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		require.False(t, description.PendingActivities[0].Paused)
 
 		description, err = s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun2.GetID(), workflowRun2.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
-		require.Equal(t, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration(), 10*time.Second)
-		require.Equal(t, description.PendingActivities[0].Paused, false)
+		require.Equal(t, 10*time.Second, description.PendingActivities[0].ActivityOptions.ScheduleToCloseTimeout.AsDuration())
+		require.False(t, description.PendingActivities[0].Paused)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let both of the activities succeed

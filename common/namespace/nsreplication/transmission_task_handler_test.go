@@ -139,6 +139,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		failoverVersion,
 		isGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	s.Nil(err)
 }
@@ -194,6 +195,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		failoverVersion,
 		isGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	s.Nil(err)
 }
@@ -282,6 +284,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		failoverVersion,
 		isGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	s.Nil(err)
 }
@@ -336,6 +339,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 		failoverVersion,
 		isGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	s.Nil(err)
 }
@@ -424,6 +428,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		failoverVersion,
 		isGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	s.Nil(err)
 
@@ -438,6 +443,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 		failoverVersion,
 		isGlobalNamespace,
 		nil,
+		false, // forceReplicate
 	)
 	s.Nil(err)
 }

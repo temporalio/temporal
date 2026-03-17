@@ -1,6 +1,7 @@
 package dynamicconfig_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.uber.org/mock/gomock"
 )
@@ -34,10 +37,10 @@ func (s *fileBasedClientSuite) SetupSuite() {
 	var err error
 	s.doneCh = make(chan any)
 	logger := log.NewNoopLogger()
-	s.client, err = dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	s.client, err = dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second * 5,
-	}, logger, s.doneCh)
+	}, logger, s.doneCh, metrics.NoopMetricsHandler)
 	s.Require().NoError(err)
 	s.collection = dynamicconfig.NewCollection(s.client, logger)
 	s.collection.Start()
@@ -70,6 +73,20 @@ func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	defaultValue := true
 	v := dynamicconfig.NewGlobalBoolSetting(unknownKey, defaultValue, "").Get(s.collection)()
 	s.Equal(defaultValue, v)
+}
+
+func (s *fileBasedClientSuite) TestNewFileBasedClientWithoutMetrics() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+
+	_, err := dynamicconfig.NewFileBasedClient(
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "config/testConfig.yaml",
+			PollInterval: time.Minute * 5,
+		}, logger, doneCh)
+	s.NoError(err)
 }
 
 func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
@@ -255,25 +272,53 @@ func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByTaskTypeQueue() {
 	s.Equal(expectedValue, v)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_ConfigNotExist() {
-	_, err := dynamicconfig.NewFileBasedClient(nil, nil, nil)
-	s.Error(err)
+func (s *fileBasedClientSuite) TestGetDurationValue_FilteredByChasmTaskType() {
+	setting := dynamicconfig.NewChasmTaskTypeDurationSetting(testGetDurationPropertyFilteredByChasmTaskTypeKey, 0, "")
+	v := setting.Get(s.collection)("activity.dispatch")
+	s.Equal(30*time.Second, v)
+	v = setting.Get(s.collection)("callback.invoke")
+	s.Equal(24*time.Hour, v)
 }
 
-func (s *fileBasedClientSuite) TestValidateConfig_FileNotExist() {
-	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
-		Filepath:     "file/not/exist.yaml",
-		PollInterval: time.Second * 10,
-	}, nil, nil)
-	s.Error(err)
+func (s *fileBasedClientSuite) TestValidateConfig_NilLogger() {
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(gomock.NewController(s.T()))
+	_, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, nil, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err, "logger for dynamic config client is nil")
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilConfig() {
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(nil, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err, "configuration for dynamic config client is nil")
+}
+
+func (s *fileBasedClientSuite) TestValidateConfig_NilReader() {
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithReader(nil, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "config/testConfig.yaml",
+		PollInterval: time.Second * 5,
+	}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Error(err, "file reader for dynamic config client is nil")
 }
 
 func (s *fileBasedClientSuite) TestValidateConfig_ShortPollInterval() {
-	_, err := dynamicconfig.NewFileBasedClient(&dynamicconfig.FileBasedClientConfig{
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	_, err := dynamicconfig.NewFileBasedClientWithMetrics(&dynamicconfig.FileBasedClientConfig{
 		Filepath:     "config/testConfig.yaml",
 		PollInterval: time.Second,
-	}, nil, nil)
-	s.Error(err)
+	}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.Contains(err.Error(), "poll interval should be at least")
 }
 
 func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
@@ -339,7 +384,7 @@ testGetBoolPropertyKey:
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
-		}, mockLogger, doneCh)
+		}, mockLogger, doneCh, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
 	c := dynamicconfig.NewCollection(client, mockLogger)
@@ -369,6 +414,46 @@ testGetBoolPropertyKey:
 	cancel2()
 	c.Stop()
 
+	close(doneCh)
+}
+
+func (s *fileBasedClientSuite) TestNewFileBasedClientWithNilMetricsHandler() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	originFileData := []byte(`
+testGetFloat64PropertyKey:
+- value: 12.22
+  constraints: {}
+`)
+
+	doneCh := make(chan any)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	mockLogger := log.NewMockLogger(ctrl)
+	fileModTime := time.Now().Add(-time.Minute * 5)
+	pollInterval := time.Minute * 5
+	mockLogger.EXPECT().Info(gomock.Any()).Times(2)
+	// warnings expected with nil metrics and unregistered key
+	mockLogger.EXPECT().Warn(gomock.Any(), gomock.Any()).AnyTimes()
+
+	reader.EXPECT().GetModTime().Return(fileModTime, nil).Times(3)
+	reader.EXPECT().ReadFile().Return([]byte(originFileData), nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: pollInterval,
+		}, mockLogger, doneCh, nil)
+	s.NoError(err)
+
+	//  set the metrics handler and shoul expect no warnings
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	client.SetMetricsHandler(captureHandler)
+	s.NoError(client.Update())
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][0].Value, 0)
 	close(doneCh)
 }
 
@@ -411,7 +496,7 @@ history.fakeRetryPolicy:
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
-		}, mockLogger, s.doneCh)
+		}, mockLogger, s.doneCh, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
@@ -466,7 +551,7 @@ testGetIntPropertyKey:
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
-		}, mockLogger, s.doneCh)
+		}, mockLogger, s.doneCh, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
@@ -528,7 +613,7 @@ testGetFloat64PropertyKey:
 		&dynamicconfig.FileBasedClientConfig{
 			Filepath:     "anyValue",
 			PollInterval: updateInterval,
-		}, mockLogger, s.doneCh)
+		}, mockLogger, s.doneCh, metrics.NoopMetricsHandler)
 	s.NoError(err)
 
 	reader.EXPECT().GetModTime().Return(updatedModTime, nil)
@@ -538,6 +623,273 @@ testGetFloat64PropertyKey:
 	s.NoError(client.Update())
 	s.NoError(err)
 	close(doneCh)
+}
+
+func (s *fileBasedClientSuite) TestUpdate_ReadFileFailShouldRetry() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime called twice (validateStaticConfig + Update), ReadFile once
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.NoError(err)
+
+	// Second update: mod time advanced to t2, but ReadFile fails transiently
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	// Third update: same mod time t2.
+	// Since retryOnErr=true for ReadFile failures, lastCheckedTime is not advanced.
+	// t2.After(t1) is true → ReadFile is called again.
+	// If bug: t2.After(t2) is false → update silently skipped → mock expectation fails.
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	s.NoError(client.Update())
+}
+
+func (s *fileBasedClientSuite) TestUpdate_YamlParseErrorDoesNotRetry() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+
+	// update interval is set to 5 minutes to postpone the goroutine from updating the config file
+	// and leave room for manual calls of update()
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	goodData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+	// Invalid YAML that produces lr.Errors (decode error)
+	badData := []byte(`{
+  "matching.numTaskqueueReadPartitions": [
+    {
+      "value": 4
+    },
+    {
+      "constraints": {
+        "namespace": "cp-snapjoinerv2-staging.27ece"
+      },
+      "value": 16
+    },
+    {
+      "constraints": {
+        "namespace": "ejp-automation-api-prod.2bf53",
+        "taskQueueName": "Interpreter_DEFAULT",
+        "taskType": "Activity, Workflow"
+      },
+      "value": 8
+    }
+  ]
+}`)
+
+	// init: GetModTime called twice (validateStaticConfig + Update), ReadFile once
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(goodData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.NoError(err)
+
+	// Second update: mod time advanced to t2, ReadFile returns bad YAML (parse error)
+	// retryOnErr=false → lastCheckedTime advances to t2
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(badData, nil)
+	s.Error(client.Update())
+
+	// Third update: same mod time t2.
+	// Since retryOnErr=false for parse errors, lastCheckedTime was already set to t2.
+	// t2.After(t2) is false → update skipped, ReadFile is NOT called.
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	s.NoError(client.Update())
+}
+
+func (s *fileBasedClientSuite) TestUpdate_EmitsMetricOnFailure() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	captureHandler := metricstest.NewCaptureHandler()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime x2, ReadFile x1
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, captureHandler)
+	s.NoError(err)
+
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// Trigger a failing update
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
+}
+
+func (s *fileBasedClientSuite) TestUpdate_EmitsGaugeMetricOnFailure() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	captureHandler := metricstest.NewCaptureHandler()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+	t3 := t2.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime x2, ReadFile x1
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, captureHandler)
+	s.NoError(err)
+
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// Trigger a failing update: gauge should be 1
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
+
+	// Fix the problem and trigger a successful update: gauge should be 0
+	// lastCheckedTime is still t1 (retryOnErr=true on transient error), so t2 will trigger a read
+	reader.EXPECT().GetModTime().Return(t3, nil)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+	s.NoError(client.Update())
+
+	snapshot = capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 2)
+	s.InDelta(float64(0), snapshot["dynamic_config_update_failure"][1].Value, 0)
+}
+
+func (s *fileBasedClientSuite) TestUpdate_SetMetricsHandlerRecordsMetrics() {
+	dynamicconfig.NewGlobalIntSetting(testGetIntPropertyKey, 0, "")
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	captureHandler := metricstest.NewCaptureHandler()
+
+	updateInterval := time.Minute * 5
+	t1 := time.Now()
+	t2 := t1.Add(time.Second)
+
+	fileData := []byte(`
+testGetIntPropertyKey:
+- value: 1000
+  constraints: {}
+`)
+
+	// init: GetModTime x2, ReadFile x1; starts with NoopMetricsHandler so no captured metrics
+	reader.EXPECT().GetModTime().Return(t1, nil).Times(2)
+	reader.EXPECT().ReadFile().Return(fileData, nil)
+
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader,
+		&dynamicconfig.FileBasedClientConfig{
+			Filepath:     "anyValue",
+			PollInterval: updateInterval,
+		}, logger, doneCh, metrics.NoopMetricsHandler)
+	s.NoError(err)
+
+	// Inject the real metrics handler after construction (deferred injection pattern)
+	client.SetMetricsHandler(captureHandler)
+
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// Trigger a failing update — metric should now be recorded via the injected handler
+	reader.EXPECT().GetModTime().Return(t2, nil)
+	reader.EXPECT().ReadFile().Return(nil, errors.New("transient read error"))
+	s.Error(client.Update())
+
+	snapshot := capture.Snapshot()
+	s.Len(snapshot["dynamic_config_update_failure"], 1)
+	s.InDelta(float64(1), snapshot["dynamic_config_update_failure"][0].Value, 0)
 }
 
 func (s *fileBasedClientSuite) TestWarnUnregisteredKey() {
@@ -640,4 +992,23 @@ testGetBoolPropertyKey:
 		}
 	}
 	s.Equal(3, found)
+}
+
+func (s *fileBasedClientSuite) TestGetMetricsHandler_SetNilHandler() {
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	reader := dynamicconfig.NewMockFileReader(ctrl)
+	logger := log.NewNoopLogger()
+	doneCh := make(chan any)
+	defer close(doneCh)
+	reader.EXPECT().GetModTime().Return(time.Now(), nil).AnyTimes()
+	// Use a minimal valid YAML config to avoid parse errors
+	reader.EXPECT().ReadFile().Return([]byte("testGetIntPropertyKey:\n- value: 1000\n"), nil).AnyTimes()
+	client, err := dynamicconfig.NewFileBasedClientWithReader(reader, &dynamicconfig.FileBasedClientConfig{
+		Filepath:     "anyValue",
+		PollInterval: time.Minute * 5,
+	}, logger, doneCh, nil)
+	s.NoError(err)
+	client.SetMetricsHandler(nil)
+	s.NoError(client.Update())
 }
