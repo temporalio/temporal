@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       cli-version:
-        description: "Temporal CLI version to include in images"
+        description: "Optional Temporal CLI version override (leave empty to use default)"
         default: ""
       alpine-tag:
         description: "Optional Alpine base image tag override (leave empty to use default from docker-bake.hcl)"
