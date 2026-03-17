@@ -19,6 +19,7 @@ type CommandHandlerOptions struct {
 
 // Handler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
 // worker request.
+// TODO: Rename CommandHandler
 type Handler func(
 	chasmCtx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
