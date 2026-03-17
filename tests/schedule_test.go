@@ -255,7 +255,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
 	// GreaterOrEqual is used as we may have had other runs start while waiting for visibility
-	s.DurationNear(describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
+	durationNear(t,describeResp.Info.CreateTime.AsTime().Sub(createTime), 0, 3*time.Second)
 	s.GreaterOrEqual(describeResp.Info.ActionCount, int64(2))
 	s.EqualValues(0, describeResp.Info.MissedCatchupWindow)
 	s.EqualValues(0, describeResp.Info.OverlapSkipped)
@@ -264,7 +264,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
 	s.Equal(int64(0), action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second))
-	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
+	durationNear(t,action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
 
 	// validate list response
 
@@ -374,7 +374,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.Equal(wfSAValue.Data, describeResp.Schedule.Action.GetStartWorkflow().SearchAttributes.IndexedFields[csaKeyword].Data)
 	s.Equal(wfMemo.Data, describeResp.Schedule.Action.GetStartWorkflow().Memo.Fields["wfmemo1"].Data)
 
-	s.DurationNear(describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
+	durationNear(t,describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
 	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
 	s.Equal(int64(1000000000), lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second), lastAction.ScheduleTime.AsTime().UnixNano())
 
@@ -1603,6 +1603,12 @@ func getScheduleEntryFromVisibility(env testcore.Env, sid string, newContext con
 		return false
 	}, 15*time.Second, 1*time.Second)
 	return slEntry
+}
+
+func durationNear(t *testing.T, value, target, tolerance time.Duration) {
+	t.Helper()
+	require.Greater(t, value, target-tolerance)
+	require.Less(t, value, target+tolerance)
 }
 
 func assertSameRecentActions(
