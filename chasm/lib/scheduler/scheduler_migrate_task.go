@@ -12,8 +12,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.uber.org/fx"
-
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -25,6 +23,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/fx"
 )
 
 type (
@@ -65,7 +64,7 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Validate(
 	if scheduler.Closed {
 		return false, nil
 	}
-	return scheduler.MigrationToWorkflowPending, nil
+	return scheduler.WorkflowMigration != nil, nil
 }
 
 func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
@@ -109,9 +108,9 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 
 			// Restore the pre-migration paused state so the V1 workflow receives
 			// the correct schedule state (not the migration-imposed pause).
-			if schedulerState.GetSchedule().GetState() != nil {
-				schedulerState.Schedule.State.Paused = schedulerState.PreMigrationPaused
-				schedulerState.Schedule.State.Notes = schedulerState.PreMigrationNotes
+			if schedulerState.GetSchedule().GetState() != nil && schedulerState.GetWorkflowMigration() != nil {
+				schedulerState.Schedule.State.Paused = schedulerState.GetWorkflowMigration().GetPreMigrationPaused()
+				schedulerState.Schedule.State.Notes = schedulerState.GetWorkflowMigration().GetPreMigrationNotes()
 			}
 
 			result = readResult{
@@ -180,7 +179,7 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 		schedulerRef,
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			s.Closed = true
-			s.MigrationToWorkflowPending = false
+			s.WorkflowMigration = nil
 			return nil, nil
 		},
 		nil,

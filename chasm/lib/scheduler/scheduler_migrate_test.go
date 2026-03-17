@@ -14,7 +14,7 @@ import (
 func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
-	require.False(t, sched.SchedulerState.Schedule.State.Paused)
+	require.False(t, sched.Schedule.State.Paused)
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
@@ -22,17 +22,17 @@ func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, sched.SchedulerState.Schedule.State.Paused)
-	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.SchedulerState.Schedule.State.Notes)
-	require.True(t, sched.SchedulerState.MigrationToWorkflowPending)
+	require.True(t, sched.Schedule.State.Paused)
+	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
+	require.NotNil(t, sched.WorkflowMigration)
 }
 
 func TestMigrateToWorkflow_SavesPreMigrationState(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
 	// Pause the schedule before migration with custom notes.
-	sched.SchedulerState.Schedule.State.Paused = true
-	sched.SchedulerState.Schedule.State.Notes = "user paused"
+	sched.Schedule.State.Paused = true
+	sched.Schedule.State.Notes = "user paused"
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
@@ -40,14 +40,15 @@ func TestMigrateToWorkflow_SavesPreMigrationState(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, sched.SchedulerState.PreMigrationPaused)
-	require.Equal(t, "user paused", sched.SchedulerState.PreMigrationNotes)
+	require.NotNil(t, sched.WorkflowMigration)
+	require.True(t, sched.WorkflowMigration.PreMigrationPaused)
+	require.Equal(t, "user paused", sched.WorkflowMigration.PreMigrationNotes)
 }
 
 func TestMigrateToWorkflow_SavesPreMigrationState_Unpaused(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
-	require.False(t, sched.SchedulerState.Schedule.State.Paused)
+	require.False(t, sched.Schedule.State.Paused)
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
@@ -55,8 +56,9 @@ func TestMigrateToWorkflow_SavesPreMigrationState_Unpaused(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.False(t, sched.SchedulerState.PreMigrationPaused)
-	require.Empty(t, sched.SchedulerState.PreMigrationNotes)
+	require.NotNil(t, sched.WorkflowMigration)
+	require.False(t, sched.WorkflowMigration.PreMigrationPaused)
+	require.Empty(t, sched.WorkflowMigration.PreMigrationNotes)
 }
 
 func TestMigrateToWorkflow_Idempotent(t *testing.T) {
@@ -136,7 +138,7 @@ func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	require.True(t, sched.SchedulerState.Schedule.State.Paused)
+	require.True(t, sched.Schedule.State.Paused)
 }
 
 func TestUpdate_ForcesPauseDuringMigration(t *testing.T) {
@@ -163,6 +165,6 @@ func TestUpdate_ForcesPauseDuringMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.True(t, sched.SchedulerState.Schedule.State.Paused)
-	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.SchedulerState.Schedule.State.Notes)
+	require.True(t, sched.Schedule.State.Paused)
+	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
 }

@@ -12,12 +12,12 @@ type (
 
 		handler *handler
 
-		SchedulerIdleTaskExecutor              *SchedulerIdleTaskExecutor
-		GeneratorTaskExecutor                  *GeneratorTaskExecutor
-		InvokerExecuteTaskExecutor             *InvokerExecuteTaskExecutor
-		InvokerProcessBufferTaskExecutor       *InvokerProcessBufferTaskExecutor
-		BackfillerTaskExecutor                 *BackfillerTaskExecutor
-		MigrateToWorkflowTaskExecutor          *SchedulerMigrateToWorkflowTaskExecutor
+		SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
+		GeneratorTaskExecutor            *GeneratorTaskExecutor
+		InvokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
+		InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
+		BackfillerTaskExecutor           *BackfillerTaskExecutor
+		MigrateToWorkflowTaskExecutor    *SchedulerMigrateToWorkflowTaskExecutor
 	}
 )
 

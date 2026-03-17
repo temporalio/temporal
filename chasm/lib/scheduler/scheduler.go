@@ -690,14 +690,15 @@ func (s *Scheduler) MigrateToWorkflow(
 	if s.Closed {
 		return nil, ErrClosed
 	}
-	if s.MigrationToWorkflowPending {
+	if s.WorkflowMigration != nil {
 		return &schedulerpb.MigrateToWorkflowResponse{}, nil
 	}
 
 	// Save pre-migration paused state, mark migration as pending, then pause.
-	s.PreMigrationPaused = s.Schedule.State.Paused
-	s.PreMigrationNotes = s.Schedule.State.Notes
-	s.MigrationToWorkflowPending = true
+	s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{
+		PreMigrationPaused: s.Schedule.State.Paused,
+		PreMigrationNotes:  s.Schedule.State.Notes,
+	}
 	s.Schedule.State.Paused = true
 	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
 
@@ -742,7 +743,7 @@ func (s *Scheduler) Update(
 	s.setNullableFields()
 
 	// If a migration is pending, prevent the update from unpausing the schedule.
-	if s.MigrationToWorkflowPending {
+	if s.WorkflowMigration != nil {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
 	}
@@ -773,7 +774,7 @@ func (s *Scheduler) Patch(
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
-		if s.MigrationToWorkflowPending {
+		if s.WorkflowMigration != nil {
 			return nil, ErrMigrationPending
 		}
 		s.Schedule.State.Paused = false

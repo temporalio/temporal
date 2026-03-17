@@ -418,6 +418,11 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	env := testcore.NewEnv(
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		// Explicitly disable CHASM scheduler creation so the frontend's
+		// DescribeSchedule routes directly to V1 (workflow-backed) without
+		// attempting the CHASM path first. This lets us verify the V1 schedule
+		// is fully functional after migration.
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 	)
 
 	ctx := testcore.NewContext()
@@ -491,6 +496,8 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	require.NoError(t, err)
 
 	// Wait for V1 workflow to start and become describable via the frontend.
+	// Because EnableCHASMSchedulerCreation is false, the frontend routes
+	// DescribeSchedule directly to the V1 (workflow-backed) path.
 	var v1Desc *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
 		v1Desc, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -503,7 +510,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	v1Schedule := v1Desc.GetSchedule()
 
 	// Validate the schedule spec is preserved across migration.
-	require.Equal(t, len(v2Schedule.GetSpec().GetInterval()), len(v1Schedule.GetSpec().GetInterval()))
+	require.Len(t, v1Schedule.GetSpec().GetInterval(), len(v2Schedule.GetSpec().GetInterval()))
 	require.Equal(t,
 		v2Schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration(),
 		v1Schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration(),
@@ -556,6 +563,7 @@ func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {
 	env := testcore.NewEnv(
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 	)
 
 	ctx := testcore.NewContext()
