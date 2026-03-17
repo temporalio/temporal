@@ -1349,7 +1349,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 		ScheduleId: sid,
 	})
 	s.NoError(err)
-	s.EqualValues(1, len(describeResp.Info.RunningWorkflows))
+	s.Len(describeResp.Info.RunningWorkflows, 1)
 
 	events1 := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
 	expectedHistory := `
@@ -1385,7 +1385,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 		ScheduleId: sid,
 	})
 	s.NoError(err)
-	s.EqualValues(0, len(describeResp.Info.RunningWorkflows))
+	s.Empty(describeResp.Info.RunningWorkflows)
 
 	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
 	s.Eventually(func() bool {
@@ -1627,4 +1627,3 @@ func assertSameRecentActions(
 		}
 	}
 }
-
