@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"sync"
 	"time"
 
 	"github.com/uber-go/tally/v4"
@@ -21,6 +22,7 @@ type (
 		scope          tally.Scope
 		perUnitBuckets map[MetricUnit]tally.Buckets
 		excludeTags    excludeTags
+		childCache     sync.Map // tagsCacheKey(tags) -> *tallyMetricsHandler
 	}
 )
 
@@ -40,14 +42,46 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 	}
 }
 
-// WithTags creates a new MetricProvder with provided []Tag
-// Tags are merged with registered Tags from the source MetricsHandler
+// tagsCacheKey builds a compact string key from a tag slice for use as a
+// sync.Map lookup key.
+func tagsCacheKey(tags []Tag) string {
+	if len(tags) == 1 {
+		return tags[0].Key + "\x00" + tags[0].Value
+	}
+	size := len(tags) - 1 // separators between pairs
+	for i := range tags {
+		size += len(tags[i].Key) + 1 + len(tags[i].Value)
+	}
+	b := make([]byte, 0, size)
+	for i, t := range tags {
+		if i > 0 {
+			b = append(b, 0)
+		}
+		b = append(b, t.Key...)
+		b = append(b, 0)
+		b = append(b, t.Value...)
+	}
+	return string(b)
+}
+
+// WithTags creates a new MetricProvider with provided []Tag
+// Tags are merged with registered Tags from the source MetricsHandler.
+// Handlers are cached by tag combination so repeated calls avoid allocations.
 func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
-	return &tallyMetricsHandler{
+	if len(tags) == 0 {
+		return tmh
+	}
+	key := tagsCacheKey(tags)
+	if v, ok := tmh.childCache.Load(key); ok {
+		return v.(*tallyMetricsHandler)
+	}
+	child := &tallyMetricsHandler{
 		scope:          tmh.scope.Tagged(tagsToMap(tags, tmh.excludeTags)),
 		perUnitBuckets: tmh.perUnitBuckets,
 		excludeTags:    tmh.excludeTags,
 	}
+	actual, _ := tmh.childCache.LoadOrStore(key, child)
+	return actual.(*tallyMetricsHandler)
 }
 
 // Counter obtains a counter for the given name.

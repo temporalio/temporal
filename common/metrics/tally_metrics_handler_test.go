@@ -2,11 +2,13 @@ package metrics
 
 import (
 	"math"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally/v4"
 )
 
@@ -86,4 +88,219 @@ func recordTallyMetrics(h Handler) {
 	histogram.Record(1234567)
 	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
 	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
+}
+
+func TestWithTags_EmptyTagsReturnsSelf(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	got := h.WithTags()
+	require.Same(t, h, got, "WithTags() with no args should return the same handler")
+}
+
+func TestWithTags_CacheHitReturnsSamePointer(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	h1 := h.WithTags(OperationTag("op1"))
+	h2 := h.WithTags(OperationTag("op1"))
+	require.Same(t, h1, h2, "repeated WithTags with identical args should return the same handler")
+}
+
+func TestWithTags_DifferentTagsReturnDifferentHandlers(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	h1 := h.WithTags(OperationTag("op1"))
+	h2 := h.WithTags(OperationTag("op2"))
+	require.NotSame(t, h1, h2, "WithTags with different values must produce different handlers")
+
+	// Different keys with same value.
+	h3 := h.WithTags(StringTag("key_a", "val"))
+	h4 := h.WithTags(StringTag("key_b", "val"))
+	require.NotSame(t, h3, h4, "WithTags with different keys must produce different handlers")
+}
+
+func TestWithTags_CachedHandlerRecordsMetricsCorrectly(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	tagged := h.WithTags(StringTag("env", "prod"))
+
+	// Record via first call.
+	tagged.Counter("requests").Record(5)
+
+	// Record via second (cached) call.
+	cached := h.WithTags(StringTag("env", "prod"))
+	cached.Counter("requests").Record(3)
+
+	snap := scope.Snapshot()
+	c := snap.Counters()["test.requests+env=prod"]
+	require.NotNil(t, c)
+	assert.EqualValues(t, 8, c.Value())
+	assert.EqualValues(t, map[string]string{"env": "prod"}, c.Tags())
+}
+
+func TestWithTags_MultipleTagsCacheCorrectly(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	tags := []Tag{OperationTag("op1"), StringTag("env", "staging")}
+	h1 := h.WithTags(tags...)
+	h2 := h.WithTags(tags...)
+	require.Same(t, h1, h2, "multi-tag WithTags should be cached")
+
+	h1.Counter("hits").Record(1)
+	h2.Counter("hits").Record(2)
+	snap := scope.Snapshot()
+	c := snap.Counters()["test.hits+env=staging,operation=op1"]
+	require.NotNil(t, c)
+	assert.EqualValues(t, 3, c.Value())
+}
+
+func TestWithTags_TagOrderMatters(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	// Different ordering of the same two tags should be separate cache
+	// entries (the tally scope will merge them, but the cache keys differ).
+	h1 := h.WithTags(StringTag("a", "1"), StringTag("b", "2"))
+	h2 := h.WithTags(StringTag("b", "2"), StringTag("a", "1"))
+
+	// They must both work — record via each.
+	h1.Counter("c").Record(1)
+	h2.Counter("c").Record(1)
+
+	snap := scope.Snapshot()
+	c := snap.Counters()["test.c+a=1,b=2"]
+	require.NotNil(t, c)
+	assert.EqualValues(t, 2, c.Value())
+}
+
+func TestWithTags_ChildCachesAreIndependent(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	child := h.WithTags(OperationTag("parent_op"))
+	grandchild := child.WithTags(StringTag("env", "dev"))
+
+	// Grandchild should be cached on child, not on root.
+	grandchild2 := child.WithTags(StringTag("env", "dev"))
+	require.Same(t, grandchild, grandchild2)
+
+	// Root should not have the grandchild cached.
+	fromRoot := h.WithTags(StringTag("env", "dev"))
+	require.NotSame(t, grandchild, fromRoot, "child and root caches should be independent")
+}
+
+func TestWithTags_ExcludeTagsStillApply(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	// "activityType" is in excludeTags with empty allow-list, so any value
+	// should be replaced with tagExcludedValue.
+	tagged := h.WithTags(ActivityTypeTag("MyActivity"))
+	tagged.Counter("hits").Record(1)
+
+	snap := scope.Snapshot()
+	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
+	require.NotNil(t, c, "excluded tag value should be sanitized")
+	assert.EqualValues(t, 1, c.Value())
+}
+
+func TestWithTags_ConcurrentAccess(t *testing.T) {
+	scope := tally.NewTestScope("test", map[string]string{})
+	h := NewTallyMetricsHandler(defaultConfig, scope)
+
+	const goroutines = 32
+	const iterations = 100
+	var wg sync.WaitGroup
+	handlers := make([]Handler, goroutines)
+
+	wg.Add(goroutines)
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			var last Handler
+			for j := 0; j < iterations; j++ {
+				last = h.WithTags(OperationTag("concurrent_op"))
+				last.Counter("concurrent_count").Record(1)
+			}
+			handlers[idx] = last
+		}(i)
+	}
+	wg.Wait()
+
+	// All goroutines should have received the same cached handler.
+	for i := 1; i < goroutines; i++ {
+		require.Same(t, handlers[0], handlers[i],
+			"all goroutines should get the same cached handler")
+	}
+
+	snap := scope.Snapshot()
+	c := snap.Counters()["test.concurrent_count+operation=concurrent_op"]
+	require.NotNil(t, c)
+	assert.EqualValues(t, int64(goroutines*iterations), c.Value())
+}
+
+func TestTagsCacheKey(t *testing.T) {
+	tests := []struct {
+		name string
+		a, b []Tag
+		same bool
+	}{
+		{
+			name: "identical single tags",
+			a:    []Tag{{Key: "op", Value: "foo"}},
+			b:    []Tag{{Key: "op", Value: "foo"}},
+			same: true,
+		},
+		{
+			name: "different values",
+			a:    []Tag{{Key: "op", Value: "foo"}},
+			b:    []Tag{{Key: "op", Value: "bar"}},
+			same: false,
+		},
+		{
+			name: "different keys",
+			a:    []Tag{{Key: "op", Value: "x"}},
+			b:    []Tag{{Key: "ns", Value: "x"}},
+			same: false,
+		},
+		{
+			name: "identical multi tags",
+			a:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			b:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			same: true,
+		},
+		{
+			name: "different ordering",
+			a:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			b:    []Tag{{Key: "b", Value: "2"}, {Key: "a", Value: "1"}},
+			same: false,
+		},
+		{
+			name: "single vs multi",
+			a:    []Tag{{Key: "a", Value: "1"}},
+			b:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			same: false,
+		},
+		{
+			name: "key boundary ambiguity",
+			a:    []Tag{{Key: "ab", Value: "c"}},
+			b:    []Tag{{Key: "a", Value: "bc"}},
+			same: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ka := tagsCacheKey(tt.a)
+			kb := tagsCacheKey(tt.b)
+			if tt.same {
+				require.Equal(t, ka, kb)
+			} else {
+				require.NotEqual(t, ka, kb)
+			}
+		})
+	}
 }
