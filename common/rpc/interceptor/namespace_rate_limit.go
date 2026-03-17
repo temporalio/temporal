@@ -78,7 +78,7 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 		}
 		if ni.pollWaitForToken() {
 			if _, ok := ni.pollMethods[info.FullMethod]; ok {
-				if err := ni.wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
+				if err := ni.Wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 					return nil, err
 				}
 				return handler(ctx, req)
@@ -92,7 +92,7 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 	return handler(ctx, req)
 }
 
-func (ni *NamespaceRateLimitInterceptorImpl) wait(ctx context.Context, namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
+func (ni *NamespaceRateLimitInterceptorImpl) Wait(ctx context.Context, namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
 	token, ok := ni.tokens[methodName]
 	if !ok {
 		token = NamespaceRateLimitDefaultToken
@@ -106,21 +106,12 @@ func (ni *NamespaceRateLimitInterceptorImpl) wait(ctx context.Context, namespace
 		"", // this interceptor layer does not throttle based on call initiation
 	)
 
-	// Try non-blocking first: if a token is available immediately, proceed regardless
-	// of how much deadline remains.
 	if ni.rateLimiter.Allow(time.Now().UTC(), request) {
 		return nil
 	}
 
-	// No immediate token. Block-wait but reserve CriticalLongPollTimeout for the actual
-	// poll execution after the token is acquired. Using CriticalLongPollTimeout (10s)
-	// rather than MinLongPollTimeout (2s) to avoid a race: ValidateLongPollContextTimeout
-	// inside the handler rejects requests with remaining < MinLongPollTimeout. Execution
-	// time between Wait() returning and that check could consume the 2s buffer, causing
-	// ErrContextTimeoutTooShort. 10s provides comfortable headroom.
-	// If no deadline is set, use the original context as-is.
 	waitCtx := ctx
-	cancel := context.CancelFunc(func() {})
+	var cancel context.CancelFunc = func() {}
 	if deadline, ok := ctx.Deadline(); ok {
 		waitCtx, cancel = context.WithDeadline(ctx, deadline.Add(-common.CriticalLongPollTimeout))
 	}
@@ -128,11 +119,9 @@ func (ni *NamespaceRateLimitInterceptorImpl) wait(ctx context.Context, namespace
 
 	err := ni.rateLimiter.Wait(waitCtx, request)
 	if err != nil && ctx.Err() == nil {
-		// Shortened deadline expired but caller's context is still valid —
-		// rate limiting took too long. Return ResourceExhausted, not DeadlineExceeded.
 		return ErrNamespaceRateLimitServerBusy
 	}
-	return err
+	return ctx.Err()
 }
 
 func (ni *NamespaceRateLimitInterceptorImpl) Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error {
