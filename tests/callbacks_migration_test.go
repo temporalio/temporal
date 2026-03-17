@@ -40,8 +40,6 @@ func (s *CallbacksMigrationSuite) SetupTest() {
 	// Start with CHASM disabled by default for migration tests
 	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, false)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false)
-	// Enable Nexus for callbacks
-	s.OverrideDynamicConfig(dynamicconfig.EnableNexus, true)
 }
 
 // TODO (seankane): This test can be removed once CHASM callbacks are the default

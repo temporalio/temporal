@@ -72,6 +72,20 @@ func (mr *MockChasmTreeMockRecorder) ApplySnapshot(arg0 any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySnapshot", reflect.TypeOf((*MockChasmTree)(nil).ApplySnapshot), arg0)
 }
 
+// ApplySystemMutation mocks base method.
+func (m *MockChasmTree) ApplySystemMutation(arg0 chasm.NodesMutation) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplySystemMutation", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplySystemMutation indicates an expected call of ApplySystemMutation.
+func (mr *MockChasmTreeMockRecorder) ApplySystemMutation(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplySystemMutation", reflect.TypeOf((*MockChasmTree)(nil).ApplySystemMutation), arg0)
+}
+
 // Archetype mocks base method.
 func (m *MockChasmTree) Archetype() (chasm.Archetype, error) {
 	m.ctrl.T.Helper()

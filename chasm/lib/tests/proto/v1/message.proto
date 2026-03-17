@@ -12,6 +12,7 @@ message TestPayloadStore {
     // (-- api-linter: core::0142::time-field-type=disabled --)
     map<string, google.protobuf.Timestamp> expiration_times = 3;
     bool closed = 4;
+    bool canceled = 5;
 }
 
 message TestPayloadTTLPureTask {

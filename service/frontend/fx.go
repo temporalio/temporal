@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -96,11 +97,13 @@ var Module = fx.Options(
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
+	fx.Provide(nsreplication.NewNoopDataMerger),
 	fx.Provide(AuthorizationInterceptorProvider),
 	fx.Provide(NamespaceCheckerProvider),
 	fx.Provide(func(so GrpcServerOptions) *grpc.Server { return grpc.NewServer(so.Options...) }),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(NamespaceDLQHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
@@ -686,6 +689,8 @@ func AdminHandlerProvider(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -715,10 +720,32 @@ func AdminHandlerProvider(
 		eventSerializer,
 		timeSource,
 		chasmRegistry,
+		namespaceDataMerger,
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args)
+	return NewAdminHandler(args, namespaceDLQHandler)
+}
+
+// NamespaceDLQHandlerProvider provides the default namespace DLQ message handler.
+func NamespaceDLQHandlerProvider(
+	clusterMetadata cluster.Metadata,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	logger log.SnTaggedLogger,
+) nsreplication.DLQMessageHandler {
+	taskExecutor := nsreplication.NewTaskExecutor(
+		clusterMetadata.GetCurrentClusterName(),
+		persistenceMetadataManager,
+		namespaceDataMerger,
+		logger,
+	)
+	return nsreplication.NewDLQMessageHandler(
+		taskExecutor,
+		namespaceReplicationQueue,
+		logger,
+	)
 }
 
 func OperatorHandlerProvider(

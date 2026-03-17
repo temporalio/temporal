@@ -920,13 +920,6 @@ and deployment interaction in matching and history.`,
 		true,
 		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)
-	EnableNexus = NewGlobalBoolSetting(
-		"system.enableNexus",
-		true,
-		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
-		to take effect.`,
-	)
-
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
 		false,
@@ -1316,6 +1309,12 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
+		"matching.emitTaskDispatchLatencyAtPoll",
+		true,
+		`When enabled, TaskDispatchLatencyPerTaskQueue is emitted when responding to poll requests (with extra tags
+like partition and worker-version) instead of being emitted at the matcher level.`,
+	)
 	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
@@ -1440,6 +1439,13 @@ second per poller by one physical queue manager`,
 		`MatchingEnableWorkerPluginMetrics controls whether to export worker plugin metrics.
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
+	)
+	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
+		"matching.enablePollerAutoscalingMetrics",
+		false,
+		`MatchingEnablePollerAutoscalingMetrics controls whether to export poller autoscaling metrics.
+The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
+default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
@@ -1722,6 +1728,15 @@ before calling remote for missing events`,
 		15*time.Minute,
 		`StandbyTaskMissingEventsDiscardDelay is the amount of time standby cluster's will wait (if events are missing)
 before discarding the task`,
+	)
+	ChasmStandbyTaskDiscardDelay = NewChasmTaskTypeDurationSetting(
+		"history.ChasmStandbyTaskDiscardDelay",
+		24*time.Hour,
+		`ChasmStandbyTaskDiscardDelay is the amount of time standby cluster will wait
+before discarding a CHASM task. Configurable per RegistrableTask type (e.g. "activity.dispatch").
+The default is intentionally much higher than the non CHASM standby discard delay because
+discarding a CHASM task can leave the execution in a stuck state after failover. Task types
+that can be safely offloaded should be configured with a shorter delay.`,
 	)
 	QueuePendingTaskCriticalCount = NewGlobalIntSetting(
 		"history.queuePendingTaskCriticalCount",
@@ -2411,6 +2426,11 @@ the number of children greater than or equal to this threshold`,
 		"history.enableDropRepeatedWorkflowTaskFailures",
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
+	)
+	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
+		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
+		true,
+		`SendTransientOrSpeculativeWorkflowTaskEvents controls whether GetWorkflowExecutionHistory returns non-durable transient or speculative workflow task events. Enabled by default but can be disabled per namespace if it causes compatibility problems.`,
 	)
 	DefaultWorkflowTaskTimeout = NewNamespaceDurationSetting(
 		"history.defaultWorkflowTaskTimeout",

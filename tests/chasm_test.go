@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -382,9 +384,9 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 		)
 		s.NoError(err)
 
-		_, err = tests.ClosePayloadStoreHandler(
+		_, err = tests.CancelPayloadStoreHandler(
 			s.chasmContext,
-			tests.ClosePayloadStoreRequest{
+			tests.CancelPayloadStoreRequest{
 				NamespaceID: s.NamespaceID(),
 				StoreID:     storeID,
 			},
@@ -422,7 +424,7 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 		totalCount += group.Count
 		var groupValue string
 		s.NoError(payload.Decode(group.Values[0], &groupValue))
-		s.Contains([]string{"Running", "Completed"}, groupValue)
+		s.Contains([]string{"Running", "Canceled"}, groupValue)
 	}
 	s.Equal(int64(5), totalCount)
 
@@ -589,6 +591,69 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	)
 }
 
+func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
+	tv := testvars.New(s.T())
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	storeID := tv.Any().String()
+	_, err := tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      s.NamespaceID(),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	visQuery := fmt.Sprintf("WorkflowId = '%s'", storeID)
+
+	// Wait for visibility record to appear.
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			require.NoError(t, err)
+			assert.Len(t, resp.Executions, 1)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: s.NamespaceID(),
+			StoreID:     storeID,
+			Reason:      "test deletion",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	// Validate execution is fully deleted (both mutable state and visibility record).
+	s.EventuallyWithT(
+		func(t *assert.CollectT) {
+			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
+				NamespaceID:   s.NamespaceID().String(),
+				NamespaceName: s.Namespace().String(),
+				PageSize:      10,
+				Query:         visQuery,
+			})
+			require.NoError(t, err)
+			assert.Empty(t, resp.Executions)
+		},
+		testcore.WaitForESToSettle,
+		100*time.Millisecond,
+	)
+}
+
 func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	tv := testvars.New(s.T())
 	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
@@ -638,25 +703,23 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.True(ok)
 	s.Equal("Running", executionStatus)
 
-	// Close the store and verify the status changes
-	_, err = tests.ClosePayloadStoreHandler(
+	_, err = tests.CancelPayloadStoreHandler(
 		ctx,
-		tests.ClosePayloadStoreRequest{
+		tests.CancelPayloadStoreRequest{
 			NamespaceID: s.NamespaceID(),
 			StoreID:     storeID,
 		},
 	)
 	s.NoError(err)
 
-	// Query for Completed status using ExecutionStatus as CHASM alias
-	visQueryCompleted := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Completed'", archetypeID)
+	visQueryCanceled := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Canceled' AND PayloadStoreId = '%s'", archetypeID, storeID)
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
 				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
-				Query:         visQueryCompleted + fmt.Sprintf(" AND PayloadStoreId = '%s'", storeID),
+				Query:         visQueryCanceled,
 			})
 			s.NoError(err)
 			return len(resp.Executions) == 1

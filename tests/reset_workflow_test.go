@@ -83,7 +83,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			var scheduleActivityCommands []*commandpb.Command
 			for i := 1; i <= activityCount; i++ {
@@ -1151,4 +1151,8 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflowWithExternalPayloads() {
 	s.NotNil(descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(int64(1), descResp.WorkflowExecutionInfo.ExternalPayloadCount)
 	s.Equal(workflowExternalPayloadSize, descResp.WorkflowExecutionInfo.ExternalPayloadSizeBytes)
+}
+
+func (s *ResetWorkflowTestSuite) Context() context.Context {
+	return s.T().Context()
 }
