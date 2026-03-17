@@ -354,7 +354,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	opts := activityOptionsFromStartRequest(req)
-	err := ValidateAndNormalizeActivityAttributes(
+	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
