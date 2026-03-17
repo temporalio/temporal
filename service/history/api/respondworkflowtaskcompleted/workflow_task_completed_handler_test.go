@@ -20,7 +20,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -45,10 +45,10 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms                   *historyi.MockMutableState
-		updates              update.Registry
-		handler              *workflowTaskCompletedHandler
-		chasmCommandRegistry *chasmcommand.Registry
+		ms                    *historyi.MockMutableState
+		updates               update.Registry
+		handler               *workflowTaskCompletedHandler
+		chasmWorkflowRegistry *workflowregistry.Registry
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -81,7 +81,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		dcClient := dynamicconfig.StaticClient(nil)
 		if opts.chasmEnabled {
-			out.chasmCommandRegistry = chasmcommand.NewRegistry()
+			out.chasmWorkflowRegistry = workflowregistry.NewRegistry()
 			mockCtx := &chasm.MockMutableContext{}
 			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
@@ -130,7 +130,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			nil, // searchattribute.MapperProvider
 			false,
 			nil,
-			out.chasmCommandRegistry,
+			out.chasmWorkflowRegistry,
 			nil,
 			nil,
 		)
@@ -401,9 +401,9 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		// Register a test handler that returns a sentinel error
 		sentinelErr := errors.New("sentinel: CHASM handler invoked")
-		err := tc.chasmCommandRegistry.Register(
+		err := tc.chasmWorkflowRegistry.RegisterCommandHandler(
 			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-			func(chasm.MutableContext, *chasmworkflow.Workflow, chasmcommand.Validator, *commandpb.Command, chasmcommand.HandlerOptions) error {
+			func(chasm.MutableContext, *chasmworkflow.Workflow, workflowregistry.Validator, *commandpb.Command, workflowregistry.CommandHandlerOptions) error {
 				return sentinelErr
 			},
 		)
