@@ -29,8 +29,7 @@ type MockContext struct {
 	HandleEndpointByName       func(string) (*persistencespb.NexusEndpointEntry, error)
 	HandleMetricsHandler       func() metrics.Handler
 
-	ctx           context.Context
-	HandleLibrary func(name string) (Library, bool)
+	ctx context.Context
 }
 
 func (c *MockContext) goContext() context.Context {
