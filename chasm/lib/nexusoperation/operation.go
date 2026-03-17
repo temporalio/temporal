@@ -22,6 +22,7 @@ type OperationStore interface {
 	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation)
 	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation)
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation)
+	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation)
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation)
 }
 
@@ -94,6 +95,17 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	return nil
 }
 
+// StoreProcessor returns the OperationStore that should be used to process this operation's state transitions and commands.
+// For a workflow-embedded Nexus operation, this will return the parent workflow as the store processor.
+// For a standalone Nexus operation, this will return the operation itself as the store processor.
+func (o *Operation) StoreProcessor(ctx chasm.Context) OperationStore {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store
+	}
+	return o
+}
+
 func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) {
 	transitionStarted.Apply(o, ctx, EventStarted{})
 }
@@ -108,4 +120,8 @@ func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operatio
 
 func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) {
 	TransitionCanceled.Apply(o, ctx, EventCanceled{})
+}
+
+func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation) {
+	transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
