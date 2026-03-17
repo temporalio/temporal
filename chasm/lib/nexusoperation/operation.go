@@ -107,7 +107,10 @@ func (o *Operation) StoreProcessor(ctx chasm.Context) OperationStore {
 }
 
 func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) error {
-	return transitionStarted.Apply(o, ctx, EventStarted{OperationToken: o.GetOperationToken()})
+	return transitionStarted.Apply(o, ctx, EventStarted{
+		OperationToken: o.GetOperationToken(),
+		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	})
 }
 
 func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation) error {
