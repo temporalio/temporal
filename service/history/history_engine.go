@@ -14,7 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/command"
+	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -143,7 +143,7 @@ type (
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
-		chasmCommandRegistry       *chasmcommand.Registry
+		chasmWorkflowRegistry      *workflowregistry.Registry
 		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
@@ -178,7 +178,7 @@ func NewEngineWithShardContext(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
-	chasmCommandRegistry *chasmcommand.Registry,
+	chasmWorkflowRegistry *workflowregistry.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
@@ -228,7 +228,7 @@ func NewEngineWithShardContext(
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
 		commandHandlerRegistry:     commandHandlerRegistry,
-		chasmCommandRegistry:       chasmCommandRegistry,
+		chasmWorkflowRegistry:      chasmWorkflowRegistry,
 		workflowCache:              workflowCache,
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,
@@ -584,7 +584,7 @@ func (e *historyEngineImpl) RespondWorkflowTaskCompleted(
 		e.tokenSerializer,
 		e.eventNotifier,
 		e.commandHandlerRegistry,
-		e.chasmCommandRegistry,
+		e.chasmWorkflowRegistry,
 		e.searchAttributesValidator,
 		e.persistenceVisibilityMgr,
 		e.workflowConsistencyChecker,
