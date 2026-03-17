@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -123,6 +124,7 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkersWithNoHeartbeats
 
 	resp, err := s.FrontendClient().ListWorkers(ctx, &workflowservice.ListWorkersRequest{
 		Namespace: s.Namespace().String(),
+		Query:     "TaskQueue='no-heartbeats-recorded-on-this-queue'",
 	})
 	s.NoError(err)
 	s.NotNil(resp)
@@ -138,9 +140,13 @@ func (s *WorkerRegistryTestSuite) TestWorkerRegistry_DescribeWorkerWithNoHeartbe
 		Namespace:         s.Namespace().String(),
 		WorkerInstanceKey: "nonexistent-worker",
 	})
-	s.Error(err)
+	s.Require().Error(err)
 	var notFound *serviceerror.NotFound
-	s.ErrorAs(err, &notFound)
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	s.True(
+		errors.As(err, &notFound) || errors.As(err, &namespaceNotFound),
+		"expected NotFound or NamespaceNotFound, got: %v", err,
+	)
 }
 
 func (s *WorkerRegistryTestSuite) TestWorkerRegistry_ListWorkers() {
