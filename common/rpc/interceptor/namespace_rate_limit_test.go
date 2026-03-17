@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.uber.org/mock/gomock"
@@ -51,7 +51,7 @@ func (s *namespaceRateLimitInterceptorSuite) newImpl(pollWaitForToken bool) *Nam
 			pollWorkflowTaskQueueMethod: {},
 		},
 		pollWaitForToken: func(_ string) bool { return pollWaitForToken },
-		logger:           log.NewNoopLogger(),
+		metricsHandler:   metrics.NoopMetricsHandler,
 	}
 }
 

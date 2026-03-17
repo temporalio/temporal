@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -145,7 +146,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		make(map[string]int),
 		map[string]struct{}{},
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 	)
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
 		mockRateLimiter{options.rateLimitAllow},

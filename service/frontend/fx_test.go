@@ -575,6 +575,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 				&config,
 				mockRegistry,
 				serviceResolver,
+				metrics.NoopMetricsHandler,
 				log.NewTestLogger(),
 			)
 

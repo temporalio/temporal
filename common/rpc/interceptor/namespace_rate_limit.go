@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
@@ -44,7 +43,7 @@ type (
 		reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn
 		pollMethods                       map[string]struct{}
 		pollWaitForToken                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		logger                            log.Logger
+		metricsHandler                    metrics.Handler
 	}
 )
 
@@ -57,7 +56,7 @@ func NewNamespaceRateLimitInterceptor(
 	tokens map[string]int,
 	pollMethods map[string]struct{},
 	pollWaitForToken dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
@@ -65,7 +64,7 @@ func NewNamespaceRateLimitInterceptor(
 		tokens:            tokens,
 		pollMethods:       pollMethods,
 		pollWaitForToken:  pollWaitForToken,
-		logger:            logger,
+		metricsHandler:    metricsHandler,
 	}
 }
 
@@ -123,13 +122,13 @@ func (ni *NamespaceRateLimitInterceptorImpl) Wait(ctx context.Context, namespace
 	}
 	defer cancel()
 
-	mh := GetMetricsHandlerFromContext(ctx, ni.logger).WithTags(
+	start := time.Now()
+	err := ni.rateLimiter.Wait(waitCtx, request)
+	metrics.NamespaceRateLimitWaitLatency.With(ni.metricsHandler).Record(
+		time.Since(start),
 		metrics.NamespaceTag(namespaceName.String()),
 		metrics.OperationTag(methodName),
 	)
-	start := time.Now()
-	err := ni.rateLimiter.Wait(waitCtx, request)
-	metrics.NamespaceRateLimitWaitLatency.With(mh).Record(time.Since(start))
 
 	if err != nil && ctx.Err() == nil {
 		return ErrNamespaceRateLimitServerBusy

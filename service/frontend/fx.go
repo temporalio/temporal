@@ -482,6 +482,7 @@ func NamespaceRateLimitInterceptorProvider(
 	serviceConfig *Config,
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
+	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
 ) interceptor.NamespaceRateLimitInterceptor {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -534,7 +535,7 @@ func NamespaceRateLimitInterceptorProvider(
 			)
 		},
 	)
-	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, configs.PollAPISet, serviceConfig.PollWaitForNamespaceRateLimitToken, logger)
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{}, configs.PollAPISet, serviceConfig.PollWaitForNamespaceRateLimitToken, metricsHandler)
 }
 
 func NamespaceCountLimitInterceptorProvider(
