@@ -144,19 +144,3 @@ func (o *Operation) OnTimedOut(ctx chasm.MutableContext, _ *Operation, cause *fa
 	}
 	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
-
-func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation) {
-	transitionSucceeded.Apply(o, ctx, EventSucceeded{})
-}
-
-func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation) {
-	transitionFailed.Apply(o, ctx, EventFailed{})
-}
-
-func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) {
-	TransitionCanceled.Apply(o, ctx, EventCanceled{})
-}
-
-func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation) {
-	transitionTimedOut.Apply(o, ctx, EventTimedOut{})
-}
