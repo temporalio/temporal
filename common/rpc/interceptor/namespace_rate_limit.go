@@ -40,7 +40,7 @@ type (
 		tokens                            map[string]int
 		reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn
 		pollMethods                       map[string]struct{}
-		pollWaitForToken                  dynamicconfig.BoolPropertyFn
+		pollWaitForToken                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -52,7 +52,7 @@ func NewNamespaceRateLimitInterceptor(
 	rateLimiter quotas.RequestRateLimiter,
 	tokens map[string]int,
 	pollMethods map[string]struct{},
-	pollWaitForToken dynamicconfig.BoolPropertyFn,
+	pollWaitForToken dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
@@ -76,7 +76,7 @@ func (ni *NamespaceRateLimitInterceptorImpl) Intercept(
 		} else if IsLongPollDescribeActivityExecutionRequest(req) {
 			method = configs.PollActivityExecutionAPIName
 		}
-		if ni.pollWaitForToken() {
+		if ni.pollWaitForToken(ns.String()) {
 			if _, ok := ni.pollMethods[info.FullMethod]; ok {
 				if err := ni.Wait(ctx, ns, method, headers.NewGRPCHeaderGetter(ctx)); err != nil {
 					return nil, err

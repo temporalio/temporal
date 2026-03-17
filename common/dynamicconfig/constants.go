@@ -681,7 +681,7 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
-	FrontendPollWaitForNamespaceRateLimitToken = NewGlobalBoolSetting(
+	FrontendPollWaitForNamespaceRateLimitToken = NewNamespaceBoolSetting(
 		"frontend.pollWaitForNamespaceRateLimitToken",
 		false,
 		`FrontendPollWaitForNamespaceRateLimitToken controls whether poll requests wait for

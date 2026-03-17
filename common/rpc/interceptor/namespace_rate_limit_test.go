@@ -49,7 +49,7 @@ func (s *namespaceRateLimitInterceptorSuite) newImpl(pollWaitForToken bool) *Nam
 		pollMethods: map[string]struct{}{
 			pollWorkflowTaskQueueMethod: {},
 		},
-		pollWaitForToken: func() bool { return pollWaitForToken },
+		pollWaitForToken: func(_ string) bool { return pollWaitForToken },
 	}
 }
 
