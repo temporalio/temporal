@@ -19,10 +19,10 @@ var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation
 // TODO:
 // Both nexus operation and workflow implement this. In nexus this is just a state transition.
 type OperationStore interface {
-	OnNexsusOperationStarted(ctx chasm.MutableContext, operation *Operation)
-	OnNexsusOperationCancelled(ctx chasm.MutableContext, operation *Operation)
-	OnNexsusOperationFailed(ctx chasm.MutableContext, operation *Operation)
-	OnNexsusOperationCompleted(ctx chasm.MutableContext, operation *Operation)
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation)
+	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation)
+	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation)
+	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation)
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -96,4 +96,16 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 
 func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) {
 	transitionStarted.Apply(o, ctx, EventStarted{})
+}
+
+func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation) {
+	transitionSucceeded.Apply(o, ctx, EventSucceeded{})
+}
+
+func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation) {
+	transitionFailed.Apply(o, ctx, EventFailed{})
+}
+
+func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) {
+	TransitionCanceled.Apply(o, ctx, EventCanceled{})
 }
