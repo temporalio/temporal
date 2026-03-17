@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 )
@@ -64,7 +65,7 @@ func (t *ForwarderTestSuite) SetupTest() {
 	t.partition = tqFam.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 
 	if t.newFwdr {
-		t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
+		t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
 		t.NoError(err)
 	} else {
 		t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)

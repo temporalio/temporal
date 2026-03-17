@@ -911,13 +911,6 @@ and deployment interaction in matching and history.`,
 		true,
 		`EnableSendTargetVersionChanged lets Pinned workflows receive TargetWorkerDeploymentVersionChanged=true when a new target version is available for that workflow.`,
 	)
-	EnableNexus = NewGlobalBoolSetting(
-		"system.enableNexus",
-		true,
-		`Toggles all Nexus functionality on the server. Note that toggling this requires restarting server hosts for it
-		to take effect.`,
-	)
-
 	AllowDeleteNamespaceIfNexusEndpointTarget = NewGlobalBoolSetting(
 		"frontend.allowDeleteNamespaceIfNexusEndpointTarget",
 		false,
@@ -1306,6 +1299,12 @@ duration since last poll exceeds this threshold.`,
 		"matching.queryPollerUnavailableWindow",
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
+	)
+	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
+		"matching.emitTaskDispatchLatencyAtPoll",
+		true,
+		`When enabled, TaskDispatchLatencyPerTaskQueue is emitted when responding to poll requests (with extra tags
+like partition and worker-version) instead of being emitted at the matcher level.`,
 	)
 	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"matching.listNexusEndpointsLongPollTimeout",
