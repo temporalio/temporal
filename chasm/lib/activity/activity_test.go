@@ -159,47 +159,43 @@ func TestActivityTerminate(t *testing.T) {
 	testCases := []struct {
 		name           string
 		activityStatus activitypb.ActivityExecutionStatus
-		expectNoOp     bool
+		expectErr      string
 	}{
 		{
 			name:           "terminate scheduled activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			expectNoOp:     false,
 		},
 		{
 			name:           "terminate started activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
-			expectNoOp:     false,
 		},
 		{
 			name:           "terminate cancel-requested activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-			expectNoOp:     false,
 		},
 		{
-			name:           "no-op on completed activity",
+			name:           "error on completed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			expectNoOp:     true,
+			expectErr:      "cannot terminate activity in state Completed",
 		},
 		{
 			name:           "no-op on already terminated activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-			expectNoOp:     true,
 		},
 		{
-			name:           "no-op on failed activity",
+			name:           "error on failed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-			expectNoOp:     true,
+			expectErr:      "cannot terminate activity in state Failed",
 		},
 		{
-			name:           "no-op on timed out activity",
+			name:           "error on timed out activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-			expectNoOp:     true,
+			expectErr:      "cannot terminate activity in state TimedOut",
 		},
 		{
-			name:           "no-op on canceled activity",
+			name:           "error on canceled activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-			expectNoOp:     true,
+			expectErr:      "cannot terminate activity in state Canceled",
 		},
 	}
 
@@ -227,11 +223,12 @@ func TestActivityTerminate(t *testing.T) {
 			_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
 				Reason: "Delete activity execution",
 			})
-			require.NoError(t, err)
 
-			if tc.expectNoOp {
-				require.Equal(t, tc.activityStatus, activity.Status, "expected no state change for terminal activities")
+			if tc.expectErr != "" {
+				require.EqualError(t, err, tc.expectErr)
+				require.Equal(t, tc.activityStatus, activity.Status, "expected no state change on error")
 			} else {
+				require.NoError(t, err)
 				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 			}
 		})
