@@ -1,10 +1,10 @@
 package tests
 
 import (
+	"encoding/binary"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -67,7 +67,7 @@ func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  uuid.NewString(),
+				RequestId:  testcore.RandomizeStr("request-id"),
 			},
 		},
 	)
@@ -124,7 +124,7 @@ func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                uuid.NewString(),
+		RequestId:                testcore.RandomizeStr("request-id"),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -155,7 +155,7 @@ func TestScheduleMigrationV2AlreadyExists(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  uuid.NewString(),
+		RequestId:  testcore.RandomizeStr("request-id"),
 	})
 	require.NoError(t, err)
 
@@ -239,7 +239,7 @@ func TestScheduleMigrationDynamicConfig(t *testing.T) {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                uuid.NewString(),
+		RequestId:                testcore.RandomizeStr("request-id"),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -347,7 +347,7 @@ func TestScheduleMigrationV1ToV2(t *testing.T) {
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 		Input:                    inputPayloads,
 		Identity:                 "test",
-		RequestId:                uuid.NewString(),
+		RequestId:                testcore.RandomizeStr("request-id"),
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 	}
@@ -381,7 +381,7 @@ func TestScheduleMigrationV1ToV2(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
 		Identity:   "test",
-		RequestId:  uuid.NewString(),
+		RequestId:  testcore.RandomizeStr("request-id"),
 	})
 	require.NoError(t, err)
 
@@ -462,7 +462,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  uuid.NewString(),
+				RequestId:  testcore.RandomizeStr("request-id"),
 			},
 		},
 	)
@@ -486,7 +486,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  uuid.NewString(),
+		RequestId:  testcore.RandomizeStr("request-id"),
 	})
 	require.NoError(t, err)
 
@@ -530,8 +530,14 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	require.Equal(t, v2Schedule.GetState().GetPaused(), v1Schedule.GetState().GetPaused())
 	require.Equal(t, v2Schedule.GetState().GetNotes(), v1Schedule.GetState().GetNotes())
 
-	// Validate the conflict token is preserved.
-	require.Equal(t, v2ConflictToken, v1Desc.GetConflictToken())
+	// Validate the conflict token value is preserved across migration.
+	// V2 (CHASM) serializes as LittleEndian, V1 (workflow) as BigEndian, so decode both to int64.
+	require.Len(t, v2ConflictToken, 8)
+	v2Token := int64(binary.LittleEndian.Uint64(v2ConflictToken))
+	v1ConflictToken := v1Desc.GetConflictToken()
+	require.Len(t, v1ConflictToken, 8)
+	v1Token := int64(binary.BigEndian.Uint64(v1ConflictToken))
+	require.Equal(t, v2Token, v1Token)
 
 	// Verify the CHASM scheduler is closed after migration.
 	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
@@ -587,7 +593,7 @@ func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {
 				ScheduleId: sid,
 				Schedule:   sched,
 				Identity:   "test",
-				RequestId:  uuid.NewString(),
+				RequestId:  testcore.RandomizeStr("request-id"),
 			},
 		},
 	)
@@ -599,7 +605,7 @@ func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  uuid.NewString(),
+		RequestId:  testcore.RandomizeStr("request-id"),
 	})
 	require.NoError(t, err)
 
@@ -609,7 +615,7 @@ func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {
 		ScheduleId: sid,
 		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
 		Identity:   "test",
-		RequestId:  uuid.NewString(),
+		RequestId:  testcore.RandomizeStr("request-id"),
 	})
 	require.NoError(t, err)
 }

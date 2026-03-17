@@ -16,8 +16,8 @@ type (
 		GeneratorTaskExecutor                  *GeneratorTaskExecutor
 		InvokerExecuteTaskExecutor             *InvokerExecuteTaskExecutor
 		InvokerProcessBufferTaskExecutor       *InvokerProcessBufferTaskExecutor
-		BackfillerTaskExecutor        *BackfillerTaskExecutor
-		MigrateToWorkflowTaskExecutor *SchedulerMigrateToWorkflowTaskExecutor
+		BackfillerTaskExecutor                 *BackfillerTaskExecutor
+		MigrateToWorkflowTaskExecutor          *SchedulerMigrateToWorkflowTaskExecutor
 	}
 )
 

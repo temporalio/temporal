@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.uber.org/fx"
+
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -22,7 +25,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/fx"
 )
 
 type (
@@ -147,6 +149,7 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 	// Build and send StartWorkflowExecution request.
 	workflowID := legacyscheduler.WorkflowIDPrefix + result.scheduleID
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
 		Namespace:                result.namespace,
 		WorkflowId:               workflowID,
 		WorkflowType:             &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},

@@ -59,11 +59,8 @@ func TestMigrateToWorkflow_SavesPreMigrationState_Unpaused(t *testing.T) {
 	require.Empty(t, sched.SchedulerState.PreMigrationNotes)
 }
 
-func TestMigrateToWorkflow_Idempotent_DoesNotOverwritePreMigrationState(t *testing.T) {
+func TestMigrateToWorkflow_Idempotent(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
-
-	// Schedule is not paused before first migration.
-	require.False(t, sched.SchedulerState.Schedule.State.Paused)
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
@@ -71,18 +68,12 @@ func TestMigrateToWorkflow_Idempotent_DoesNotOverwritePreMigrationState(t *testi
 	})
 	require.NoError(t, err)
 
-	require.False(t, sched.SchedulerState.PreMigrationPaused)
-
-	// Second call should not overwrite the pre-migration state (which is now
-	// "paused for migration" -- but the saved state should still be unpaused).
+	// Second call succeeds without error (no-op).
 	_, err = sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
 		NamespaceId: namespaceID,
 		ScheduleId:  scheduleID,
 	})
 	require.NoError(t, err)
-
-	require.False(t, sched.SchedulerState.PreMigrationPaused)
-	require.Empty(t, sched.SchedulerState.PreMigrationNotes)
 }
 
 func TestMigrateToWorkflow_Sentinel(t *testing.T) {

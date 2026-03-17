@@ -678,8 +678,8 @@ func (s *Scheduler) Delete(
 
 // MigrateToWorkflow pauses the schedule and schedules a side-effect task to
 // start the V1 workflow. This is the CHASM-side operation for V2-to-V1 migration.
-// It is idempotent: if the schedule is already paused for migration, it still
-// succeeds and schedules another task.
+// It is idempotent: if a migration is already pending, it returns success
+// without taking any action.
 func (s *Scheduler) MigrateToWorkflow(
 	ctx chasm.MutableContext,
 	req *schedulerpb.MigrateToWorkflowRequest,
