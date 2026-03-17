@@ -17,8 +17,32 @@ import (
 // Each test method should create its own [TestEnv] and manage its own state.
 func RunSuite(t *testing.T, suite any) {
 	t.Helper()
+
+	methods := validateSuite(t, suite)
+
+	// Mark as parallel only after all validation has passed.
 	t.Parallel()
 
+	v := reflect.ValueOf(suite)
+	structType := v.Type().Elem()
+
+	for _, method := range methods {
+		fn := method.Func
+
+		// Create a shallow copy so each test method gets its own instance,
+		// preventing data races if a method accidentally mutates suite fields.
+		cp := reflect.New(structType)
+		cp.Elem().Set(v.Elem())
+
+		t.Run(method.Name, func(t *testing.T) {
+			fn.Call([]reflect.Value{cp, reflect.ValueOf(t)})
+		})
+	}
+}
+
+// validateSuite checks the suite struct and its methods, panicking if any
+// requirements are violated. Returns the list of valid Test* methods.
+func validateSuite(t *testing.T, suite any) []reflect.Method {
 	v := reflect.ValueOf(suite)
 	typ := v.Type()
 
@@ -34,9 +58,24 @@ func RunSuite(t *testing.T, suite any) {
 		panic(fmt.Sprintf("RunSuite: test name %q must end with \"Suite\"", t.Name()))
 	}
 
-	tType := reflect.TypeOf((*testing.T)(nil))
+	// Verify all fields are value types to prevent shared mutable state.
+	// Since test methods run in parallel, reference types (pointers, slices,
+	// maps, etc.) would be shared even across shallow copies and could
+	// cause data races that the race detector may not reliably catch.
+	for i := 0; i < structType.NumField(); i++ {
+		f := structType.Field(i)
+		if !isValueType(f.Type) {
+			panic(fmt.Sprintf(
+				"RunSuite: suite %s has field %q of type %v which is not a value type; "+
+					"suite fields must be value types since test methods run in parallel",
+				structType.Name(), f.Name, f.Type,
+			))
+		}
+	}
 
-	var testCount int
+	tType := reflect.TypeOf((*testing.T)(nil))
+	var methods []reflect.Method
+
 	for i := 0; i < typ.NumMethod(); i++ {
 		method := typ.Method(i)
 		name := method.Name
@@ -58,20 +97,38 @@ func RunSuite(t *testing.T, suite any) {
 			))
 		}
 
-		testCount++
-		fn := method.Func
-
-		// Create a shallow copy so each test method gets its own instance,
-		// preventing data races if a method accidentally mutates suite fields.
-		copy := reflect.New(structType)
-		copy.Elem().Set(v.Elem())
-
-		t.Run(name, func(t *testing.T) {
-			fn.Call([]reflect.Value{copy, reflect.ValueOf(t)})
-		})
+		methods = append(methods, method)
 	}
 
-	if testCount == 0 {
+	if len(methods) == 0 {
 		panic(fmt.Sprintf("RunSuite: suite %s has no Test* methods", structType.Name()))
+	}
+
+	return methods
+}
+
+// isValueType returns true if the type is safe to shallow-copy without sharing
+// mutable state: primitives, strings, arrays of value types, and structs
+// composed entirely of value types.
+func isValueType(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Bool,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr,
+		reflect.Float32, reflect.Float64,
+		reflect.Complex64, reflect.Complex128,
+		reflect.String:
+		return true
+	case reflect.Array:
+		return isValueType(t.Elem())
+	case reflect.Struct:
+		for i := 0; i < t.NumField(); i++ {
+			if !isValueType(t.Field(i).Type) {
+				return false
+			}
+		}
+		return true
+	default:
+		return false
 	}
 }
