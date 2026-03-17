@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -116,7 +115,7 @@ func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(ctx co
 			Version:   tv.DeploymentVersionString(),
 		})
 
-		a.Equal(expectedTaskQueues, len(respV.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()))
+		a.Len(respV.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(), expectedTaskQueues)
 	}, 5*time.Minute, 500*time.Millisecond)
 }
 
@@ -363,7 +362,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_TwoVersions_Sorted(
 		a.Equal(tv.DeploymentSeries(), resp.GetWorkerDeploymentInfo().GetName())
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
-		a.Equal(2, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+		a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), 2)
 
 		// Verify that the version summaries are non-nil and sorted.
 		versionSummaries := resp.GetWorkerDeploymentInfo().GetVersionSummaries()
@@ -411,7 +410,7 @@ func (s *WorkerDeploymentSuite) TestDescribeWorkerDeployment_MultipleVersions_So
 		a.NoError(err)
 
 		a.NotNil(resp.GetWorkerDeploymentInfo().GetVersionSummaries())
-		a.Equal(numVersions, len(resp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+		a.Len(resp.GetWorkerDeploymentInfo().GetVersionSummaries(), numVersions)
 
 		// Verify that the version summaries are sorted.
 		versionSummaries := resp.GetWorkerDeploymentInfo().GetVersionSummaries()
@@ -456,7 +455,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 		Version:        firstVersion.DeploymentVersionString(),
 		ConflictToken:  cT,
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
@@ -480,7 +479,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_Describe_SetCurrent_SetRamping
 		ConflictToken:           cT,
 		IgnoreMissingTaskQueues: true, // here until we have 'has version started' safeguard in place
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
@@ -525,7 +524,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 		Version:        firstVersion.DeploymentVersionString(),
 		ConflictToken:  cTWrong,
 	})
-	s.Equal(err.Error(), expectedError)
+	s.Equal(expectedError, err.Error())
 
 	// Set first version as ramping version with wrong token
 	_, err = s.FrontendClient().SetWorkerDeploymentRampingVersion(ctx, &workflowservice.SetWorkerDeploymentRampingVersionRequest{
@@ -535,7 +534,7 @@ func (s *WorkerDeploymentSuite) TestConflictToken_SetCurrent_SetRamping_Wrong() 
 		Percentage:     5,
 		ConflictToken:  cTWrong,
 	})
-	s.Equal(err.Error(), expectedError)
+	s.Equal(expectedError, err.Error())
 }
 
 // Testing ListWorkerDeployments
@@ -1461,7 +1460,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Batching()
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(tv.DeploymentVersionString(), resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 
 	s.verifyDescribeWorkerDeployment(s.Require(), resp, &workflowservice.DescribeWorkerDeploymentResponse{
@@ -1533,7 +1532,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	// nolint:staticcheck // SA1019: old worker versioning
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
@@ -1725,7 +1724,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Batching() {
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	s.verifyDescribeWorkerDeployment(s.Require(), resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
@@ -1910,7 +1909,7 @@ func (s *WorkerDeploymentSuite) TestSetCurrentVersion_Unversioned_NoRamp() {
 		Namespace:      s.Namespace().String(),
 		DeploymentName: currentVars.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.verifyDescribeWorkerDeployment(s.Require(), resp, &workflowservice.DescribeWorkerDeploymentResponse{
 		WorkerDeploymentInfo: &deploymentpb.WorkerDeploymentInfo{
 			Name:       currentVars.DeploymentSeries(),
@@ -2071,8 +2070,22 @@ func (s *WorkerDeploymentSuite) TestConcurrentPollers_DifferentTaskQueues_SameVe
 	tv := testvars.New(s)
 
 	tqs := 10
+	// Start all pollers concurrently (pollFromDeployment has no assertions, so it's safe to call from goroutines)
 	for i := range tqs {
-		go s.startVersionWorkflow(ctx, tv.WithTaskQueueNumber(i))
+		go s.pollFromDeployment(ctx, tv.WithTaskQueueNumber(i))
+	}
+	// Wait for all version workflows to appear (must run in the test goroutine due to assertions)
+	for i := range tqs {
+		tvI := tv.WithTaskQueueNumber(i)
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := require.New(t)
+			resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace: s.Namespace().String(),
+				Version:   tvI.DeploymentVersionString(),
+			})
+			a.NoError(err)
+			a.Equal(tvI.ExternalDeploymentVersion(), resp.GetWorkerDeploymentVersionInfo().GetDeploymentVersion())
+		}, time.Minute, time.Second)
 	}
 
 	// set this version as current version
@@ -2462,7 +2475,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 		Namespace:      s.Namespace().String(),
 		DeploymentName: tv.DeploymentSeries(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 
 	// check that the current version's task queues have ramping version == __unversioned__
@@ -2606,7 +2619,7 @@ func (s *WorkerDeploymentSuite) verifyTaskQueueVersioningInfo(ctx context.Contex
 			TaskQueue: tq,
 		})
 		a := require.New(t)
-		a.Nil(err)
+		a.NoError(err)
 		a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedCurrentVersion), tqDesc.GetVersioningInfo().GetCurrentDeploymentVersion())
 		a.Equal(worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(expectedRampingVersion), tqDesc.GetVersioningInfo().GetRampingDeploymentVersion())
 		a.Equal(expectedCurrentVersion, tqDesc.GetVersioningInfo().GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
@@ -3243,7 +3256,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 	}
 
 	err = s.SendSignal(s.Namespace().String(), workflowExecution, workerdeployment.SyncDrainageSignalName, signalPayload, tv1.ClientIdentity())
-	s.Nil(err)
+	s.NoError(err)
 
 	// Stop the poller so it doesn't keep polling
 	pollerCancel()
@@ -3283,7 +3296,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		DeploymentName: tv1.DeploymentSeries(),
 		Identity:       tv1.ClientIdentity(),
 	})
-	s.Nil(err)
+	s.NoError(err)
 
 	// Describe Worker Deployment should give not found
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -3294,7 +3307,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		})
 		a.Error(err)
 		var nfe *serviceerror.NotFound
-		a.True(errors.As(err, &nfe))
+		a.ErrorAs(err, &nfe)
 	}, time.Second*5, time.Millisecond*200)
 
 	// ListDeployments should not show the closed/deleted Worker Deployment
@@ -3303,7 +3316,7 @@ func (s *WorkerDeploymentSuite) TestDeleteWorkerDeployment_ValidDelete() {
 		listResp, err := s.FrontendClient().ListWorkerDeployments(ctx, &workflowservice.ListWorkerDeploymentsRequest{
 			Namespace: s.Namespace().String(),
 		})
-		a.Nil(err)
+		a.NoError(err)
 		for _, dInfo := range listResp.GetWorkerDeployments() {
 			a.NotEqual(tv1.DeploymentSeries(), dInfo.GetName())
 		}
@@ -3376,7 +3389,7 @@ func (s *WorkerDeploymentSuite) tryDeleteVersion(
 		Identity:  tv.ClientIdentity(),
 	})
 	if expectedError == "" {
-		s.Nil(err)
+		s.NoError(err)
 	} else {
 		s.Error(err)
 		s.Contains(err.Error(), expectedError)
@@ -3437,9 +3450,9 @@ func (s *WorkerDeploymentSuite) verifyRoutingConfig(a *require.Assertions, expec
 }
 
 func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo) {
-	a.True((actual == nil) == (expected == nil))
+	a.Equal((actual == nil), (expected == nil))
 	a.Equal(expected.GetName(), actual.GetName())
-	a.True((actual.GetRoutingConfig() == nil) == (expected.GetRoutingConfig() == nil))
+	a.Equal((actual.GetRoutingConfig() == nil), (expected.GetRoutingConfig() == nil))
 	a.Equal(expected.GetLastModifierIdentity(), actual.GetLastModifierIdentity())
 
 	s.verifyTimestampWithinRange(a, expected.GetCreateTime(), actual.GetCreateTime(),

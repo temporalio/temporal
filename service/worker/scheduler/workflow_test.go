@@ -2464,3 +2464,117 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
 	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
 }
+
+func (s *workflowSuite) TestMigrateDynamicConfig() {
+	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe).
+	// Mock MigrateSchedule activity to succeed.
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Once().Return(nil)
+
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	// Workflow should complete successfully (not CAN) after migration triggered by tweakable.
+	s.True(s.env.IsWorkflowCompleted())
+	s.NoError(s.env.GetWorkflowError())
+}
+
+func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
+	// Enable migration by threading enableCHASMMigration=true through the closure (race-safe),
+	// but activity fails.
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return errors.New("migration failed")
+		})
+
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 5
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), true)
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	// Workflow should CAN after all iterations, not terminate.
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	// Migration attempted every iteration.
+	s.Equal(5, migrateCalls)
+
+	// PendingMigration should be preserved in CAN state.
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	var canArgs schedulespb.StartScheduleArgs
+	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.True(canArgs.State.PendingMigration, "PendingMigration should be set in CAN state")
+}
+
+func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
+	// Ensure migration does NOT happen when EnableCHASMMigration is false (default).
+	prevTweakables := CurrentTweakablePolicies
+	CurrentTweakablePolicies.EnableCHASMMigration = false
+	defer func() { CurrentTweakablePolicies = prevTweakables }()
+
+	// No activity mock registered -- if migration is attempted, the test will fail.
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(1 * time.Hour),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	// Workflow should CAN normally without attempting migration.
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}

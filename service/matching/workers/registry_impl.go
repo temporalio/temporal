@@ -364,7 +364,7 @@ func (m *registryImpl) Stop() {
 
 func (m *registryImpl) RecordWorkerHeartbeats(nsID namespace.ID, nsName namespace.Name, workerHeartbeat []*workerpb.WorkerHeartbeat) {
 	m.upsertHeartbeats(nsID, workerHeartbeat)
-	m.metricsEmitter.emit(nsName, workerHeartbeat)
+	m.metricsEmitter.emit(nsID, nsName, workerHeartbeat)
 }
 
 func (m *registryImpl) ListWorkers(nsID namespace.ID, params ListWorkersParams) (ListWorkersResponse, error) {

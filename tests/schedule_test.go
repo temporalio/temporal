@@ -263,7 +263,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.GreaterOrEqual(len(describeResp.Info.RecentActions), 2)
 	action0 := describeResp.Info.RecentActions[0]
 	s.WithinRange(action0.ScheduleTime.AsTime(), createTime, time.Now())
-	s.True(action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 0)
+	s.Equal(int64(0), action0.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second))
 	s.DurationNear(action0.ActualTime.AsTime().Sub(action0.ScheduleTime.AsTime()), 0, 3*time.Second)
 
 	// validate list response
@@ -311,7 +311,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	var ex0StartTime time.Time
 	s.NoError(payload.Decode(ex0.SearchAttributes.IndexedFields[sadefs.TemporalScheduledStartTime], &ex0StartTime))
 	s.WithinRange(ex0StartTime, createTime, time.Now())
-	s.True(ex0StartTime.UnixNano()%int64(5*time.Second) == 0)
+	s.Equal(int64(0), ex0StartTime.UnixNano()%int64(5*time.Second))
 
 	// list schedules with search attribute filter
 
@@ -376,7 +376,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 
 	s.DurationNear(describeResp.Info.UpdateTime.AsTime().Sub(updateTime), 0, 3*time.Second)
 	lastAction := describeResp.Info.RecentActions[len(describeResp.Info.RecentActions)-1]
-	s.True(lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second) == 1000000000, lastAction.ScheduleTime.AsTime().UnixNano())
+	s.Equal(int64(1000000000), lastAction.ScheduleTime.AsTime().UnixNano()%int64(5*time.Second), lastAction.ScheduleTime.AsTime().UnixNano())
 
 	// update schedule and search attributes
 
@@ -487,7 +487,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
-	s.Equal(1, len(listResp.Schedules))
+	s.Len(listResp.Schedules, 1)
 	entry = listResp.Schedules[0]
 	s.Equal(sid, entry.ScheduleId)
 	s.True(entry.Info.Paused)
@@ -634,7 +634,7 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 
 		switch num {
 		case 1:
-			s.Equal("", lcr)
+			s.Empty(lcr)
 			s.NoError(lastErr)
 			return "this one succeeds", nil
 		case 2:
@@ -714,7 +714,7 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	listResp := getScheduleEntryFromVisibility(s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 1
 	})
-	s.Equal(1, len(listResp.Info.RecentActions))
+	s.Len(listResp.Info.RecentActions, 1)
 
 	a1 := listResp.Info.RecentActions[0]
 	s.True(strings.HasPrefix(a1.StartWorkflowResult.WorkflowId, wid))
@@ -930,9 +930,9 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
 	require.NotNil(t, entry)
 	spec := entry.GetInfo().GetSpec()
-	require.Equal(t, expectedLimit, len(spec.GetInterval()))
-	require.Equal(t, expectedLimit, len(spec.GetStructuredCalendar()))
-	require.Equal(t, expectedLimit, len(spec.GetExcludeStructuredCalendar()))
+	require.Len(t, spec.GetInterval(), expectedLimit)
+	require.Len(t, spec.GetStructuredCalendar(), expectedLimit)
+	require.Len(t, spec.GetExcludeStructuredCalendar(), expectedLimit)
 }
 
 func testCountSchedules(t *testing.T, newContext contextFactory) {
