@@ -178,7 +178,6 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	createTime := time.Now()
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// describe immediately after create and verify FutureActionTimes
 	describeRespAfterCreate, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -581,7 +580,6 @@ func testInput(t *testing.T, newContext contextFactory) {
 	ctx := newContext(s.Context())
 	_, err = s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 8*time.Second, 200*time.Millisecond)
 }
@@ -657,7 +655,6 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
 }
@@ -712,7 +709,6 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// validate RecentActions made it to visibility
 	listResp := getScheduleEntryFromVisibility(s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
@@ -798,7 +794,6 @@ func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// Update the interval to be very short (1s).
 	schedule.Spec.Interval[0].Interval = durationpb.New(1 * time.Second)
@@ -852,7 +847,6 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// Query for matching times over a 5-hour window.
 	now := time.Now().UTC().Truncate(time.Hour).Add(time.Hour) // Start of next hour
@@ -931,7 +925,6 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// Verify the memo field length limit was enforced.
 	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
@@ -983,19 +976,7 @@ func testCountSchedules(t *testing.T, newContext contextFactory) {
 			RequestId:  uuid.NewString(),
 		})
 		s.NoError(err)
-		scheduleCleanup(s, sid, newContext)
 	}
-
-	// Wait for schedules to appear in visibility
-	s.Eventually(func() bool {
-		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
-			Namespace: s.Namespace().String(),
-		})
-		if err != nil {
-			return false
-		}
-		return countResp.Count >= 3
-	}, 15*time.Second, 1*time.Second)
 
 	// Test basic count (all schedules)
 	s.Eventually(func() bool {
@@ -1094,7 +1075,6 @@ func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 		ctx := newContext(s.Context())
 		_, err := s.FrontendClient().CreateSchedule(ctx, req)
 		require.NoError(t, err)
-		scheduleCleanup(s, sid, newContext)
 
 		// Now try to update with internal task queue
 		schedule.Action.GetStartWorkflow().TaskQueue = &taskqueuepb.TaskQueue{
@@ -1148,7 +1128,6 @@ func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
 	ctx := newContext(s.Context())
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// Try to create again with a different request ID - should fail with AlreadyExists
 	req.RequestId = uuid.NewString()
@@ -1192,7 +1171,6 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// Patch with 50 backfill requests at a time until we reach the limit of 100.
 	now := time.Now()
@@ -1361,7 +1339,6 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 6*time.Second, 200*time.Millisecond)
 
@@ -1456,7 +1433,6 @@ func testListBeforeRun(t *testing.T, newContext contextFactory) {
 
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
 	s.NotNil(entry.Info)
@@ -1513,7 +1489,6 @@ func testRateLimit(t *testing.T, newContext contextFactory) {
 			RequestId:  uuid.NewString(),
 		})
 		s.NoError(err)
-		scheduleCleanup(s, fmt.Sprintf(sid, i), newContext)
 	}
 
 	time.Sleep(5 * time.Second) //nolint:forbidigo
@@ -1567,7 +1542,6 @@ func testNextTimeCache(t *testing.T, newContext contextFactory) {
 
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
-	scheduleCleanup(s, sid, newContext)
 
 	// wait for at least 13 runs
 	const count = 13
@@ -1654,12 +1628,3 @@ func assertSameRecentActions(
 	}
 }
 
-func scheduleCleanup(env testcore.Env, sid string, newContext contextFactory) {
-	env.T().Cleanup(func() {
-		_, _ = env.FrontendClient().DeleteSchedule(newContext(env.Context()), &workflowservice.DeleteScheduleRequest{
-			Namespace:  env.Namespace().String(),
-			ScheduleId: sid,
-			Identity:   "test",
-		})
-	})
-}
