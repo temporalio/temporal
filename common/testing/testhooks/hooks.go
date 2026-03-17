@@ -17,6 +17,7 @@ var (
 	TaskQueuesInDeploymentSyncBatchSize      = newKey[int, global]()
 	MatchingIgnoreRoutingConfigRevisionCheck = newKey[bool, namespace.ID]()
 	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
+	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

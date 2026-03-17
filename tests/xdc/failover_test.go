@@ -2335,6 +2335,9 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	err = run3.Get(testCtx, nil)
 	s.NoError(err)
 
+	// Wait for all 6 workflow runs (wf1, wf2, wf3, wf6, wf7, wf8) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 6)
+
 	// start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2478,6 +2481,9 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
+	// Wait for wf1 to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 1)
+
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2587,20 +2593,8 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
-	// Wait for visibility to index both workflow runs before starting force-replication.
-	// Force-replication uses ListWorkflowExecutions with an empty query (all workflows in namespace),
-	// so we use the same empty query here to match exactly what force-replication will see.
-	frontendClient0 := s.clusters[0].FrontendClient()
-	s.Eventually(func() bool {
-		countResp, err := frontendClient0.CountWorkflowExecutions(testCtx, &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: namespace,
-		})
-		if err != nil {
-			return false
-		}
-		// Expect exactly 2 runs: original run + reset run
-		return countResp.GetCount() == 2
-	}, 15*time.Second, 200*time.Millisecond, "visibility should index both workflow runs before force-replication")
+	// Wait for both workflow runs (original + reset) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 2)
 
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{

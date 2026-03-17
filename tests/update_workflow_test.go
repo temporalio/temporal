@@ -69,6 +69,7 @@ func closeShard(s testcore.Env, wid string) {
 }
 
 func TestWorkflowUpdateSuite(t *testing.T) {
+	t.Parallel()
 	t.Run("EmptySpeculativeWorkflowTask_AcceptComplete", func(t *testing.T) {
 		testCases := []struct {
 			name     string

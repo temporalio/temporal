@@ -74,33 +74,33 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task
 }
 
 // DispatchNexusTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, taskId string, request *matchingservice.DispatchNexusTaskRequest) (*matchingservice.DispatchNexusTaskResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, taskId, request)
+	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, task)
 	ret0, _ := ret[0].(*matchingservice.DispatchNexusTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispatchNexusTask indicates an expected call of DispatchNexusTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, taskId, request any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchNexusTask), ctx, taskId, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchNexusTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchNexusTask), ctx, task)
 }
 
 // DispatchQueryTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, taskId string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, taskId, request)
+	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, task)
 	ret0, _ := ret[0].(*matchingservice.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // DispatchQueryTask indicates an expected call of DispatchQueryTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, taskId, request any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, taskId, request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, task)
 }
 
 // DispatchSpooledTask mocks base method.
