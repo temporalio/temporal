@@ -44,6 +44,8 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Wrap errors with context when there's something interesting or informative to add, e.g. `fmt.Errorf("multi-operation part 2: %w", err)`
 - Don't panic in library code - return errors and let caller decide
 - Validate early in handlers, not deep in business logic
+- Use `errors.AsType` instead of `errors.As`
+- Use `require.ErrorContains` instead of two separate assertions (`require.Error` + `require.Contains`)
 
 ## 6. Consistency with Codebase
 
