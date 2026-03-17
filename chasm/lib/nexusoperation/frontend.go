@@ -78,9 +78,6 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	if err != nil {
-		return nil, err
-	}
 	return resp.GetFrontendResponse(), nil
 }
 
@@ -105,9 +102,6 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	if err != nil {
-		return nil, err
-	}
 	return resp.GetFrontendResponse(), nil
 }
 
