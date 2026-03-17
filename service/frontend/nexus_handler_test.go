@@ -145,6 +145,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		make(map[string]int),
 		map[string]struct{}{},
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		log.NewNoopLogger(),
 	)
 	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
 		mockRateLimiter{options.rateLimitAllow},

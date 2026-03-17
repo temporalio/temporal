@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/frontend/configs"
@@ -32,6 +34,7 @@ type (
 	NamespaceRateLimitInterceptor interface {
 		Intercept(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error)
 		Allow(namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error
+		Wait(ctx context.Context, namespaceName namespace.Name, methodName string, headerGetter headers.HeaderGetter) error
 	}
 
 	NamespaceRateLimitInterceptorImpl struct {
@@ -41,6 +44,7 @@ type (
 		reducePollWorkflowHistoryPriority dynamicconfig.BoolPropertyFn
 		pollMethods                       map[string]struct{}
 		pollWaitForToken                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		logger                            log.Logger
 	}
 )
 
@@ -53,6 +57,7 @@ func NewNamespaceRateLimitInterceptor(
 	tokens map[string]int,
 	pollMethods map[string]struct{},
 	pollWaitForToken dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	logger log.Logger,
 ) NamespaceRateLimitInterceptor {
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: namespaceRegistry,
@@ -60,6 +65,7 @@ func NewNamespaceRateLimitInterceptor(
 		tokens:            tokens,
 		pollMethods:       pollMethods,
 		pollWaitForToken:  pollWaitForToken,
+		logger:            logger,
 	}
 }
 
@@ -117,7 +123,14 @@ func (ni *NamespaceRateLimitInterceptorImpl) Wait(ctx context.Context, namespace
 	}
 	defer cancel()
 
+	mh := GetMetricsHandlerFromContext(ctx, ni.logger).WithTags(
+		metrics.NamespaceTag(namespaceName.String()),
+		metrics.OperationTag(methodName),
+	)
+	start := time.Now()
 	err := ni.rateLimiter.Wait(waitCtx, request)
+	metrics.NamespaceRateLimitWaitLatency.With(mh).Record(time.Since(start))
+
 	if err != nil && ctx.Err() == nil {
 		return ErrNamespaceRateLimitServerBusy
 	}

@@ -665,6 +665,7 @@ var (
 	TlsCertsExpired                          = NewGaugeDef("certificates_expired")
 	TlsCertsExpiring                         = NewGaugeDef("certificates_expiring")
 	ServiceAuthorizationLatency              = NewTimerDef("service_authorization_latency")
+	NamespaceRateLimitWaitLatency            = NewTimerDef("namespace_rate_limit_poll_wait_latency")
 	EventBlobSize                            = NewBytesHistogramDef("event_blob_size")
 	BlobSizeError                            = NewCounterDef(
 		"blob_size_error",
