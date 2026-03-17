@@ -143,7 +143,7 @@ type (
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
-		chasmWorkflowRegistry       *workflowregistry.Registry
+		chasmWorkflowRegistry      *workflowregistry.Registry
 		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
@@ -228,7 +228,7 @@ func NewEngineWithShardContext(
 		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 		taskCategoryRegistry:       taskCategoryRegistry,
 		commandHandlerRegistry:     commandHandlerRegistry,
-		chasmWorkflowRegistry:       chasmWorkflowRegistry,
+		chasmWorkflowRegistry:      chasmWorkflowRegistry,
 		workflowCache:              workflowCache,
 		replicationProgressCache:   replicationProgressCache,
 		syncStateRetriever:         syncStateRetriever,

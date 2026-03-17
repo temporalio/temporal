@@ -62,7 +62,7 @@ type (
 		searchAttributesValidator      *searchattribute.Validator
 		persistenceVisibilityMgr       manager.VisibilityManager
 		commandHandlerRegistry         *workflow.CommandHandlerRegistry
-		chasmWorkflowRegistry           *workflowregistry.Registry
+		chasmWorkflowRegistry          *workflowregistry.Registry
 		matchingClient                 matchingservice.MatchingServiceClient
 		versionMembershipCache         worker_versioning.VersionMembershipCache
 	}
@@ -100,7 +100,7 @@ func NewWorkflowTaskCompletedHandler(
 		searchAttributesValidator:      searchAttributesValidator,
 		persistenceVisibilityMgr:       visibilityManager,
 		commandHandlerRegistry:         commandHandlerRegistry,
-		chasmWorkflowRegistry:           chasmWorkflowRegistry,
+		chasmWorkflowRegistry:          chasmWorkflowRegistry,
 		matchingClient:                 matchingClient,
 		versionMembershipCache:         versionMembershipCache,
 	}

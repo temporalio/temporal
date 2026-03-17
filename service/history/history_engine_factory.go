@@ -47,7 +47,7 @@ type (
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		ReplicationDLQWriter            replication.DLQWriter
 		CommandHandlerRegistry          *workflow.CommandHandlerRegistry
-		ChasmWorkflowRegistry            *workflowregistry.Registry
+		ChasmWorkflowRegistry           *workflowregistry.Registry
 		OutboundQueueCBPool             *circuitbreakerpool.OutboundQueueCircuitBreakerPool
 		PersistenceRateLimiter          replication.PersistenceRateLimiter
 		TestHooks                       testhooks.TestHooks

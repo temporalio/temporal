@@ -45,9 +45,9 @@ func TestCommandProtocolMessage(t *testing.T) {
 	t.Parallel()
 
 	type testconf struct {
-		ms                   *historyi.MockMutableState
-		updates              update.Registry
-		handler              *workflowTaskCompletedHandler
+		ms                    *historyi.MockMutableState
+		updates               update.Registry
+		handler               *workflowTaskCompletedHandler
 		chasmWorkflowRegistry *workflowregistry.Registry
 	}
 
