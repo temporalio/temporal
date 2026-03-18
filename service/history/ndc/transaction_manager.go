@@ -329,7 +329,6 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			baseRebuildLastEventVersion,
 			baseNextEventID,
 			resetRunID,
-			uuid.NewString(),
 			targetWorkflow,
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,

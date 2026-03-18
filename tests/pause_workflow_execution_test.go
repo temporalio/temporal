@@ -101,14 +101,14 @@ func (s *PauseWorkflowExecutionSuite) SetupTest() {
 		return "activity", nil
 	}
 
-	s.Worker().RegisterWorkflow(s.workflowFn)
-	s.Worker().RegisterWorkflow(s.childWorkflowFn)
-	s.Worker().RegisterActivity(s.activityFn)
+	s.SdkWorker().RegisterWorkflow(s.workflowFn)
+	s.SdkWorker().RegisterWorkflow(s.childWorkflowFn)
+	s.SdkWorker().RegisterActivity(s.activityFn)
 
 	// Setup for TestPauseWorkflowAndActivity
 	s.activityShouldSucceed.Store(false)
-	s.Worker().RegisterWorkflow(s.workflowWithFailingActivity)
-	s.Worker().RegisterActivity(s.failingActivity)
+	s.SdkWorker().RegisterWorkflow(s.workflowWithFailingActivity)
+	s.SdkWorker().RegisterActivity(s.failingActivity)
 }
 
 // failingActivity is an activity that fails until activityShouldSucceed is set to true.

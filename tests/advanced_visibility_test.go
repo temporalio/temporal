@@ -1675,8 +1675,8 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
 			Get(ctx, nil)
 	}
 
-	s.Worker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
-	s.Worker().RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(childWf, workflow.RegisterOptions{Name: childWfType})
 
 	startOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfID,
