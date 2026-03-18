@@ -413,3 +413,4 @@ func TestScheduleMigrationV1ToV2(t *testing.T) {
 	)
 	require.NoError(t, err)
 }
+
