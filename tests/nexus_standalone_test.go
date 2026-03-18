@@ -23,7 +23,7 @@ import (
 var nexusStandaloneOpts = []testcore.TestOption{
 	testcore.WithDedicatedCluster(),
 	testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-	testcore.WithDynamicConfig(nexusoperation.ChasmNexusEnabled, true),
+	testcore.WithDynamicConfig(nexusoperation.Enabled, true),
 }
 
 func TestStandaloneNexusOperation(t *testing.T) {

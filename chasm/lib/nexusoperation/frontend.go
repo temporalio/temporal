@@ -22,7 +22,10 @@ type FrontendHandler interface {
 	RequestCancelNexusOperationExecution(context.Context, *workflowservice.RequestCancelNexusOperationExecutionRequest) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error)
 	TerminateNexusOperationExecution(context.Context, *workflowservice.TerminateNexusOperationExecutionRequest) (*workflowservice.TerminateNexusOperationExecutionResponse, error)
 	DeleteNexusOperationExecution(context.Context, *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error)
+	IsStandaloneNexusOperationEnabled(namespaceName string) bool
 }
+
+var ErrStandaloneNexusOperationDisabled = serviceerror.NewUnimplemented("Standalone Nexus operation is disabled")
 
 type frontendHandler struct {
 	client            nexusoperationpb.NexusOperationServiceClient
@@ -54,19 +57,17 @@ func NewFrontendHandler(
 	}
 }
 
-func (h *frontendHandler) checkEnabled(namespaceName string) error {
-	if !h.config.ChasmEnabled(namespaceName) || !h.config.ChasmNexusEnabled(namespaceName) {
-		return serviceerror.NewUnimplemented("Standalone Nexus operation is disabled")
-	}
-	return nil
+// IsStandaloneNexusOperationEnabled checks if standalone Nexus operations are enabled for the given namespace.
+func (h *frontendHandler) IsStandaloneNexusOperationEnabled(namespaceName string) bool {
+	return h.config.Enabled(namespaceName)
 }
 
 func (h *frontendHandler) StartNexusOperationExecution(
 	ctx context.Context,
 	req *workflowservice.StartNexusOperationExecutionRequest,
 ) (*workflowservice.StartNexusOperationExecutionResponse, error) {
-	if err := h.checkEnabled(req.GetNamespace()); err != nil {
-		return nil, err
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -94,8 +95,8 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 	ctx context.Context,
 	req *workflowservice.DescribeNexusOperationExecutionRequest,
 ) (*workflowservice.DescribeNexusOperationExecutionResponse, error) {
-	if err := h.checkEnabled(req.GetNamespace()); err != nil {
-		return nil, err
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
@@ -114,26 +115,44 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 	return resp.GetFrontendResponse(), err
 }
 
-func (h *frontendHandler) PollNexusOperationExecution(context.Context, *workflowservice.PollNexusOperationExecutionRequest) (*workflowservice.PollNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) PollNexusOperationExecution(_ context.Context, req *workflowservice.PollNexusOperationExecutionRequest) (*workflowservice.PollNexusOperationExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 	return nil, serviceerror.NewUnimplemented("PollNexusOperationExecution not implemented")
 }
 
-func (h *frontendHandler) ListNexusOperationExecutions(context.Context, *workflowservice.ListNexusOperationExecutionsRequest) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
+func (h *frontendHandler) ListNexusOperationExecutions(_ context.Context, req *workflowservice.ListNexusOperationExecutionsRequest) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 	return nil, serviceerror.NewUnimplemented("ListNexusOperationExecutions not implemented")
 }
 
-func (h *frontendHandler) CountNexusOperationExecutions(context.Context, *workflowservice.CountNexusOperationExecutionsRequest) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
+func (h *frontendHandler) CountNexusOperationExecutions(_ context.Context, req *workflowservice.CountNexusOperationExecutionsRequest) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 	return nil, serviceerror.NewUnimplemented("CountNexusOperationExecutions not implemented")
 }
 
-func (h *frontendHandler) RequestCancelNexusOperationExecution(context.Context, *workflowservice.RequestCancelNexusOperationExecutionRequest) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) RequestCancelNexusOperationExecution(_ context.Context, req *workflowservice.RequestCancelNexusOperationExecutionRequest) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 	return nil, serviceerror.NewUnimplemented("RequestCancelNexusOperationExecution not implemented")
 }
 
-func (h *frontendHandler) TerminateNexusOperationExecution(context.Context, *workflowservice.TerminateNexusOperationExecutionRequest) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) TerminateNexusOperationExecution(_ context.Context, req *workflowservice.TerminateNexusOperationExecutionRequest) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 	return nil, serviceerror.NewUnimplemented("TerminateNexusOperationExecution not implemented")
 }
 
-func (h *frontendHandler) DeleteNexusOperationExecution(context.Context, *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) DeleteNexusOperationExecution(_ context.Context, req *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
 	return nil, serviceerror.NewUnimplemented("DeleteNexusOperationExecution not implemented")
 }
