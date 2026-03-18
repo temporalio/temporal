@@ -34,9 +34,6 @@ type Workflow struct {
 	// MSPointer is a special in-memory field for accessing the underlying mutable state.
 	chasm.MSPointer
 
-	// EventRegistry provides access to event definitions for applying history events.
-	EventRegistry EventRegistry
-
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
 
