@@ -133,7 +133,7 @@ func (h *handler) DescribeActivityExecution(
 
 	token := req.GetFrontendRequest().GetLongPollToken()
 	if len(token) == 0 {
-		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req, nil)
+		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req)
 	}
 	response, _, err = chasm.PollComponent(ctx, ref, func(
 		a *Activity,
