@@ -36,7 +36,7 @@ func TestWorkflowAliasSearchAttributeTestSuite(t *testing.T) {
 func (s *WorkflowAliasSearchAttributeTestSuite) SetupTest() {
 	s.FunctionalTestBase.SetupTest()
 
-	s.Worker().RegisterWorkflow(s.workflowFunc)
+	s.SdkWorker().RegisterWorkflow(s.workflowFunc)
 }
 
 func (s *WorkflowAliasSearchAttributeTestSuite) workflowFunc(ctx workflow.Context) (string, error) {
