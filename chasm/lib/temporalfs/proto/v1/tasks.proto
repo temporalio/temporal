@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.temporalfs.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspb";
+
+message ChunkGCTask {
+    // Tombstone-based GC: scan tombstone prefix, delete orphaned chunks.
+    uint64 last_processed_txn_id = 1;
+}
+
+message ManifestCompactTask {
+    // Flatten manifest diff chain from last checkpoint to current.
+    uint64 checkpoint_txn_id = 1;
+}
+
+message QuotaCheckTask {
+    // Enforce storage quotas. Triggered after writes.
+}

@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.temporalfs.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspb";
+
+import "google/protobuf/duration.proto";
+
+enum FilesystemStatus {
+    FILESYSTEM_STATUS_UNSPECIFIED = 0;
+    FILESYSTEM_STATUS_RUNNING = 1;
+    FILESYSTEM_STATUS_ARCHIVED = 2;
+    FILESYSTEM_STATUS_DELETED = 3;
+}
+
+message FilesystemState {
+    FilesystemStatus status = 1;
+    FilesystemConfig config = 2;
+    FSStats stats = 3;
+    uint64 next_inode_id = 4;
+    uint64 next_txn_id = 5;
+    // P1: single owner workflow
+    string owner_workflow_id = 6;
+}
+
+message FilesystemConfig {
+    // Default chunk size in bytes (default: 256KB).
+    uint32 chunk_size = 1;
+    // Maximum total size quota in bytes.
+    uint64 max_size = 2;
+    // Maximum inode count.
+    uint64 max_files = 3;
+    // Interval between GC runs.
+    google.protobuf.Duration gc_interval = 4;
+    // How long to retain snapshots.
+    google.protobuf.Duration snapshot_retention = 5;
+}
+
+message FSStats {
+    uint64 total_size = 1;
+    uint64 file_count = 2;
+    uint64 dir_count = 3;
+    uint64 inode_count = 4;
+    uint64 chunk_count = 5;
+    uint64 transition_count = 6;
+}
