@@ -162,11 +162,11 @@ func (t *transferQueueStandbyTaskExecutor) discardChasmTask(
 	}
 	chasmTree, ok := postActionInfo.(historyi.ChasmTree)
 	if !ok {
-		return consts.ErrTaskDiscarded
+		return serviceerror.NewInternal("postActionInfo is not a ChasmTree")
 	}
 	chasmTask, ok := taskInfo.(*tasks.ChasmTask)
 	if !ok {
-		return consts.ErrTaskDiscarded
+		return serviceerror.NewInternal("taskInfo is not a ChasmTask")
 	}
 
 	err := discardChasmSideEffectTask(
@@ -176,11 +176,11 @@ func (t *transferQueueStandbyTaskExecutor) discardChasmTask(
 		chasmTree,
 		chasmTask,
 	)
-	if errors.Is(err, consts.ErrTaskDiscarded) {
-		// No custom discard handler — fall back to checking if execution still exists on source.
-		return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
+	if err != nil && !errors.Is(err, consts.ErrTaskDiscarded) {
+		return err
 	}
-	return err
+
+	return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(

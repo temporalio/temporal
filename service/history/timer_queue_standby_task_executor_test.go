@@ -2339,15 +2339,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTimerTask
 		})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
 		s.NotNil(resp)
-		s.NoError(resp.ExecutionErr)
+		// Even with a discard handler, we always check if execution still exists on source.
+		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
 	})
 
 	s.Run("WithoutHandler", func() {
 		executor, task := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(_ *historyi.MockChasmTree) {})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))
 		s.NotNil(resp)
-		// Without a discard handler, the task falls back to checkExecutionStillExistsOnSourceBeforeDiscard,
-		// which ultimately discards the task.
 		s.ErrorIs(resp.ExecutionErr, consts.ErrTaskDiscarded)
 	})
 }
