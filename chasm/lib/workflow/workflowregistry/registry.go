@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
 
 // ErrDuplicateRegistration is returned by a [Registry] when it detects duplicate registration.
@@ -12,17 +13,17 @@ var ErrDuplicateRegistration = errors.New("duplicate registration")
 
 // Registry maintains a the following mappings for a workflow:
 // CommandType -> Handler
-// EventType -> EventDefinition
+// EventType -> chasmworkflow.EventDefinition
 type Registry struct {
 	commandHandlers  map[enumspb.CommandType]Handler
-	eventDefinitions map[enumspb.EventType]EventDefinition
+	eventDefinitions map[enumspb.EventType]chasmworkflow.EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
 func NewRegistry() *Registry {
 	return &Registry{
 		commandHandlers:  make(map[enumspb.CommandType]Handler),
-		eventDefinitions: make(map[enumspb.EventType]EventDefinition),
+		eventDefinitions: make(map[enumspb.EventType]chasmworkflow.EventDefinition),
 	}
 }
 
@@ -43,10 +44,10 @@ func (r *Registry) CommandHandler(t enumspb.CommandType) (handler Handler, ok bo
 	return
 }
 
-// RegisterEventDefinition registers a [EventDefinition] for a given event type.
+// RegisterEventDefinition registers an [chasmworkflow.EventDefinition] for a given event type.
 // Returns an [ErrDuplicateRegistration] if a handler for the given event is already registered.
 // All registration is expected to happen in a single thread on process initialization.
-func (r *Registry) RegisterEventDefinition(def EventDefinition) error {
+func (r *Registry) RegisterEventDefinition(def chasmworkflow.EventDefinition) error {
 	if existing, ok := r.eventDefinitions[def.Type()]; ok {
 		return fmt.Errorf("%w: event handler for %v: %v", ErrDuplicateRegistration, def.Type(), existing)
 	}
@@ -54,8 +55,8 @@ func (r *Registry) RegisterEventDefinition(def EventDefinition) error {
 	return nil
 }
 
-// EventDefinition returns a [EventDefinition] for a given event type and a boolean indicating whether it was found.
-func (r *Registry) EventDefinition(t enumspb.EventType) (EventDefinition, bool) {
+// EventDefinition returns an [chasmworkflow.EventDefinition] for a given event type and a boolean indicating whether it was found.
+func (r *Registry) EventDefinition(t enumspb.EventType) (chasmworkflow.EventDefinition, bool) {
 	def, ok := r.eventDefinitions[t]
 	return def, ok
 }

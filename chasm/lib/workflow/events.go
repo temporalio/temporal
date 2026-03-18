@@ -1,10 +1,15 @@
 package workflow
 
 import (
+	"errors"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/chasm"
 )
+
+// ErrEventNotCherryPickable should be returned by CherryPick if an event should not be cherry picked for whatever reason.
+var ErrEventNotCherryPickable = errors.New("event not cherry pickable")
 
 // EventDefinition is a definition for a history event for a given event type.
 type EventDefinition interface {
