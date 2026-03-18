@@ -3086,27 +3086,73 @@ func (n *Node) ExecuteSideEffectTask(
 	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
-) (retErr error) {
+) error {
+	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectTask", registry, chasmTask)
+	if err != nil {
+		return err
+	}
+	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskExecuteFn)
+}
 
+// ExecuteSideEffectDiscardTask executes the discard handler for the given ChasmTask. This is called on standby
+// clusters when a side effect task has been pending past the discard delay, allowing custom discard behavior
+// (e.g., spilling activity tasks to matching).
+func (n *Node) ExecuteSideEffectDiscardTask(
+	ctx context.Context,
+	registry *Registry,
+	executionKey ExecutionKey,
+	chasmTask *tasks.ChasmTask,
+	validate func(NodeBackend, Context, Component) error,
+) error {
+	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectDiscardTask", registry, chasmTask)
+	if err != nil {
+		return err
+	}
+	if !rt.HasDiscardHandler() {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"ExecuteSideEffectDiscardTask called on executor without SideEffectTaskDiscarder",
+			fmt.Errorf("%s", rt.fqType()))
+	}
+	return n.invokeSideEffectTaskFn(ctx, rt, executionKey, chasmTask, validate, rt.sideEffectTaskDiscardFn)
+}
+
+func (n *Node) lookupSideEffectTask(
+	ctx context.Context,
+	callerName string,
+	registry *Registry,
+	chasmTask *tasks.ChasmTask,
+) (*RegistrableTask, error) {
 	if engineFromContext(ctx) == nil {
-		return serviceerror.NewInternal("no CHASM engine set on context")
+		return nil, serviceerror.NewInternal("no CHASM engine set on context")
 	}
 
-	taskInfo := chasmTask.Info
-	taskTypeID := taskInfo.TypeId
+	taskTypeID := chasmTask.Info.TypeId
 	registrableTask, ok := registry.TaskByID(taskTypeID)
 	if !ok {
-		return softassert.UnexpectedInternalErr(
+		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
 			"unknown task type id",
 			fmt.Errorf("%d", taskTypeID))
 	}
 	if registrableTask.isPureTask {
-		return softassert.UnexpectedInternalErr(
+		return nil, softassert.UnexpectedInternalErr(
 			n.logger,
-			"ExecuteSideEffectTask called on a Pure task, task type: ",
+			callerName+" called on a Pure task",
 			fmt.Errorf("%s", registrableTask.fqType()))
 	}
+	return registrableTask, nil
+}
+
+func (n *Node) invokeSideEffectTaskFn(
+	ctx context.Context,
+	registrableTask *RegistrableTask,
+	executionKey ExecutionKey,
+	chasmTask *tasks.ChasmTask,
+	validate func(NodeBackend, Context, Component) error,
+	taskFn func(context.Context, ComponentRef, TaskAttributes, any) error,
+) (retErr error) {
+	taskInfo := chasmTask.Info
 
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -3149,96 +3195,7 @@ func (n *Node) ExecuteSideEffectTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return registrableTask.sideEffectTaskExecuteFn(
-		ctx,
-		ref,
-		taskAttributes,
-		taskValue.Interface(),
-	)
-}
-
-// ExecuteSideEffectDiscardTask executes the discard handler for the given ChasmTask. This is called on standby
-// clusters when a side effect task has been pending past the discard delay, allowing custom discard behavior
-// (e.g., spilling activity tasks to matching).
-func (n *Node) ExecuteSideEffectDiscardTask(
-	ctx context.Context,
-	registry *Registry,
-	executionKey ExecutionKey,
-	chasmTask *tasks.ChasmTask,
-	validate func(NodeBackend, Context, Component) error,
-) (retErr error) {
-
-	if engineFromContext(ctx) == nil {
-		return serviceerror.NewInternal("no CHASM engine set on context")
-	}
-
-	taskInfo := chasmTask.Info
-	taskTypeID := taskInfo.TypeId
-	registrableTask, ok := registry.TaskByID(taskTypeID)
-	if !ok {
-		return softassert.UnexpectedInternalErr(
-			n.logger,
-			"unknown task type id",
-			fmt.Errorf("%d", taskTypeID))
-	}
-	if registrableTask.isPureTask {
-		return softassert.UnexpectedInternalErr(
-			n.logger,
-			"ExecuteSideEffectDiscardTask called on a Pure task",
-			fmt.Errorf("%s", registrableTask.fqType()))
-	}
-
-	if !registrableTask.HasDiscardHandler() {
-		return softassert.UnexpectedInternalErr(
-			n.logger,
-			"ExecuteSideEffectDiscardTask called on executor without SideEffectTaskDiscarder",
-			fmt.Errorf("%s", registrableTask.fqType()))
-	}
-
-	defer func() {
-		if rec := recover(); rec != nil {
-			chasmTask.DeserializedTask = reflect.Value{}
-			panic(rec) //nolint:forbidigo
-		}
-		if retErr != nil && !errors.As(retErr, new(*serviceerror.NotFound)) {
-			chasmTask.DeserializedTask = reflect.Value{}
-		}
-	}()
-
-	if !chasmTask.DeserializedTask.IsValid() {
-		var err error
-		chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
-		if err != nil {
-			return err
-		}
-	}
-	taskValue := chasmTask.DeserializedTask
-
-	taskAttributes := TaskAttributes{
-		ScheduledTime: chasmTask.GetVisibilityTime(),
-		Destination:   chasmTask.Destination,
-	}
-
-	ref := ComponentRef{
-		ExecutionKey:          executionKey,
-		archetypeID:           n.ArchetypeID(),
-		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
-		componentPath:         taskInfo.Path,
-		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
-
-		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
-	}
-
-	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
-
-	defer log.CapturePanic(n.logger, &retErr)
-
-	return registrableTask.sideEffectTaskDiscardFn(
-		ctx,
-		ref,
-		taskAttributes,
-		taskValue.Interface(),
-	)
+	return taskFn(ctx, ref, taskAttributes, taskValue.Interface())
 }
 
 func (n *Node) ComponentByPath(
