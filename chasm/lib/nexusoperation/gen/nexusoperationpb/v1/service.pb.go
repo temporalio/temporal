@@ -10,6 +10,7 @@ import (
 	reflect "reflect"
 	unsafe "unsafe"
 
+	_ "go.temporal.io/server/api/common/v1"
 	_ "go.temporal.io/server/api/routing/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -26,10 +27,10 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto protore
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"?temporal/server/chasm/lib/nexusoperation/proto/v1/service.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1aHtemporal/server/chasm/lib/nexusoperation/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xd8\x03\n" +
-	"\x15NexusOperationService\x12\xd9\x01\n" +
-	"\x13StartNexusOperation\x12M.temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest\x1aN.temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse\"#\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x12\xe2\x01\n" +
-	"\x16DescribeNexusOperation\x12P.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest\x1aQ.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse\"#\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_idBVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
+	"?temporal/server/chasm/lib/nexusoperation/proto/v1/service.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1aHtemporal/server/chasm/lib/nexusoperation/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xe4\x03\n" +
+	"\x15NexusOperationService\x12\xdf\x01\n" +
+	"\x13StartNexusOperation\x12M.temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest\x1aN.temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationResponse\")\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x8a\xb5\x18\x02\b\x01\x12\xe8\x01\n" +
+	"\x16DescribeNexusOperation\x12P.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationRequest\x1aQ.temporal.server.chasm.lib.nexusoperation.proto.v1.DescribeNexusOperationResponse\")\x92\xc4\x03\x1f\x1a\x1dfrontend_request.operation_id\x8a\xb5\x18\x02\b\x01BVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_service_proto_goTypes = []any{
 	(*StartNexusOperationRequest)(nil),     // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.StartNexusOperationRequest

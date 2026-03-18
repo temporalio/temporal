@@ -5,14 +5,17 @@ package temporal.server.chasm.lib.nexusoperation.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
 import "chasm/lib/nexusoperation/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
 service NexusOperationService {
     rpc StartNexusOperation(StartNexusOperationRequest) returns (StartNexusOperationResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
     rpc DescribeNexusOperation(DescribeNexusOperationRequest) returns (DescribeNexusOperationResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 }

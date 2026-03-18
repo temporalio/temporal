@@ -66,7 +66,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 	ctx context.Context,
 	req *workflowservice.StartNexusOperationExecutionRequest,
 ) (*workflowservice.StartNexusOperationExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
@@ -95,7 +95,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 	ctx context.Context,
 	req *workflowservice.DescribeNexusOperationExecutionRequest,
 ) (*workflowservice.DescribeNexusOperationExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
@@ -116,42 +116,42 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 }
 
 func (h *frontendHandler) PollNexusOperationExecution(_ context.Context, req *workflowservice.PollNexusOperationExecutionRequest) (*workflowservice.PollNexusOperationExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 	return nil, serviceerror.NewUnimplemented("PollNexusOperationExecution not implemented")
 }
 
 func (h *frontendHandler) ListNexusOperationExecutions(_ context.Context, req *workflowservice.ListNexusOperationExecutionsRequest) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 	return nil, serviceerror.NewUnimplemented("ListNexusOperationExecutions not implemented")
 }
 
 func (h *frontendHandler) CountNexusOperationExecutions(_ context.Context, req *workflowservice.CountNexusOperationExecutionsRequest) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 	return nil, serviceerror.NewUnimplemented("CountNexusOperationExecutions not implemented")
 }
 
 func (h *frontendHandler) RequestCancelNexusOperationExecution(_ context.Context, req *workflowservice.RequestCancelNexusOperationExecutionRequest) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 	return nil, serviceerror.NewUnimplemented("RequestCancelNexusOperationExecution not implemented")
 }
 
 func (h *frontendHandler) TerminateNexusOperationExecution(_ context.Context, req *workflowservice.TerminateNexusOperationExecutionRequest) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 	return nil, serviceerror.NewUnimplemented("TerminateNexusOperationExecution not implemented")
 }
 
 func (h *frontendHandler) DeleteNexusOperationExecution(_ context.Context, req *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
-	if !h.config.Enabled(req.GetNamespace()) {
+	if !h.IsStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 	return nil, serviceerror.NewUnimplemented("DeleteNexusOperationExecution not implemented")
