@@ -245,6 +245,8 @@ func (w *Workflow) OnNexusOperationFailed(
 func (w *Workflow) OnNexusOperationCompleted(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
+	result *commonpb.Payload,
+	links []*commonpb.Link,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -257,10 +259,10 @@ func (w *Workflow) OnNexusOperationCompleted(
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: parentData.GetScheduledEventId(),
 				RequestId:        op.GetRequestId(),
-				// TODO: Figure out how to populate result for completed event.
-				// Result:           op.GetResult(),
+				Result:           result,
 			},
 		}
+		e.Links = links
 	})
 
 	def, ok := eventRegistry(ctx).EventDefinition(eventType)

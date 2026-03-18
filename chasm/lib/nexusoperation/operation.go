@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -23,7 +24,7 @@ type OperationStore interface {
 	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation) error
-	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 }
 
 // Operation is a CHASM component that represents a Nexus operation.
@@ -113,7 +114,7 @@ func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operati
 	})
 }
 
-func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation) error {
+func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation, _ *commonpb.Payload, _ []*commonpb.Link) error {
 	return transitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
