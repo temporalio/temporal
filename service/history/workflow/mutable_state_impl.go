@@ -4445,7 +4445,7 @@ func (ms *MutableStateImpl) AddActivityTaskCanceledEvent(
 			tag.WorkflowEventID(ms.GetNextEventID()),
 			tag.ErrorTypeInvalidHistoryAction,
 			tag.WorkflowScheduledEventID(scheduledEventID),
-			tag.WorkflowActivityID(ai.ActivityId),
+			tag.ActivityID(ai.ActivityId),
 			tag.WorkflowStartedEventID(ai.StartedEventId))
 		return nil, ms.createInternalServerError(opTag)
 	}
@@ -6699,6 +6699,12 @@ func (ms *MutableStateImpl) AddTasks(
 ) {
 	now := ms.timeSource.Now()
 	for _, task := range newTasks {
+		if chasmTask, ok := task.(*tasks.ChasmTask); ok &&
+			chasmTask.GetCategory() == tasks.CategoryVisibility &&
+			ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			softassert.Fail(ms.logger, "CHASM visibility task added on already-closed execution")
+		}
+
 		category := task.GetCategory()
 		if category.Type() == tasks.CategoryTypeScheduled &&
 			task.GetVisibilityTime().Sub(now) > maxScheduledTaskDuration {

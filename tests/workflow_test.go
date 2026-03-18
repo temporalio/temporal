@@ -1276,7 +1276,7 @@ func (s *WorkflowTestSuite) TestWorkflowTaskAndActivityTaskTimeoutsWorkflow() {
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(tv.WorkflowID(), task.WorkflowExecution.WorkflowId)
 		s.Equal(tv.ActivityType().Name, task.ActivityType.Name)
-		s.Logger.Info("Activity ID", tag.WorkflowActivityID(task.ActivityId))
+		s.Logger.Info("Activity ID", tag.ActivityID(task.ActivityId))
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
@@ -1726,7 +1726,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_Invalid_DeploymentSearchA
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_InternalTaskQueue() {
 	tv := testvars.New(s.T())
-	errorMessageKeyword := "internal per namespace task queue"
+	errorMessageKeyword := "internal per-namespace task queue"
 
 	// Test StartWorkflowExecution with internal task queue
 	s.Run("StartWorkflowExecution_PerNSWorkerTaskQueue", func() {
