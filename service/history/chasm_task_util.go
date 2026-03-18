@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/consts"
