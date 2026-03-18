@@ -491,9 +491,18 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wait for V1 workflow to start and become describable via the frontend.
-	// Because EnableCHASMSchedulerCreation is false, the frontend routes
-	// DescribeSchedule directly to the V1 (workflow-backed) path.
+	// Wait for the V1 system scheduler workflow to start by describing it directly,
+	// independent of frontend routing controlled by the DC knob.
+	sysWorkflowID := scheduler.WorkflowIDPrefix + sid
+	require.Eventually(t, func() bool {
+		_, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: sysWorkflowID},
+		})
+		return err == nil
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Also verify DescribeSchedule routes to the V1 path (EnableCHASMSchedulerCreation is false).
 	var v1Desc *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
 		v1Desc, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
