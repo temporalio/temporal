@@ -269,7 +269,7 @@ var TransitionTerminated = chasm.NewTransition(
 				},
 			}
 
-			a.emitOnTerminatedMetrics(ctx, event.metricsHandler, event.fromStatus)
+			a.emitOnTerminatedMetrics(event.metricsHandler)
 
 			return nil
 		})
