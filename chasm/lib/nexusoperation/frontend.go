@@ -78,7 +78,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), nil
+	return resp.GetFrontendResponse(), err
 }
 
 func (h *frontendHandler) DescribeNexusOperationExecution(
@@ -102,7 +102,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), nil
+	return resp.GetFrontendResponse(), err
 }
 
 func (h *frontendHandler) PollNexusOperationExecution(context.Context, *workflowservice.PollNexusOperationExecutionRequest) (*workflowservice.PollNexusOperationExecutionResponse, error) {
