@@ -207,8 +207,7 @@ func (v *visibilityArchiver) query(
 	}
 
 	if request.parsedQuery.workflowID != nil {
-		prefix = constructVisibilityFilenamePrefix(request.namespaceID, indexKeyWorkflowID)
-		prefix = fmt.Sprintf("%s_%s", prefix, hash(*request.parsedQuery.workflowID))
+		prefix = constructWorkflowIdBasedSearchKey(request.namespaceID, request.parsedQuery)
 	}
 
 	return v.queryPrefix(ctx, uri, request, saTypeMap, prefix)

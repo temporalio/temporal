@@ -56,6 +56,38 @@ func constructTimeBasedSearchKey(namespaceID, tag string, t time.Time, precision
 	return fmt.Sprintf("%s_%s", constructVisibilityFilenamePrefix(namespaceID, tag), t.Format(timeFormat))
 }
 
+func constructWorkflowIdBasedSearchKey(namespaceID string, parsedQuery *parsedQuery) string {
+	prefix := constructVisibilityFilenamePrefix(namespaceID, indexKeyWorkflowID)
+	prefix = fmt.Sprintf("%s_%s", prefix, hash(*parsedQuery.workflowID))
+
+	if !parsedQuery.closeTime.IsZero() && parsedQuery.searchPrecision != nil {
+		var timeFormat = ""
+		switch *parsedQuery.searchPrecision {
+		case PrecisionSecond:
+			timeFormat = ":05"
+			fallthrough
+		case PrecisionMinute:
+			timeFormat = ":04" + timeFormat
+			fallthrough
+		case PrecisionHour:
+			timeFormat = "15" + timeFormat
+			fallthrough
+		case PrecisionDay:
+			timeFormat = "2006-01-02T" + timeFormat
+		}
+		prefix = fmt.Sprintf("%s_%s", prefix, parsedQuery.closeTime.Format(timeFormat))
+
+		if parsedQuery.runID != nil {
+			var workflowTypeHash string
+			if parsedQuery.workflowType != nil {
+				workflowTypeHash = hash(*parsedQuery.workflowType)
+			}
+			prefix = fmt.Sprintf("%s_%s_%s", prefix, workflowTypeHash, hash(*parsedQuery.runID))
+		}
+	}
+	return prefix
+}
+
 func hash(s string) (result string) {
 	if s != "" {
 		return fmt.Sprintf("%v", farm.Fingerprint64([]byte(s)))

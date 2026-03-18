@@ -515,9 +515,13 @@ func (s *visibilityArchiverSuite) TestQuery_Success_WorkflowID_WithTimeFilter() 
 	expectedPrefix := constructVisibilityFilenamePrefix(testNamespaceID, indexKeyWorkflowID)
 	expectedPrefix = fmt.Sprintf("%s_%s", expectedPrefix, hash(testWorkflowID))
 
+	// The query logic now appends CloseTime based on SearchPrecision to the prefix
+	// precision Day format: "2006-01-02T"
+	expectedExtendedPrefix := fmt.Sprintf("%s_%s", expectedPrefix, "2020-02-05T")
+
 	filename := expectedPrefix + "_2020-02-05T09:56:14Z_" + hash(testWorkflowTypeName) + "_" + hash(testWorkflowID) + "_" + hash(testRunID) + ".visibility"
 
-	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, expectedPrefix, 10, 0, gomock.Any()).Return([]string{
+	storageWrapper.EXPECT().QueryWithFilters(gomock.Any(), URI, expectedExtendedPrefix, 10, 0, gomock.Any()).Return([]string{
 		filename,
 	}, true, 1, nil)
 	storageWrapper.EXPECT().Get(gomock.Any(), URI, testNamespaceID+"/"+filepath.Base(filename)).Return([]byte(exampleVisibilityRecord), nil)
