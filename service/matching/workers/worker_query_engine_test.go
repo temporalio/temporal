@@ -141,6 +141,16 @@ func TestActivityInfoMatchEvaluator_SupportedFields(t *testing.T) {
 			expectedMatch: false,
 		},
 		{
+			name:          "BuildId, true",
+			query:         fmt.Sprintf("%s = 'build_id'", workerBuildIDColName),
+			expectedMatch: true,
+		},
+		{
+			name:          "BuildId, false",
+			query:         fmt.Sprintf("%s = 'build_id_unknown'", workerBuildIDColName),
+			expectedMatch: false,
+		},
+		{
 			name:          "SdkName, true",
 			query:         fmt.Sprintf("%s = 'sdk_name'", workerSdkNameColName),
 			expectedMatch: true,
@@ -168,6 +178,16 @@ func TestActivityInfoMatchEvaluator_SupportedFields(t *testing.T) {
 		{
 			name:          "WorkerStatus, false",
 			query:         fmt.Sprintf("%s = 'status_unknown'", workerStatusColName),
+			expectedMatch: false,
+		},
+		{
+			name:          "Status (alias), true",
+			query:         "Status = 'Running'",
+			expectedMatch: true,
+		},
+		{
+			name:          "Status (alias), false",
+			query:         "Status = 'status_unknown'",
 			expectedMatch: false,
 		},
 	}
