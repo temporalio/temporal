@@ -8,6 +8,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -28,6 +29,7 @@ type frontendHandler struct {
 	config            *Config
 	logger            log.Logger
 	namespaceRegistry namespace.Registry
+	endpointRegistry  commonnexus.EndpointRegistry
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
 }
@@ -37,6 +39,7 @@ func NewFrontendHandler(
 	config *Config,
 	logger log.Logger,
 	namespaceRegistry namespace.Registry,
+	endpointRegistry commonnexus.EndpointRegistry,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) FrontendHandler {
@@ -45,6 +48,7 @@ func NewFrontendHandler(
 		config:            config,
 		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
+		endpointRegistry:  endpointRegistry,
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
 	}
@@ -71,6 +75,11 @@ func (h *frontendHandler) StartNexusOperationExecution(
 	}
 
 	if err := validateAndNormalizeStartRequest(req, h.config, h.saMapperProvider, h.saValidator); err != nil {
+		return nil, err
+	}
+
+	// Verify the endpoint exists before creating the operation.
+	if _, err := h.endpointRegistry.GetByName(ctx, namespaceID, req.GetEndpoint()); err != nil {
 		return nil, err
 	}
 

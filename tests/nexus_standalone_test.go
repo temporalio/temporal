@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
@@ -30,6 +31,7 @@ func TestStandaloneNexusOperation(t *testing.T) {
 
 	t.Run("StartAndDescribe", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
@@ -44,6 +46,7 @@ func TestStandaloneNexusOperation(t *testing.T) {
 		}
 		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:      "test-op",
+			Endpoint:         endpointName,
 			Input:            testInput,
 			NexusHeader:      testHeader,
 			UserMetadata:     testUserMetadata,
@@ -66,7 +69,7 @@ func TestStandaloneNexusOperation(t *testing.T) {
 		protorequire.ProtoEqual(t, &nexuspb.NexusOperationExecutionInfo{
 			OperationId:            "test-op",
 			RunId:                  startResp.RunId,
-			Endpoint:               "test-endpoint",
+			Endpoint:               endpointName,
 			Service:                "test-service",
 			Operation:              "test-operation",
 			Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
@@ -124,9 +127,11 @@ func TestStandaloneNexusOperation(t *testing.T) {
 
 	t.Run("DescribeWrongRunId", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
 
 		_, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
+			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
@@ -141,15 +146,18 @@ func TestStandaloneNexusOperation(t *testing.T) {
 
 	t.Run("IDConflictPolicy_Fail", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
 
 		resp1, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
+			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		// Second start with different request ID should fail.
 		_, err = startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
+			Endpoint:    endpointName,
 			RequestId:   "different-request-id",
 		})
 		s.Error(err)
@@ -157,6 +165,7 @@ func TestStandaloneNexusOperation(t *testing.T) {
 		// Second start with same request ID should return existing run.
 		resp2, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
+			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 		s.Equal(resp1.RunId, resp2.RunId)
@@ -165,14 +174,17 @@ func TestStandaloneNexusOperation(t *testing.T) {
 
 	t.Run("IDConflictPolicy_UseExisting", func(t *testing.T) {
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
 
 		resp1, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
+			Endpoint:    endpointName,
 		})
 		s.NoError(err)
 
 		resp2, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:      "test-op",
+			Endpoint:         endpointName,
 			RequestId:        "different-request-id",
 			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
 		})
@@ -182,12 +194,30 @@ func TestStandaloneNexusOperation(t *testing.T) {
 	})
 }
 
+func createNexusEndpoint(s *testcore.TestEnv) string {
+	name := testcore.RandomizedNexusEndpoint(s.T().Name())
+	_, err := s.OperatorClient().CreateNexusEndpoint(s.Context(), &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: name,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_Worker_{
+					Worker: &nexuspb.EndpointTarget_Worker{
+						Namespace: s.Namespace().String(),
+						TaskQueue: "unused-for-test",
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+	return name
+}
+
 func startNexusOperation(
 	s *testcore.TestEnv,
 	req *workflowservice.StartNexusOperationExecutionRequest,
 ) (*workflowservice.StartNexusOperationExecutionResponse, error) {
 	req.Namespace = cmp.Or(req.Namespace, s.Namespace().String())
-	req.Endpoint = cmp.Or(req.Endpoint, "test-endpoint")
 	req.Service = cmp.Or(req.Service, "test-service")
 	req.Operation = cmp.Or(req.Operation, "test-operation")
 	req.RequestId = cmp.Or(req.RequestId, s.Tv().RequestID())
