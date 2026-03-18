@@ -157,7 +157,7 @@ func runSuiteWithMatchingBehaviors(
 	subtest func(s *taskQueueStatsSuite),
 ) {
 	runWithMatchingBehaviors(t, baseOpts, func(env *testcore.TestEnv, behavior testcore.MatchingBehavior) {
-		s := newTaskQueueStatsSuite(t, env, usePriMatcher)
+		s := newTaskQueueStatsSuite(env.T(), env, usePriMatcher)
 		subtest(s)
 	})
 }
