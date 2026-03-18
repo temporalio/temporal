@@ -204,7 +204,7 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		chasmAliasedSAs = make(map[string]chasm.VisibilityValue)
 	}
 	if exec.TaskQueue != "" {
-		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueString(exec.TaskQueue)
+		chasmAliasedSAs[sadefs.TaskQueue] = chasm.VisibilityValueKeyword(exec.TaskQueue)
 	}
 
 	customAliasedSAs, err := searchattribute.AliasFields(
@@ -598,11 +598,11 @@ func convertToVisibilityValue(value any) chasm.VisibilityValue {
 		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
 			return chasm.VisibilityValueTime(parsedTime)
 		}
-		return chasm.VisibilityValueString(val)
+		return chasm.VisibilityValueKeyword(val)
 	case []string:
 		return chasm.VisibilityValueStringSlice(val)
 	default:
 		// Return as string if type is unknown
-		return chasm.VisibilityValueString(fmt.Sprintf("%v", val))
+		return chasm.VisibilityValueKeyword(fmt.Sprintf("%v", val))
 	}
 }

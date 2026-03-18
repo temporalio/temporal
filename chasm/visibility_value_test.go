@@ -24,7 +24,7 @@ func TestVisibilityValue(t *testing.T) {
 	})
 
 	t.Run("String", func(t *testing.T) {
-		v := VisibilityValueString("hello, 世界")
+		v := VisibilityValueKeyword("hello, 世界")
 		p := v.MustEncode()
 		require.NotNil(t, p)
 
@@ -33,8 +33,8 @@ func TestVisibilityValue(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "hello, 世界", out)
 
-		require.True(t, v.Equal(VisibilityValueString("hello, 世界")))
-		require.False(t, v.Equal(VisibilityValueString("hello")))
+		require.True(t, v.Equal(VisibilityValueKeyword("hello, 世界")))
+		require.False(t, v.Equal(VisibilityValueKeyword("hello")))
 		require.False(t, v.Equal(VisibilityValueBool(true)))
 	})
 
@@ -50,7 +50,7 @@ func TestVisibilityValue(t *testing.T) {
 
 		require.True(t, v.Equal(VisibilityValueBool(true)))
 		require.False(t, v.Equal(VisibilityValueBool(false)))
-		require.False(t, v.Equal(VisibilityValueString("true")))
+		require.False(t, v.Equal(VisibilityValueKeyword("true")))
 	})
 
 	t.Run("Float64", func(t *testing.T) {
@@ -80,7 +80,7 @@ func TestVisibilityValue(t *testing.T) {
 		require.True(t, v.Equal(VisibilityValueStringSlice([]string{"a", "b", "c"})))
 		require.False(t, v.Equal(VisibilityValueStringSlice([]string{"a", "c", "b"})))
 		require.False(t, v.Equal(VisibilityValueStringSlice([]string{"a", "b"})))
-		require.False(t, v.Equal(VisibilityValueString("[a b c]")))
+		require.False(t, v.Equal(VisibilityValueKeyword("[a b c]")))
 	})
 
 	// Time
@@ -98,7 +98,7 @@ func TestVisibilityValue(t *testing.T) {
 
 		require.True(t, v.Equal(VisibilityValueTime(base)))
 		require.False(t, v.Equal(VisibilityValueTime(base.Add(time.Second))))
-		require.False(t, v.Equal(VisibilityValueString(base.String())))
+		require.False(t, v.Equal(VisibilityValueKeyword(base.String())))
 	})
 }
 
@@ -111,7 +111,7 @@ func TestIsVisibilityValueEqual(t *testing.T) {
 	require.False(t, isVisibilityValueEqual(nil, VisibilityValueInt64(1)))
 
 	// equal values
-	require.True(t, isVisibilityValueEqual(VisibilityValueString("x"), VisibilityValueString("x")))
+	require.True(t, isVisibilityValueEqual(VisibilityValueKeyword("x"), VisibilityValueKeyword("x")))
 	require.True(t, isVisibilityValueEqual(VisibilityValueInt64(5), VisibilityValueInt64(5)))
 
 	// not equal values

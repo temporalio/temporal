@@ -1,7 +1,6 @@
 package chasm
 
 import (
-	"fmt"
 	"slices"
 	"time"
 
@@ -16,34 +15,14 @@ type VisibilityValue interface {
 	Value() any
 }
 
-func VisibilityValueFromPayload(p *commonpb.Payload) (VisibilityValue, error) {
-	v, err := sadefs.DecodeValue(p, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
-	if err != nil {
-		return nil, err
-	}
-	switch vt := v.(type) {
-	case bool:
-		return VisibilityValueBool(vt), nil
-	case time.Time:
-		return VisibilityValueTime(vt), nil
-	case float64:
-		return VisibilityValueFloat64(vt), nil
-	case int64:
-		return VisibilityValueInt64(vt), nil
-	case string:
-		return VisibilityValueString(vt), nil
-	case []string:
-		return VisibilityValueStringSlice(vt), nil
-	default:
-		// this should never happen given that DecodeValue did not return an error
-		return nil, fmt.Errorf("unexpected search attribute value type %T", v)
-	}
-}
-
 type VisibilityValueInt64 int64
 
 func (v VisibilityValueInt64) MustEncode() *commonpb.Payload {
-	p, _ := sadefs.EncodeValue(int64(v), enumspb.INDEXED_VALUE_TYPE_INT)
+	p, err := sadefs.EncodeValue(int64(v), enumspb.INDEXED_VALUE_TYPE_INT)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
 	return p
 }
 
@@ -59,29 +38,37 @@ func (v VisibilityValueInt64) Value() any {
 	return int64(v)
 }
 
-type VisibilityValueString string
+type VisibilityValueKeyword string
 
-func (v VisibilityValueString) MustEncode() *commonpb.Payload {
-	p, _ := sadefs.EncodeValue(string(v), enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+func (v VisibilityValueKeyword) MustEncode() *commonpb.Payload {
+	p, err := sadefs.EncodeValue(string(v), enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
 	return p
 }
 
-func (v VisibilityValueString) Equal(other VisibilityValue) bool {
-	ov, ok := other.(VisibilityValueString)
+func (v VisibilityValueKeyword) Equal(other VisibilityValue) bool {
+	ov, ok := other.(VisibilityValueKeyword)
 	if !ok {
 		return false
 	}
 	return v == ov
 }
 
-func (v VisibilityValueString) Value() any {
+func (v VisibilityValueKeyword) Value() any {
 	return string(v)
 }
 
 type VisibilityValueBool bool
 
 func (v VisibilityValueBool) MustEncode() *commonpb.Payload {
-	p, _ := sadefs.EncodeValue(bool(v), enumspb.INDEXED_VALUE_TYPE_BOOL)
+	p, err := sadefs.EncodeValue(bool(v), enumspb.INDEXED_VALUE_TYPE_BOOL)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
 	return p
 }
 
@@ -100,7 +87,11 @@ func (v VisibilityValueBool) Value() any {
 type VisibilityValueFloat64 float64
 
 func (v VisibilityValueFloat64) MustEncode() *commonpb.Payload {
-	p, _ := sadefs.EncodeValue(float64(v), enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+	p, err := sadefs.EncodeValue(float64(v), enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
 	return p
 }
 
@@ -119,7 +110,11 @@ func (v VisibilityValueFloat64) Value() any {
 type VisibilityValueTime time.Time
 
 func (v VisibilityValueTime) MustEncode() *commonpb.Payload {
-	p, _ := sadefs.EncodeValue(time.Time(v), enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	p, err := sadefs.EncodeValue(time.Time(v), enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
 	return p
 }
 
@@ -138,7 +133,11 @@ func (v VisibilityValueTime) Value() any {
 type VisibilityValueStringSlice []string
 
 func (v VisibilityValueStringSlice) MustEncode() *commonpb.Payload {
-	p, _ := sadefs.EncodeValue([]string(v), enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	p, err := sadefs.EncodeValue([]string(v), enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+	if err != nil {
+		// nolint:forbidigo
+		panic(err)
+	}
 	return p
 }
 

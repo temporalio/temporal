@@ -76,6 +76,8 @@ var (
 )
 
 var (
+	// CHASM search attribute of type Text is not supported at this moment.
+	// Note that it's currently assumed that string type values are Keyword search attributes.
 	_ SearchAttribute = (*SearchAttributeBool)(nil)
 	_ SearchAttribute = (*SearchAttributeDateTime)(nil)
 	_ SearchAttribute = (*SearchAttributeInt)(nil)
@@ -370,7 +372,7 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
 		Field: s.field,
-		Value: VisibilityValueString(value),
+		Value: VisibilityValueKeyword(value),
 	}
 }
 
@@ -423,23 +425,7 @@ func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesM
 	return SearchAttributesMap{values: values}
 }
 
-func NewSearchAttributesMapFromProto(
-	searchAttributes *commonpb.SearchAttributes,
-) (SearchAttributesMap, error) {
-	if searchAttributes == nil || searchAttributes.GetIndexedFields() == nil {
-		return NewSearchAttributesMap(nil), nil
-	}
-	values := make(map[string]VisibilityValue)
-	for k, p := range searchAttributes.IndexedFields {
-		value, err := VisibilityValueFromPayload(p)
-		if err != nil {
-			return NewSearchAttributesMap(nil), err
-		}
-		values[k] = value
-	}
-	return NewSearchAttributesMap(values), nil
-}
-
+// ToProto encodes the search attributes as proto object.
 func (m *SearchAttributesMap) ToProto() *commonpb.SearchAttributes {
 	if m == nil || m.values == nil {
 		return nil
