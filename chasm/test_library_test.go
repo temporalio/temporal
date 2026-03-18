@@ -11,14 +11,14 @@ import (
 // testing ExecuteSideEffectDiscardTask.
 type mockDiscardableSideEffectExecutor struct {
 	*MockSideEffectTaskExecutor[any, *TestDiscardableSideEffectTask]
-	handleDiscardFn func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error
+	handleDiscardFn func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task *TestDiscardableSideEffectTask) error
 }
 
 func (m *mockDiscardableSideEffectExecutor) HandleDiscard(
 	ctx context.Context,
 	ref ComponentRef,
 	attrs TaskAttributes,
-	task any,
+	task *TestDiscardableSideEffectTask,
 ) error {
 	return m.handleDiscardFn(ctx, ref, attrs, task)
 }

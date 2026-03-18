@@ -3316,7 +3316,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(true, nil).Times(1)
 		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
-			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
 			_, err := root.Component(chasmContext, ref)
@@ -3336,7 +3336,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, nil).Times(1)
 		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
-			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			_, err := root.Component(chasmContext, ref)
 			return err
@@ -3354,7 +3354,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, validationErr).Times(1)
 		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
-			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			_, err := root.Component(chasmContext, ref)
 			return err
@@ -3379,7 +3379,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		).Return(true, nil).Times(1)
 		discardErr := errors.New("discard error")
 		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
-			_ context.Context, ref ComponentRef, _ TaskAttributes, _ any,
+			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
 			if _, err := root.Component(chasmContext, ref); err != nil {

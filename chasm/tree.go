@@ -3188,8 +3188,7 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 			fmt.Errorf("%s", registrableTask.fqType()))
 	}
 
-	discardHandler, ok := registrableTask.executor.(SideEffectDiscardHandler)
-	if !ok {
+	if !registrableTask.HasDiscardHandler() {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
 			"ExecuteSideEffectDiscardTask called on executor without SideEffectDiscardHandler",
@@ -3234,7 +3233,7 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 
 	defer log.CapturePanic(n.logger, &retErr)
 
-	return discardHandler.HandleDiscard(
+	return registrableTask.sideEffectTaskDiscardFn(
 		ctx,
 		ref,
 		taskAttributes,

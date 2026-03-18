@@ -38,7 +38,7 @@ func (e *discardableTestTaskExecutor) Execute(_ context.Context, _ chasm.Compone
 	return nil
 }
 
-func (e *discardableTestTaskExecutor) HandleDiscard(_ context.Context, _ chasm.ComponentRef, _ chasm.TaskAttributes, _ any) error {
+func (e *discardableTestTaskExecutor) HandleDiscard(_ context.Context, _ chasm.ComponentRef, _ chasm.TaskAttributes, _ *discardableTestTask) error {
 	return nil
 }
 

@@ -55,7 +55,7 @@ func (e *activityDispatchTaskExecutor) HandleDiscard(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	_ any,
+	_ *activitypb.ActivityDispatchTask,
 ) error {
 	return e.pushToMatching(ctx, activityRef)
 }
