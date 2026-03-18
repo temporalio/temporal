@@ -3,6 +3,8 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/service/history/consts"
@@ -89,7 +91,10 @@ func discardChasmSideEffectTask(
 	task *tasks.ChasmTask,
 ) error {
 	rt, ok := registry.TaskByID(task.Info.TypeId)
-	if !ok || !rt.HasDiscardHandler() {
+	if !ok {
+		return serviceerror.NewInternal("unknown task type id")
+	}
+	if !rt.HasDiscardHandler() {
 		return consts.ErrTaskDiscarded
 	}
 
