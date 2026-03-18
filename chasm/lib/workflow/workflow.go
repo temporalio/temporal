@@ -155,6 +155,7 @@ func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter
 func (w *Workflow) OnNexusOperationStarted(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
+	links []*commonpb.Link,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -171,6 +172,7 @@ func (w *Workflow) OnNexusOperationStarted(
 				RequestId:        op.GetRequestId(),
 			},
 		}
+		e.Links = links
 	})
 
 	def, ok := eventRegistry(ctx).EventDefinition(eventType)
@@ -185,6 +187,7 @@ func (w *Workflow) OnNexusOperationStarted(
 func (w *Workflow) OnNexusOperationCancelled(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
+	cause *failurepb.Failure,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -198,7 +201,7 @@ func (w *Workflow) OnNexusOperationCancelled(
 			NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
 				ScheduledEventId: scheduledEventID,
 				RequestId:        op.GetRequestId(),
-				Failure:          createNexusOperationFailure(op, scheduledEventID),
+				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
 			},
 		}
 	})
@@ -215,6 +218,7 @@ func (w *Workflow) OnNexusOperationCancelled(
 func (w *Workflow) OnNexusOperationFailed(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
+	cause *failurepb.Failure,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -228,7 +232,7 @@ func (w *Workflow) OnNexusOperationFailed(
 			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
 				ScheduledEventId: scheduledEventID,
 				RequestId:        op.GetRequestId(),
-				Failure:          createNexusOperationFailure(op, scheduledEventID),
+				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
 			},
 		}
 	})
@@ -277,6 +281,7 @@ func (w *Workflow) OnNexusOperationCompleted(
 func (w *Workflow) OnNexusOperationTimedOut(
 	ctx chasm.MutableContext,
 	op *nexusoperation.Operation,
+	cause *failurepb.Failure,
 ) error {
 	parentData := &workflowpb.NexusOperationParentData{}
 	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
@@ -290,7 +295,7 @@ func (w *Workflow) OnNexusOperationTimedOut(
 			NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 				ScheduledEventId: scheduledEventID,
 				RequestId:        op.GetRequestId(),
-				Failure:          createNexusOperationFailure(op, scheduledEventID),
+				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
 			},
 		}
 	})
@@ -302,22 +307,22 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	return def.Apply(ctx, w, event)
 }
 
-// createNexusOperationFailure creates a NexusOperationExecutionFailure wrapping the operation's last attempt failure.
-func createNexusOperationFailure(op *nexusoperation.Operation, scheduledEventID int64) *failurepb.Failure {
+// createNexusOperationFailure creates a NexusOperationExecutionFailure wrapping the given cause.
+func createNexusOperationFailure(op *nexusoperation.Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
 	return &failurepb.Failure{
 		Message: "nexus operation completed unsuccessfully",
 		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
 			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
-				Endpoint:  op.GetEndpoint(),
-				Service:   op.GetService(),
-				Operation: op.GetOperation(),
-				// TODO: Check if this is correct.
-				OperationToken:   op.GetOperationToken(),
+				Endpoint:       op.GetEndpoint(),
+				Service:        op.GetService(),
+				Operation:      op.GetOperation(),
+				OperationToken: op.GetOperationToken(),
+				// TODO: check if this is right
 				OperationId:      op.GetOperationToken(),
 				ScheduledEventId: scheduledEventID,
 			},
 		},
-		Cause: op.GetLastAttemptFailure(),
+		Cause: cause,
 	}
 }
 

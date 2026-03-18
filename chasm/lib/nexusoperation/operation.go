@@ -2,6 +2,7 @@ package nexusoperation
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -20,10 +21,10 @@ var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
-	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation) error
-	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation) error
-	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation) error
-	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation) error
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, links []*commonpb.Link) error
+	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
 }
 
@@ -107,7 +108,7 @@ func (o *Operation) StoreProcessor(ctx chasm.Context) OperationStore {
 	return o
 }
 
-func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation) error {
+func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation, _ []*commonpb.Link) error {
 	return transitionStarted.Apply(o, ctx, EventStarted{
 		OperationToken: o.GetOperationToken(),
 		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
@@ -118,14 +119,14 @@ func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Opera
 	return transitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
-func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation) error {
+func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation, _ *failurepb.Failure) error {
 	return transitionFailed.Apply(o, ctx, EventFailed{})
 }
 
-func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation) error {
+func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation, _ *failurepb.Failure) error {
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{})
 }
 
-func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation) error {
+func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation, _ *failurepb.Failure) error {
 	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
