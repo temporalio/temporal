@@ -1515,9 +1515,9 @@ func (s *ScheduleCHASMFunctionalSuite) TestPatchRejectsExcessBackfillers() {
 // gets a Nexus callback attached by the SchedulerCallbacksTask, and the migrated
 // CHASM scheduler learns about the workflow's completion.
 func (s *ScheduleCHASMFunctionalSuite) TestMigrationCallbackAttach() {
-	sid := "sched-test-migration-cb-attach"
-	wid := "sched-test-migration-cb-attach-wf"
-	wt := "sched-test-migration-cb-attach-wt"
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
 
 	// Register a workflow that blocks until signaled.
 	resumeSignal := "resume"
@@ -1532,12 +1532,12 @@ func (s *ScheduleCHASMFunctionalSuite) TestMigrationCallbackAttach() {
 	// Start the signal-blocked workflow directly.
 	ctx := s.newContext()
 	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:  s.Namespace().String(),
-		WorkflowId: wid,
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   wid,
 		WorkflowType: &commonpb.WorkflowType{Name: wt},
-		TaskQueue:  &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     testcore.RandomizeStr("identity"),
+		RequestId:    testcore.RandomizeStr("request-id"),
 	})
 	s.NoError(err)
 

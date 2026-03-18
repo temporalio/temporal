@@ -115,7 +115,7 @@ func (r *SchedulerCallbacksTaskExecutor) Execute(
 
 			invoker := s.Invoker.Get(ctx)
 			for _, start := range invoker.BufferedStarts {
-				if !start.HasCallback && start.GetRunId() != "" && start.GetCompleted() == nil {
+				if needsCallback(start) {
 					starts = append(starts, common.CloneProto(start))
 				}
 			}
@@ -203,7 +203,10 @@ func (r *SchedulerCallbacksTaskExecutor) watchRunningStart(
 	}
 
 	wfInfo := descResp.GetWorkflowExecutionInfo()
-	if wfInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	wfProgressing := wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
+		wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+
+	if !wfProgressing {
 		return &watchResult{
 			completed: &schedulespb.CompletedResult{
 				Status:    wfInfo.GetStatus(),
@@ -259,9 +262,13 @@ func (r *SchedulerCallbacksTaskExecutor) Validate(
 ) (bool, error) {
 	invoker := scheduler.Invoker.Get(ctx)
 	for _, start := range invoker.BufferedStarts {
-		if !start.HasCallback && start.GetRunId() != "" && start.GetCompleted() == nil {
+		if needsCallback(start) {
 			return true, nil
 		}
 	}
 	return false, nil
+}
+
+func needsCallback(start *schedulespb.BufferedStart) bool {
+	return !start.HasCallback && start.GetRunId() != "" && start.GetCompleted() != nil
 }
