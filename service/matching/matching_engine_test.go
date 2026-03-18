@@ -3582,7 +3582,8 @@ func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 }
 
 func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {
-	ch := s.matchingEngine.nexusEndpointsOwnershipLostCh
+	_, ch, err := s.matchingEngine.checkNexusEndpointsOwnership()
+	s.NoError(err)
 	s.matchingEngine.notifyNexusEndpointsOwnershipChange()
 	select {
 	case <-ch:
