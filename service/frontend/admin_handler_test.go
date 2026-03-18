@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmworkflowregistry "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	clientmocks "go.temporal.io/server/client"
 	historyclient "go.temporal.io/server/client/history"
 	"go.temporal.io/server/common/clock"
@@ -151,7 +152,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	}
 
 	chasmRegistry := chasm.NewRegistry(s.mockResource.GetLogger())
-	err := chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflowregistry.NewRegistry()))
 	s.NoError(err)
 
 	args := NewAdminHandlerArgs{

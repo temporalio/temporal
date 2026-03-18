@@ -5,6 +5,7 @@ import (
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmworkflowregistry "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common/log"
 )
 
@@ -15,7 +16,7 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 		return nil, err
 	}
 
-	if err := registry.Register(chasmworkflow.NewLibrary()); err != nil {
+	if err := registry.Register(chasmworkflow.NewLibrary(chasmworkflowregistry.NewRegistry())); err != nil {
 		return nil, err
 	}
 

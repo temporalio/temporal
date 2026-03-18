@@ -19,19 +19,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// EventDefinition is a definition for a history event for a given event type.
-type EventDefinition interface {
-	Type() enumspb.EventType
-	IsWorkflowTaskTrigger() bool
-	Apply(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent) error
-	CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
-}
-
-// EventRegistry provides access to event definitions by event type.
-type EventRegistry interface {
-	EventDefinition(t enumspb.EventType) (EventDefinition, bool)
-}
-
 type Workflow struct {
 	chasm.UnimplementedComponent
 
@@ -41,9 +28,6 @@ type Workflow struct {
 
 	// MSPointer is a special in-memory field for accessing the underlying mutable state.
 	chasm.MSPointer
-
-	// EventRegistry provides access to event definitions for applying history events.
-	EventRegistry EventRegistry
 
 	// Callbacks map is used to store the callbacks for the workflow.
 	Callbacks chasm.Map[string, *callback.Callback]
@@ -156,6 +140,11 @@ func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*hist
 	return w.MSPointer.AddHistoryEvent(t, setAttributes)
 }
 
+// eventRegistry retrieves the EventRegistry from the CHASM context.
+func eventRegistry(ctx chasm.Context) EventRegistry {
+	return ctx.Value(eventRegistryChasmCtxKey).(EventRegistry)
+}
+
 // HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.
 func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
@@ -184,7 +173,7 @@ func (w *Workflow) OnNexusOperationStarted(
 		}
 	})
 
-	def, ok := w.EventRegistry.EventDefinition(eventType)
+	def, ok := eventRegistry(ctx).EventDefinition(eventType)
 	if !ok {
 		return fmt.Errorf("no event definition registered for %v", eventType)
 	}
@@ -214,7 +203,7 @@ func (w *Workflow) OnNexusOperationCancelled(
 		}
 	})
 
-	def, ok := w.EventRegistry.EventDefinition(eventType)
+	def, ok := eventRegistry(ctx).EventDefinition(eventType)
 	if !ok {
 		return fmt.Errorf("no event definition registered for %v", eventType)
 	}
@@ -244,7 +233,7 @@ func (w *Workflow) OnNexusOperationFailed(
 		}
 	})
 
-	def, ok := w.EventRegistry.EventDefinition(eventType)
+	def, ok := eventRegistry(ctx).EventDefinition(eventType)
 	if !ok {
 		return fmt.Errorf("no event definition registered for %v", eventType)
 	}
@@ -274,7 +263,7 @@ func (w *Workflow) OnNexusOperationCompleted(
 		}
 	})
 
-	def, ok := w.EventRegistry.EventDefinition(eventType)
+	def, ok := eventRegistry(ctx).EventDefinition(eventType)
 	if !ok {
 		return fmt.Errorf("no event definition registered for %v", eventType)
 	}
@@ -304,7 +293,7 @@ func (w *Workflow) OnNexusOperationTimedOut(
 		}
 	})
 
-	def, ok := w.EventRegistry.EventDefinition(eventType)
+	def, ok := eventRegistry(ctx).EventDefinition(eventType)
 	if !ok {
 		return fmt.Errorf("no event definition registered for %v", eventType)
 	}

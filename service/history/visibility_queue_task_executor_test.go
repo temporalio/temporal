@@ -19,6 +19,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	chasmworkflowregistry "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -131,7 +132,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 	s.NoError(err)
 	err = chasmRegistry.Register(&testChasmLibrary{})
 	s.NoError(err)
-	err = chasmRegistry.Register(chasmworkflow.NewLibrary())
+	err = chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflowregistry.NewRegistry()))
 	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
