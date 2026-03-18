@@ -270,5 +270,5 @@ func (r *SchedulerCallbacksTaskExecutor) Validate(
 }
 
 func needsCallback(start *schedulespb.BufferedStart) bool {
-	return !start.HasCallback && start.GetRunId() != "" && start.GetCompleted() != nil
+	return !start.HasCallback && start.GetRunId() != "" && start.GetCompleted() == nil
 }
