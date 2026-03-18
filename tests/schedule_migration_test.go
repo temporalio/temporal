@@ -461,7 +461,23 @@ func TestCHASMScheduleDescribeAfterDisablingCreationAndMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, firstDescribe.GetSchedule())
+	require.Eventually(t, func() bool {
+		listResp, listErr := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{Namespace: nsName})
+		if listErr != nil {
+			return false
+		}
+		for _, schedule := range listResp.GetSchedules() {
+			if schedule.GetScheduleId() == sid {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 200*time.Millisecond)
 
+	// CHASM-created schedules do not create the legacy V1 scheduler workflow.
+	// We assert that describing the V1 workflow ID returns NotFound so this test
+	// explicitly proves the schedule is CHASM-backed before toggling creation and
+	// migration off.
 	_, err = env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
 		ctx,
 		&historyservice.DescribeWorkflowExecutionRequest{
@@ -486,6 +502,18 @@ func TestCHASMScheduleDescribeAfterDisablingCreationAndMigration(t *testing.T) {
 		if describeErr != nil {
 			return false
 		}
-		return describeResp.GetSchedule() != nil
+		if describeResp.GetSchedule() == nil {
+			return false
+		}
+		listResp, listErr := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{Namespace: nsName})
+		if listErr != nil {
+			return false
+		}
+		for _, schedule := range listResp.GetSchedules() {
+			if schedule.GetScheduleId() == sid {
+				return true
+			}
+		}
+		return false
 	}, 10*time.Second, 200*time.Millisecond)
 }
