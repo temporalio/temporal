@@ -418,10 +418,6 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	env := testcore.NewEnv(
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		// Explicitly disable CHASM scheduler creation so the frontend's
-		// DescribeSchedule routes directly to V1 (workflow-backed) without
-		// attempting the CHASM path first. This lets us verify the V1 schedule
-		// is fully functional after migration.
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
 	)
 
@@ -557,6 +553,17 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	// Closed CHASM schedulers return ErrClosed (FailedPrecondition).
 	var failedPreconditionErr *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &failedPreconditionErr)
+
+	// Validate ListSchedules returns exactly one entry (no duplicates from V1+V2).
+	var listResp *workflowservice.ListSchedulesResponse
+	require.Eventually(t, func() bool {
+		listResp, err = env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       nsName,
+			MaximumPageSize: 10,
+		})
+		return err == nil && len(listResp.GetSchedules()) == 1
+	}, 10*time.Second, 500*time.Millisecond)
+	require.Equal(t, sid, listResp.GetSchedules()[0].GetScheduleId())
 }
 
 func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {

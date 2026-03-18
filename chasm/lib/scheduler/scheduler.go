@@ -90,7 +90,7 @@ var (
 	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
-	ErrMigrationPending      = serviceerror.NewFailedPrecondition("schedule has a pending migration to workflow; unpause is not allowed")
+	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -739,14 +739,14 @@ func (s *Scheduler) Update(
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
 	}
 
+	// Reject updates outright when a migration is pending so that changes are
+	// not silently lost during the migration window.
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
+
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
-
-	// If a migration is pending, prevent the update from unpausing the schedule.
-	if s.WorkflowMigration != nil {
-		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
-	}
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()

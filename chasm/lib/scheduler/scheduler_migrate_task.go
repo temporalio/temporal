@@ -108,10 +108,10 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 
 			// Restore the pre-migration paused state so the V1 workflow receives
 			// the correct schedule state (not the migration-imposed pause).
-			if schedulerState.GetSchedule().GetState() != nil && schedulerState.GetWorkflowMigration() != nil {
-				schedulerState.Schedule.State.Paused = schedulerState.GetWorkflowMigration().GetPreMigrationPaused()
-				schedulerState.Schedule.State.Notes = schedulerState.GetWorkflowMigration().GetPreMigrationNotes()
-			}
+			// Validation guarantees WorkflowMigration and State are always set
+			// when this task runs.
+			schedulerState.Schedule.State.Paused = schedulerState.WorkflowMigration.PreMigrationPaused
+			schedulerState.Schedule.State.Notes = schedulerState.WorkflowMigration.PreMigrationNotes
 
 			result = readResult{
 				args: migration.CHASMToLegacyStartScheduleArgs(
