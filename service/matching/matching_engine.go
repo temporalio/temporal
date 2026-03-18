@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/stream_batcher"
+	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
@@ -689,6 +690,7 @@ pollLoop:
 		}
 		if task.isStarted() {
 			// tasks received from remote are already started. So, simply forward the response
+			// no need to emit task dispatch latency metric because the parent partition already did it.
 			return e.convertPollWorkflowTaskQueueResponse(task.pollWorkflowTaskQueueResponse(), task.namespace)
 		}
 
@@ -737,6 +739,8 @@ pollLoop:
 				NextPageToken:              nextPageToken,
 			}
 
+			// Local query match. Emit the dispatch latency metric. This metric does not include the query response time.
+			e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 			return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 		}
 
@@ -822,6 +826,7 @@ pollLoop:
 		}
 
 		task.finish(nil, true)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
@@ -1095,6 +1100,7 @@ pollLoop:
 			continue pollLoop
 		}
 		task.finish(nil, true)
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
 }
@@ -1353,16 +1359,12 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 							if req.GetReportStats() {
 								totalStats := physicalTqInfos[buildId][taskQueueType].TaskQueueStats
 								partitionStats := vii.PhysicalTaskQueueInfo.TaskQueueStats
-								mergedStats = &taskqueuepb.TaskQueueStats{
-									ApproximateBacklogCount: totalStats.ApproximateBacklogCount + partitionStats.ApproximateBacklogCount,
-									ApproximateBacklogAge:   oldestBacklogAge(totalStats.ApproximateBacklogAge, partitionStats.ApproximateBacklogAge),
-									TasksAddRate:            totalStats.TasksAddRate + partitionStats.TasksAddRate,
-									TasksDispatchRate:       totalStats.TasksDispatchRate + partitionStats.TasksDispatchRate,
-								}
+								mergedStats = cloneTaskQueueStats(totalStats)
+								taskqueue.MergeStats(mergedStats, partitionStats)
 							}
 
 							physicalTqInfos[buildId][taskQueueType] = &taskqueuespb.PhysicalTaskQueueInfo{
-								Pollers:        dedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
+								Pollers:        taskqueue.DedupPollers(append(physInfo.GetPollers(), vii.PhysicalTaskQueueInfo.GetPollers()...)),
 								TaskQueueStats: mergedStats,
 							}
 						}
@@ -1519,8 +1521,8 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 						if _, ok := taskQueueStatsByPriority[pri]; !ok {
 							taskQueueStatsByPriority[pri] = &taskqueuepb.TaskQueueStats{}
 						}
-						mergeStats(taskQueueStats, priorityStats)
-						mergeStats(taskQueueStatsByPriority[pri], priorityStats)
+						taskqueue.MergeStats(taskQueueStats, priorityStats)
+						taskqueue.MergeStats(taskQueueStatsByPriority[pri], priorityStats)
 					}
 				}
 			}
@@ -1599,18 +1601,6 @@ func (e *matchingEngineImpl) DescribeVersionedTaskQueues(
 
 	pm.PutCache(cacheKey, resp)
 	return resp, nil
-}
-
-func dedupPollers(pollerInfos []*taskqueuepb.PollerInfo) []*taskqueuepb.PollerInfo {
-	allKeys := make(map[string]bool)
-	var list []*taskqueuepb.PollerInfo
-	for _, item := range pollerInfos {
-		if _, value := allKeys[item.GetIdentity()]; !value {
-			allKeys[item.GetIdentity()] = true
-			list = append(list, item)
-		}
-	}
-	return list
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueuePartition(
@@ -2626,6 +2616,7 @@ pollLoop:
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
 
+		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return &matchingservice.PollNexusTaskQueueResponse{
 			Response: &workflowservice.PollNexusTaskQueueResponse{
 				TaskToken:             serializedToken,
@@ -2881,6 +2872,70 @@ func (e *matchingEngineImpl) pollTask(
 		}()
 	}
 	return pm.PollTask(ctx, pollMetadata)
+}
+
+// emitTaskDispatchLatency emits latency metrics for a task dispatched to a worker.
+// Here is what task_dispatch_latency measures vs schedule_to_start_latency:
+//
+//	Latency        					 		 | task_dispatch 	| schedule_to_start
+//
+// --------------------------------------------------+------------------+------------------
+//
+//	transfer task processing 						 | excluded 		| included
+//	record*TaskStarted latency 						 | included 		| partial
+//	task forward latency 							 | included 		| included
+//	poll forward latency 							 | excluded for now | excluded
+//	backlog delay 									 | included 	    | included
+//	sync match delay 								 | included 	    | included
+//	rescheduling of the same task attempt by History | resets latency   | does not reset
+//
+// ----------------------------------------------------------------------------------------
+func (e *matchingEngineImpl) emitTaskDispatchLatency(
+	task *internalTask,
+	partition tqid.Partition,
+	namespaceID string,
+	namespaceName string,
+	pollMetadata *pollMetadata,
+) {
+	tqName := partition.TaskQueue().Name()
+	taskType := partition.TaskType()
+
+	if !e.config.EmitTaskDispatchLatencyAtPoll(namespaceName, tqName, taskType) {
+		return
+	}
+
+	taskCreateTime := task.getCreateTime()
+	if taskCreateTime == nil {
+		return
+	}
+
+	// Determine origin partition: for forwarded tasks use the origin partition from
+	// forward info; for local tasks use the current partition.
+	originPartition := partition
+	if task.isForwarded() && task.forwardInfo.GetOriginPartition() != "" {
+		o, err := tqid.NormalPartitionFromRpcName(task.forwardInfo.GetOriginPartition(), namespaceID, taskType)
+		if err == nil {
+			originPartition = o
+		} // else ignore the error and use the current partition
+	}
+
+	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions))
+
+	handler := metrics.GetPerTaskQueuePartitionIDScope(
+		e.metricsHandler,
+		namespaceName,
+		originPartition,
+		e.config.BreakdownMetricsByTaskQueue(namespaceName, tqName, taskType),
+		e.config.BreakdownMetricsByPartition(namespaceName, tqName, taskType),
+	)
+
+	metrics.TaskDispatchLatencyPerTaskQueue.With(handler).Record(
+		time.Since(timestamp.TimeValue(taskCreateTime)),
+		metrics.TaskSourceTag(task.source),
+		metrics.ForwardedTag(task.isForwarded()),
+		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
+		metrics.WorkerVersionTag(workerVersion, e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)),
+	)
 }
 
 // Unloads the given task queue partition. If it has already been unloaded (i.e. it's not present in the loaded

@@ -1,9 +1,7 @@
 package frontend
 
 import (
-	"fmt"
 	"net"
-	"os"
 	"regexp"
 	"sync"
 	"time"
@@ -191,9 +189,6 @@ type Config struct {
 	EnableWorkerVersioningWorkflow dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkerVersioningRules    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	// EnableNexusAPIs controls whether to allow invoking Nexus related APIs.
-	EnableNexusAPIs dynamicconfig.BoolPropertyFn
-
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -225,7 +220,6 @@ type Config struct {
 	WorkerHeartbeatsEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
-	ListWorkersEnabled                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -365,7 +359,6 @@ func NewConfig(
 		EnableWorkerVersioningWorkflow: dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Get(dc),
 		EnableWorkerVersioningRules:    dynamicconfig.FrontendEnableWorkerVersioningRuleAPIs.Get(dc),
 
-		EnableNexusAPIs:                dynamicconfig.EnableNexus.Get(dc),
 		CallbackURLMaxLength:           dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:          dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:        dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
@@ -391,7 +384,6 @@ func NewConfig(
 		WorkerHeartbeatsEnabled:           dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
 		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
 		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		ListWorkersEnabled:                dynamicconfig.ListWorkersEnabled.Get(dc),
 		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
 		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
 
@@ -485,15 +477,9 @@ func (s *Service) Start() {
 				s.logger.Fatal("Failed to serve HTTP API server", tag.Error(err))
 			}
 		}()
-	} else if s.config.EnableNexusAPIs() {
-		var action string
-		if os.Args[0] == "temporal" {
-			action = "To enable Nexus, start the server with: `temporal server start-dev --http-port 7243 --dynamic-config-value system.enableNexus=true`."
-		} else {
-			action = "To enable Nexus, follow these instructions: https://github.com/temporalio/temporal/blob/main/docs/architecture/nexus.md#enabling-nexus."
-		}
-
-		s.logger.Warn(fmt.Sprintf("system.enableNexus dynamic config is enabled but the HTTP API port has not been set. Starting with Nexus disabled. %s", action))
+	} else {
+		s.logger.Warn("HTTP API port has not been set. Nexus HTTP endpoints will not be available. " +
+			"To enable Nexus, follow these instructions: https://github.com/temporalio/temporal/blob/main/docs/architecture/nexus.md#enabling-nexus.")
 	}
 
 	go s.membershipMonitor.Start()

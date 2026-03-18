@@ -1219,6 +1219,13 @@ var (
 			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand poller autoscaling adoption.
+	PollerAutoscalingHeartbeatCount = NewCounterDef(
+		"poller_autoscaling_heartbeat_count",
+		WithDescription(
+			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
+	)
+	// ----------------------------------------------------------------------------------------------------------------
 
 	// Versioning and Reachability
 	ReachabilityExitPointCounter = NewCounterDef("reachability_exit_point_count")

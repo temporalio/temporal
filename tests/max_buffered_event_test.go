@@ -19,6 +19,7 @@ import (
 )
 
 func TestMaxBufferedEventSuite(t *testing.T) {
+	t.Parallel()
 	commonOpts := []testcore.TestOption{
 		testcore.WithSdkWorker(),
 		// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit.

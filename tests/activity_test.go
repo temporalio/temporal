@@ -89,8 +89,8 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringBackoff
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -159,8 +159,8 @@ func (s *ActivityClientTestSuite) TestActivityScheduleToClose_FiredDuringActivit
 		return "done!", err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        s.T().Name(),
@@ -298,8 +298,8 @@ func (s *ActivityClientTestSuite) Test_ActivityTimeouts() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 "functional-test-activity-timeouts",
@@ -450,7 +450,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeatWorkflow_Success() {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 		for i := range 10 {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
 			_, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
 				Namespace: s.Namespace().String(),
 				TaskToken: task.TaskToken,
@@ -986,7 +986,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
 		for i := range 10 {
-			s.Logger.Info("Heartbeating for activity", tag.WorkflowActivityID(task.ActivityId), tag.Counter(i))
+			s.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
 			response, err := s.FrontendClient().RecordActivityTaskHeartbeat(testcore.NewContext(),
 				&workflowservice.RecordActivityTaskHeartbeatRequest{
 					Namespace: s.Namespace().String(),
@@ -1231,8 +1231,8 @@ func (s *ActivityClientTestSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-heartbeat-details-during-retry"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -1525,8 +1525,8 @@ func (s *ActivityClientTestSuite) TestActivity_AttemptsExceeded() {
 		return err
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
 
 	wfID := testcore.RandomizeStr(s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{

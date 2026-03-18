@@ -74,6 +74,83 @@ func (s *ChasmSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+func (s *ChasmSuite) TestDeleteExecution_RunningExecution() {
+	nsName := s.createGlobalNamespace()
+
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	s.NoError(err)
+	nsID := nsResp.NamespaceInfo.GetId()
+
+	tv := testvars.New(s.T())
+	storeID := tv.Any().String()
+
+	ctx, cancel := context.WithTimeout(s.chasmContext, chasmTestTimeout)
+	defer cancel()
+
+	_, err = tests.NewPayloadStoreHandler(
+		ctx,
+		tests.NewPayloadStoreRequest{
+			NamespaceID:      namespace.ID(nsID),
+			StoreID:          storeID,
+			IDReusePolicy:    chasm.BusinessIDReusePolicyRejectDuplicate,
+			IDConflictPolicy: chasm.BusinessIDConflictPolicyFail,
+		},
+	)
+	s.NoError(err)
+
+	chasmRegistry := s.clusters[0].Host().GetCHASMRegistry()
+	archetypeID, ok := chasmRegistry.ComponentIDFor(&tests.PayloadStore{})
+	s.True(ok)
+	archetype, ok := chasmRegistry.ComponentFqnByID(archetypeID)
+	s.True(ok)
+
+	describeExecutionRequest := &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: storeID,
+		},
+		Archetype: archetype,
+	}
+	_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+	s.NoError(err)
+
+	s.Eventually(func() bool {
+		_, err = s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		return err == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
+	err = tests.DeletePayloadStoreHandler(
+		ctx,
+		tests.DeletePayloadStoreRequest{
+			NamespaceID: namespace.ID(nsID),
+			StoreID:     storeID,
+			Reason:      "xdc test deletion",
+			Identity:    "test-identity",
+		},
+	)
+	s.NoError(err)
+
+	// Active cluster should fully delete the execution.
+	s.Eventually(func() bool {
+		_, err = s.clusters[0].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		return errors.As(err, new(*serviceerror.NotFound))
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Standby cluster receives the close via replication but won't process
+	// the DeleteExecutionTask itself; it will be cleaned up by the retention timer.
+	// Verify the execution is terminated on the standby.
+	s.Eventually(func() bool {
+		resp, err := s.clusters[1].AdminClient().DescribeMutableState(testcore.NewContext(), describeExecutionRequest)
+		if err != nil {
+			// Execution may already be gone if replication of delete happened.
+			return errors.As(err, new(*serviceerror.NotFound))
+		}
+		return resp.GetDatabaseMutableState().GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 func (s *ChasmSuite) TestRetentionTimer() {
 	nsName := s.createGlobalNamespace()
 
