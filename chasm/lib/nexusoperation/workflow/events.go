@@ -236,7 +236,7 @@ func (d StartedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// _, err := TransitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
+	// _, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
 	// 	return TransitionStarted.Apply(o, EventStarted{
 	// 		Time:       event.EventTime.AsTime(),
 	// 		Node:       node,
