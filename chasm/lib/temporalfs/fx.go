@@ -1,6 +1,9 @@
 package temporalfs
 
 import (
+	"os"
+	"path/filepath"
+
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.uber.org/fx"
@@ -12,7 +15,8 @@ var HistoryModule = fx.Module(
 		ConfigProvider,
 		fx.Annotate(
 			func(logger log.Logger) FSStoreProvider {
-				return NewInMemoryStoreProvider(logger)
+				dataDir := filepath.Join(os.TempDir(), "temporalfs")
+				return NewPebbleStoreProvider(dataDir, logger)
 			},
 			fx.As(new(FSStoreProvider)),
 		),

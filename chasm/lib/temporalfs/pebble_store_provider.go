@@ -1,176 +1,102 @@
 package temporalfs
 
 import (
-	"encoding/binary"
-	"errors"
-	"sort"
+	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
+	"github.com/temporalio/temporal-fs/pkg/store"
+	pebblestore "github.com/temporalio/temporal-fs/pkg/store/pebble"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
-// InMemoryStoreProvider implements FSStoreProvider using in-memory maps.
-// This is a placeholder for development and testing. The production OSS
-// implementation will use PebbleDB once the temporal-fs module is integrated.
-type InMemoryStoreProvider struct {
-	logger log.Logger
+// PebbleStoreProvider implements FSStoreProvider using PebbleDB via temporal-fs.
+// One PebbleDB instance is created per history shard (lazy-created).
+// Individual filesystem executions are isolated via PrefixedStore.
+type PebbleStoreProvider struct {
+	dataDir string
+	logger  log.Logger
 
-	mu     sync.Mutex
-	stores map[string]*inMemoryStore
+	mu   sync.Mutex
+	dbs  map[int32]*pebblestore.Store
+	seqs map[string]uint64 // maps "ns:fsid" → partition ID
+	next uint64
 }
 
-// NewInMemoryStoreProvider creates a new InMemoryStoreProvider.
-func NewInMemoryStoreProvider(logger log.Logger) *InMemoryStoreProvider {
-	return &InMemoryStoreProvider{
-		logger: logger,
-		stores: make(map[string]*inMemoryStore),
+// NewPebbleStoreProvider creates a new PebbleStoreProvider.
+// dataDir is the root directory for TemporalFS PebbleDB instances.
+func NewPebbleStoreProvider(dataDir string, logger log.Logger) *PebbleStoreProvider {
+	return &PebbleStoreProvider{
+		dataDir: dataDir,
+		logger:  logger,
+		dbs:     make(map[int32]*pebblestore.Store),
+		seqs:    make(map[string]uint64),
+		next:    1,
 	}
 }
 
-func (p *InMemoryStoreProvider) GetStore(_ int32, namespaceID string, filesystemID string) (FSStore, error) {
-	key := string(makeExecutionPrefix(namespaceID, filesystemID))
+func (p *PebbleStoreProvider) GetStore(shardID int32, namespaceID string, filesystemID string) (store.Store, error) {
+	db, err := p.getOrCreateDB(shardID)
+	if err != nil {
+		return nil, err
+	}
 
+	partitionID := p.getPartitionID(namespaceID, filesystemID)
+	return store.NewPrefixedStore(db, partitionID), nil
+}
+
+func (p *PebbleStoreProvider) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if store, ok := p.stores[key]; ok {
-		return store, nil
+	var firstErr error
+	for id, db := range p.dbs {
+		if err := db.Close(); err != nil && firstErr == nil {
+			firstErr = err
+			p.logger.Error("Failed to close PebbleDB", tag.ShardID(id), tag.Error(err))
+		}
 	}
-
-	store := &inMemoryStore{
-		data: make(map[string][]byte),
-	}
-	p.stores[key] = store
-	return store, nil
+	p.dbs = make(map[int32]*pebblestore.Store)
+	p.seqs = make(map[string]uint64)
+	return firstErr
 }
 
-func (p *InMemoryStoreProvider) Close() error {
+func (p *PebbleStoreProvider) getOrCreateDB(shardID int32) (*pebblestore.Store, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.stores = make(map[string]*inMemoryStore)
-	return nil
-}
 
-// makeExecutionPrefix creates a unique byte prefix for a filesystem execution.
-func makeExecutionPrefix(namespaceID string, filesystemID string) []byte {
-	prefix := make([]byte, 0, 4+len(namespaceID)+4+len(filesystemID)+1)
-	prefix = binary.BigEndian.AppendUint32(prefix, uint32(len(namespaceID)))
-	prefix = append(prefix, namespaceID...)
-	prefix = binary.BigEndian.AppendUint32(prefix, uint32(len(filesystemID)))
-	prefix = append(prefix, filesystemID...)
-	prefix = append(prefix, '/')
-	return prefix
-}
-
-// inMemoryStore is a simple in-memory FSStore implementation.
-type inMemoryStore struct {
-	mu   sync.RWMutex
-	data map[string][]byte
-}
-
-func (s *inMemoryStore) Get(key []byte) ([]byte, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	val, ok := s.data[string(key)]
-	if !ok {
-		return nil, nil
+	if db, ok := p.dbs[shardID]; ok {
+		return db, nil
 	}
-	result := make([]byte, len(val))
-	copy(result, val)
-	return result, nil
-}
 
-func (s *inMemoryStore) Set(key []byte, value []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	val := make([]byte, len(value))
-	copy(val, value)
-	s.data[string(key)] = val
-	return nil
-}
-
-func (s *inMemoryStore) Delete(key []byte) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.data, string(key))
-	return nil
-}
-
-func (s *inMemoryStore) NewBatch() FSBatch {
-	return &inMemoryBatch{store: s}
-}
-
-func (s *inMemoryStore) Scan(start, end []byte, fn func(key, value []byte) bool) error {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	// Collect and sort keys for deterministic iteration.
-	keys := make([]string, 0, len(s.data))
-	for k := range s.data {
-		if k >= string(start) && k < string(end) {
-			keys = append(keys, k)
-		}
+	dbPath := filepath.Join(p.dataDir, fmt.Sprintf("shard-%d", shardID))
+	if err := os.MkdirAll(dbPath, 0o750); err != nil {
+		return nil, fmt.Errorf("failed to create PebbleDB dir: %w", err)
 	}
-	sort.Strings(keys)
 
-	for _, k := range keys {
-		if !fn([]byte(k), s.data[k]) {
-			break
-		}
+	db, err := pebblestore.New(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open PebbleDB at %s: %w", dbPath, err)
 	}
-	return nil
+
+	p.dbs[shardID] = db
+	return db, nil
 }
 
-func (s *inMemoryStore) Close() error {
-	return nil
-}
+// getPartitionID returns a stable partition ID for a given namespace+filesystem pair.
+// This is used by PrefixedStore for key isolation.
+func (p *PebbleStoreProvider) getPartitionID(namespaceID string, filesystemID string) uint64 {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
-type batchOp struct {
-	key    string
-	value  []byte
-	delete bool
-}
-
-type inMemoryBatch struct {
-	store *inMemoryStore
-	ops   []batchOp
-}
-
-func (b *inMemoryBatch) Set(key []byte, value []byte) error {
-	val := make([]byte, len(value))
-	copy(val, value)
-	b.ops = append(b.ops, batchOp{key: string(key), value: val})
-	return nil
-}
-
-func (b *inMemoryBatch) Delete(key []byte) error {
-	b.ops = append(b.ops, batchOp{key: string(key), delete: true})
-	return nil
-}
-
-func (b *inMemoryBatch) Commit() error {
-	if b.store == nil {
-		return errors.New("batch already closed")
+	key := namespaceID + ":" + filesystemID
+	if id, ok := p.seqs[key]; ok {
+		return id
 	}
-	b.store.mu.Lock()
-	defer b.store.mu.Unlock()
-
-	for _, op := range b.ops {
-		if op.delete {
-			delete(b.store.data, op.key)
-		} else {
-			b.store.data[op.key] = op.value
-		}
-	}
-	b.ops = nil
-	return nil
-}
-
-func (b *inMemoryBatch) Close() error {
-	b.ops = nil
-	b.store = nil
-	return nil
+	id := p.next
+	p.next++
+	p.seqs[key] = id
+	return id
 }
