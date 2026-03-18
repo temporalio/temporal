@@ -48,8 +48,8 @@ type testContext struct {
 	wf              *chasmworkflow.Workflow
 	backend         *chasm.MockNodeBackend
 	execInfo        *persistencespb.WorkflowExecutionInfo
-	scheduleHandler workflowregistry.Handler
-	cancelHandler   workflowregistry.Handler
+	scheduleHandler workflowregistry.CommandHandler
+	cancelHandler   workflowregistry.CommandHandler
 	history         *historypb.History
 }
 

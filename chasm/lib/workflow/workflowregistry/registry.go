@@ -15,22 +15,22 @@ var ErrDuplicateRegistration = errors.New("duplicate registration")
 // CommandType -> Handler
 // EventType -> chasmworkflow.EventDefinition
 type Registry struct {
-	commandHandlers  map[enumspb.CommandType]Handler
+	commandHandlers  map[enumspb.CommandType]CommandHandler
 	eventDefinitions map[enumspb.EventType]chasmworkflow.EventDefinition
 }
 
 // NewRegistry creates a new [Registry].
 func NewRegistry() *Registry {
 	return &Registry{
-		commandHandlers:  make(map[enumspb.CommandType]Handler),
+		commandHandlers:  make(map[enumspb.CommandType]CommandHandler),
 		eventDefinitions: make(map[enumspb.EventType]chasmworkflow.EventDefinition),
 	}
 }
 
-// RegisterCommandHandler registers a [Handler] for a given command type.
+// RegisterCommandHandler registers a [CommandHandler] for a given command type.
 // Returns an [ErrDuplicateRegistration] if a handler for the given command is already registered.
 // All registration is expected to happen in a single thread on process initialization.
-func (r *Registry) RegisterCommandHandler(t enumspb.CommandType, handler Handler) error {
+func (r *Registry) RegisterCommandHandler(t enumspb.CommandType, handler CommandHandler) error {
 	if existing, ok := r.commandHandlers[t]; ok {
 		return fmt.Errorf("%w: command handler for %v: %v", ErrDuplicateRegistration, t, existing)
 	}
@@ -38,8 +38,8 @@ func (r *Registry) RegisterCommandHandler(t enumspb.CommandType, handler Handler
 	return nil
 }
 
-// CommandHandler returns a [Handler] for a given command type and a boolean indicating whether it was found.
-func (r *Registry) CommandHandler(t enumspb.CommandType) (handler Handler, ok bool) {
+// CommandHandler returns a [CommandHandler] for a given command type and a boolean indicating whether it was found.
+func (r *Registry) CommandHandler(t enumspb.CommandType) (handler CommandHandler, ok bool) {
 	handler, ok = r.commandHandlers[t]
 	return
 }

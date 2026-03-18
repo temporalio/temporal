@@ -9,7 +9,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
 
-// ErrNotSupported is returned by a [Handler] when the command type is registered but not supported;
+// ErrNotSupported is returned by a [CommandHandler] when the command type is registered but not supported;
 // for example, because of a disabled feature flag.
 var ErrCommandNotSupported = errors.New("command not supported")
 
@@ -17,10 +17,9 @@ type CommandHandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
 }
 
-// Handler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
+// CommandHandler is a function for handling a workflow command as part of processing a RespondWorkflowTaskCompleted
 // worker request.
-// TODO: Rename CommandHandler
-type Handler func(
+type CommandHandler func(
 	chasmCtx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
 	validator Validator,
@@ -34,7 +33,7 @@ type Validator interface {
 	IsValidPayloadSize(size int) bool
 }
 
-// FailWorkflowTaskError is an error that can be returned from a [Handler] to fail the current workflow task and
+// FailWorkflowTaskError is an error that can be returned from a [CommandHandler] to fail the current workflow task and
 // optionally terminate the entire workflow.
 type FailWorkflowTaskError struct {
 	Cause             enumspb.WorkflowTaskFailedCause
