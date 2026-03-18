@@ -149,8 +149,8 @@ func (s *storageWrapper) QueryWithFilters(ctx context.Context, URI archiver.URI,
 			return resultSet, true, currentPos, nil
 		}
 
-		if completed := isPageCompleted(pageSize, len(resultSet)); completed {
-			return resultSet, completed, currentPos, err
+		if isPageCompleted(pageSize, len(resultSet)) {
+			return resultSet, false, currentPos, err
 		}
 
 		valid := true
