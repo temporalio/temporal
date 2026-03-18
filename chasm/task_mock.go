@@ -92,42 +92,42 @@ func (mr *MockPureTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPureTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
 }
 
-// MockSideEffectDiscardHandler is a mock of SideEffectDiscardHandler interface.
-type MockSideEffectDiscardHandler[T any] struct {
+// MockSideEffectTaskDiscarder is a mock of SideEffectTaskDiscarder interface.
+type MockSideEffectTaskDiscarder[T any] struct {
 	ctrl     *gomock.Controller
-	recorder *MockSideEffectDiscardHandlerMockRecorder[T]
+	recorder *MockSideEffectTaskDiscarderMockRecorder[T]
 	isgomock struct{}
 }
 
-// MockSideEffectDiscardHandlerMockRecorder is the mock recorder for MockSideEffectDiscardHandler.
-type MockSideEffectDiscardHandlerMockRecorder[T any] struct {
-	mock *MockSideEffectDiscardHandler[T]
+// MockSideEffectTaskDiscarderMockRecorder is the mock recorder for MockSideEffectTaskDiscarder.
+type MockSideEffectTaskDiscarderMockRecorder[T any] struct {
+	mock *MockSideEffectTaskDiscarder[T]
 }
 
-// NewMockSideEffectDiscardHandler creates a new mock instance.
-func NewMockSideEffectDiscardHandler[T any](ctrl *gomock.Controller) *MockSideEffectDiscardHandler[T] {
-	mock := &MockSideEffectDiscardHandler[T]{ctrl: ctrl}
-	mock.recorder = &MockSideEffectDiscardHandlerMockRecorder[T]{mock}
+// NewMockSideEffectTaskDiscarder creates a new mock instance.
+func NewMockSideEffectTaskDiscarder[T any](ctrl *gomock.Controller) *MockSideEffectTaskDiscarder[T] {
+	mock := &MockSideEffectTaskDiscarder[T]{ctrl: ctrl}
+	mock.recorder = &MockSideEffectTaskDiscarderMockRecorder[T]{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockSideEffectDiscardHandler[T]) EXPECT() *MockSideEffectDiscardHandlerMockRecorder[T] {
+func (m *MockSideEffectTaskDiscarder[T]) EXPECT() *MockSideEffectTaskDiscarderMockRecorder[T] {
 	return m.recorder
 }
 
-// HandleDiscard mocks base method.
-func (m *MockSideEffectDiscardHandler[T]) HandleDiscard(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task T) error {
+// Discard mocks base method.
+func (m *MockSideEffectTaskDiscarder[T]) Discard(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task T) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleDiscard", ctx, ref, attrs, task)
+	ret := m.ctrl.Call(m, "Discard", ctx, ref, attrs, task)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// HandleDiscard indicates an expected call of HandleDiscard.
-func (mr *MockSideEffectDiscardHandlerMockRecorder[T]) HandleDiscard(ctx, ref, attrs, task any) *gomock.Call {
+// Discard indicates an expected call of Discard.
+func (mr *MockSideEffectTaskDiscarderMockRecorder[T]) Discard(ctx, ref, attrs, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDiscard", reflect.TypeOf((*MockSideEffectDiscardHandler[T])(nil).HandleDiscard), ctx, ref, attrs, task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Discard", reflect.TypeOf((*MockSideEffectTaskDiscarder[T])(nil).Discard), ctx, ref, attrs, task)
 }
 
 // MockTaskValidator is a mock of TaskValidator interface.

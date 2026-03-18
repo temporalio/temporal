@@ -7,20 +7,20 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// mockDiscardableSideEffectExecutor wraps MockSideEffectTaskExecutor and adds SideEffectDiscardHandler support for
+// mockDiscardableSideEffectExecutor wraps MockSideEffectTaskExecutor and adds SideEffectTaskDiscarder support for
 // testing ExecuteSideEffectDiscardTask.
 type mockDiscardableSideEffectExecutor struct {
 	*MockSideEffectTaskExecutor[any, *TestDiscardableSideEffectTask]
-	handleDiscardFn func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task *TestDiscardableSideEffectTask) error
+	discardFn func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task *TestDiscardableSideEffectTask) error
 }
 
-func (m *mockDiscardableSideEffectExecutor) HandleDiscard(
+func (m *mockDiscardableSideEffectExecutor) Discard(
 	ctx context.Context,
 	ref ComponentRef,
 	attrs TaskAttributes,
 	task *TestDiscardableSideEffectTask,
 ) error {
-	return m.handleDiscardFn(ctx, ref, attrs, task)
+	return m.discardFn(ctx, ref, attrs, task)
 }
 
 type TestLibrary struct {

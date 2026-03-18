@@ -170,7 +170,7 @@ func (s *ChasmSuite) TestRetentionTimer() {
 // Test flow:
 //  1. Start a standalone activity on cluster 0 (active). This generates an ActivityDispatchTask.
 //  2. Wait for replication to cluster 1 (standby).
-//  3. Verify HandleDiscard fired by checking that the activity task appears in cluster 1's matching backlog.
+//  3. Verify Discard fired by checking that the activity task appears in cluster 1's matching backlog.
 //  4. Failover namespace to cluster 1, as SAA tasks are only pollable on active clusters
 //  5. Poll the activity task on cluster 1 (now active).
 //  6. Complete the activity from cluster 1.
@@ -218,7 +218,7 @@ func (s *ChasmSuite) TestActivityDispatchTaskStandbySpillover() {
 		return err == nil
 	}, 10*time.Second, 100*time.Millisecond)
 
-	// Verify HandleDiscard fired on cluster 1 (standby) by checking that the activity task was pushed into cluster 1's
+	// Verify Discard fired on cluster 1 (standby) by checking that the activity task was pushed into cluster 1's
 	// matching backlog
 	s.Eventually(func() bool {
 		for partitionID := range int32(dynamicconfig.GlobalDefaultNumTaskQueuePartitions) {

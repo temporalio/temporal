@@ -7,7 +7,7 @@ import (
 )
 
 // discardableTaskTestLibrary is a minimal CHASM library that registers a side-effect task whose executor implements
-// SideEffectDiscardHandler, used for testing discard paths in standby task executors.
+// SideEffectTaskDiscarder, used for testing discard paths in standby task executors.
 type discardableTaskTestLibrary struct {
 	chasm.UnimplementedLibrary
 }
@@ -38,12 +38,12 @@ func (e *discardableTestTaskExecutor) Execute(_ context.Context, _ chasm.Compone
 	return nil
 }
 
-func (e *discardableTestTaskExecutor) HandleDiscard(_ context.Context, _ chasm.ComponentRef, _ chasm.TaskAttributes, _ *discardableTestTask) error {
+func (e *discardableTestTaskExecutor) Discard(_ context.Context, _ chasm.ComponentRef, _ chasm.TaskAttributes, _ *discardableTestTask) error {
 	return nil
 }
 
 // nonDiscardableTaskTestLibrary is a minimal CHASM library that registers a side-effect task whose executor does NOT
-// implement SideEffectDiscardHandler.
+// implement SideEffectTaskDiscarder.
 type nonDiscardableTaskTestLibrary struct {
 	chasm.UnimplementedLibrary
 }

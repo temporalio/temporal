@@ -3191,7 +3191,7 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 	if !registrableTask.HasDiscardHandler() {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
-			"ExecuteSideEffectDiscardTask called on executor without SideEffectDiscardHandler",
+			"ExecuteSideEffectDiscardTask called on executor without SideEffectTaskDiscarder",
 			fmt.Errorf("%s", registrableTask.fqType()))
 	}
 

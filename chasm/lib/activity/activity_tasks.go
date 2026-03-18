@@ -49,9 +49,9 @@ func (e *activityDispatchTaskExecutor) Execute(
 	return e.pushToMatching(ctx, activityRef)
 }
 
-// HandleDiscard spills the task to matching instead of silently discarding it on standby clusters when the activity
+// Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
 // dispatch task has been pending past the discard delay.
-func (e *activityDispatchTaskExecutor) HandleDiscard(
+func (e *activityDispatchTaskExecutor) Discard(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,

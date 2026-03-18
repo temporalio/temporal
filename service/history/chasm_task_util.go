@@ -80,7 +80,7 @@ func executeChasmSideEffectTask(
 }
 
 // discardChasmSideEffectTask runs the discard handler for a CHASM side effect task on standby. If the task's executor
-// implements SideEffectDiscardHandler, it calls the handler. Otherwise, it returns ErrTaskDiscarded.
+// implements SideEffectTaskDiscarder, it calls the handler. Otherwise, it returns ErrTaskDiscarded.
 func discardChasmSideEffectTask(
 	ctx context.Context,
 	engine chasm.Engine,

@@ -31,7 +31,7 @@ type (
 )
 
 // NewRegistrableSideEffectTask creates a new registrable side-effect task. NOTE: C is not Component but any.
-// If the executor also implements SideEffectDiscardHandler, the framework will call HandleDiscard instead of silently
+// If the executor also implements SideEffectTaskDiscarder, the framework will call Discard instead of silently
 // discarding the task on standby clusters after the discard delay.
 func NewRegistrableSideEffectTask[C any, T any](
 	taskType string,
@@ -40,9 +40,9 @@ func NewRegistrableSideEffectTask[C any, T any](
 	opts ...RegistrableTaskOption,
 ) *RegistrableTask {
 	var discardFn sideEffectTaskDiscardFn
-	if handler, ok := any(executor).(SideEffectDiscardHandler[T]); ok {
+	if discarder, ok := any(executor).(SideEffectTaskDiscarder[T]); ok {
 		discardFn = func(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task any) error {
-			return handler.HandleDiscard(ctx, ref, attrs, task.(T))
+			return discarder.Discard(ctx, ref, attrs, task.(T))
 		}
 	}
 
@@ -171,7 +171,7 @@ func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
 }
 
-// HasDiscardHandler returns true if the task's executor implements SideEffectDiscardHandler, meaning it has custom
+// HasDiscardHandler returns true if the task's executor implements SideEffectTaskDiscarder, meaning it has custom
 // discard behavior for standby clusters.
 func (rt *RegistrableTask) HasDiscardHandler() bool {
 	return rt.sideEffectTaskDiscardFn != nil

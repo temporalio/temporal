@@ -3315,7 +3315,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(true, nil).Times(1)
-		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
@@ -3335,7 +3335,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, nil).Times(1)
-		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			_, err := root.Component(chasmContext, ref)
@@ -3353,7 +3353,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		s.testLibrary.mockDiscardableSideEffectTaskValidator.EXPECT().Validate(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(false, validationErr).Times(1)
-		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			_, err := root.Component(chasmContext, ref)
@@ -3378,7 +3378,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		).Return(true, nil).Times(1)
 		discardErr := errors.New("discard error")
-		s.testLibrary.mockDiscardableSideEffectExecutor.handleDiscardFn = func(
+		s.testLibrary.mockDiscardableSideEffectExecutor.discardFn = func(
 			_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask,
 		) error {
 			s.NotNil(ref.validationFn)
@@ -3395,7 +3395,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 }
 
 func (s *nodeSuite) TestHasDiscardHandler() {
-	// The discardable side effect task has an executor that implements SideEffectDiscardHandler.
+	// The discardable side effect task has an executor that implements SideEffectTaskDiscarder.
 	discardableTask, ok := s.registry.TaskByID(testDiscardableSideEffectTaskTypeID)
 	s.True(ok)
 	s.True(discardableTask.HasDiscardHandler())
