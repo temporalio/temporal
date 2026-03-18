@@ -380,13 +380,13 @@ func (a *Activity) HandleCanceled(
 func (a *Activity) Terminate(
 	ctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
-) (*chasm.TerminateComponentResponse, error) {
+) (chasm.TerminateComponentResponse, error) {
 	// If already in a terminal state, no-op.
 	if !TransitionTerminated.Possible(a) {
 		if a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
-			return &chasm.TerminateComponentResponse{}, nil
+			return chasm.TerminateComponentResponse{}, nil
 		}
-		return nil, serviceerror.NewFailedPrecondition(
+		return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPrecondition(
 			fmt.Sprintf("cannot terminate activity in state %s", a.StateMachineState().String()),
 		)
 	}
@@ -403,7 +403,7 @@ func (a *Activity) Terminate(
 		metricsHandler: ctx.MetricsHandler(),
 		fromStatus:     a.GetStatus(),
 	}
-	return &chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)
 }
 
 func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateRequestEvent) (
