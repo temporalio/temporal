@@ -3236,6 +3236,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			BuildIdBasedVersioning:          true,
 			CountGroupByExecutionStatus:     true,
 			Nexus:                           wh.httpEnabled && wh.config.EnableNexusAPIs(),
+			ServerlessDeployments:           true,
 		},
 	}, nil
 }
