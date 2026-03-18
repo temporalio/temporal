@@ -1005,7 +1005,7 @@ func testCountSchedules(t *testing.T, newContext contextFactory) {
 
 func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 	s := testcore.NewEnv(t, scheduleCommonOpts()...)
-	errorMessageKeyword := "internal per namespace task queue"
+	errorMessageKeyword := "internal per-namespace task queue"
 
 	// Test CreateSchedule with internal task queue
 	t.Run("CreateSchedule_PerNSWorkerTaskQueue", func(t *testing.T) {
