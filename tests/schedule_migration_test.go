@@ -413,3 +413,79 @@ func TestScheduleMigrationV1ToV2(t *testing.T) {
 	)
 	require.NoError(t, err)
 }
+
+func TestCHASMScheduleDescribeAfterDisablingCreationAndMigration(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+	)
+
+	ctx := testcore.NewContext()
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	sid := testcore.RandomizeStr("sched-routing-after-disable")
+	wid := testcore.RandomizeStr("sched-routing-after-disable-wf")
+	wt := testcore.RandomizeStr("sched-routing-after-disable-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	firstDescribe, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstDescribe.GetSchedule())
+
+	_, err = env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+		ctx,
+		&historyservice.DescribeWorkflowExecutionRequest{
+			NamespaceId: nsID,
+			Request: &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: nsName,
+				Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+			},
+		},
+	)
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr)
+
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, false)
+
+	require.Eventually(t, func() bool {
+		describeResp, describeErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		if describeErr != nil {
+			return false
+		}
+		return describeResp.GetSchedule() != nil
+	}, 10*time.Second, 200*time.Millisecond)
+}
