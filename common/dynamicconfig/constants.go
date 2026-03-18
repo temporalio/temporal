@@ -3163,10 +3163,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
+	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
+	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,
-		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
+		`Deprecated: no longer honored. ListWorkers and DescribeWorker are always enabled.`,
 	)
 
 	WorkerCommandsEnabled = NewNamespaceBoolSetting(

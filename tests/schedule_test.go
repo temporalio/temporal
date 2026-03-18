@@ -1590,7 +1590,7 @@ func (s *scheduleFunctionalSuiteBase) TestCountSchedules() {
 }
 
 func (s *scheduleFunctionalSuiteBase) TestSchedule_InternalTaskQueue() {
-	errorMessageKeyword := "internal per namespace task queue"
+	errorMessageKeyword := "internal per-namespace task queue"
 
 	// Test CreateSchedule with internal task queue
 	s.Run("CreateSchedule_PerNSWorkerTaskQueue", func() {

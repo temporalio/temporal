@@ -238,7 +238,7 @@ func (s *commandAttrValidatorSuite) TestValidateContinueAsNewWorkflowExecutionAt
 		executionInfo,
 	)
 	s.Error(err)
-	s.Contains(err.Error(), "cannot use internal per namespace task queue")
+	s.Contains(err.Error(), "cannot use internal per-namespace task queue")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, fc)
 
 	executionInfo.TaskQueue = primitives.PerNSWorkerTaskQueue
