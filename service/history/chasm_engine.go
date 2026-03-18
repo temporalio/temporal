@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/deletemanager"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -429,6 +431,75 @@ func (e *ChasmEngine) UpdateComponent(
 	}()
 
 	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn)
+}
+
+// DeleteExecution deletes a CHASM execution. If the execution is still running on the active
+// cluster, it is terminated first. A DeleteExecutionTask is then queued to remove all execution
+// data from persistence. On standby clusters, the execution is deleted regardless of state.
+func (e *ChasmEngine) DeleteExecution(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	request chasm.DeleteExecutionRequest,
+) (retError error) {
+	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		executionLease.GetReleaseFn()(retError)
+	}()
+
+	mutableState := executionLease.GetMutableState()
+	we := mutableState.GetWorkflowKey()
+
+	log.With(shardContext.GetLogger(),
+		tag.WorkflowNamespaceID(ref.NamespaceID),
+		tag.WorkflowID(we.WorkflowID),
+		tag.WorkflowRunID(we.RunID),
+	).Info("Deleting CHASM execution")
+
+	if mutableState.IsWorkflowExecutionRunning() {
+		ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(ref.NamespaceID))
+		if err != nil {
+			return err
+		}
+		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+			chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
+			if !ok {
+				return serviceerror.NewInternalf(
+					"CHASM tree implementation not properly wired up, encountered type: %T, expected type: %T",
+					mutableState.ChasmTree(),
+					&chasm.Node{},
+				)
+			}
+
+			chasmTree.SetDeleteAfterClose(true)
+			if err := chasmTree.Terminate(request.TerminateComponentRequest); err != nil {
+				return err
+			}
+
+			taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(shardContext, mutableState)
+			deleteTask, err := taskGenerator.GenerateDeleteExecutionTask()
+			if err != nil {
+				return err
+			}
+			mutableState.AddTasks(deleteTask)
+
+			return executionLease.GetContext().UpdateWorkflowExecutionAsActive(ctx, shardContext)
+		}
+	}
+
+	// Execution is closed or namespace is standby: add delete task directly.
+	return deletemanager.AddDeleteExecutionTask(
+		ctx,
+		shardContext,
+		namespace.ID(ref.NamespaceID),
+		&commonpb.WorkflowExecution{
+			WorkflowId: we.WorkflowID,
+			RunId:      we.RunID,
+		},
+		mutableState,
+	)
 }
 
 // ReadComponent evaluates readFn against the current state of the component identified by the

@@ -133,9 +133,7 @@ func getOptionalQueueFactories(
 	if _, ok := registry.GetCategoryByID(tasks.CategoryIDArchival); ok {
 		factories = append(factories, NewArchivalQueueFactory(archivalParams))
 	}
-	if config.EnableNexus() {
-		factories = append(factories, NewOutboundQueueFactory(outboundParams))
-	}
+	factories = append(factories, NewOutboundQueueFactory(outboundParams))
 	return additionalQueueFactories{
 		Factories: factories,
 	}

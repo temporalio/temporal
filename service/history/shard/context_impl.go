@@ -695,7 +695,8 @@ func (s *ContextImpl) updateCloseTaskIDs(executionInfo *persistencespb.WorkflowE
 		}
 	}
 	for _, t := range tasksByCategory[tasks.CategoryVisibility] {
-		if t.GetType() == enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION {
+		if t.GetType() == enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION ||
+			t.GetType() == enumsspb.TASK_TYPE_CHASM {
 			executionInfo.CloseVisibilityTaskId = t.GetTaskID()
 			break
 		}

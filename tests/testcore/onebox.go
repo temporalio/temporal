@@ -965,7 +965,7 @@ func sdkClientFactoryProvider(
 }
 
 func (c *TemporalImpl) overrideDynamicConfig(t *testing.T, name dynamicconfig.Key, value any) func() {
-	cleanup := c.dcClient.OverrideValue(name, value)
+	cleanup := c.dcClient.PartialOverrideValue(name, value)
 	t.Cleanup(cleanup)
 	return cleanup
 }
