@@ -2,6 +2,7 @@ package temporalfs
 
 import (
 	"fmt"
+	"hash/fnv"
 	"os"
 	"path/filepath"
 	"sync"
@@ -19,10 +20,8 @@ type PebbleStoreProvider struct {
 	dataDir string
 	logger  log.Logger
 
-	mu   sync.Mutex
-	db   *pebblestore.Store
-	seqs map[string]uint64 // maps "ns:fsid" → partition ID
-	next uint64
+	mu sync.Mutex
+	db *pebblestore.Store
 }
 
 // NewPebbleStoreProvider creates a new PebbleStoreProvider.
@@ -31,8 +30,6 @@ func NewPebbleStoreProvider(dataDir string, logger log.Logger) *PebbleStoreProvi
 	return &PebbleStoreProvider{
 		dataDir: dataDir,
 		logger:  logger,
-		seqs:    make(map[string]uint64),
-		next:    1,
 	}
 }
 
@@ -58,7 +55,6 @@ func (p *PebbleStoreProvider) Close() error {
 		}
 		p.db = nil
 	}
-	p.seqs = make(map[string]uint64)
 	return err
 }
 
@@ -84,18 +80,12 @@ func (p *PebbleStoreProvider) getOrCreateDB() (*pebblestore.Store, error) {
 	return db, nil
 }
 
-// getPartitionID returns a stable partition ID for a given namespace+filesystem pair.
-// This is used by PrefixedStore for key isolation.
+// getPartitionID returns a deterministic partition ID for a given namespace+filesystem pair.
+// Uses FNV-1a hash of the composite key so partition IDs are stable across restarts.
 func (p *PebbleStoreProvider) getPartitionID(namespaceID string, filesystemID string) uint64 {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	key := namespaceID + ":" + filesystemID
-	if id, ok := p.seqs[key]; ok {
-		return id
-	}
-	id := p.next
-	p.next++
-	p.seqs[key] = id
-	return id
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(namespaceID))
+	_, _ = h.Write([]byte{':'})
+	_, _ = h.Write([]byte(filesystemID))
+	return h.Sum64()
 }

@@ -130,5 +130,24 @@ func TestPebbleStoreProvider_Close(t *testing.T) {
 
 	// After close, internal state should be cleared.
 	require.Nil(t, provider.db)
-	require.Empty(t, provider.seqs)
+}
+
+// TestPebbleStoreProvider_PartitionIDStability tests that partition IDs are
+// deterministic and stable across provider instances (i.e., across restarts).
+func TestPebbleStoreProvider_PartitionIDStability(t *testing.T) {
+	p1 := NewPebbleStoreProvider(t.TempDir(), log.NewTestLogger())
+	p2 := NewPebbleStoreProvider(t.TempDir(), log.NewTestLogger())
+
+	// Same inputs must produce the same partition ID across instances.
+	id1 := p1.getPartitionID("ns-a", "fs-1")
+	id2 := p2.getPartitionID("ns-a", "fs-1")
+	require.Equal(t, id1, id2, "partition ID must be deterministic across instances")
+
+	// Different inputs must produce different partition IDs.
+	id3 := p1.getPartitionID("ns-a", "fs-2")
+	require.NotEqual(t, id1, id3, "different filesystems should have different partition IDs")
+
+	// Calling again returns the same value (idempotent).
+	id4 := p1.getPartitionID("ns-a", "fs-1")
+	require.Equal(t, id1, id4)
 }
