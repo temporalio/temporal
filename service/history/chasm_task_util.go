@@ -41,7 +41,6 @@ func validateChasmSideEffectTask(
 func executeChasmSideEffectTask(
 	ctx context.Context,
 	engine chasm.Engine,
-	registry *chasm.Registry,
 	tree historyi.ChasmTree,
 	task *tasks.ChasmTask,
 ) error {
@@ -73,7 +72,6 @@ func executeChasmSideEffectTask(
 	engineCtx := chasm.NewEngineContext(ctx, engine)
 	return tree.ExecuteSideEffectTask(
 		engineCtx,
-		registry,
 		executionKey,
 		task,
 		validate,
@@ -120,7 +118,6 @@ func discardChasmSideEffectTask(
 	engineCtx := chasm.NewEngineContext(ctx, engine)
 	return tree.ExecuteSideEffectDiscardTask(
 		engineCtx,
-		registry,
 		executionKey,
 		task,
 		validate,

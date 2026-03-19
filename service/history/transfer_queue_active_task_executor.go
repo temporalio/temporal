@@ -190,7 +190,6 @@ func (t *transferQueueActiveTaskExecutor) executeChasmSideEffectTransferTask(
 	return executeChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
-		t.shardContext.ChasmRegistry(),
 		tree,
 		task,
 	)

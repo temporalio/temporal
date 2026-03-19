@@ -279,16 +279,24 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_PreValidationFails()
 func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() {
 	chasmDiscardDuration := s.mockShard.GetConfig().ChasmStandbyTaskDiscardDelay("")
 
-	setupDiscard := func(lib chasm.Library, taskName string, treeMockFn func(*historyi.MockChasmTree)) *tasks.ChasmTask {
+	setupDiscard := func(lib chasm.Library, taskName string, treeMockFn func(*historyi.MockChasmTree)) (*outboundQueueStandbyTaskExecutor, queues.Executable) {
 		registry := chasm.NewRegistry(s.logger)
 		s.NoError(registry.Register(lib))
 		s.mockShard.SetChasmRegistry(registry)
 		typeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(lib.Name(), taskName))
 
-		s.mockChasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
-		treeMockFn(s.mockChasmTree)
+		chasmTree := historyi.NewMockChasmTree(s.controller)
+		chasmTree.EXPECT().ValidateSideEffectTask(gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
+		treeMockFn(chasmTree)
 
-		s.mockMutableState.EXPECT().ChasmTree().Return(s.mockChasmTree).AnyTimes()
+		ms := historyi.NewMockMutableState(s.controller)
+		ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+		ms.EXPECT().NextTransitionCount().Return(int64(0)).AnyTimes()
+		ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+		ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+			State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		}).AnyTimes()
+		ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
 
 		task := &tasks.ChasmTask{
 			WorkflowKey:         tests.WorkflowKey,
@@ -302,34 +310,44 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 			},
 		}
 
-		s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
+		wfCtx := historyi.NewMockWorkflowContext(s.controller)
+		wfCtx.EXPECT().LoadMutableState(gomock.Any(), gomock.Any()).Return(ms, nil)
+
+		mockCache := cache.NewMockCache(s.controller)
+		mockCache.EXPECT().GetOrCreateChasmExecution(
 			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), tests.ArchetypeID, gomock.Any(),
-		).Return(s.mockWorkflowContext, func(error) {}, nil)
+		).Return(wfCtx, func(error) {}, nil)
 
-		s.mockWorkflowContext.EXPECT().
-			LoadMutableState(gomock.Any(), gomock.Any()).
-			Return(s.mockMutableState, nil)
+		executable := queues.NewMockExecutable(s.controller)
+		executable.EXPECT().GetTask().Return(task).AnyTimes()
 
-		s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
+		executor := newOutboundQueueStandbyTaskExecutor(
+			s.mockShard,
+			mockCache,
+			s.clusterName,
+			s.logger,
+			s.metricsHandler,
+			s.mockChasmEngine,
+		)
 
-		return task
+		return executor, executable
 	}
 
 	s.Run("WithHandler", func() {
-		setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
+		executor, executable := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
 			tree.EXPECT().ExecuteSideEffectDiscardTask(
-				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 			).Return(nil).Times(1)
 		})
-		result := s.executor.Execute(context.Background(), s.mockExecutable)
+		result := executor.Execute(context.Background(), executable)
 		s.NoError(result.ExecutionErr)
 		s.False(result.ExecutedAsActive)
 	})
 
 	s.Run("WithoutHandler", func() {
-		setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(_ *historyi.MockChasmTree) {})
+		executor, executable := setupDiscard(&nonDiscardableTaskTestLibrary{}, "non_discard_task", func(_ *historyi.MockChasmTree) {})
 		// Without a discard handler, discardChasmSideEffectTask returns ErrTaskDiscarded directly.
-		result := s.executor.Execute(context.Background(), s.mockExecutable)
+		result := executor.Execute(context.Background(), executable)
 		s.ErrorIs(result.ExecutionErr, consts.ErrTaskDiscarded)
 		s.False(result.ExecutedAsActive)
 	})

@@ -1412,7 +1412,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestExecuteChasmSideEffectTransf
 	s.Run("WithHandler", func() {
 		executor, task := setupDiscard(&discardableTaskTestLibrary{}, "discard_task", func(tree *historyi.MockChasmTree) {
 			tree.EXPECT().ExecuteSideEffectDiscardTask(
-				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+				gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 			).Return(nil).Times(1)
 		})
 		resp := executor.Execute(context.Background(), s.newTaskExecutable(task))

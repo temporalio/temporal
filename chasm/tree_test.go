@@ -3214,7 +3214,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Succeed task execution.
 	expectValidate(true, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.NoError(err)
 	s.True(backendValidtionFnCalled)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -3222,7 +3222,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	// Invalid task.
 	expectValidate(false, nil)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.True(chasmTask.DeserializedTask.IsValid())
@@ -3231,7 +3231,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	validationErr := errors.New("validation error")
 	expectValidate(false, validationErr)
 	expectExecute(nil)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(validationErr, err)
 	s.False(chasmTask.DeserializedTask.IsValid())
 
@@ -3239,7 +3239,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	expectValidate(true, nil)
 	executionErr := errors.New("execution error")
 	expectExecute(executionErr)
-	err = root.ExecuteSideEffectTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+	err = root.ExecuteSideEffectTask(ctx, executionKey, chasmTask, dummyValidationFn)
 	s.ErrorIs(executionErr, err)
 	s.True(backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
@@ -3323,7 +3323,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			return err
 		}
 
-		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
 		s.NoError(err)
 		s.True(validationFnCalled)
 		s.True(chasmTask.DeserializedTask.IsValid())
@@ -3342,7 +3342,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			return err
 		}
 
-		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
 		s.ErrorAs(err, new(*serviceerror.NotFound))
 	})
 
@@ -3361,7 +3361,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		}
 
 		err := root.ExecuteSideEffectDiscardTask(
-			ctx, s.registry, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
+			ctx, executionKey, chasmTask, func(_ NodeBackend, _ Context, _ Component) error { return nil })
 		s.ErrorIs(err, validationErr)
 	})
 
@@ -3388,7 +3388,7 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			return discardErr
 		}
 
-		err := root.ExecuteSideEffectDiscardTask(ctx, s.registry, executionKey, chasmTask, dummyValidationFn)
+		err := root.ExecuteSideEffectDiscardTask(ctx, executionKey, chasmTask, dummyValidationFn)
 		s.ErrorIs(err, discardErr)
 		s.True(validationFnCalled)
 	})

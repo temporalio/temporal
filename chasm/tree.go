@@ -3129,12 +3129,11 @@ func (n *Node) ValidateSideEffectTask(
 // ctx should have a CHASM engine already set.
 func (n *Node) ExecuteSideEffectTask(
 	ctx context.Context,
-	registry *Registry,
 	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
 ) error {
-	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectTask", registry, chasmTask)
+	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectTask", chasmTask)
 	if err != nil {
 		return err
 	}
@@ -3146,12 +3145,11 @@ func (n *Node) ExecuteSideEffectTask(
 // (e.g., spilling activity tasks to matching).
 func (n *Node) ExecuteSideEffectDiscardTask(
 	ctx context.Context,
-	registry *Registry,
 	executionKey ExecutionKey,
 	chasmTask *tasks.ChasmTask,
 	validate func(NodeBackend, Context, Component) error,
 ) error {
-	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectDiscardTask", registry, chasmTask)
+	rt, err := n.lookupSideEffectTask(ctx, "ExecuteSideEffectDiscardTask", chasmTask)
 	if err != nil {
 		return err
 	}
@@ -3167,7 +3165,6 @@ func (n *Node) ExecuteSideEffectDiscardTask(
 func (n *Node) lookupSideEffectTask(
 	ctx context.Context,
 	callerName string,
-	registry *Registry,
 	chasmTask *tasks.ChasmTask,
 ) (*RegistrableTask, error) {
 	if engineFromContext(ctx) == nil {
@@ -3175,7 +3172,7 @@ func (n *Node) lookupSideEffectTask(
 	}
 
 	taskTypeID := chasmTask.Info.TypeId
-	registrableTask, ok := registry.TaskByID(taskTypeID)
+	registrableTask, ok := n.registry.TaskByID(taskTypeID)
 	if !ok {
 		return nil, softassert.UnexpectedInternalErr(
 			n.logger,

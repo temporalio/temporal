@@ -33,14 +33,12 @@ type ChasmTree interface {
 	) error
 	ExecuteSideEffectTask(
 		ctx context.Context,
-		registry *chasm.Registry,
 		executionKey chasm.ExecutionKey,
 		task *tasks.ChasmTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 	) error
 	ExecuteSideEffectDiscardTask(
 		ctx context.Context,
-		registry *chasm.Registry,
 		executionKey chasm.ExecutionKey,
 		task *tasks.ChasmTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,

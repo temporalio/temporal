@@ -82,7 +82,6 @@ func (*noopChasmTree) ComponentByPath(chasm.Context, []string) (chasm.Component,
 
 func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
-	registry *chasm.Registry,
 	executionKey chasm.ExecutionKey,
 	task *tasks.ChasmTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
@@ -92,7 +91,6 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 
 func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 	ctx context.Context,
-	registry *chasm.Registry,
 	executionKey chasm.ExecutionKey,
 	task *tasks.ChasmTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
