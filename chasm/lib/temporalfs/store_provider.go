@@ -5,7 +5,8 @@ import (
 )
 
 // FSStoreProvider is the pluggable interface for FS storage backends.
-// OSS implements this with PebbleStoreProvider. SaaS can implement with WalkerStore.
+// OSS implements this with PebbleStoreProvider. SaaS implements with
+// CDSStoreProvider (backed by Walker) via fx.Decorate in saas-temporal.
 //
 // This is the sole extension point for SaaS — all other FS components
 // (CHASM archetype, gRPC service, FUSE mount) are identical between OSS and SaaS.
