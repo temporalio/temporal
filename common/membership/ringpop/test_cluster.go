@@ -138,9 +138,16 @@ func newTestCluster(
 		if i < len(joinTimes) {
 			joinTime = joinTimes[i]
 		}
+		svcPort := int(port)
+		svcCfg := &config.Config{
+			Services: map[string]config.Service{
+				string(serviceName): {RPC: config.RPC{GRPCPort: svcPort}},
+			},
+		}
 		cluster.rings[i] = newMonitor(
 			serviceName,
-			config.ServicePortMap{serviceName: int(port)}, // use same port for "grpc" port
+			config.ServicePortMap{serviceName: svcPort}, // use same port for "grpc" port
+			svcCfg,
 			ringPop,
 			logger,
 			mockMgr,

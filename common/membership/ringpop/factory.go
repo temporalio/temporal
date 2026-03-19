@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"time"
 
@@ -35,6 +36,7 @@ type factoryParams struct {
 	fx.In
 
 	Config          *config.Membership
+	ServerConfig    *config.Config
 	ServiceName     primitives.ServiceName
 	ServicePortMap  config.ServicePortMap
 	Logger          log.Logger
@@ -47,6 +49,7 @@ type factoryParams struct {
 // factory provides ringpop based membership objects
 type factory struct {
 	Config          *config.Membership
+	ServerConfig    *config.Config
 	ServiceName     primitives.ServiceName
 	ServicePortMap  config.ServicePortMap
 	Logger          log.Logger
@@ -59,6 +62,22 @@ type factory struct {
 	monitor *monitor
 	chOnce  sync.Once
 	monOnce sync.Once
+}
+
+// lazyHostInfoProvider implements membership.HostInfoProvider by reading the gRPC port
+// from config at call time. This is necessary when port 0 is configured: the actual
+// ephemeral port is only known after rpc.RPCFactory binds the listener, but the provider
+// is constructed before that happens. Reading from config lazily ensures the correct port
+// is returned once it has been updated post-bind.
+type lazyHostInfoProvider struct {
+	host    string
+	svcName primitives.ServiceName
+	cfg     *config.Config
+}
+
+func (p *lazyHostInfoProvider) HostInfo() membership.HostInfo {
+	port := p.cfg.Services[string(p.svcName)].RPC.GRPCPort
+	return membership.NewHostInfoFromAddress(net.JoinHostPort(p.host, strconv.Itoa(port)))
 }
 
 var errMalformedBroadcastAddress = errors.New("ringpop config malformed `broadcastAddress` param")
@@ -76,6 +95,7 @@ func newFactory(params factoryParams) (*factory, error) {
 
 	return &factory{
 		Config:          params.Config,
+		ServerConfig:             params.ServerConfig,
 		ServiceName:     params.ServiceName,
 		ServicePortMap:  params.ServicePortMap,
 		Logger:          params.Logger,
@@ -114,6 +134,7 @@ func (factory *factory) getMonitor() *monitor {
 		factory.monitor = newMonitor(
 			factory.ServiceName,
 			factory.ServicePortMap,
+			factory.ServerConfig,
 			rp,
 			factory.Logger,
 			factory.MetadataManager,
@@ -250,19 +271,21 @@ func (factory *factory) getHostInfoProvider() (membership.HostInfoProvider, erro
 		return nil, err
 	}
 
-	servicePort, ok := factory.ServicePortMap[factory.ServiceName]
-	if !ok {
+	if _, ok := factory.ServicePortMap[factory.ServiceName]; !ok {
 		return nil, membership.ErrUnknownService
 	}
 
-	// The broadcastAddressResolver returns the host:port used to listen for
-	// ringpop messages. We use a different port for the service, so we
-	// replace that portion.
-	serviceAddress, err := replaceServicePort(address, servicePort)
+	// Extract the host from the broadcast address. The actual gRPC port is read lazily
+	// from config in HostInfo() so that ephemeral port 0 assignments are reflected after
+	// rpc.RPCFactory binds and updates the config entry.
+	host, _, err := net.SplitHostPort(address)
 	if err != nil {
-		return nil, err
+		return nil, membership.ErrIncorrectAddressFormat
 	}
 
-	hostInfo := membership.NewHostInfoFromAddress(serviceAddress)
-	return membership.NewHostInfoProvider(hostInfo), nil
+	return &lazyHostInfoProvider{
+		host:    host,
+		svcName: factory.ServiceName,
+		cfg:     factory.ServerConfig,
+	}, nil
 }

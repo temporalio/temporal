@@ -156,7 +156,19 @@ func (d *RPCFactory) createGRPCListener() net.Listener {
 		d.logger.Fatal("Failed to start gRPC listener", tag.Error(err), tag.Service(d.serviceName), tag.Address(hostAddress))
 	}
 
-	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(hostAddress))
+	// If port 0 was configured, the OS assigns an ephemeral port. Update the config with the
+	// actual bound port so that membership (monitor.Start) and HostInfoProvider can discover it.
+	if rpcConfig.GRPCPort == 0 {
+		tcpAddr, ok := grpcListener.Addr().(*net.TCPAddr)
+		if !ok {
+			d.logger.Fatal("gRPC listener returned non-TCP address", tag.Service(d.serviceName), tag.Address(grpcListener.Addr().String()))
+		}
+		svc := d.config.Services[string(d.serviceName)]
+		svc.RPC.GRPCPort = tcpAddr.Port
+		d.config.Services[string(d.serviceName)] = svc
+	}
+
+	d.logger.Info("Created gRPC listener", tag.Service(d.serviceName), tag.Address(grpcListener.Addr().String()))
 	return grpcListener
 }
 

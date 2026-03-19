@@ -7,9 +7,11 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,8 +24,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/testing/freeport"
-	"go.temporal.io/server/schema/sqlite"
+"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
 	expmaps "golang.org/x/exp/maps"
 )
@@ -91,13 +92,9 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
 		sqliteConfig.ConnectAttributes["_"+k] = v
 	}
 
-	if cfg.FrontendPort == 0 {
-		cfg.FrontendPort = freeport.MustGetFreePort()
-	}
-	if cfg.MetricsPort == 0 {
-		cfg.MetricsPort = freeport.MustGetFreePort()
-	}
-	pprofPort := freeport.MustGetFreePort()
+	// MetricsPort 0 lets the OS assign an ephemeral port, avoiding TIME_WAIT exhaustion.
+	// FrontendPort 0 likewise; the actual port is read from config after Start() binds it.
+	pprofPort := 0
 
 	serverConfig.Global.Membership = config.Membership{
 		MaxJoinDuration:  30 * time.Second,
@@ -127,7 +124,9 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
 			"active": {
 				Enabled:                true,
 				InitialFailoverVersion: 1,
-				RPCAddress:             fmt.Sprintf("%s:%d", localBroadcastAddress, cfg.FrontendPort),
+				// Placeholder address; EnableGlobalNamespace=false so this is never used
+				// for actual cross-cluster connections. Must be non-empty to pass validation.
+				RPCAddress: localBroadcastAddress + ":0",
 			},
 		},
 	}
@@ -152,12 +151,9 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
 			Provider:   nil,
 		},
 	}
-	// TODO(dnr): Figure out why server fails to start when PublicClient is not set with error:
-	//            panic: Client must be created with client.Dial() or client.NewLazyClient()
-	//            See also: https://github.com/temporalio/temporal/pull/4026#discussion_r1149808018
-	serverConfig.PublicClient = config.PublicClient{
-		HostPort: fmt.Sprintf("%s:%d", localBroadcastAddress, cfg.FrontendPort),
-	}
+	// PublicClient.HostPort is left empty: getFrontendConnectionDetails falls back to
+	// membership-based resolution (resolver.MakeURL(FrontendService)) when it is unset.
+	// The actual HostPort is derived post-Start() from the config once the port is bound.
 	serverConfig.NamespaceDefaults = config.NamespaceDefaults{
 		Archival: config.ArchivalNamespaceDefaults{
 			History: config.HistoryArchivalNamespaceDefaults{
@@ -203,6 +199,7 @@ func (cfg *LiteServerConfig) validate() error {
 // LiteServer is a high level wrapper for Server that automatically configures a SQLite backend.
 type LiteServer struct {
 	internal         temporal.Server
+	serverCfg        *config.Config
 	frontendHostPort string
 }
 
@@ -294,8 +291,8 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 	}
 
 	s := &LiteServer{
-		internal:         srv,
-		frontendHostPort: liteConfig.BaseConfig.PublicClient.HostPort,
+		internal:  srv,
+		serverCfg: liteConfig.BaseConfig,
 	}
 
 	return s, nil
@@ -305,7 +302,15 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 func (s *LiteServer) Start() error {
 	// We wrap Server instead of simply embedding it in the LiteServer struct so
 	// that it's possible to add additional lifecycle hooks here if necessary.
-	return s.internal.Start()
+	if err := s.internal.Start(); err != nil {
+		return err
+	}
+
+	// After Start() the gRPC listener has been bound and rpc.RPCFactory has updated
+	// config.Services["frontend"].RPC.GRPCPort with the actual ephemeral port.
+	frontendPort := s.serverCfg.Services["frontend"].RPC.GRPCPort
+	s.frontendHostPort = net.JoinHostPort(localBroadcastAddress, strconv.Itoa(frontendPort))
+	return nil
 }
 
 // Stop the server.
@@ -351,18 +356,24 @@ func getAllowedPragmas() []string {
 }
 
 func (cfg *LiteServerConfig) mustGetService(frontendPortOffset int) config.Service {
+	grpcPort := 0
+	if frontendPortOffset == 0 && cfg.FrontendPort != 0 {
+		// Caller explicitly specified a frontend port; honour it.
+		grpcPort = cfg.FrontendPort
+	}
+
 	svc := config.Service{
 		RPC: config.RPC{
-			GRPCPort:        cfg.FrontendPort + frontendPortOffset,
-			MembershipPort:  freeport.MustGetFreePort(),
+			// GRPCPort 0 lets the OS assign an ephemeral port.  rpc.RPCFactory updates
+			// the config entry with the actual port after binding so that membership can
+			// advertise it correctly.
+			GRPCPort: grpcPort,
+			// MembershipPort 0: tchannel binds an ephemeral port; ringpop reads the
+			// actual address from tChannel.PeerInfo(), so port 0 works transparently.
+			MembershipPort:  0,
 			BindOnLocalHost: true,
 			BindOnIP:        "",
 		},
-	}
-
-	// Assign any open port when configured to use dynamic ports
-	if frontendPortOffset != 0 {
-		svc.RPC.GRPCPort = freeport.MustGetFreePort()
 	}
 
 	// Optionally bind frontend to IPv4 address

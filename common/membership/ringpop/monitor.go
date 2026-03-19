@@ -56,6 +56,7 @@ type monitor struct {
 
 	serviceName               primitives.ServiceName
 	services                  config.ServicePortMap
+	cfg                       *config.Config
 	rp                        *ringpop.Ringpop
 	maxJoinDuration           time.Duration
 	propagationTime           time.Duration
@@ -74,6 +75,7 @@ var _ membership.Monitor = (*monitor)(nil)
 func newMonitor(
 	serviceName primitives.ServiceName,
 	services config.ServicePortMap,
+	cfg *config.Config,
 	rp *ringpop.Ringpop,
 	logger log.Logger,
 	metadataManager persistence.ClusterMetadataManager,
@@ -96,6 +98,7 @@ func newMonitor(
 
 		serviceName:               serviceName,
 		services:                  services,
+		cfg:                       cfg,
 		rp:                        rp,
 		rings:                     make(map[primitives.ServiceName]*serviceResolver),
 		logger:                    logger,
@@ -162,7 +165,10 @@ func (rpo *monitor) Start() {
 		time.AfterFunc(clearAfter, rpo.clearStartAt)
 	}
 
-	if err = labels.Set(portKey, strconv.Itoa(rpo.services[rpo.serviceName])); err != nil {
+	// Read the actual bound port from config. When port 0 is configured, rpc.go updates the
+	// config entry after binding so that the correct ephemeral port is advertised here.
+	grpcPort := rpo.cfg.Services[string(rpo.serviceName)].RPC.GRPCPort
+	if err = labels.Set(portKey, strconv.Itoa(grpcPort)); err != nil {
 		rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(portKey))
 	}
 
