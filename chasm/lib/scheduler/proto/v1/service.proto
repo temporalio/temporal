@@ -41,4 +41,8 @@ service SchedulerService {
     rpc CreateFromMigrationState(CreateFromMigrationStateRequest) returns (CreateFromMigrationStateResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "state.scheduler_state.schedule_id";
     }
+
+    rpc CreateSentinel(CreateSentinelRequest) returns (CreateSentinelResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
+    }
 }

@@ -81,3 +81,14 @@ message CreateFromMigrationStateRequest {
 }
 
 message CreateFromMigrationStateResponse {}
+
+message CreateSentinelRequest {
+    // Internal namespace ID (UUID).
+    string namespace_id = 1;
+
+    string namespace = 2;
+
+    string schedule_id = 3;
+}
+
+message CreateSentinelResponse {}
