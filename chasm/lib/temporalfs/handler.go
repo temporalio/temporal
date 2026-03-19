@@ -389,16 +389,20 @@ func (h *handler) ReadDir(_ context.Context, req *temporalfspb.ReadDirRequest) (
 	}
 	defer f.Close()
 
-	entries, err := f.ReadDirByID(req.GetInodeId())
+	entries, err := f.ReadDirPlusByID(req.GetInodeId())
 	if err != nil {
 		return nil, mapFSError(err)
 	}
 
 	protoEntries := make([]*temporalfspb.DirEntry, len(entries))
 	for i, e := range entries {
-		inode, err := f.StatByID(e.InodeID)
-		if err != nil {
-			return nil, mapFSError(err)
+		inode := e.Inode
+		if inode == nil {
+			// Embedded inode unavailable (e.g., hardlinked file) — fetch it.
+			inode, err = f.StatByID(e.InodeID)
+			if err != nil {
+				return nil, mapFSError(err)
+			}
 		}
 		protoEntries[i] = &temporalfspb.DirEntry{
 			Name:    e.Name,
@@ -518,10 +522,7 @@ func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*t
 	var blocks, bfree, files, ffree uint64
 	if quota.MaxBytes > 0 {
 		blocks = uint64(quota.MaxBytes) / uint64(bsize)
-		used := uint64(quota.UsedBytes) / uint64(bsize)
-		if used > blocks {
-			used = blocks
-		}
+		used := min(uint64(quota.UsedBytes)/uint64(bsize), blocks)
 		bfree = blocks - used
 	} else {
 		blocks = statfsVirtualBytes / uint64(bsize)
@@ -529,10 +530,7 @@ func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*t
 	}
 	if quota.MaxInodes > 0 {
 		files = uint64(quota.MaxInodes)
-		used := uint64(quota.UsedInodes)
-		if used > files {
-			used = files
-		}
+		used := min(uint64(quota.UsedInodes), files)
 		ffree = files - used
 	} else {
 		files = statfsVirtualInodes
