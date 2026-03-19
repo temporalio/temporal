@@ -20,7 +20,9 @@ func (l *Library) Name() string {
 	return chasm.WorkflowLibraryName
 }
 
-const eventRegistryChasmCtxKey = "eventRegistryKey"
+type chasmCtxKey struct{}
+
+var eventRegistryChasmCtxKey chasmCtxKey = chasmCtxKey{}
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{

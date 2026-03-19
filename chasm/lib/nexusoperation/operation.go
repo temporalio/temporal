@@ -21,7 +21,7 @@ var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation
 // OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
 // It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
 type OperationStore interface {
-	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, links []*commonpb.Link) error
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
 	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
 	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
@@ -97,10 +97,10 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	return nil
 }
 
-// StoreProcessor returns the OperationStore that should be used to process this operation's state transitions and commands.
+// StoreOrSelf returns the OperationStore that should be used to process this operation's state transitions and commands.
 // For a workflow-embedded Nexus operation, this will return the parent workflow as the store processor.
 // For a standalone Nexus operation, this will return the operation itself as the store processor.
-func (o *Operation) StoreProcessor(ctx chasm.Context) OperationStore {
+func (o *Operation) StoreOrSelf(ctx chasm.Context) OperationStore {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
 		return store
@@ -108,9 +108,9 @@ func (o *Operation) StoreProcessor(ctx chasm.Context) OperationStore {
 	return o
 }
 
-func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation, _ []*commonpb.Link) error {
+func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation, operationToken string, _ []*commonpb.Link) error {
 	return transitionStarted.Apply(o, ctx, EventStarted{
-		OperationToken: o.GetOperationToken(),
+		OperationToken: operationToken,
 		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	})
 }
