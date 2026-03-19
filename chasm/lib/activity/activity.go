@@ -381,7 +381,19 @@ func (a *Activity) Terminate(
 	ctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// If already in a terminal state, no-op.
+	// If already in terminated state, fail if request ID is different, else no-op
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
+		newReqID := req.RequestID
+		existingReqID := a.GetTerminateState().GetRequestId()
+
+		if existingReqID != newReqID {
+			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPrecondition(
+				fmt.Sprintf("already terminated with request ID %s", existingReqID))
+		}
+
+		return chasm.TerminateComponentResponse{}, nil
+	}
+
 	if !TransitionTerminated.Possible(a) {
 		if a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
 			return chasm.TerminateComponentResponse{}, nil
