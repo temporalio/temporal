@@ -68,7 +68,11 @@ func (e *chunkGCTaskExecutor) Execute(
 		fs.Stats = &temporalfspb.FSStats{}
 	}
 	fs.Stats.TransitionCount++
-	fs.Stats.ChunkCount -= uint64(gcStats.ChunksDeleted)
+	if deleted := uint64(gcStats.ChunksDeleted); deleted >= fs.Stats.ChunkCount {
+		fs.Stats.ChunkCount = 0
+	} else {
+		fs.Stats.ChunkCount -= deleted
+	}
 
 	return e.rescheduleGC(ctx, fs, task.GetLastProcessedTxnId())
 }
