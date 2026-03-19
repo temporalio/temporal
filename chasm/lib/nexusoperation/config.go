@@ -212,7 +212,9 @@ type Config struct {
 	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
-	RetryPolicy                         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                    dynamicconfig.IntPropertyFn
+	RetryPolicy                         func() backoff.RetryPolicy
 }
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
@@ -234,6 +236,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
+		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
 		RetryPolicy:                        RetryPolicy.Get(dc),
 	}
 }

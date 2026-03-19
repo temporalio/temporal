@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sync/atomic"
 	"time"
 
@@ -158,10 +159,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	if args.scheduleToCloseTimeout > 0 {
 		opTimeout = min(args.scheduleToCloseTimeout-elapsed, opTimeout)
 	}
-	header := nexus.Header(args.header)
-	if header == nil {
-		header = make(nexus.Header, 2) // To set the failure support and timeout headers.
-	}
+	header := buildRequestHeader(args.header)
 	// Set the operation timeout header if not already set.
 	if opTimeoutHeader := header.Get(nexus.HeaderOperationTimeout); opTimeout != maxDuration && opTimeoutHeader == "" {
 		header.Set(nexus.HeaderOperationTimeout, commonnexus.FormatDuration(opTimeout))
@@ -215,6 +213,13 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 
 	return saveErr
+}
+
+func buildRequestHeader(header map[string]string) nexus.Header {
+	if header == nil {
+		return make(nexus.Header, 2) // To set the failure support and timeout headers.
+	}
+	return nexus.Header(maps.Clone(header))
 }
 
 func (h *operationInvocationTaskHandler) resolveEndpoint(
