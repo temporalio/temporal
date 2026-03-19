@@ -101,9 +101,9 @@ TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments c
 **[`FSStoreProvider`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/store_provider.go)** is the sole extension point for SaaS. All other FS components (CHASM archetype, gRPC service, FUSE mount) are identical between OSS and SaaS.
 
 **[`PebbleStoreProvider`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/pebble_store_provider.go)** (OSS):
-- Creates one PebbleDB instance per history shard (lazy-initialized at `{dataDir}/shard-{id}/`).
-- Returns a `PrefixedStore` per filesystem execution for key isolation — each `(namespaceID, filesystemID)` pair maps to a stable partition ID.
-- The underlying PebbleDB is shared across all filesystem executions on the same shard.
+- Creates a single PebbleDB instance (lazy-initialized at `{dataDir}/temporalfs/`).
+- Returns a `PrefixedStore` per filesystem execution for key isolation — each `(namespaceID, filesystemID)` pair maps to a deterministic partition ID derived from FNV-1a hash, ensuring stability across restarts.
+- The underlying PebbleDB is shared across all filesystem executions.
 
 **`CDSStoreProvider`** (SaaS, in `saas-temporal`):
 - Implements `FSStoreProvider` via `fx.Decorate`, replacing `PebbleStoreProvider`.
@@ -146,7 +146,26 @@ The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm
 | `Statfs` | `f.GetQuota()`, `f.ChunkSize()` |
 | `CreateSnapshot` | `f.CreateSnapshot()` |
 
-The handler pattern for FS operations is: get store via `FSStoreProvider` → open `tfs.FS` → execute operation → close FS. The CHASM execution is only accessed for lifecycle operations (create, archive, get info).
+The handler pattern for FS operations is: get store via `FSStoreProvider` → open `tfs.FS` → execute operation → close FS (which also closes the store). On error, `openFS`/`createFS` close the store internally before returning. The CHASM execution is only accessed for lifecycle operations (create, archive, get info).
+
+### WAL Integration (SaaS)
+
+In the SaaS deployment, writes go through a WAL pipeline for durability:
+
+```
+temporal-fs write → walEngine → LP WAL → ack → stateTracker buffer
+                                                      ↓
+                                              tfsFlusher (500ms tick)
+                                                      ↓
+                                              rpcEngine → Walker RPCs
+                                                      ↓
+                                              watermark advance
+```
+
+- **`walEngine`**: Implements `Engine` by routing reads to `rpcEngine` (Walker) and writes through the LP WAL. Each write is serialized as a `WALLogTFSData` record and awaits acknowledgement before buffering in the state tracker.
+- **`tfsStateTracker`**: Buffers acknowledged WAL ops in memory, ordered by log ID. The flusher drains this buffer.
+- **`tfsFlusher`**: Runs a dedicated goroutine that drains buffered ops every 500ms and writes them to Walker via `rpcEngine`, then advances the `TEMPORALFS_RECOVERY_WATERMARK`. On shutdown, performs a final flush with a 5s timeout.
+- **`tfsWALRecoverer`**: On shard acquisition, replays WAL records between the recovery watermark and the WAL head to rebuild the state tracker buffer.
 
 ### FX Wiring
 
