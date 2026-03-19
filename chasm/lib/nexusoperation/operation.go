@@ -215,7 +215,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 			info.ExpirationTime = timestamppb.New(o.ScheduledTime.AsTime().Add(o.ScheduleToCloseTimeout.AsDuration()))
 		}
 
-		if closeTime := o.closeTime(); closeTime != nil {
+		if closeTime := o.closeTime(ctx); closeTime != nil {
 			info.CloseTime = closeTime
 			info.ExecutionDuration = durationpb.New(closeTime.AsTime().Sub(o.ScheduledTime.AsTime()))
 		} else {
@@ -226,17 +226,12 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 	return info
 }
 
-// closeTime returns the close time of the operation based on LastAttemptCompleteTime for terminal states.
-func (o *Operation) closeTime() *timestamppb.Timestamp {
-	switch o.Status {
-	case nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
-		nexusoperationpb.OPERATION_STATUS_FAILED,
-		nexusoperationpb.OPERATION_STATUS_CANCELED,
-		nexusoperationpb.OPERATION_STATUS_TIMED_OUT:
-		return o.LastAttemptCompleteTime
-	default:
+// closeTime returns the close time of the operation (only for terminal states).
+func (o *Operation) closeTime(ctx chasm.Context) *timestamppb.Timestamp {
+	if !o.LifecycleState(ctx).IsClosed() {
 		return nil
 	}
+	return o.LastAttemptCompleteTime
 }
 
 func operationExecutionStatus(status nexusoperationpb.OperationStatus) enumspb.NexusOperationExecutionStatus {
