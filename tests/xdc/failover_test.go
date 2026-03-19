@@ -2506,25 +2506,18 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	s.NoError(err)
 
 	// Verify all wf in ns is now available in cluster2
-	adminClient1 := s.clusters[1].AdminClient()
+	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 	verify := func(wfID string, expectedRunID string) {
 		s.Eventually(func() bool {
-			desc1, err := adminClient1.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
-				Namespace: namespace,
-				Execution: &commonpb.WorkflowExecution{
-					WorkflowId: wfID,
-				},
-			})
+			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
 			if err != nil {
 				return false
 			}
-			return desc1.DatabaseMutableState.ExecutionState.RunId == expectedRunID &&
-				desc1.DatabaseMutableState.ExecutionState.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			return desc1.WorkflowExecutionInfo.Execution.RunId == expectedRunID &&
+				desc1.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 		}, 15*time.Second, 200*time.Millisecond, "workflow %s should be replicated to cluster2", wfID)
 	}
 	verify(workflowID, run1.GetRunID())
-
-	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 
@@ -2549,15 +2542,9 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	err = resetRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	descResp, err := adminClient1.DescribeMutableState(testCtx, &adminservice.DescribeMutableStateRequest{
-		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      resetResp.GetRunId(),
-		},
-	})
+	descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
 	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.DatabaseMutableState.ExecutionState.Status)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
