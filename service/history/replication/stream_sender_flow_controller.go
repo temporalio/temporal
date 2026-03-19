@@ -52,7 +52,16 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 	lowPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
 		return float64(config.ReplicationStreamSenderLowPriorityQPS())
 	})
+	throttledPriorityState := &flowControlState{
+		resume: true,
+	}
+	throttledPriorityState.cond = sync.NewCond(&throttledPriorityState.mu)
+	throttledPriorityState.rateLimiter = quotas.NewDefaultOutgoingRateLimiter(func() float64 {
+		return float64(config.ReplicationStreamSenderLowPriorityQPS())
+	})
+
 	flowControlStates[enumsspb.TASK_PRIORITY_HIGH] = highPriorityState
+	flowControlStates[enumsspb.TASK_PRIORITY_THROTTLED] = throttledPriorityState
 	flowControlStates[enumsspb.TASK_PRIORITY_LOW] = lowPriorityState
 	return &SenderFlowControllerImpl{
 		flowControlStates:  flowControlStates,
@@ -64,6 +73,9 @@ func NewSenderFlowController(config *configs.Config, logger log.Logger) *SenderF
 func (s *SenderFlowControllerImpl) RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState) {
 	if syncState.GetHighPriorityState() != nil {
 		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_HIGH], syncState.GetHighPriorityState().GetFlowControlCommand())
+	}
+	if syncState.GetThrottledPriorityState() != nil {
+		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_THROTTLED], syncState.GetThrottledPriorityState().GetFlowControlCommand())
 	}
 	if syncState.GetLowPriorityState() != nil {
 		s.setState(s.flowControlStates[enumsspb.TASK_PRIORITY_LOW], syncState.GetLowPriorityState().GetFlowControlCommand())

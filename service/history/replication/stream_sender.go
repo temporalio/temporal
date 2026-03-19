@@ -63,6 +63,9 @@ type (
 		flowController          SenderFlowController
 		sendLock                sync.Mutex
 		ssRateLimiter           ServerSchedulerRateLimiter
+		// throttledNamespaceIDs stores a map[string]struct{} of namespace IDs that the
+		// receiver has reported as throttled; updated on each SyncReplicationState ACK.
+		throttledNamespaceIDs atomic.Value
 	}
 )
 
@@ -333,6 +336,11 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 	)
 	if s.isTieredStackEnabled {
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
+		throttled := make(map[string]struct{}, len(attr.GetThrottledNamespaceIds()))
+		for _, id := range attr.GetThrottledNamespaceIds() {
+			throttled[id] = struct{}{}
+		}
+		s.throttledNamespaceIDs.Store(throttled)
 	}
 
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
@@ -529,9 +537,24 @@ Loop:
 			}
 			skipCount = 0
 		}
-		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
-			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
-			continue Loop
+		// In tiered-stack mode, resolve the effective priority for this task.
+		// The HIGH loop handles both HIGH and THROTTLED tasks (THROTTLED tasks originate from
+		// the HIGH task reader). The LOW loop handles only always-LOW tasks.
+		// In single-stack mode (UNSPECIFIED), priority is passed through unchanged.
+		taskPriority := priority
+		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED {
+			taskPriority = s.getEffectiveTaskPriority(item)
+			// HIGH loop: skip only always-LOW tasks (e.g. SyncWorkflowStateTask); THROTTLED tasks
+			// originate from the HIGH reader and are intentionally sent within this loop at reduced
+			// priority, so they are NOT skipped here.
+			if priority == enumsspb.TASK_PRIORITY_HIGH && taskPriority == enumsspb.TASK_PRIORITY_LOW {
+				continue Loop
+			}
+			// LOW loop: skip anything that isn't always-LOW (including THROTTLED, which the HIGH
+			// loop handles so the LOW reader doesn't double-send it).
+			if priority == enumsspb.TASK_PRIORITY_LOW && taskPriority != enumsspb.TASK_PRIORITY_LOW {
+				continue Loop
+			}
 		}
 		if !s.shouldProcessTask(item) {
 			continue Loop
@@ -541,7 +564,7 @@ Loop:
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationTaskPriorityTag(taskPriority),
 		)
 
 		var attempt int64
@@ -554,19 +577,25 @@ Loop:
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-					metrics.ReplicationTaskPriorityTag(priority),
+					metrics.ReplicationTaskPriorityTag(taskPriority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, taskPriority)
 			if err != nil {
 				return err
 			}
 			if task == nil {
 				return nil
 			}
-			task.Priority = priority
+			task.Priority = taskPriority
 			if s.isTieredStackEnabled {
-				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
+				// THROTTLED tasks use the THROTTLED flow control lane so backpressure
+				// from throttled-namespace backlogs does not affect the HIGH lane.
+				waitPriority := priority
+				if taskPriority == enumsspb.TASK_PRIORITY_THROTTLED {
+					waitPriority = enumsspb.TASK_PRIORITY_THROTTLED
+				}
+				if err := s.flowController.Wait(s.server.Context(), waitPriority); err != nil {
 					if errors.Is(err, context.Canceled) {
 						return err
 					}
@@ -600,7 +629,7 @@ Loop:
 						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
 						ExclusiveHighWatermark:     task.SourceTaskId + 1,
 						ExclusiveHighWatermarkTime: task.VisibilityTime,
-						Priority:                   priority,
+						Priority:                   taskPriority,
 					},
 				},
 			}); err != nil {
@@ -713,6 +742,23 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
 	}
+}
+
+// getEffectiveTaskPriority returns the task priority to use for routing decisions.
+// In tiered-stack mode, HIGH-priority tasks whose namespace is currently reported as
+// throttled by the receiver are sent with THROTTLED priority. The receiver continues
+// to run THROTTLED tasks through the namespace rate limiter so the namespace can
+// recover and be promoted back to HIGH priority.
+func (s *StreamSenderImpl) getEffectiveTaskPriority(task tasks.Task) enumsspb.TaskPriority {
+	p := s.getTaskPriority(task)
+	if p == enumsspb.TASK_PRIORITY_HIGH && s.isTieredStackEnabled {
+		if m, ok := s.throttledNamespaceIDs.Load().(map[string]struct{}); ok {
+			if _, throttled := m[task.GetNamespaceID()]; throttled {
+				return enumsspb.TASK_PRIORITY_THROTTLED
+			}
+		}
+	}
+	return p
 }
 
 func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {

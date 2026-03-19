@@ -69,6 +69,11 @@ message SyncReplicationState {
     google.protobuf.Timestamp  inclusive_low_watermark_time = 2;
     ReplicationState high_priority_state = 3;
     ReplicationState low_priority_state = 4;
+    // flow control state for the THROTTLED priority lane; watermark is factored into high_priority_state
+    // on the receiver so the sender does not need to track it separately
+    ReplicationState throttled_priority_state = 5;
+    // namespace IDs currently throttled by the receiver; sender should demote these to throttled priority
+    repeated string throttled_namespace_ids = 6;
 }
 message ReplicationState {
     int64 inclusive_low_watermark = 1;

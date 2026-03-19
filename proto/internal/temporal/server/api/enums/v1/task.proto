@@ -65,6 +65,11 @@ enum TaskType {
 enum TaskPriority {
     TASK_PRIORITY_UNSPECIFIED = 0;
     TASK_PRIORITY_HIGH = 1;
+    // TASK_PRIORITY_THROTTLED is assigned by the sender to tasks that would normally be HIGH
+    // priority but whose namespace is currently reported as throttled by the receiver.
+    // The receiver continues to run these tasks through the namespace throttler so the
+    // namespace can recover and be promoted back to HIGH priority.
+    TASK_PRIORITY_THROTTLED = 2;
     // gap between index can be used for future priority levels if needed
     TASK_PRIORITY_LOW = 10;
 }

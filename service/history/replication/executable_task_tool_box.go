@@ -37,5 +37,6 @@ type (
 		HistoryEventsHandler     eventhandler.HistoryEventsHandler
 		WorkflowCache            wcache.Cache
 		RemoteHistoryFetcher     eventhandler.HistoryPaginatedFetcher
+		NamespaceThrottler       NamespaceThrottler
 	}
 )

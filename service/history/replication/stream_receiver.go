@@ -39,18 +39,19 @@ type (
 	StreamReceiverImpl struct {
 		ProcessToolBox
 
-		status                  int32
-		clientShardKey          ClusterShardKey
-		serverShardKey          ClusterShardKey
-		highPriorityTaskTracker ExecutableTaskTracker
-		lowPriorityTaskTracker  ExecutableTaskTracker
-		shutdownChan            channel.ShutdownOnce
-		logger                  log.Logger
-		stream                  Stream
-		taskConverter           ExecutableTaskConverter
-		receiverMode            ReceiverMode
-		flowController          ReceiverFlowController
-		recvSignalChan          chan struct{}
+		status                       int32
+		clientShardKey               ClusterShardKey
+		serverShardKey               ClusterShardKey
+		highPriorityTaskTracker      ExecutableTaskTracker
+		throttledPriorityTaskTracker ExecutableTaskTracker
+		lowPriorityTaskTracker       ExecutableTaskTracker
+		shutdownChan                 channel.ShutdownOnce
+		logger                       log.Logger
+		stream                       Stream
+		taskConverter                ExecutableTaskConverter
+		receiverMode                 ReceiverMode
+		flowController               ReceiverFlowController
+		recvSignalChan               chan struct{}
 
 		slowSubmissionMu         sync.RWMutex
 		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
@@ -81,17 +82,19 @@ func NewStreamReceiver(
 		tag.Operation("replication-stream-receiver"),
 	)
 	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
+	throttledPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	receiver := &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
-		status:                  common.DaemonStatusInitialized,
-		clientShardKey:          clientShardKey,
-		serverShardKey:          serverShardKey,
-		highPriorityTaskTracker: highPriorityTaskTracker,
-		lowPriorityTaskTracker:  lowPriorityTaskTracker,
-		shutdownChan:            channel.NewShutdownOnce(),
-		logger:                  logger,
+		status:                       common.DaemonStatusInitialized,
+		clientShardKey:               clientShardKey,
+		serverShardKey:               serverShardKey,
+		highPriorityTaskTracker:      highPriorityTaskTracker,
+		throttledPriorityTaskTracker: throttledPriorityTaskTracker,
+		lowPriorityTaskTracker:       lowPriorityTaskTracker,
+		shutdownChan:                 channel.NewShutdownOnce(),
+		logger:                       logger,
 		stream: newStream(
 			processToolBox,
 			clientShardKey,
@@ -107,6 +110,12 @@ func NewStreamReceiver(
 		return &FlowControlSignal{
 			taskTrackingCount:  highPriorityTaskTracker.Size(),
 			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
+		}
+	}
+	taskTrackerMap[enumsspb.TASK_PRIORITY_THROTTLED] = func() *FlowControlSignal {
+		return &FlowControlSignal{
+			taskTrackingCount:  throttledPriorityTaskTracker.Size(),
+			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_THROTTLED),
 		}
 	}
 	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
@@ -223,10 +232,11 @@ func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
 ) (int64, error) {
 	highPriorityWaterMarkInfo := r.highPriorityTaskTracker.LowWatermark()
+	throttledPriorityWaterMarkInfo := r.throttledPriorityTaskTracker.LowWatermark()
 	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
-	size := r.highPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size()
+	size := r.highPriorityTaskTracker.Size() + r.throttledPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size()
 
-	var highPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
+	var highPriorityWatermark, throttledPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
 	inclusiveLowWaterMark := int64(-1)
 	var inclusiveLowWaterMarkTime time.Time
 
@@ -244,15 +254,37 @@ func (r *StreamReceiverImpl) ackMessage(
 			r.logger.Warn("Tiered stack mode. Have to wait for both high and low priority tracker received at least one batch of tasks before acking.")
 			return 0, nil
 		}
+
+		// Synthetic effective HIGH watermark: min of HIGH and THROTTLED trackers.
+		// THROTTLED tasks originate from the HIGH reader on the sender, so their
+		// watermarks are interleaved with HIGH task IDs. The sender uses HighPriorityState
+		// to advance the HIGH reader position, so we must not report a watermark that
+		// skips over unprocessed THROTTLED tasks.
+		effectiveHighWaterMarkInfo := highPriorityWaterMarkInfo
+		if throttledPriorityWaterMarkInfo != nil && throttledPriorityWaterMarkInfo.Watermark < highPriorityWaterMarkInfo.Watermark {
+			effectiveHighWaterMarkInfo = throttledPriorityWaterMarkInfo
+		}
+
 		highPriorityFlowControlInfo := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_HIGH)
 		if highPriorityFlowControlInfo.Command == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
 			r.logger.Warn(fmt.Sprintf("pausing High Priority Tasks: %s", highPriorityFlowControlInfo.Cause))
 		}
 		highPriorityWatermark = &replicationspb.ReplicationState{
-			InclusiveLowWatermark:     highPriorityWaterMarkInfo.Watermark,
-			InclusiveLowWatermarkTime: timestamppb.New(highPriorityWaterMarkInfo.Timestamp),
+			InclusiveLowWatermark:     effectiveHighWaterMarkInfo.Watermark,
+			InclusiveLowWatermarkTime: timestamppb.New(effectiveHighWaterMarkInfo.Timestamp),
 			FlowControlCommand:        highPriorityFlowControlInfo.Command,
 		}
+
+		throttledFlowControlInfo := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_THROTTLED)
+		if throttledFlowControlInfo.Command == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
+			r.logger.Warn(fmt.Sprintf("pausing Throttled Priority Tasks: %s", throttledFlowControlInfo.Cause))
+		}
+		// Watermark is already factored into highPriorityWatermark above; this field carries
+		// only the flow control command back to the sender.
+		throttledPriorityWatermark = &replicationspb.ReplicationState{
+			FlowControlCommand: throttledFlowControlInfo.Command,
+		}
+
 		lowPriorityFlowControlInfo := r.flowController.GetFlowControlInfo(enumsspb.TASK_PRIORITY_LOW)
 		if lowPriorityFlowControlInfo.Command == enumsspb.REPLICATION_FLOW_CONTROL_COMMAND_PAUSE {
 			r.logger.Warn(fmt.Sprintf("pausing Low Priority Tasks: %s", lowPriorityFlowControlInfo.Cause))
@@ -262,9 +294,9 @@ func (r *StreamReceiverImpl) ackMessage(
 			InclusiveLowWatermarkTime: timestamppb.New(lowPriorityWaterMarkInfo.Timestamp),
 			FlowControlCommand:        lowPriorityFlowControlInfo.Command,
 		}
-		if highPriorityWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
-			inclusiveLowWaterMark = highPriorityWaterMarkInfo.Watermark
-			inclusiveLowWaterMarkTime = highPriorityWaterMarkInfo.Timestamp
+		if effectiveHighWaterMarkInfo.Watermark <= lowPriorityWaterMarkInfo.Watermark {
+			inclusiveLowWaterMark = effectiveHighWaterMarkInfo.Watermark
+			inclusiveLowWaterMarkTime = effectiveHighWaterMarkInfo.Timestamp
 		} else {
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
@@ -283,14 +315,19 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
+	syncState := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark:     inclusiveLowWaterMark,
+		InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
+		HighPriorityState:         highPriorityWatermark,
+		ThrottledPriorityState:    throttledPriorityWatermark,
+		LowPriorityState:          lowPriorityWatermark,
+	}
+	if receiverMode == ReceiverModeTieredStack {
+		syncState.ThrottledNamespaceIds = r.NamespaceThrottler.ThrottledNamespaceIDs()
+	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
-			SyncReplicationState: &replicationspb.SyncReplicationState{
-				InclusiveLowWatermark:     inclusiveLowWaterMark,
-				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
-				HighPriorityState:         highPriorityWatermark,
-				LowPriorityState:          lowPriorityWatermark,
-			},
+			SyncReplicationState: syncState,
 		},
 	}); err != nil {
 		return 0, NewStreamError("stream_receiver failed to send", err)
@@ -339,6 +376,7 @@ func (r *StreamReceiverImpl) processMessages(
 			// sender mode changed, exit loop and let stream reconnect to retry
 			return NewStreamError("ReplicationTask wrong receiver mode", err)
 		}
+		receiverMode := ReceiverMode(atomic.LoadInt32((*int32)(&r.receiverMode)))
 
 		if err = ValidateTasksHaveSamePriority(priority, messages.ReplicationTasks...); err != nil {
 			// This should not happen because source side is sending task 1 by 1. Validate here just in case.
@@ -368,6 +406,19 @@ func (r *StreamReceiverImpl) processMessages(
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
 				return err
+			}
+			if receiverMode == ReceiverModeTieredStack &&
+				(schedulerPriority == enumsspb.TASK_PRIORITY_HIGH || schedulerPriority == enumsspb.TASK_PRIORITY_THROTTLED) {
+				nsID := task.ReplicationTask().GetRawTaskInfo().GetNamespaceId()
+				if !r.NamespaceThrottler.Allow(nsID) {
+					if schedulerPriority == enumsspb.TASK_PRIORITY_HIGH {
+						schedulerPriority = enumsspb.TASK_PRIORITY_THROTTLED
+						r.ThrottledLogger.Warn("Replication namespace throttled, demoting task to throttled priority",
+							tag.WorkflowNamespaceID(nsID),
+						)
+					}
+					// Already THROTTLED and still over limit — no change needed; Allow() updated throttled state.
+				}
 			}
 			scheduler, err := r.getTaskScheduler(schedulerPriority)
 			if err != nil {
@@ -405,6 +456,8 @@ func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 		return r.highPriorityTaskTracker, nil
 	case enumsspb.TASK_PRIORITY_LOW:
 		return r.lowPriorityTaskTracker, nil
+	case enumsspb.TASK_PRIORITY_THROTTLED:
+		return r.throttledPriorityTaskTracker, nil
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
 	}
@@ -421,7 +474,7 @@ func (r *StreamReceiverImpl) getTaskSchedulerPriority(priority enumsspb.TaskPrio
 			return enumsspb.TASK_PRIORITY_LOW, nil
 		}
 		return enumsspb.TASK_PRIORITY_HIGH, nil
-	case enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW:
+	case enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW, enumsspb.TASK_PRIORITY_THROTTLED:
 		return priority, nil
 	default:
 		return 0, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
@@ -432,7 +485,9 @@ func (r *StreamReceiverImpl) getTaskScheduler(priority enumsspb.TaskPriority) (c
 	switch priority {
 	case enumsspb.TASK_PRIORITY_HIGH:
 		return r.ProcessToolBox.HighPriorityTaskScheduler, nil
-	case enumsspb.TASK_PRIORITY_LOW:
+	case enumsspb.TASK_PRIORITY_LOW, enumsspb.TASK_PRIORITY_THROTTLED:
+		// THROTTLED shares the LOW scheduler so throttled-namespace backpressure cannot
+		// block the HIGH scheduler lane.
 		return r.ProcessToolBox.LowPriorityTaskScheduler, nil
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("Unknown task scheduler priority: %v", priority)
@@ -467,7 +522,7 @@ func (r *StreamReceiverImpl) setReceiverMode(priority enumsspb.TaskPriority) {
 	switch priority {
 	case enumsspb.TASK_PRIORITY_UNSPECIFIED:
 		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeSingleStack))
-	case enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW:
+	case enumsspb.TASK_PRIORITY_HIGH, enumsspb.TASK_PRIORITY_LOW, enumsspb.TASK_PRIORITY_THROTTLED:
 		atomic.StoreInt32((*int32)(&r.receiverMode), int32(ReceiverModeTieredStack))
 	}
 }

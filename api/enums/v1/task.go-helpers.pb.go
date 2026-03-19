@@ -75,6 +75,7 @@ var (
 	TaskPriority_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"High":        1,
+		"Throttled":   2,
 		"Low":         10,
 	}
 )

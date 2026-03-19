@@ -1048,6 +1048,104 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.IsType(&StreamError{}, err)
 }
 
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_NotTieredStack_ReturnsBase() {
+	s.streamSender.isTieredStackEnabled = false
+	task := tasks.NewMockTask(s.controller)
+	// GetNamespaceID must not be called; the throttle check is gated on isTieredStackEnabled.
+	s.Equal(enumsspb.TASK_PRIORITY_HIGH, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_TieredStack_NotThrottled_ReturnsHigh() {
+	s.streamSender.isTieredStackEnabled = true
+	task := tasks.NewMockTask(s.controller)
+	task.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{})
+	s.Equal(enumsspb.TASK_PRIORITY_HIGH, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_TieredStack_Throttled_DemotesToThrottled() {
+	s.streamSender.isTieredStackEnabled = true
+	task := tasks.NewMockTask(s.controller)
+	task.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"ns-1": {}})
+	s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestGetEffectiveTaskPriority_TieredStack_LowTaskNotAffected() {
+	s.streamSender.isTieredStackEnabled = true
+	// SyncWorkflowStateTask is inherently LOW priority; throttle map must not flip it further.
+	task := &tasks.SyncWorkflowStateTask{}
+	s.Equal(enumsspb.TASK_PRIORITY_LOW, s.streamSender.getEffectiveTaskPriority(task))
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_StoresThrottledNamespaceIDs() {
+	s.streamSender.isTieredStackEnabled = true
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	ts := timestamppb.New(time.Now())
+	replicationState := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark:     100,
+		InclusiveLowWatermarkTime: ts,
+		HighPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     110,
+			InclusiveLowWatermarkTime: ts,
+		},
+		LowPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     100,
+			InclusiveLowWatermarkTime: ts,
+		},
+		ThrottledNamespaceIds: []string{"ns-a", "ns-b"},
+	}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Times(1)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, gomock.Any(), gomock.Any()).Return(nil)
+
+	err := s.streamSender.recvSyncReplicationState(replicationState)
+	s.NoError(err)
+
+	m, ok := s.streamSender.throttledNamespaceIDs.Load().(map[string]struct{})
+	s.True(ok)
+	s.Contains(m, "ns-a")
+	s.Contains(m, "ns-b")
+	s.Len(m, 2)
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_ClearsThrottledNamespaceIDs() {
+	s.streamSender.isTieredStackEnabled = true
+	// Pre-populate with some throttled namespaces.
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"old-ns": {}})
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	ts := timestamppb.New(time.Now())
+	replicationState := &replicationspb.SyncReplicationState{
+		InclusiveLowWatermark:     100,
+		InclusiveLowWatermarkTime: ts,
+		HighPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     110,
+			InclusiveLowWatermarkTime: ts,
+		},
+		LowPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     100,
+			InclusiveLowWatermarkTime: ts,
+		},
+		// No throttled namespace IDs — receiver cleared them.
+	}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(replicationState).Times(1)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, gomock.Any(), gomock.Any()).Return(nil)
+
+	err := s.streamSender.recvSyncReplicationState(replicationState)
+	s.NoError(err)
+
+	m, ok := s.streamSender.throttledNamespaceIDs.Load().(map[string]struct{})
+	s.True(ok)
+	s.Empty(m)
+}
+
 func (s *streamSenderSuite) TestLivenessMonitor() {
 	s.streamSender.recvSignalChan <- struct{}{}
 	livenessMonitor(
