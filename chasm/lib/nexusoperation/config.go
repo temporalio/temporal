@@ -13,6 +13,12 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 )
 
+var Enabled = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableStandalone",
+	false,
+	`Toggles standalone Nexus operation functionality on the server.`,
+)
+
 var ChasmNexusEnabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableChasm",
 	false,
@@ -188,6 +194,7 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 )
 
 type Config struct {
+	Enabled                             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmEnabled                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumHistoryShards                    int32
@@ -210,6 +217,7 @@ type Config struct {
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
+		Enabled:                            Enabled.Get(dc),
 		ChasmEnabled:                       dynamicconfig.EnableChasm.Get(dc),
 		ChasmNexusEnabled:                  ChasmNexusEnabled.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
