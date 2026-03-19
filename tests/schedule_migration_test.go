@@ -413,3 +413,101 @@ func TestScheduleMigrationV1ToV2(t *testing.T) {
 	)
 	require.NoError(t, err)
 }
+
+func TestCHASMScheduleDescribeAfterDisablingCreationAndMigration(t *testing.T) {
+	env := testcore.NewEnv(
+		t,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+	)
+
+	ctx := testcore.NewContext()
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	sid := testcore.RandomizeStr("sched-routing-after-disable")
+	wid := testcore.RandomizeStr("sched-routing-after-disable-wf")
+	wt := testcore.RandomizeStr("sched-routing-after-disable-wt")
+	tq := testcore.RandomizeStr("tq")
+
+	sched := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule:   sched,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	firstDescribe, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstDescribe.GetSchedule())
+	require.Eventually(t, func() bool {
+		listResp, listErr := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{Namespace: nsName})
+		if listErr != nil {
+			return false
+		}
+		for _, schedule := range listResp.GetSchedules() {
+			if schedule.GetScheduleId() == sid {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Verify the schedule exists in CHASM by describing it directly through the
+	// scheduler client (history-only path that only goes to CHASM).
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
+		ctx,
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+		},
+	)
+	require.NoError(t, err)
+
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, false)
+
+	require.Eventually(t, func() bool {
+		describeResp, describeErr := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+		})
+		if describeErr != nil {
+			return false
+		}
+		if describeResp.GetSchedule() == nil {
+			return false
+		}
+		listResp, listErr := env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{Namespace: nsName})
+		if listErr != nil {
+			return false
+		}
+		for _, schedule := range listResp.GetSchedules() {
+			if schedule.GetScheduleId() == sid {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 200*time.Millisecond)
+}

@@ -13,6 +13,7 @@ type (
 		handler *handler
 
 		SchedulerIdleTaskExecutor        *SchedulerIdleTaskExecutor
+		SchedulerCallbacksTaskExecutor   *SchedulerCallbacksTaskExecutor
 		GeneratorTaskExecutor            *GeneratorTaskExecutor
 		InvokerExecuteTaskExecutor       *InvokerExecuteTaskExecutor
 		InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor
@@ -23,6 +24,7 @@ type (
 func NewLibrary(
 	handler *handler,
 	SchedulerIdleTaskExecutor *SchedulerIdleTaskExecutor,
+	SchedulerCallbacksTaskExecutor *SchedulerCallbacksTaskExecutor,
 	GeneratorTaskExecutor *GeneratorTaskExecutor,
 	InvokerExecuteTaskExecutor *InvokerExecuteTaskExecutor,
 	InvokerProcessBufferTaskExecutor *InvokerProcessBufferTaskExecutor,
@@ -31,6 +33,7 @@ func NewLibrary(
 	return &Library{
 		handler:                          handler,
 		SchedulerIdleTaskExecutor:        SchedulerIdleTaskExecutor,
+		SchedulerCallbacksTaskExecutor:   SchedulerCallbacksTaskExecutor,
 		GeneratorTaskExecutor:            GeneratorTaskExecutor,
 		InvokerExecuteTaskExecutor:       InvokerExecuteTaskExecutor,
 		InvokerProcessBufferTaskExecutor: InvokerProcessBufferTaskExecutor,
@@ -61,6 +64,11 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			"idle",
 			l.SchedulerIdleTaskExecutor,
 			l.SchedulerIdleTaskExecutor,
+		),
+		chasm.NewRegistrableSideEffectTask(
+			"callbacks",
+			l.SchedulerCallbacksTaskExecutor,
+			l.SchedulerCallbacksTaskExecutor,
 		),
 		chasm.NewRegistrablePureTask(
 			"generate",

@@ -19,7 +19,7 @@ func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
 		return nil, err
 	}
 
-	if err := registry.Register(chasmscheduler.NewLibrary(nil, nil, nil, nil, nil, nil)); err != nil {
+	if err := registry.Register(chasmscheduler.NewLibrary(nil, nil, nil, nil, nil, nil, nil)); err != nil {
 		return nil, err
 	}
 

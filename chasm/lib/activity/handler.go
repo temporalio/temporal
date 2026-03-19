@@ -133,7 +133,7 @@ func (h *handler) DescribeActivityExecution(
 
 	token := req.GetFrontendRequest().GetLongPollToken()
 	if len(token) == 0 {
-		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req, nil)
+		return chasm.ReadComponent(ctx, ref, (*Activity).buildDescribeActivityExecutionResponse, req)
 	}
 	response, _, err = chasm.PollComponent(ctx, ref, func(
 		a *Activity,
@@ -214,6 +214,30 @@ func (h *handler) PollActivityExecution(
 	return response, err
 }
 
+// DeleteActivityExecution terminates the activity if running, then schedules it for deletion.
+func (h *handler) DeleteActivityExecution(
+	ctx context.Context,
+	req *activitypb.DeleteActivityExecutionRequest,
+) (*activitypb.DeleteActivityExecutionResponse, error) {
+	frontendReq := req.GetFrontendRequest()
+
+	key := chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  frontendReq.GetActivityId(),
+		RunID:       frontendReq.GetRunId(),
+	}
+
+	if err := chasm.DeleteExecution[*Activity](ctx, key, chasm.DeleteExecutionRequest{
+		TerminateComponentRequest: chasm.TerminateComponentRequest{
+			Reason: "Delete activity execution",
+		},
+	}); err != nil {
+		return nil, err
+	}
+
+	return &activitypb.DeleteActivityExecutionResponse{}, nil
+}
+
 // TerminateActivityExecution terminates an activity execution.
 func (h *handler) TerminateActivityExecution(
 	ctx context.Context,
@@ -236,7 +260,7 @@ func (h *handler) TerminateActivityExecution(
 		ctx,
 		ref,
 		(*Activity).handleTerminated,
-		terminateEvent{
+		terminateRequestEvent{
 			request: req,
 			MetricsHandlerBuilderParams: MetricsHandlerBuilderParams{
 				Handler:                     h.metricsHandler,
