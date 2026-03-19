@@ -88,7 +88,7 @@ func (s *streamReceiverSuite) SetupTest() {
 		MetricsHandler:            metrics.NoopMetricsHandler,
 		Logger:                    testLogger,
 		ThrottledLogger:           testLogger,
-		NamespaceThrottler:    NoopNamespaceReplicationThrottler{},
+		NamespaceThrottler:        NoopNamespaceReplicationThrottler{},
 		DLQWriter:                 NoopDLQWriter{},
 	}
 	processToolBox.Config.ReplicationStreamSyncStatusDuration = dynamicconfig.GetDurationPropertyFn(5 * time.Millisecond)
