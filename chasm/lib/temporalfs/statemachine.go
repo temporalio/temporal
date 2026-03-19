@@ -17,6 +17,9 @@ func (f *Filesystem) StateMachineState() temporalfspb.FilesystemStatus {
 
 // SetStateMachineState sets the filesystem status.
 func (f *Filesystem) SetStateMachineState(state temporalfspb.FilesystemStatus) {
+	if f.FilesystemState == nil {
+		f.FilesystemState = &temporalfspb.FilesystemState{}
+	}
 	f.Status = state
 }
 

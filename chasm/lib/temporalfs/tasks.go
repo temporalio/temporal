@@ -158,7 +158,9 @@ func (e *quotaCheckTaskExecutor) Execute(
 	}
 
 	m := f.Metrics()
-	f.Close()
+	if closeErr := f.Close(); closeErr != nil {
+		e.logger.Warn("QuotaCheck: failed to close FS", tag.Error(closeErr))
+	}
 
 	if fs.Stats == nil {
 		fs.Stats = &temporalfspb.FSStats{}

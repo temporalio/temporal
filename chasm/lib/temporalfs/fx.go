@@ -1,6 +1,7 @@
 package temporalfs
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -14,9 +15,15 @@ var HistoryModule = fx.Module(
 	fx.Provide(
 		ConfigProvider,
 		fx.Annotate(
-			func(logger log.Logger) FSStoreProvider {
+			func(lc fx.Lifecycle, logger log.Logger) FSStoreProvider {
 				dataDir := filepath.Join(os.TempDir(), "temporalfs")
-				return NewPebbleStoreProvider(dataDir, logger)
+				provider := NewPebbleStoreProvider(dataDir, logger)
+				lc.Append(fx.Hook{
+					OnStop: func(_ context.Context) error {
+						return provider.Close()
+					},
+				})
+				return provider
 			},
 			fx.As(new(FSStoreProvider)),
 		),
