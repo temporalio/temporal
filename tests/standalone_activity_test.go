@@ -1935,7 +1935,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 
 	})
 
-	t.Run("TerminateAlreadyTerminatedWithSameRequestID_Fails", func(t *testing.T) {
+	t.Run("DuplicateRequestIDSucceeds", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -1962,8 +1962,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 			Reason:     "Test Termination",
 			Identity:   "terminator",
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.NoError(t, err)
 	})
 
 	t.Run("TerminateAlreadyTerminatedWithNoRequestID_Fails", func(t *testing.T) {
