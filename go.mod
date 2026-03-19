@@ -45,7 +45,7 @@ require (
 	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
 	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
 	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
-	github.com/temporalio/temporal-fs v1.0.0
+	github.com/temporalio/temporal-fs v1.1.0
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.16
@@ -212,5 +212,3 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
-
-replace github.com/temporalio/temporal-fs => /Users/dashti/repos/temporal/github.com/temporalio/temporal-fs
