@@ -90,11 +90,10 @@ func (d *matchingTaskStoreV1) CreateTasks(
 		}
 	}
 
-	// The following query is used to ensure that range_id didn't change
-	batch.Query(switchTasksTable(templateUpdateTaskQueueQuery, matchingTaskVersion1),
+	// Verify range_id fencing token without writing the task_queue metadata blob.
+	// Metadata is flushed periodically by SyncState.
+	batch.Query(switchTasksTable(templateCheckRangeIDQuery, matchingTaskVersion1),
 		request.RangeID,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
 		namespaceID,
 		taskQueue,
 		taskQueueType,
@@ -116,7 +115,7 @@ func (d *matchingTaskStoreV1) CreateTasks(
 		}
 	}
 
-	return &p.CreateTasksResponse{UpdatedMetadata: true}, nil
+	return &p.CreateTasksResponse{UpdatedMetadata: false}, nil
 }
 
 // GetTasks get a task

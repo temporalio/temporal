@@ -233,6 +233,45 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 	s.Nil(resp.NextPageToken)
 }
 
+func (s *TaskQueueTaskSuite) TestCreateTasks_DoesNotUpdateMetadata() {
+	rangeID := rand.Int63()
+	taskQueue := s.createTaskQueue(rangeID)
+
+	// Read back the metadata as it was stored at creation time.
+	getResp, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
+		NamespaceID: s.namespaceID,
+		TaskQueue:   s.taskQueueName,
+		TaskType:    s.taskQueueType,
+	})
+	s.NoError(err)
+	originalAckLevel := getResp.TaskQueueInfo.AckLevel
+
+	// CreateTasks with a modified AckLevel in the metadata blob.
+	modifiedQueue := *taskQueue
+	modifiedQueue.AckLevel = originalAckLevel + 999
+
+	taskID := rand.Int63()
+	task := s.randomTask(taskID)
+	resp, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
+		TaskQueueInfo: &p.PersistedTaskQueueInfo{
+			RangeID: rangeID,
+			Data:    &modifiedQueue,
+		},
+		Tasks: []*persistencespb.AllocatedTaskInfo{task},
+	})
+	s.NoError(err)
+	s.False(resp.UpdatedMetadata)
+
+	// Verify the metadata blob in the DB still has the original AckLevel.
+	getResp2, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
+		NamespaceID: s.namespaceID,
+		TaskQueue:   s.taskQueueName,
+		TaskType:    s.taskQueueType,
+	})
+	s.NoError(err)
+	s.Equal(originalAckLevel, getResp2.TaskQueueInfo.AckLevel)
+}
+
 func (s *TaskQueueTaskSuite) createTaskQueue(
 	rangeID int64,
 ) *persistencespb.TaskQueueInfo {
