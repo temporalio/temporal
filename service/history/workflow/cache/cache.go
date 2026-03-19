@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
@@ -22,10 +23,12 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/tests/umpire/entity"
 )
 
 type (
@@ -321,6 +324,18 @@ func (c *cacheImpl) lockWorkflowExecution(
 	cacheKey Key,
 	lockPriority locks.Priority,
 ) error {
+	// Instrument workflow lock acquisition for observability
+	wfKey := workflowCtx.GetWorkflowKey()
+	lockPriorityStr := "low"
+	if lockPriority == locks.PriorityHigh {
+		lockPriorityStr = "high"
+	}
+	ctx, span := umpire.Instrument(ctx, "workflow.cache.lock.acquire",
+		umpire.EntityTag(entity.Namespace(wfKey.NamespaceID).Workflow(wfKey.WorkflowID).Execution(wfKey.RunID)),
+		attribute.String("lock.type", lockPriorityStr),
+	)
+	defer span.End()
+
 	// skip if there is no deadline
 	if deadline, ok := ctx.Deadline(); ok {
 		var cancel context.CancelFunc
@@ -341,6 +356,9 @@ func (c *cacheImpl) lockWorkflowExecution(
 
 	if err := workflowCtx.Lock(ctx, lockPriority); err != nil {
 		// ctx is done before lock can be acquired
+		umpire.RecordError(ctx, err,
+			umpire.EntityTag(entity.Namespace(wfKey.NamespaceID).Workflow(wfKey.WorkflowID).Execution(wfKey.RunID)),
+		)
 		c.Release(cacheKey)
 		return consts.ErrResourceExhaustedBusyWorkflow
 	}
@@ -363,25 +381,47 @@ func (c *cacheImpl) makeReleaseFunc(
 				metrics.HistoryWorkflowExecutionCacheLockHoldDuration.With(handler).Record(time.Since(acquireTime))
 			}()
 			if rec := recover(); rec != nil {
+				// Record lock release event before panic
+				wfKey := wfContext.GetWorkflowKey()
+				umpire.RecordFact(context.Background(), "workflow.cache.lock.released",
+					umpire.EntityTag(entity.Namespace(wfKey.NamespaceID).Workflow(wfKey.WorkflowID)),
+					attribute.String("release.reason", "panic"),
+				)
 				wfContext.Clear()
 				wfContext.Unlock()
 				c.Release(cacheKey)
 				panic(rec)
 			} else {
+				wfKey := wfContext.GetWorkflowKey()
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
+					umpire.RecordFact(context.Background(), "workflow.cache.lock.released",
+						umpire.EntityTag(entity.Namespace(wfKey.NamespaceID).Workflow(wfKey.WorkflowID)),
+						attribute.String("release.reason", "error_or_force_clear"),
+						attribute.Bool("has.error", err != nil),
+					)
 					wfContext.Clear()
 					wfContext.Unlock()
 					c.Release(cacheKey)
 				} else {
 					isDirty := wfContext.IsDirty()
 					if isDirty {
+						umpire.RecordFact(context.Background(), "workflow.cache.lock.released",
+							umpire.EntityTag(entity.Namespace(wfKey.NamespaceID).Workflow(wfKey.WorkflowID)),
+							attribute.String("release.reason", "dirty_state"),
+							attribute.Bool("is.dirty", true),
+						)
 						wfContext.Clear()
 						logger := log.With(shardContext.GetLogger(), tag.ComponentHistoryCache)
 						logger.Error("Cache encountered dirty mutable state transaction",
 							tag.WorkflowNamespaceID(wfContext.GetWorkflowKey().NamespaceID),
 							tag.WorkflowID(wfContext.GetWorkflowKey().WorkflowID),
 							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
+						)
+					} else {
+						umpire.RecordFact(context.Background(), "workflow.cache.lock.released",
+							umpire.EntityTag(entity.Namespace(wfKey.NamespaceID).Workflow(wfKey.WorkflowID)),
+							attribute.String("release.reason", "normal"),
 						)
 					}
 					wfContext.Unlock()

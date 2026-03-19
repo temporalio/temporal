@@ -190,11 +190,12 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		health.NewServer(),
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
+		nil, // hostInfoProvider
 		healthInterceptor,
 		scheduler.NewSpecBuilder(),
 		true,
 		nil, // Not testing activity handler here
-		nil,
+		nil, // registry
 		quotas.NoopRequestRateLimiter,
 	)
 }

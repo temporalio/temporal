@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.temporal.io/server/tests/testcore"
+	umpiretest "go.temporal.io/server/tests/umpire"
+	"go.temporal.io/server/tests/umpire/rulebook"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -168,7 +170,7 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				s.NotNil(res.NewTask)
 				updateResult := <-updateResultCh
 				s.Equal("success-result-of-"+s.Tv().UpdateID(), testcore.DecodeString(s.T(), updateResult.GetOutcome().GetSuccess()))
-				s.EqualValues(0, res.NewTask.ResetHistoryEventId)
+				s.EqualValues(0, res.NewTask.ResetHistoryEventId) // why? no context.
 
 				// Test non-blocking poll
 				for _, waitPolicy := range []*updatepb.WaitPolicy{{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_UNSPECIFIED}, nil} {
@@ -200,6 +202,10 @@ func TestWorkflowUpdateSuite(t *testing.T) {
   8 WorkflowExecutionUpdateAccepted {"AcceptedRequestSequencingEventId": 5} // WTScheduled event which delivered update to the worker.
   9 WorkflowExecutionUpdateCompleted {"AcceptedEventId": 8}
 `, events)
+
+				// Verify Umpire's stage-monotone rule actually evaluated this update.
+				s.RequireRulePassed(&rulebook.WorkflowUpdateStageMonotoneRule{},
+					umpiretest.Workflow(tv.WorkflowID()).Update(tv.UpdateID()))
 			})
 		}
 	})

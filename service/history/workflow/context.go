@@ -967,12 +967,14 @@ func (c *ContextImpl) UpdateRegistry(ctx context.Context) update.Registry {
 	if c.updateRegistry == nil {
 		nsName := c.MutableState.GetNamespaceEntry().Name().String()
 
+		wfKey := c.GetWorkflowKey()
 		c.updateRegistry = update.NewRegistry(
 			c.MutableState,
 			update.WithNamespace(nsName),
 			update.WithLogger(c.logger),
 			update.WithMetrics(c.metricsHandler),
 			update.WithTracerProvider(trace.SpanFromContext(ctx).TracerProvider()),
+			update.WithWorkflowExecution(wfKey.WorkflowID, wfKey.RunID, c.MutableState.CurrentTaskQueue().GetName()),
 			update.WithInFlightLimit(
 				func() int {
 					return c.config.WorkflowExecutionMaxInFlightUpdates(nsName)

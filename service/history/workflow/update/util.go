@@ -1,6 +1,7 @@
 package update
 
 import (
+	"context"
 	"fmt"
 
 	"go.opentelemetry.io/otel/trace"
@@ -107,5 +108,35 @@ func (i *instrumentation) stateChange(updateID string, from, to state) {
 		tag.String("update-id", updateID),
 		tag.Stringer("from-state", from),
 		tag.Stringer("to-state", to),
+	)
+}
+
+// emitAbortEvents emits OTEL span events for each aborted update so the
+// umpire test observer can track the abort.
+func (i *instrumentation) emitAbortEvents(workflowID string, updateIDs []string, reason AbortReason) {
+	_, span := i.tracer.Start(context.Background(), "update.abort")
+	defer span.End()
+	for _, updateID := range updateIDs {
+		span.AddEvent(telemetry.EventWorkflowUpdateAborted,
+			trace.WithAttributes(
+				telemetry.AttrUpdateID.String( updateID),
+				telemetry.AttrWorkflowID.String( workflowID),
+				telemetry.AttrAbortReason.String( reason.String()),
+			),
+		)
+	}
+}
+
+// emitWorkflowTerminatedEvent emits an OTEL span event so the umpire test
+// observer can transition WorkflowTask entities to a terminal state.
+func (i *instrumentation) emitWorkflowTerminatedEvent(workflowID, runID, taskQueue string) {
+	_, span := i.tracer.Start(context.Background(), "workflow.terminated")
+	defer span.End()
+	span.AddEvent(telemetry.EventWorkflowTerminated,
+		trace.WithAttributes(
+			telemetry.AttrWorkflowID.String( workflowID),
+			telemetry.AttrRunID.String( runID),
+			telemetry.AttrTaskQueue.String( taskQueue),
+		),
 	)
 }

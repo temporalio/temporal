@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/intercept"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -44,8 +45,10 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
+	umpirefw "go.temporal.io/server/common/testing/umpire"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/components/nexusoperations"
+	umpiretest "go.temporal.io/server/tests/umpire"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -68,6 +71,7 @@ type (
 
 		Logger       log.Logger
 		otelExporter *testtelemetry.MemoryExporter
+		umpire       *umpiretest.Umpire
 
 		testCluster *TestCluster
 		// TODO (alex): this doesn't have to be a separate field. All usages can be replaced with values from testCluster itself.
@@ -99,6 +103,8 @@ type (
 		FaultInjectionConfig   *config.FaultInjection
 		NumHistoryShards       int32
 		SharedCluster          bool
+		AdditionalInterceptors []grpc.UnaryServerInterceptor
+		PersistenceInterceptor intercept.PersistenceInterceptor
 	}
 	TestClusterOption func(params *TestClusterParams)
 )
@@ -124,6 +130,18 @@ func init() {
 func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
+	}
+}
+
+func WithAdditionalGrpcInterceptors(interceptors ...grpc.UnaryServerInterceptor) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.AdditionalInterceptors = interceptors
+	}
+}
+
+func WithPersistenceInterceptor(interceptor intercept.PersistenceInterceptor) TestClusterOption {
+	return func(params *TestClusterParams) {
+		params.PersistenceInterceptor = interceptor
 	}
 }
 
@@ -165,6 +183,11 @@ func WithSharedCluster() TestClusterOption {
 	return func(params *TestClusterParams) {
 		params.SharedCluster = true
 	}
+}
+
+// buildPersistenceInterceptor returns the user-supplied interceptor as-is.
+func (s *FunctionalTestBase) buildPersistenceInterceptor(userInterceptor intercept.PersistenceInterceptor) intercept.PersistenceInterceptor {
+	return userInterceptor
 }
 
 func (s *FunctionalTestBase) GetTestCluster() *TestCluster {
@@ -227,6 +250,20 @@ func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 	return s.taskPoller
 }
 
+func (s *FunctionalTestBase) GetUmpire() *umpiretest.Umpire {
+	if s.umpire == nil {
+		panic("Umpire not initialized - did you forget to call SetupSuite()?")
+	}
+	return s.umpire
+}
+
+// RequireRulePassed asserts that the given rule evaluated the entity identified
+// by entityKey and found no violation.
+func (s *FunctionalTestBase) RequireRulePassed(rule interface{ Name() string }, entityKey string) {
+	s.T().Helper()
+	s.GetUmpire().RequireRulePassed(s.T(), rule, entityKey)
+}
+
 func (s *FunctionalTestBase) SetupSuite() {
 	s.SetupSuiteWithCluster()
 }
@@ -263,6 +300,15 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.Logger = tl
 	}
 
+	// Initialize Umpire for telemetry verification BEFORE creating interceptors.
+	var err error
+	s.umpire, err = umpiretest.NewUmpire(s.Logger)
+	s.Require().NoError(err)
+
+	additionalInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(params.AdditionalInterceptors)+1)
+	additionalInterceptors = append(additionalInterceptors, umpiretest.NewUnaryServerInterceptor(s.umpire, nil))
+	additionalInterceptors = append(additionalInterceptors, params.AdditionalInterceptors...)
+
 	s.testClusterConfig = &TestClusterConfig{
 		FaultInjection: params.FaultInjectionConfig,
 		HistoryConfig: HistoryConfig{
@@ -273,6 +319,8 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableMetricsCapture:   true,
 		EnableArchival:         params.ArchivalEnabled,
 		EnableMTLS:             params.EnableMTLS,
+		AdditionalInterceptors: additionalInterceptors,
+		PersistenceInterceptor: s.buildPersistenceInterceptor(params.PersistenceInterceptor),
 	}
 
 	// Apply configuration for shared clusters.
@@ -294,7 +342,10 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		}
 	}
 
-	var err error
+	// Register Umpire as a span processor so it receives spans synchronously
+	// via OnEnd, bypassing the batch exporter pipeline.
+	s.testClusterConfig.SpanProcessors = append(s.testClusterConfig.SpanProcessors, s.umpire)
+
 	testClusterFactory := NewTestClusterFactory()
 	s.testCluster, err = testClusterFactory.NewCluster(s.T(), s.testClusterConfig, s.Logger)
 	s.Require().NoError(err)
@@ -323,6 +374,8 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
 		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
 	})
+
+	// Umpire is now ready to process traces (no start needed)
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -410,6 +463,34 @@ func (s *FunctionalTestBase) exportOTELTraces() {
 	_ = s.otelExporter.Shutdown(NewContext())
 }
 
+func (s *FunctionalTestBase) checkWatchdog() {
+	// Umpire is always initialized in SetupSuiteWithCluster
+	// Run a final check to verify all telemetry invariants.
+	if s.umpire != nil {
+		violations := s.umpire.Check(context.Background(), true)
+		if len(violations) > 0 {
+			s.T().Logf("Umpire detected %d violation(s):", len(violations))
+			for _, vi := range violations {
+				if v, ok := vi.(umpirefw.Violation); ok {
+					s.T().Logf("  [%s] %s: %v", v.Rule, v.Message, v.Tags)
+				}
+			}
+			s.Require().Empty(violations, "Umpire detected %d violation(s)", len(violations))
+		}
+
+		// Litmus test: verify each rule actually evaluated entities.
+		for _, rs := range s.umpire.RuleStats() {
+			if rs.Passes == 0 {
+				s.T().Errorf("Umpire rule %q never evaluated any entities — may be dead code", rs.Name)
+			}
+		}
+
+		if err := s.umpire.Shutdown(context.Background()); err != nil {
+			s.T().Logf("umpire shutdown error: %v", err)
+		}
+	}
+}
+
 func (s *FunctionalTestBase) TearDownCluster() {
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.Namespace()))
 	s.Require().NoError(s.MarkNamespaceAsDeleted(s.ExternalNamespace()))
@@ -417,11 +498,18 @@ func (s *FunctionalTestBase) TearDownCluster() {
 	if s.testCluster != nil {
 		s.Require().NoError(s.testCluster.TearDownCluster())
 	}
+	s.testCluster.TearDownCluster()
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownTest()`.
 func (s *FunctionalTestBase) TearDownTest() {
+	// Reset Umpire state between tests
+	if s.umpire != nil {
+		s.umpire.Reset()
+	}
+
 	s.exportOTELTraces()
+	s.checkWatchdog()
 	s.tearDownSdk()
 	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }

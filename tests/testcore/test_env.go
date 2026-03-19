@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/testing/umpire"
 	"google.golang.org/grpc"
 )
 
@@ -230,6 +231,23 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t:                  t,
 		tv:                 testvars.New(t),
 		ctx:                setupTestTimeoutWithContext(t, options.timeout),
+	}
+
+	// Register per-test Umpire verification.
+	if base.umpire != nil {
+		t.Cleanup(func() {
+			violations := base.umpire.Check(context.Background(), true)
+			if len(violations) > 0 {
+				t.Logf("Umpire detected %d violation(s):", len(violations))
+				for _, vi := range violations {
+					if v, ok := vi.(umpire.Violation); ok {
+						t.Logf("  [%s] %s: %v", v.Rule, v.Message, v.Tags)
+					}
+				}
+				t.Errorf("Umpire detected %d violation(s)", len(violations))
+			}
+			base.umpire.Reset()
+		})
 	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.

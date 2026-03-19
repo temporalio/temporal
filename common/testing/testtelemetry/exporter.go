@@ -15,6 +15,48 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// MultiExporter forwards spans to multiple underlying exporters.
+type MultiExporter struct {
+	exporters []sdktrace.SpanExporter
+}
+
+var _ sdktrace.SpanExporter = (*MultiExporter)(nil)
+
+// NewMultiExporter creates a new MultiExporter that forwards spans to all
+// provided exporters. Nil exporters are skipped.
+func NewMultiExporter(exporters ...sdktrace.SpanExporter) *MultiExporter {
+	var filtered []sdktrace.SpanExporter
+	for _, exp := range exporters {
+		if exp != nil {
+			filtered = append(filtered, exp)
+		}
+	}
+	return &MultiExporter{exporters: filtered}
+}
+
+// ExportSpans forwards spans to all underlying exporters.
+// Returns the first error encountered, but continues to export to all exporters.
+func (m *MultiExporter) ExportSpans(ctx context.Context, spans []sdktrace.ReadOnlySpan) error {
+	var firstErr error
+	for _, exp := range m.exporters {
+		if err := exp.ExportSpans(ctx, spans); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
+// Shutdown shuts down all underlying exporters.
+func (m *MultiExporter) Shutdown(ctx context.Context) error {
+	var firstErr error
+	for _, exp := range m.exporters {
+		if err := exp.Shutdown(ctx); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 var _ sdktrace.SpanExporter = (*MemoryExporter)(nil)
 
 type (

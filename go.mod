@@ -19,6 +19,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/go-faker/faker/v4 v4.6.0
 	github.com/go-jose/go-jose/v4 v4.0.5
+	github.com/go-playground/validator/v10 v10.28.0
 	github.com/go-sql-driver/mysql v1.9.0
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
@@ -31,6 +32,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.10.9
+	github.com/looplab/fsm v1.0.3
 	github.com/maruel/panicparse/v2 v2.4.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/sdk-go v0.5.2-0.20260211051645-26b0b4c584e5
@@ -79,7 +81,11 @@ require (
 )
 
 require (
+	github.com/gabriel-vasile/mimetype v1.4.10 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.2 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 )
 
@@ -106,7 +112,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250121191232-2f005788dc42 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.6 // indirect
-	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
@@ -174,4 +180,13 @@ require (
 	modernc.org/libc v1.67.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
+)
+
+// Omes uses a multi-module repository structure
+// Replace directives to handle internal module dependencies
+// The workers/go submodule requires omes@v1.0.0 which doesn't exist,
+// so we redirect it to the actual commit hash
+replace (
+	github.com/temporalio/omes v1.0.0 => github.com/temporalio/omes v0.0.0-20251119184504-586248ce060d
+	github.com/temporalio/omes/workers/go => github.com/temporalio/omes/workers/go v0.0.0-20251119184504-586248ce060d
 )

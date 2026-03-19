@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/telemetry"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -493,6 +495,15 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 			// task is expired while polling
 			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
 			task.finish(nil, false)
+			// Emit an OTEL span event so the test observer can track discarded tasks.
+			span := trace.SpanFromContext(ctx)
+			span.AddEvent(telemetry.EventWorkflowTaskDiscarded,
+				trace.WithAttributes(
+					telemetry.AttrWorkflowID.String(task.event.Data.GetWorkflowId()),
+					telemetry.AttrRunID.String(task.event.Data.GetRunId()),
+					telemetry.AttrTaskQueue.String(c.queue.TaskQueueFamily().Name()),
+				),
+			)
 			continue
 		}
 

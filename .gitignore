@@ -9,6 +9,7 @@
 .DS_Store
 .coverage
 .testoutput
+testdata/
 
 *.out
 *.test

@@ -93,6 +93,11 @@ type (
 		failoverVersion int64
 		instrumentation instrumentation
 
+		// Workflow execution info for OTEL events.
+		workflowID string
+		runID      string
+		taskQueue  string
+
 		maxTotal                              func() int
 		maxInFlightUpdateCount                func() int
 		maxInFlightUpdateSize                 func() int
@@ -162,6 +167,15 @@ func WithMetrics(m metrics.Handler) Option {
 func WithTracerProvider(t trace.TracerProvider) Option {
 	return func(r *registry) {
 		r.instrumentation.tracer = t.Tracer(telemetry.ComponentUpdateRegistry)
+	}
+}
+
+// WithWorkflowExecution sets the workflow execution info used for OTEL events.
+func WithWorkflowExecution(workflowID, runID, taskQueue string) Option {
+	return func(r *registry) {
+		r.workflowID = workflowID
+		r.runID = runID
+		r.taskQueue = taskQueue
 	}
 }
 
@@ -281,9 +295,13 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 }
 
 func (r *registry) Abort(reason AbortReason) {
-	for _, upd := range r.updates {
+	updateIDs := make([]string, 0, len(r.updates))
+	for updateID, upd := range r.updates {
 		upd.abort(reason, effect.Immediate(context.Background()))
+		updateIDs = append(updateIDs, updateID)
 	}
+	r.instrumentation.emitAbortEvents(r.workflowID, updateIDs, reason)
+	r.instrumentation.emitWorkflowTerminatedEvent(r.workflowID, r.runID, r.taskQueue)
 }
 
 func (r *registry) AbortAccepted(reason AbortReason, effects effect.Controller) {

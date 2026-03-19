@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/telemetry"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -43,6 +45,7 @@ type (
 		throttledLogger   log.Logger
 		namespaceRegistry namespace.Registry
 		workersRegistry   workers.Registry
+		hostInfoProvider  membership.HostInfoProvider
 	}
 
 	HandlerParams struct {
@@ -86,10 +89,11 @@ func NewHandler(
 	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:          params.Config,
-		metricsHandler:  params.MetricsHandler,
-		logger:          params.Logger,
-		throttledLogger: params.ThrottledLogger,
+		config:           params.Config,
+		metricsHandler:   params.MetricsHandler,
+		logger:           params.Logger,
+		throttledLogger:  params.ThrottledLogger,
+		hostInfoProvider: params.HostInfoProvider,
 		engine: NewEngine(
 			params.TaskManager,
 			params.FairTaskManager,
@@ -134,6 +138,10 @@ func (h *Handler) Stop() {
 	h.engine.Stop()
 }
 
+func (h *Handler) Identity() string {
+	return h.hostInfoProvider.HostInfo().Identity()
+}
+
 func (h *Handler) opMetricsHandler(
 	namespaceID string,
 	taskQueue *taskqueuepb.TaskQueue,
@@ -157,6 +165,7 @@ func (h *Handler) AddActivityTask(
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+
 	startT := time.Now().UTC()
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -182,6 +191,7 @@ func (h *Handler) AddWorkflowTask(
 	request *matchingservice.AddWorkflowTaskRequest,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+
 	startT := time.Now().UTC()
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
@@ -198,6 +208,19 @@ func (h *Handler) AddWorkflowTask(
 	if syncMatch {
 		metrics.SyncMatchLatencyPerTaskQueue.With(opMetrics).Record(time.Since(startT))
 	}
+	if !syncMatch && err == nil {
+		// Task was spooled to persistence (no worker was sync-matched).
+		// Emit an OTEL span event so the test observer can track stored tasks.
+		span := trace.SpanFromContext(ctx)
+		span.AddEvent(telemetry.EventWorkflowTaskStored,
+			trace.WithAttributes(
+				telemetry.AttrWorkflowID.String(request.GetExecution().GetWorkflowId()),
+				telemetry.AttrRunID.String(request.GetExecution().GetRunId()),
+				telemetry.AttrNamespaceID.String(request.GetNamespaceId()),
+				telemetry.AttrTaskQueue.String(request.GetTaskQueue().GetName()),
+			),
+		)
+	}
 	return &matchingservice.AddWorkflowTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
@@ -207,6 +230,7 @@ func (h *Handler) PollActivityTaskQueue(
 	request *matchingservice.PollActivityTaskQueueRequest,
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue(),
@@ -235,6 +259,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
+
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetPollRequest().GetTaskQueue(),

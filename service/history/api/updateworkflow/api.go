@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/telemetry"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -26,6 +28,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -272,23 +275,40 @@ func (u *Updater) addWorkflowTaskToMatching(ctx context.Context) error {
 		return err
 	}
 
-	_, err = u.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
-		NamespaceId: u.namespaceID.String(),
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: u.wfKey.WorkflowID,
-			RunId:      u.wfKey.RunID,
-		},
-		TaskQueue:              u.taskQueue,
-		ScheduledEventId:       u.scheduledEventID,
-		ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
-		Clock:                  clock,
-		VersionDirective:       u.directive,
-		Priority:               u.priority,
-		Stamp:                  u.workflowTaskStamp,
-	})
+	_, err = u.matchingClient.AddWorkflowTask(
+		metadata.NewOutgoingContext(ctx, metadata.Pairs("x-speculative-workflow-task", "true")),
+		&matchingservice.AddWorkflowTaskRequest{
+			NamespaceId: u.namespaceID.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: u.wfKey.WorkflowID,
+				RunId:      u.wfKey.RunID,
+			},
+			TaskQueue:              u.taskQueue,
+			ScheduledEventId:       u.scheduledEventID,
+			ScheduleToStartTimeout: durationpb.New(u.scheduleToStartTimeout),
+			Clock:                  clock,
+			VersionDirective:       u.directive,
+			Priority:               u.priority,
+			Stamp:                  u.workflowTaskStamp,
+		})
 	if err != nil {
 		return err
 	}
+
+	// Emit an OTEL span event so the umpire can observe that a speculative
+	// workflow task was dispatched. The event is recorded on whatever span is
+	// active in the context (the enclosing UpdateWorkflowExecution RPC span).
+	// The umpire's ImportSpans path looks for this event name and converts it
+	// into a ScheduleSpeculativeWorkflowTask scorebook move.
+	trace.SpanFromContext(ctx).AddEvent(
+		telemetry.EventSpeculativeWorkflowTaskScheduled,
+		trace.WithAttributes(
+			telemetry.AttrWorkflowID.String(u.wfKey.WorkflowID),
+			telemetry.AttrRunID.String(u.wfKey.RunID),
+			telemetry.AttrNamespaceID.String(u.namespaceID.String()),
+			telemetry.AttrTaskQueue.String(u.taskQueue.GetName()),
+		),
+	)
 
 	return nil
 }

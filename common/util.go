@@ -665,6 +665,14 @@ func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
 }
 
+func CloneProtos[T proto.Message](v []T) []T {
+	var res []T
+	for _, item := range v {
+		res = append(res, CloneProto(item))
+	}
+	return res
+}
+
 func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	if src == nil {
 		return nil
