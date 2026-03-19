@@ -1,0 +1,41 @@
+{{ $decorator := (or .Vars.DecoratorName (printf "interceptor%s" .Interface.Name)) }}
+
+type (
+    {{$decorator}} struct {
+        {{.Interface.Type}}
+        interceptor PersistenceInterceptor
+    }
+)
+
+// new{{upFirst $decorator}} returns {{$decorator}}.
+func new{{upFirst $decorator}} (
+    baseStore {{.Interface.Type}},
+    interceptor PersistenceInterceptor,
+) *{{$decorator}} {
+    return &{{$decorator}} {
+        {{.Interface.Name}}: baseStore,
+        interceptor: interceptor,
+    }
+}
+
+{{range $method := .Interface.Methods}}
+    {{if (and $method.AcceptsContext (gt (len $method.Params) 1) (lt (len $method.Results) 3)) }}
+        {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
+        // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
+        func (d {{$decorator}}) {{$method.Declaration}} {
+            err = d.interceptor(
+                "{{ $method.Name }}",
+                func() (any, error) {
+                    {{$method.ResultsNames}} = d.{{$.Interface.Name}}.{{$method.Call}}
+                    {{- if (eq (len $method.Results) 1) }}
+                    return nil, err
+                    {{- else }}
+                    return {{ $method.ResultsNames }}
+                    {{- end }}
+                },
+                {{$method.ParamsNames}},
+            )
+            return
+        }
+    {{end}}
+{{end}}

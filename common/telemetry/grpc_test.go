@@ -21,8 +21,12 @@ import (
 )
 
 func Test_ServerStatsHandler(t *testing.T) {
+	type serverStatsResult struct {
+		mainSpanAttrs    map[string]attribute.KeyValue
+		requestSpanAttrs map[string]attribute.KeyValue
+	}
 
-	makeRequest := func(responseErr error) map[string]attribute.KeyValue {
+	makeRequest := func(responseErr error) serverStatsResult {
 		t.Helper()
 
 		exporter := tracetest.NewInMemoryExporter()
@@ -50,47 +54,57 @@ func Test_ServerStatsHandler(t *testing.T) {
 			Error: responseErr,
 		})
 
-		exportedSpans := exporter.GetSpans()
-		require.Len(t, exportedSpans, 1)
-		attrByKey := map[string]attribute.KeyValue{}
-		for _, a := range exportedSpans[0].Attributes {
-			attrByKey[string(a.Key)] = a
+		result := serverStatsResult{}
+		for _, span := range exporter.GetSpans() {
+			attrByKey := map[string]attribute.KeyValue{}
+			for _, a := range span.Attributes {
+				attrByKey[string(a.Key)] = a
+			}
+			if span.Name == api.WorkflowServicePrefix+"/request" {
+				result.requestSpanAttrs = attrByKey
+			} else {
+				result.mainSpanAttrs = attrByKey
+			}
 		}
-		return attrByKey
+		require.NotNil(t, result.mainSpanAttrs)
+		require.NotNil(t, result.requestSpanAttrs)
+		return result
 	}
 
 	t.Run("annotate span with workflow tags", func(t *testing.T) {
-		spanAttrsByKey := makeRequest(nil)
+		result := makeRequest(nil)
 
-		require.Equal(t, "WF-ID", spanAttrsByKey["temporalWorkflowID"].Value.AsString())
-		require.Equal(t, "RUN-ID", spanAttrsByKey["temporalRunID"].Value.AsString())
+		require.NotContains(t, result.mainSpanAttrs, "temporalWorkflowID")
+		require.NotContains(t, result.mainSpanAttrs, "temporalRunID")
+		require.Equal(t, "WF-ID", result.requestSpanAttrs["temporalWorkflowID"].Value.AsString())
+		require.Equal(t, "RUN-ID", result.requestSpanAttrs["temporalRunID"].Value.AsString())
 
 		// ensure no debug attributes are present
-		require.NotContains(t, spanAttrsByKey, "rpc.request.payload")
-		require.NotContains(t, spanAttrsByKey, "rpc.response.payload")
+		require.NotContains(t, result.requestSpanAttrs, "rpc.request.payload")
+		require.NotContains(t, result.mainSpanAttrs, "rpc.response.payload")
 	})
 
 	t.Run("annotate span with request/response payload in debug mode", func(t *testing.T) {
 		os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 		defer os.Unsetenv("TEMPORAL_OTEL_DEBUG")
 
-		spanAttrsByKey := makeRequest(nil)
+		result := makeRequest(nil)
 
 		require.JSONEq(t,
 			`{"workflowExecution":{"workflowId":"WF-ID","runId":"RUN-ID"}}`,
-			toStr(t, spanAttrsByKey["rpc.request.payload"].Value))
-		require.Equal(t, "{}", spanAttrsByKey["rpc.response.payload"].Value.AsString())
+			toStr(t, result.requestSpanAttrs["rpc.request.payload"].Value))
+		require.Equal(t, "{}", result.mainSpanAttrs["rpc.response.payload"].Value.AsString())
 	})
 
 	t.Run("annotate span with response error payload in debug mode", func(t *testing.T) {
 		os.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 		defer os.Unsetenv("TEMPORAL_OTEL_DEBUG")
 
-		spanAttrsByKey := makeRequest(status.Errorf(codes.Internal, "Something went wrong"))
+		result := makeRequest(status.Errorf(codes.Internal, "Something went wrong"))
 
 		require.JSONEq(t,
 			`{"code":13,"message":"Something went wrong"}`,
-			toStr(t, spanAttrsByKey["rpc.response.error"].Value))
+			toStr(t, result.mainSpanAttrs["rpc.response.error"].Value))
 	})
 
 	t.Run("skip if noop trace provider", func(t *testing.T) {

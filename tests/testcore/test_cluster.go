@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/fx"
 	"go.uber.org/multierr"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -81,12 +82,14 @@ type (
 		EnableMetricsCapture            bool
 		EnableHistoryTaskRecorder       bool
 		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		SpanProcessors                  []sdktrace.SpanProcessor
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
-		ServiceFxOptions  map[primitives.ServiceName][]fx.Option
-		TokenProvider     auth.TokenProvider
-		TLSConfigProvider *encryption.FixedTLSConfigProvider
+		ServiceFxOptions       map[primitives.ServiceName][]fx.Option
+		AdditionalInterceptors []grpc.UnaryServerInterceptor
+		TokenProvider          auth.TokenProvider
+		TLSConfigProvider      *encryption.FixedTLSConfigProvider
 	}
 
 	TestClusterFactory interface {
@@ -327,6 +330,8 @@ func newClusterWithPersistenceTestBaseFactory(
 		taskCategoryRegistry:             temporal.TaskCategoryRegistryProvider(archiverMetadata),
 		hostsByProtocolByService:         hostsByProtocolByService,
 		spanExporters:                    clusterConfig.SpanExporters,
+		spanProcessors:                   clusterConfig.SpanProcessors,
+		additionalInterceptors:           clusterConfig.AdditionalInterceptors,
 		tokenProvider:                    clusterConfig.TokenProvider,
 		enableHistoryTaskRecorder:        clusterConfig.EnableHistoryTaskRecorder,
 	}

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/intercept"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
@@ -106,6 +107,8 @@ type (
 		replicationStreamRecorder *ReplicationStreamRecorder
 		historyTaskRecorder       *HistoryTaskRecorder
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		spanProcessors            []sdktrace.SpanProcessor
+		additionalInterceptors    []grpc.UnaryServerInterceptor
 		tokenProvider             auth.TokenProvider
 		enableHistoryTaskRecorder bool
 	}
@@ -165,6 +168,8 @@ type (
 		taskCategoryRegistry      tasks.TaskCategoryRegistry
 		hostsByProtocolByService  map[transferProtocol]map[primitives.ServiceName]static.Hosts
 		spanExporters             map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		spanProcessors            []sdktrace.SpanProcessor
+		additionalInterceptors    []grpc.UnaryServerInterceptor
 		tokenProvider             auth.TokenProvider
 		enableHistoryTaskRecorder bool
 	}
@@ -209,6 +214,8 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		hostsByProtocolByService:         params.hostsByProtocolByService,
 		replicationStreamRecorder:        NewReplicationStreamRecorder(),
 		spanExporters:                    params.spanExporters,
+		spanProcessors:                   params.spanProcessors,
+		additionalInterceptors:           params.additionalInterceptors,
 		tokenProvider:                    params.tokenProvider,
 		enableHistoryTaskRecorder:        params.enableHistoryTaskRecorder,
 	}
@@ -356,12 +363,12 @@ func (c *temporalImpl) startFrontend() {
 			fx.Provide(sdkClientFactoryProvider),
 			fx.Provide(c.GetMetricsHandler),
 			fx.Provide(func() []grpc.UnaryServerInterceptor {
+				interceptors := make([]grpc.UnaryServerInterceptor, 0, len(c.additionalInterceptors)+1)
+				interceptors = append(interceptors, c.additionalInterceptors...)
 				if c.replicationStreamRecorder != nil {
-					return []grpc.UnaryServerInterceptor{
-						c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName),
-					}
+					interceptors = append(interceptors, c.replicationStreamRecorder.UnaryServerInterceptor(c.clusterMetadataConfig.CurrentClusterName))
 				}
-				return nil
+				return interceptors
 			}),
 			fx.Provide(func() []grpc.StreamServerInterceptor {
 				if c.replicationStreamRecorder != nil {
@@ -381,6 +388,7 @@ func (c *temporalImpl) startFrontend() {
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+			fx.Provide(func() intercept.PersistenceInterceptor { return nil }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
@@ -388,6 +396,9 @@ func (c *temporalImpl) startFrontend() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Decorate(func(base []sdktrace.SpanProcessor) []sdktrace.SpanProcessor {
+				return append(base, c.spanProcessors...)
+			}),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			frontend.Module,
@@ -480,6 +491,7 @@ func (c *temporalImpl) startHistory() {
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceFactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+			fx.Provide(func() intercept.PersistenceInterceptor { return nil }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
@@ -487,6 +499,9 @@ func (c *temporalImpl) startHistory() {
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			fx.Provide(c.GetTLSConfigProvider),
 			fx.Provide(c.GetTaskCategoryRegistry),
+			fx.Decorate(func(base []sdktrace.SpanProcessor) []sdktrace.SpanProcessor {
+				return append(base, c.spanProcessors...)
+			}),
 			temporal.TraceExportModule,
 			temporal.ServiceTracingModule,
 			history.QueueModule,
@@ -537,6 +552,7 @@ func (c *temporalImpl) startMatching() {
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+			fx.Provide(func() intercept.PersistenceInterceptor { return nil }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),
@@ -602,6 +618,7 @@ func (c *temporalImpl) startWorker() {
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return c.abstractDataStoreFactory }),
+			fx.Provide(func() intercept.PersistenceInterceptor { return nil }),
 			fx.Provide(func() visibility.VisibilityStoreFactory { return c.visibilityStoreFactory }),
 			fx.Provide(func() dynamicconfig.Client { return c.dcClient }),
 			fx.Decorate(func() testhooks.TestHooks { return c.testHooks }),

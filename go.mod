@@ -24,6 +24,7 @@ require (
 	github.com/fatih/color v1.19.0
 	github.com/go-faker/faker/v4 v4.7.0
 	github.com/go-jose/go-jose/v4 v4.1.4
+	github.com/go-playground/validator/v10 v10.30.3
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/gocql/gocql v1.7.0
 	github.com/golang-jwt/jwt/v4 v4.5.2
@@ -36,6 +37,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.12.3
+	github.com/looplab/fsm v1.0.3
 	github.com/maruel/panicparse/v2 v2.5.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0
@@ -91,6 +93,7 @@ require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.13 // indirect
 	github.com/go-openapi/swag/cmdutils v0.26.0 // indirect
 	github.com/go-openapi/swag/conv v0.26.0 // indirect
 	github.com/go-openapi/swag/fileutils v0.26.0 // indirect
@@ -102,7 +105,10 @@ require (
 	github.com/go-openapi/swag/stringutils v0.26.0 // indirect
 	github.com/go-openapi/swag/typeutils v0.26.0 // indirect
 	github.com/go-openapi/swag/yamlutils v0.26.0 // indirect
+	github.com/go-playground/locales v0.14.1 // indirect
+	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/hashicorp/go-version v1.9.0 // indirect
+	github.com/leodido/go-urn v1.4.0 // indirect
 	go.opentelemetry.io/collector/featuregate v1.56.0 // indirect
 	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d // indirect
 )
@@ -146,7 +152,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.13.0 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
