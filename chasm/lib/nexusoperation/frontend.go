@@ -43,7 +43,7 @@ func NewFrontendHandler(
 
 // isStandaloneNexusOperationEnabled checks if standalone Nexus operations are enabled for the given namespace.
 func (h *frontendHandler) isStandaloneNexusOperationEnabled(namespaceName string) bool {
-	return h.config.Enabled(namespaceName)
+	return h.config.ChasmEnabled(namespaceName) && h.config.Enabled(namespaceName)
 }
 
 func (h *frontendHandler) StartNexusOperationExecution(_ context.Context, req *workflowservice.StartNexusOperationExecutionRequest) (*workflowservice.StartNexusOperationExecutionResponse, error) {
