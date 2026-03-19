@@ -2867,6 +2867,11 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
+	workerInstanceKey := pollMetadata.workerInstanceKey
+	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
+		return nil, false, errNoTasks
+	}
+
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
 	defer cancel()
 
@@ -2875,12 +2880,8 @@ func (e *matchingEngineImpl) pollTask(
 
 		// Also track by worker instance key for bulk cancellation during shutdown.
 		// Use UUID (not pollerID) because pollerID is reused when forwarded.
-		workerInstanceKey := pollMetadata.workerInstanceKey
 		pollerTrackerKey := uuid.NewString()
 		if workerInstanceKey != "" {
-			if e.shutdownWorkers.Get(workerInstanceKey) != nil {
-				return nil, false, errNoTasks
-			}
 			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
 		}
 
