@@ -88,14 +88,14 @@ All task validators check that the filesystem is in `RUNNING` status before allo
 TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments can use different backends without changing the FS layer or CHASM archetype.
 
 ```
-┌─────────────────────────────────┐
-│         FSStoreProvider         │  ← Interface (store_provider.go)
-│  GetStore(shard, ns, fsID)      │
-│  Close()                        │
-├─────────────────┬───────────────┤
-│  PebbleStore    │  WalkerStore  │
-│  Provider (OSS) │  (SaaS, TBD) │
-└─────────────────┴───────────────┘
+┌─────────────────────────────────────┐
+│           FSStoreProvider           │  ← Interface (store_provider.go)
+│  GetStore(shard, ns, fsID)          │
+│  Close()                            │
+├──────────────────┬──────────────────┤
+│  PebbleStore     │  CDSStore        │
+│  Provider (OSS)  │  Provider (SaaS) │
+└──────────────────┴──────────────────┘
 ```
 
 **[`FSStoreProvider`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/store_provider.go)** is the sole extension point for SaaS. All other FS components (CHASM archetype, gRPC service, FUSE mount) are identical between OSS and SaaS.
@@ -105,24 +105,46 @@ TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments c
 - Returns a `PrefixedStore` per filesystem execution for key isolation — each `(namespaceID, filesystemID)` pair maps to a stable partition ID.
 - The underlying PebbleDB is shared across all filesystem executions on the same shard.
 
+**`CDSStoreProvider`** (SaaS, in `saas-temporal`):
+- Implements `FSStoreProvider` via `fx.Decorate`, replacing `PebbleStoreProvider`.
+- Backed by Walker: uses `rpcEngine` (wrapping Walker `ShardClient` RPCs) adapted to `store.Store`.
+- Data isolated via `ShardspaceTemporalFS`, a `tfs\x00` key prefix, and per-filesystem `PrefixedStore` partitions.
+- See [`cds/doc/temporalfs.md`](https://github.com/temporalio/saas-temporal/blob/main/cds/doc/temporalfs.md) in `saas-temporal` for the full CDS integration architecture.
+
 ### gRPC Service
 
 The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/proto/v1/service.proto) defines 20 RPCs for filesystem operations. The [`handler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/handler.go) implements these using CHASM APIs for lifecycle and `temporal-fs` APIs for FS operations.
 
-**Implemented RPCs:**
+**Lifecycle RPCs:**
 
 | RPC | CHASM API | temporal-fs API |
 |-----|-----------|-----------------|
 | `CreateFilesystem` | `chasm.StartExecution` | `tfs.Create()` |
 | `GetFilesystemInfo` | `chasm.ReadComponent` | — |
 | `ArchiveFilesystem` | `chasm.UpdateComponent` | — |
-| `Getattr` | — | `f.StatByID()` |
-| `ReadChunks` | — | `f.ReadAtByID()` |
-| `WriteChunks` | — | `f.WriteAtByID()` |
-| `CreateSnapshot` | — | `f.CreateSnapshot()` |
 
-**Stubbed RPCs** (pending `temporal-fs` inode-based directory APIs):
-`Lookup`, `Setattr`, `ReadDir`, `Truncate`, `Mkdir`, `Unlink`, `Rmdir`, `Rename`, `Link`, `Symlink`, `Readlink`, `CreateFile`, `Mknod`, `Statfs`.
+**FS operation RPCs** (all use inode-based `ByID` methods from `temporal-fs`):
+
+| RPC | temporal-fs API |
+|-----|-----------------|
+| `Getattr` | `f.StatByID()` |
+| `Setattr` | `f.ChmodByID()`, `f.ChownByID()`, `f.UtimensByID()` |
+| `Lookup` | `f.LookupByID()` |
+| `ReadChunks` | `f.ReadAtByID()` |
+| `WriteChunks` | `f.WriteAtByID()` |
+| `Truncate` | `f.TruncateByID()` |
+| `Mkdir` | `f.MkdirByID()` |
+| `Unlink` | `f.UnlinkByID()` |
+| `Rmdir` | `f.RmdirByID()` |
+| `Rename` | `f.RenameByID()` |
+| `ReadDir` | `f.ReadDirByID()` / `f.ReadDirPlusByID()` |
+| `Link` | `f.LinkByID()` |
+| `Symlink` | `f.SymlinkByID()` |
+| `Readlink` | `f.ReadlinkByID()` |
+| `CreateFile` | `f.CreateFileByID()` |
+| `Mknod` | `f.MknodByID()` |
+| `Statfs` | `f.GetQuota()`, `f.ChunkSize()` |
+| `CreateSnapshot` | `f.CreateSnapshot()` |
 
 The handler pattern for FS operations is: get store via `FSStoreProvider` → open `tfs.FS` → execute operation → close FS. The CHASM execution is only accessed for lifecycle operations (create, archive, get info).
 
