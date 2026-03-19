@@ -169,18 +169,21 @@ func (t *transferQueueStandbyTaskExecutor) discardChasmTask(
 		return serviceerror.NewInternal("taskInfo is not a ChasmTask")
 	}
 
-	err := discardChasmSideEffectTask(
+	err := t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, consts.ErrTaskDiscarded) {
+		return err
+	}
+
+	return discardChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
 		t.shardContext.ChasmRegistry(),
 		chasmTree,
 		chasmTask,
 	)
-	if err != nil && !errors.Is(err, consts.ErrTaskDiscarded) {
-		return err
-	}
-
-	return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processActivityTask(
