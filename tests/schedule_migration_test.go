@@ -474,22 +474,16 @@ func TestCHASMScheduleDescribeAfterDisablingCreationAndMigration(t *testing.T) {
 		return false
 	}, 10*time.Second, 200*time.Millisecond)
 
-	// CHASM-created schedules do not create the legacy V1 scheduler workflow.
-	// We assert that describing the V1 workflow ID returns NotFound so this test
-	// explicitly proves the schedule is CHASM-backed before toggling creation and
-	// migration off.
-	_, err = env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+	// Verify the schedule exists in CHASM by describing it directly through the
+	// scheduler client (history-only path that only goes to CHASM).
+	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
 		ctx,
-		&historyservice.DescribeWorkflowExecutionRequest{
-			NamespaceId: nsID,
-			Request: &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: nsName,
-				Execution: &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
-			},
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId:     nsID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
 		},
 	)
-	var notFoundErr *serviceerror.NotFound
-	require.ErrorAs(t, err, &notFoundErr)
+	require.NoError(t, err)
 
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false)
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, false)

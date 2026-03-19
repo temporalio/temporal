@@ -3474,9 +3474,7 @@ func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, na
 // first. Handlers must be capable of falling back to V1 codepaths for schedules
 // that haven't been migrated to CHASM.
 func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
-	return (headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
-		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName)) ||
-		wh.config.EnableCHASMSchedulerCreation(namespaceName) ||
+	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
 		wh.config.EnableCHASMSchedulerRouting(namespaceName)
 }
 
