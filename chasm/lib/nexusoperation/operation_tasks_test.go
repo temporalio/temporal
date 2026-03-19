@@ -74,25 +74,23 @@ func newInvocationTaskTestEnv(
 	require.NoError(t, err)
 
 	handler := &operationInvocationTaskHandler{
-		nexusTaskHandlerBase: nexusTaskHandlerBase{
-			config: &Config{
-				RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(requestTimeout),
-				MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
-				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
-				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
-				CallbackURLTemplate:     dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(false),
-				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
-					backoff.NewExponentialRetryPolicy(time.Second),
-				),
-			},
-			namespaceRegistry: nsRegistry,
-			metricsHandler:    metricsHandler,
-			logger:            log.NewNoopLogger(),
-			clientProvider:    clientProvider,
-			endpointRegistry:  endpointReg,
+		config: &Config{
+			RequestTimeout:          dynamicconfig.GetDurationPropertyFnFilteredByDestination(requestTimeout),
+			MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+			MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
+			PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
+			CallbackURLTemplate:     dynamicconfig.GetTypedPropertyFn(callbackTmpl),
+			UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(false),
+			UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+			RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
+				backoff.NewExponentialRetryPolicy(time.Second),
+			),
 		},
+		namespaceRegistry:      nsRegistry,
+		metricsHandler:         metricsHandler,
+		logger:                 log.NewNoopLogger(),
+		clientProvider:         clientProvider,
+		endpointRegistry:       endpointReg,
 		callbackTokenGenerator: commonnexus.NewCallbackTokenGenerator(),
 	}
 
