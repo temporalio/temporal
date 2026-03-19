@@ -42,7 +42,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DeleteNexusOperationExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.OperationID(r.GetOperationId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.DeleteNexusOperationExecutionResponse:
 		return nil
@@ -96,7 +97,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.DescribeNexusOperationExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.OperationID(r.GetOperationId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.DescribeNexusOperationExecutionResponse:
 		return []tag.Tag{
@@ -283,7 +285,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		}
 	case *workflowservice.PollNexusOperationExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.OperationID(r.GetOperationId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.PollNexusOperationExecutionResponse:
 		return []tag.Tag{
@@ -346,7 +349,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.RequestCancelNexusOperationExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.OperationID(r.GetOperationId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.RequestCancelNexusOperationExecutionResponse:
 		return nil
@@ -488,7 +492,9 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 	case *workflowservice.StartBatchOperationResponse:
 		return nil
 	case *workflowservice.StartNexusOperationExecutionRequest:
-		return nil
+		return []tag.Tag{
+			tag.OperationID(r.GetOperationId()),
+		}
 	case *workflowservice.StartNexusOperationExecutionResponse:
 		return []tag.Tag{
 			tag.WorkflowRunID(r.GetRunId()),
@@ -514,7 +520,8 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.TerminateNexusOperationExecutionRequest:
 		return []tag.Tag{
-			tag.WorkflowRunID(r.GetRunId()),
+			tag.OperationID(r.GetOperationId()),
+			tag.ChasmRunID(r.GetRunId()),
 		}
 	case *workflowservice.TerminateNexusOperationExecutionResponse:
 		return nil
