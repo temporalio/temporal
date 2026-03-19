@@ -53,7 +53,9 @@ func (e *chunkGCTaskExecutor) Execute(
 		BatchSize:         100,
 		MaxChunksPerRound: 10000,
 	})
-	f.Close()
+	if closeErr := f.Close(); closeErr != nil {
+		e.logger.Warn("GC: failed to close FS", tag.Error(closeErr))
+	}
 
 	e.logger.Info("GC completed",
 		tag.NewStringTag("filesystem_id", key.BusinessID),
@@ -145,14 +147,14 @@ func (e *quotaCheckTaskExecutor) Execute(
 	s, err := e.storeProvider.GetStore(0, key.NamespaceID, key.BusinessID)
 	if err != nil {
 		e.logger.Error("QuotaCheck: failed to get store", tag.Error(err))
-		return nil
+		return err
 	}
 
 	f, err := tfs.Open(s)
 	if err != nil {
 		_ = s.Close()
 		e.logger.Error("QuotaCheck: failed to open FS", tag.Error(err))
-		return nil
+		return err
 	}
 
 	m := f.Metrics()
