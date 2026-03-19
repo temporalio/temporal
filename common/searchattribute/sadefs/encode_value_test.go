@@ -1,4 +1,4 @@
-package searchattribute
+package sadefs
 
 import (
 	"errors"

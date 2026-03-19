@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -75,6 +76,8 @@ var (
 )
 
 var (
+	// CHASM search attribute of type Text is not supported at this moment.
+	// Note that it's currently assumed that string type values are Keyword search attributes.
 	_ SearchAttribute = (*SearchAttributeBool)(nil)
 	_ SearchAttribute = (*SearchAttributeDateTime)(nil)
 	_ SearchAttribute = (*SearchAttributeInt)(nil)
@@ -369,7 +372,7 @@ func (s SearchAttributeKeyword) Value(value string) SearchAttributeKeyValue {
 	return SearchAttributeKeyValue{
 		Alias: s.alias,
 		Field: s.field,
-		Value: VisibilityValueString(value),
+		Value: VisibilityValueKeyword(value),
 	}
 }
 
@@ -420,6 +423,20 @@ type SearchAttributesMap struct {
 // NewSearchAttributesMap creates a new SearchAttributeMap from raw values.
 func NewSearchAttributesMap(values map[string]VisibilityValue) SearchAttributesMap {
 	return SearchAttributesMap{values: values}
+}
+
+// ToProto encodes the search attributes as proto object.
+func (m *SearchAttributesMap) ToProto() *commonpb.SearchAttributes {
+	if m == nil || m.values == nil {
+		return nil
+	}
+	res := &commonpb.SearchAttributes{
+		IndexedFields: make(map[string]*commonpb.Payload, len(m.values)),
+	}
+	for k, v := range m.values {
+		res.IndexedFields[k] = v.MustEncode()
+	}
+	return res
 }
 
 // SearchAttributeValue returns the value for a given SearchAttribute with compile-time type safety.
