@@ -173,7 +173,7 @@ func RecordActivityCompletionMetrics(
 		tags...,
 	)
 
-	now := time.Now()
+	now := shard.GetTimeSource().Now()
 	if completion.Status != ActivityStatusTimeout &&
 		!completion.AttemptStartedTime.IsZero() &&
 		!completion.AttemptStartedTime.After(now) {

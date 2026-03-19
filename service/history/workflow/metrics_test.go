@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -193,6 +194,7 @@ func newActivityMetricsTestShard(
 	shard.EXPECT().GetConfig().Return(&configs.Config{
 		BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 	}).Times(1)
+	shard.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).Times(1)
 	return shard
 }
 

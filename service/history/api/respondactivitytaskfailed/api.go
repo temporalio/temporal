@@ -96,6 +96,8 @@ func Invoke(
 
 			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
+			// RetryActivity mutates ai in place and clears per-attempt timing fields when it resets the activity for retry.
+			// Capture the metric inputs before that mutation so we record the attempt that just finished.
 			attemptStartedTime = timestamp.TimeValue(ai.GetStartedTime())
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
 			taskQueue = ai.TaskQueue
