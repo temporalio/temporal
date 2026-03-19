@@ -1,15 +1,15 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func Test_IsValid(t *testing.T) {
-	assert := assert.New(t)
+	r := require.New(t)
 	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
@@ -17,22 +17,22 @@ func Test_IsValid(t *testing.T) {
 	}}
 
 	isDefined := typeMap.IsDefined("RunId")
-	assert.True(isDefined)
+	r.True(isDefined)
 	isDefined = typeMap.IsDefined("TemporalChangeVersion")
-	assert.True(isDefined)
+	r.True(isDefined)
 	isDefined = typeMap.IsDefined("key1")
-	assert.True(isDefined)
+	r.True(isDefined)
 
 	isDefined = NameTypeMap{}.IsDefined("key1")
-	assert.False(isDefined)
+	r.False(isDefined)
 	isDefined = typeMap.IsDefined("key4")
-	assert.False(isDefined)
+	r.False(isDefined)
 	isDefined = typeMap.IsDefined("NamespaceId")
-	assert.False(isDefined)
+	r.False(isDefined)
 }
 
 func Test_GetType(t *testing.T) {
-	assert := assert.New(t)
+	r := require.New(t)
 	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
 		"key1": enumspb.INDEXED_VALUE_TYPE_TEXT,
 		"key2": enumspb.INDEXED_VALUE_TYPE_INT,
@@ -40,30 +40,30 @@ func Test_GetType(t *testing.T) {
 	}}
 
 	ivt, err := typeMap.GetType("key1")
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_TEXT, ivt)
+	r.NoError(err)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_TEXT, ivt)
 	ivt, err = typeMap.GetType("key2")
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_INT, ivt)
+	r.NoError(err)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_INT, ivt)
 	ivt, err = typeMap.GetType("key3")
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, ivt)
+	r.NoError(err)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_BOOL, ivt)
 	ivt, err = typeMap.GetType("RunId")
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, ivt)
+	r.NoError(err)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD, ivt)
 	ivt, err = typeMap.GetType("TemporalChangeVersion")
-	assert.NoError(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, ivt)
+	r.NoError(err)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, ivt)
 	ivt, err = typeMap.GetType("NamespaceId")
-	assert.Error(err)
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
+	r.Error(err)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 
 	ivt, err = NameTypeMap{}.GetType("key1")
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
+	r.Error(err)
+	r.ErrorIs(err, sadefs.ErrInvalidName)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 	ivt, err = typeMap.GetType("key4")
-	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidName))
-	assert.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
+	r.Error(err)
+	r.ErrorIs(err, sadefs.ErrInvalidName)
+	r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ivt)
 }

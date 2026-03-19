@@ -258,6 +258,9 @@ func convertRunningWorkflowsToBufferedStarts(
 			),
 			Attempt:   1,
 			Completed: nil,
+			// Migrated running workflows must have a Nexus callback attached once the
+			// migrated schedule target has been created.
+			HasCallback: false,
 		}
 	}
 

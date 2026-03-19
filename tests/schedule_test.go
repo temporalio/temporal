@@ -26,6 +26,8 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -1971,6 +1973,143 @@ func (s *ScheduleCHASMFunctionalSuite) TestPatchRejectsExcessBackfillers() {
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPrecondition)
 	s.Contains(err.Error(), "too many concurrent backfillers")
+}
+
+// TestMigrationCallbackAttach verifies that a workflow running at migration time
+// gets a Nexus callback attached by the SchedulerCallbacksTask, and the migrated
+// CHASM scheduler learns about the workflow's completion.
+func (s *ScheduleCHASMFunctionalSuite) TestMigrationCallbackAttach() {
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	// Register a workflow that blocks until signaled.
+	resumeSignal := "resume"
+	s.worker.RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			workflow.GetSignalChannel(ctx, resumeSignal).Receive(ctx, nil)
+			return nil
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	// Start the signal-blocked workflow directly.
+	ctx := s.newContext()
+	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   wid,
+		WorkflowType: &commonpb.WorkflowType{Name: wt},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     testcore.RandomizeStr("identity"),
+		RequestId:    testcore.RandomizeStr("request-id"),
+	})
+	s.NoError(err)
+
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{
+				{Interval: durationpb.New(24 * time.Hour)},
+			},
+		},
+		Action: &schedulepb.ScheduleAction{
+			Action: &schedulepb.ScheduleAction_StartWorkflow{
+				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				},
+			},
+		},
+	}
+
+	now := time.Now().UTC()
+	nsID := s.NamespaceID().String()
+
+	// Create a CHASM scheduler via CreateFromMigrationState with the running
+	// workflow as a BufferedStart that needs a callback attached.
+	migrationState := &schedulerpb.SchedulerMigrationState{
+		SchedulerState: &schedulerpb.SchedulerState{
+			Namespace:     s.Namespace().String(),
+			NamespaceId:   nsID,
+			ScheduleId:    sid,
+			Schedule:      schedule,
+			Info:          &schedulepb.ScheduleInfo{},
+			ConflictToken: 1,
+		},
+		GeneratorState: &schedulerpb.GeneratorState{},
+		InvokerState: &schedulerpb.InvokerState{
+			BufferedStarts: []*schedulespb.BufferedStart{
+				{
+					NominalTime: timestamppb.New(now),
+					ActualTime:  timestamppb.New(now),
+					StartTime:   timestamppb.New(now),
+					WorkflowId:  wid,
+					RunId:       startResp.RunId,
+					RequestId:   uuid.NewString(),
+					Attempt:     1,
+					HasCallback: false,
+				},
+			},
+		},
+	}
+	_, err = s.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+		ctx,
+		&schedulerpb.CreateFromMigrationStateRequest{
+			NamespaceId: nsID,
+			State:       migrationState,
+		},
+	)
+	s.NoError(err)
+
+	// The SchedulerCallbacksTask should fire and attach a Nexus callback.
+	// Verify the CHASM scheduler shows the workflow as running.
+	s.Eventually(func() bool {
+		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		running := descResp.GetFrontendResponse().GetInfo().GetRunningWorkflows()
+		return len(running) > 0 && running[0].WorkflowId == wid
+	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should show running workflow")
+
+	// Signal the workflow to complete.
+	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      startResp.RunId,
+		},
+		SignalName: resumeSignal,
+	})
+	s.NoError(err)
+
+	// Verify the CHASM scheduler reflects the completion via its Nexus callback.
+	s.Eventually(func() bool {
+		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
+			},
+		)
+		if err != nil {
+			return false
+		}
+		recent := descResp.GetFrontendResponse().GetInfo().GetRecentActions()
+		for _, action := range recent {
+			if action.GetStartWorkflowResult().GetWorkflowId() == wid &&
+				action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
+				return true
+			}
+		}
+		return false
+	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should reflect workflow completion")
 }
 
 func (s *scheduleFunctionalSuiteBase) TestCountSchedules() {

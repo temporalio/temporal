@@ -21,6 +21,7 @@ var Module = fx.Module(
 	fx.Provide(func(impl *SpecProcessorImpl) SpecProcessor { return impl }),
 	fx.Provide(newHandler),
 	fx.Provide(NewSchedulerIdleTaskExecutor),
+	fx.Provide(NewSchedulerCallbacksTaskExecutor),
 	fx.Provide(NewGeneratorTaskExecutor),
 	fx.Provide(NewInvokerExecuteTaskExecutor),
 	fx.Provide(NewInvokerProcessBufferTaskExecutor),

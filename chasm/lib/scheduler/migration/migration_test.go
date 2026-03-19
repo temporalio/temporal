@@ -113,6 +113,7 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 			running++
 			require.Equal(t, "wf-1", start.WorkflowId)
 			require.Equal(t, "run-1", start.RunId)
+			require.False(t, start.HasCallback)
 		case start.Completed != nil:
 			completed++
 			require.Equal(t, "wf-2", start.WorkflowId)

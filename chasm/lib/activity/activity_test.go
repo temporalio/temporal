@@ -154,3 +154,83 @@ func TestHandleStarted(t *testing.T) {
 		})
 	}
 }
+
+func TestActivityTerminate(t *testing.T) {
+	testCases := []struct {
+		name           string
+		activityStatus activitypb.ActivityExecutionStatus
+		expectErr      string
+	}{
+		{
+			name:           "terminate scheduled activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		{
+			name:           "terminate started activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		{
+			name:           "terminate cancel-requested activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		},
+		{
+			name:           "error on completed activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			expectErr:      "cannot terminate activity in state Completed",
+		},
+		{
+			name:           "no-op on already terminated activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		},
+		{
+			name:           "error on failed activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			expectErr:      "cannot terminate activity in state Failed",
+		},
+		{
+			name:           "error on timed out activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			expectErr:      "cannot terminate activity in state TimedOut",
+		},
+		{
+			name:           "error on canceled activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+			expectErr:      "cannot terminate activity in state Canceled",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				},
+			}
+
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					Status:                 tc.activityStatus,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
+				Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+				Reason: "Delete activity execution",
+			})
+
+			if tc.expectErr != "" {
+				require.EqualError(t, err, tc.expectErr)
+				require.Equal(t, tc.activityStatus, activity.Status, "expected no state change on error")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+			}
+		})
+	}
+}

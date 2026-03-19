@@ -140,7 +140,7 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	// Create chasm search attributes map
 	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
 		testChasmSA1Name: chasm.VisibilityValueInt64(123),
-		testChasmSA2Name: chasm.VisibilityValueString("test-value"),
+		testChasmSA2Name: chasm.VisibilityValueKeyword("test-value"),
 	})
 
 	// Create custom search attributes map
@@ -442,7 +442,7 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 
 	expectedTaskQueue := "my-task-queue"
 	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
-		"TaskQueue": chasm.VisibilityValueString(expectedTaskQueue),
+		"TaskQueue": chasm.VisibilityValueKeyword(expectedTaskQueue),
 	})
 
 	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{

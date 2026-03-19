@@ -251,6 +251,10 @@ func CreateSchedulerFromMigration(
 	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
 	visibility.MergeCustomMemo(ctx, state.GetMemo())
 
+	// Schedule a callbacks task to attach Nexus callbacks to any migrated
+	// running workflows. The task self-invalidates if there's no work to do.
+	ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+
 	return sched, nil
 }
 
