@@ -88,7 +88,7 @@ func (m NameTypeMap) getType(name string, cat category) (enumspb.IndexedValueTyp
 			return t, nil
 		}
 	}
-	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", ErrInvalidName, name)
+	return enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fmt.Errorf("%w: %s", sadefs.ErrInvalidName, name)
 }
 
 func (m NameTypeMap) IsDefined(name string) bool {
