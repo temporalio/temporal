@@ -482,6 +482,14 @@ func (e *ChasmEngine) DeleteExecution(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	request chasm.DeleteExecutionRequest,
+) error {
+	return e.convertError(e.deleteExecution(ctx, ref, request), ref, request.RequestID)
+}
+
+func (e *ChasmEngine) deleteExecution(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	request chasm.DeleteExecutionRequest,
 ) (retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
