@@ -128,7 +128,7 @@ func TestPebbleStoreProvider_Close(t *testing.T) {
 	err = provider.Close()
 	require.NoError(t, err)
 
-	// After close, internal maps should be empty.
-	require.Empty(t, provider.dbs)
+	// After close, internal state should be cleared.
+	require.Nil(t, provider.db)
 	require.Empty(t, provider.seqs)
 }

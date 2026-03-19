@@ -13,32 +13,31 @@ import (
 )
 
 // PebbleStoreProvider implements FSStoreProvider using PebbleDB via temporal-fs.
-// One PebbleDB instance is created per history shard (lazy-created).
+// A single PebbleDB instance is used for all filesystem storage (lazy-created).
 // Individual filesystem executions are isolated via PrefixedStore.
 type PebbleStoreProvider struct {
 	dataDir string
 	logger  log.Logger
 
 	mu   sync.Mutex
-	dbs  map[int32]*pebblestore.Store
+	db   *pebblestore.Store
 	seqs map[string]uint64 // maps "ns:fsid" → partition ID
 	next uint64
 }
 
 // NewPebbleStoreProvider creates a new PebbleStoreProvider.
-// dataDir is the root directory for TemporalFS PebbleDB instances.
+// dataDir is the root directory for TemporalFS PebbleDB data.
 func NewPebbleStoreProvider(dataDir string, logger log.Logger) *PebbleStoreProvider {
 	return &PebbleStoreProvider{
 		dataDir: dataDir,
 		logger:  logger,
-		dbs:     make(map[int32]*pebblestore.Store),
 		seqs:    make(map[string]uint64),
 		next:    1,
 	}
 }
 
-func (p *PebbleStoreProvider) GetStore(shardID int32, namespaceID string, filesystemID string) (store.Store, error) {
-	db, err := p.getOrCreateDB(shardID)
+func (p *PebbleStoreProvider) GetStore(_ int32, namespaceID string, filesystemID string) (store.Store, error) {
+	db, err := p.getOrCreateDB()
 	if err != nil {
 		return nil, err
 	}
@@ -51,27 +50,27 @@ func (p *PebbleStoreProvider) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	var firstErr error
-	for id, db := range p.dbs {
-		if err := db.Close(); err != nil && firstErr == nil {
-			firstErr = err
-			p.logger.Error("Failed to close PebbleDB", tag.ShardID(id), tag.Error(err))
+	var err error
+	if p.db != nil {
+		err = p.db.Close()
+		if err != nil {
+			p.logger.Error("Failed to close PebbleDB", tag.Error(err))
 		}
+		p.db = nil
 	}
-	p.dbs = make(map[int32]*pebblestore.Store)
 	p.seqs = make(map[string]uint64)
-	return firstErr
+	return err
 }
 
-func (p *PebbleStoreProvider) getOrCreateDB(shardID int32) (*pebblestore.Store, error) {
+func (p *PebbleStoreProvider) getOrCreateDB() (*pebblestore.Store, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if db, ok := p.dbs[shardID]; ok {
-		return db, nil
+	if p.db != nil {
+		return p.db, nil
 	}
 
-	dbPath := filepath.Join(p.dataDir, fmt.Sprintf("shard-%d", shardID))
+	dbPath := filepath.Join(p.dataDir, "temporalfs")
 	if err := os.MkdirAll(dbPath, 0o750); err != nil {
 		return nil, fmt.Errorf("failed to create PebbleDB dir: %w", err)
 	}
@@ -81,7 +80,7 @@ func (p *PebbleStoreProvider) getOrCreateDB(shardID int32) (*pebblestore.Store, 
 		return nil, fmt.Errorf("failed to open PebbleDB at %s: %w", dbPath, err)
 	}
 
-	p.dbs[shardID] = db
+	p.db = db
 	return db, nil
 }
 
