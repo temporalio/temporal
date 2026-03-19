@@ -618,7 +618,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("StaleAttemptToken", func(t *testing.T) {
@@ -678,7 +678,7 @@ func (s *standaloneActivityTestSuite) TestComplete() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 
 		// Complete with the attempt 2 token and should succeed
 		_, err = s.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
@@ -910,7 +910,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("StaleAttemptToken", func(t *testing.T) {
@@ -970,7 +970,7 @@ func (s *standaloneActivityTestSuite) TestFail() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 
 		// Fail with the attempt 2 token and should be no error
 		_, err = s.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
@@ -1649,7 +1649,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("StaleAttemptToken", func(t *testing.T) {
@@ -1717,7 +1717,7 @@ func (s *standaloneActivityTestSuite) TestRequestCancel() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 
 		// Heartbeat then cancel with the attempt 2 token and should be no error
 		heartbeatResp, err := s.FrontendClient().RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -4109,7 +4109,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("StaleAttemptToken", func(t *testing.T) {
@@ -4177,7 +4177,7 @@ func (s *standaloneActivityTestSuite) TestHeartbeat() {
 		require.Error(t, err)
 		statusErr := serviceerror.ToStatus(err)
 		require.Equal(t, codes.NotFound, statusErr.Code())
-		require.Contains(t, statusErr.Message(), "activity task not found")
+		require.Contains(t, statusErr.Message(), fmt.Sprintf("activity not found for ID: %s", activityID))
 	})
 
 	t.Run("MismatchedNamespaceToken", func(t *testing.T) {
