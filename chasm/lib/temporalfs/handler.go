@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	tfs "github.com/temporalio/temporal-fs/pkg/fs"
-	"github.com/temporalio/temporal-fs/pkg/store"
 	"go.temporal.io/server/chasm"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"
@@ -25,6 +24,12 @@ const (
 	setattrSize  = 1 << 3 // truncate
 	setattrAtime = 1 << 4
 	setattrMtime = 1 << 5
+)
+
+// Statfs virtual capacity defaults when no quota is configured.
+const (
+	statfsVirtualBytes  = 1 << 40 // 1 TiB
+	statfsVirtualInodes = 1 << 20 // ~1M inodes
 )
 
 type handler struct {
@@ -44,23 +49,28 @@ func newHandler(config *Config, logger log.Logger, storeProvider FSStoreProvider
 }
 
 // openFS obtains a store for the given filesystem and opens an fs.FS on it.
-func (h *handler) openFS(shardID int32, namespaceID, filesystemID string) (*tfs.FS, store.Store, error) {
+// The caller owns the returned *tfs.FS and must call f.Close() which also
+// closes the underlying store. On error, all resources are cleaned up internally.
+func (h *handler) openFS(shardID int32, namespaceID, filesystemID string) (*tfs.FS, error) {
 	s, err := h.storeProvider.GetStore(shardID, namespaceID, filesystemID)
 	if err != nil {
-		return nil, nil, err
+		return nil, mapFSError(err)
 	}
 	f, err := tfs.Open(s)
 	if err != nil {
-		return nil, s, err
+		_ = s.Close()
+		return nil, mapFSError(err)
 	}
-	return f, s, nil
+	return f, nil
 }
 
 // createFS initializes a new filesystem in the store.
-func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, config *temporalfspb.FilesystemConfig) (*tfs.FS, store.Store, error) {
+// The caller owns the returned *tfs.FS and must call f.Close() which also
+// closes the underlying store. On error, all resources are cleaned up internally.
+func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, config *temporalfspb.FilesystemConfig) (*tfs.FS, error) {
 	s, err := h.storeProvider.GetStore(shardID, namespaceID, filesystemID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	chunkSize := uint32(defaultChunkSize)
@@ -70,9 +80,10 @@ func (h *handler) createFS(shardID int32, namespaceID, filesystemID string, conf
 
 	f, err := tfs.Create(s, tfs.Options{ChunkSize: chunkSize})
 	if err != nil {
-		return nil, s, err
+		_ = s.Close()
+		return nil, err
 	}
-	return f, s, nil
+	return f, nil
 }
 
 func (h *handler) CreateFilesystem(
@@ -100,13 +111,11 @@ func (h *handler) CreateFilesystem(
 			}
 
 			// Initialize the underlying FS store.
-			_, s, createErr := h.createFS(0, req.GetNamespaceId(), req.GetFilesystemId(), fs.Config)
+			f, createErr := h.createFS(0, req.GetNamespaceId(), req.GetFilesystemId(), fs.Config)
 			if createErr != nil {
 				return nil, createErr
 			}
-			if s != nil {
-				_ = s.Close()
-			}
+			_ = f.Close()
 
 			return fs, nil
 		},
@@ -174,7 +183,7 @@ func (h *handler) ArchiveFilesystem(
 // FS operations — these use temporal-fs inode-based APIs.
 
 func (h *handler) Lookup(_ context.Context, req *temporalfspb.LookupRequest) (*temporalfspb.LookupResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +201,7 @@ func (h *handler) Lookup(_ context.Context, req *temporalfspb.LookupRequest) (*t
 }
 
 func (h *handler) Getattr(_ context.Context, req *temporalfspb.GetattrRequest) (*temporalfspb.GetattrResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +218,7 @@ func (h *handler) Getattr(_ context.Context, req *temporalfspb.GetattrRequest) (
 }
 
 func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (*temporalfspb.SetattrResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +276,7 @@ func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (
 }
 
 func (h *handler) ReadChunks(_ context.Context, req *temporalfspb.ReadChunksRequest) (*temporalfspb.ReadChunksResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +293,7 @@ func (h *handler) ReadChunks(_ context.Context, req *temporalfspb.ReadChunksRequ
 }
 
 func (h *handler) WriteChunks(_ context.Context, req *temporalfspb.WriteChunksRequest) (*temporalfspb.WriteChunksResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +310,7 @@ func (h *handler) WriteChunks(_ context.Context, req *temporalfspb.WriteChunksRe
 }
 
 func (h *handler) Truncate(_ context.Context, req *temporalfspb.TruncateRequest) (*temporalfspb.TruncateResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +323,7 @@ func (h *handler) Truncate(_ context.Context, req *temporalfspb.TruncateRequest)
 }
 
 func (h *handler) Mkdir(_ context.Context, req *temporalfspb.MkdirRequest) (*temporalfspb.MkdirResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -332,7 +341,7 @@ func (h *handler) Mkdir(_ context.Context, req *temporalfspb.MkdirRequest) (*tem
 }
 
 func (h *handler) Unlink(_ context.Context, req *temporalfspb.UnlinkRequest) (*temporalfspb.UnlinkResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +354,7 @@ func (h *handler) Unlink(_ context.Context, req *temporalfspb.UnlinkRequest) (*t
 }
 
 func (h *handler) Rmdir(_ context.Context, req *temporalfspb.RmdirRequest) (*temporalfspb.RmdirResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +367,7 @@ func (h *handler) Rmdir(_ context.Context, req *temporalfspb.RmdirRequest) (*tem
 }
 
 func (h *handler) Rename(_ context.Context, req *temporalfspb.RenameRequest) (*temporalfspb.RenameResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +383,7 @@ func (h *handler) Rename(_ context.Context, req *temporalfspb.RenameRequest) (*t
 }
 
 func (h *handler) ReadDir(_ context.Context, req *temporalfspb.ReadDirRequest) (*temporalfspb.ReadDirResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -404,7 +413,7 @@ func (h *handler) ReadDir(_ context.Context, req *temporalfspb.ReadDirRequest) (
 }
 
 func (h *handler) Link(_ context.Context, req *temporalfspb.LinkRequest) (*temporalfspb.LinkResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +430,7 @@ func (h *handler) Link(_ context.Context, req *temporalfspb.LinkRequest) (*tempo
 }
 
 func (h *handler) Symlink(_ context.Context, req *temporalfspb.SymlinkRequest) (*temporalfspb.SymlinkResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -439,7 +448,7 @@ func (h *handler) Symlink(_ context.Context, req *temporalfspb.SymlinkRequest) (
 }
 
 func (h *handler) Readlink(_ context.Context, req *temporalfspb.ReadlinkRequest) (*temporalfspb.ReadlinkResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +465,7 @@ func (h *handler) Readlink(_ context.Context, req *temporalfspb.ReadlinkRequest)
 }
 
 func (h *handler) CreateFile(_ context.Context, req *temporalfspb.CreateFileRequest) (*temporalfspb.CreateFileResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +483,7 @@ func (h *handler) CreateFile(_ context.Context, req *temporalfspb.CreateFileRequ
 }
 
 func (h *handler) Mknod(_ context.Context, req *temporalfspb.MknodRequest) (*temporalfspb.MknodResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -493,7 +502,7 @@ func (h *handler) Mknod(_ context.Context, req *temporalfspb.MknodRequest) (*tem
 }
 
 func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*temporalfspb.StatfsResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
@@ -515,7 +524,7 @@ func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*t
 		}
 		bfree = blocks - used
 	} else {
-		blocks = 1 << 40 / uint64(bsize) // 1 TiB virtual
+		blocks = statfsVirtualBytes / uint64(bsize)
 		bfree = blocks
 	}
 	if quota.MaxInodes > 0 {
@@ -526,7 +535,7 @@ func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*t
 		}
 		ffree = files - used
 	} else {
-		files = 1 << 20 // 1M virtual
+		files = statfsVirtualInodes
 		ffree = files
 	}
 
@@ -543,7 +552,7 @@ func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*t
 }
 
 func (h *handler) CreateSnapshot(_ context.Context, req *temporalfspb.CreateSnapshotRequest) (*temporalfspb.CreateSnapshotResponse, error) {
-	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}

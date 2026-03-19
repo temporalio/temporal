@@ -22,11 +22,9 @@ func newTestHandler(t *testing.T) (*handler, *PebbleStoreProvider) {
 }
 
 // initHandlerFS creates an FS in the store provider.
-// Note: we must NOT close the store here because PrefixedStore.Close()
-// closes the underlying shared PebbleDB instance.
 func initHandlerFS(t *testing.T, h *handler, nsID, fsID string) {
 	t.Helper()
-	f, _, err := h.createFS(0, nsID, fsID, &temporalfspb.FilesystemConfig{ChunkSize: 256 * 1024})
+	f, err := h.createFS(0, nsID, fsID, &temporalfspb.FilesystemConfig{ChunkSize: 256 * 1024})
 	require.NoError(t, err)
 	f.Close()
 }
@@ -36,10 +34,9 @@ func TestOpenFS(t *testing.T) {
 	nsID, fsID := "ns-1", "fs-1"
 	initHandlerFS(t, h, nsID, fsID)
 
-	f, s, err := h.openFS(0, nsID, fsID)
+	f, err := h.openFS(0, nsID, fsID)
 	require.NoError(t, err)
 	require.NotNil(t, f)
-	require.NotNil(t, s)
 	f.Close()
 }
 
@@ -47,7 +44,7 @@ func TestCreateFS(t *testing.T) {
 	h, _ := newTestHandler(t)
 
 	config := &temporalfspb.FilesystemConfig{ChunkSize: 512 * 1024}
-	f, _, err := h.createFS(0, "ns-1", "fs-1", config)
+	f, err := h.createFS(0, "ns-1", "fs-1", config)
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	require.EqualValues(t, 512*1024, f.ChunkSize())
@@ -59,7 +56,7 @@ func TestCreateFS_DefaultChunkSize(t *testing.T) {
 
 	// Zero chunk size should use the default.
 	config := &temporalfspb.FilesystemConfig{ChunkSize: 0}
-	f, _, err := h.createFS(0, "ns-1", "fs-1", config)
+	f, err := h.createFS(0, "ns-1", "fs-1", config)
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	require.EqualValues(t, defaultChunkSize, f.ChunkSize())
