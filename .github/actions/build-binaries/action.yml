@@ -14,15 +14,20 @@ inputs:
     description: "Use release command (true) or build command (false). When true, single-arch is ignored and snapshot is respected."
     required: false
     default: "false"
+  go-private-token:
+    description: "Token for accessing private Go modules"
+    required: false
+    default: ""
 
 runs:
   using: composite
   steps:
     - name: Configure git for private modules
+      if: inputs.go-private-token != ''
       shell: bash
       run: git config --global url."https://x-access-token:${GO_PRIVATE_TOKEN}@github.com/".insteadOf "https://github.com/"
       env:
-        GO_PRIVATE_TOKEN: ${{ github.token }}
+        GO_PRIVATE_TOKEN: ${{ inputs.go-private-token }}
 
     - name: Setup Go
       uses: actions/setup-go@v6

@@ -30,6 +30,7 @@ jobs:
         uses: ./.github/actions/build-binaries
         with:
           snapshot: true
+          go-private-token: ${{ secrets.GO_PRIVATE_TOKEN }}
 
       - name: Build and push Docker images
         uses: ./.github/actions/build-docker-images
@@ -54,6 +55,7 @@ jobs:
         uses: ./.github/actions/build-binaries
         with:
           snapshot: true
+          go-private-token: ${{ secrets.GO_PRIVATE_TOKEN }}
 
       - name: Build Docker images
         uses: ./.github/actions/build-docker-images

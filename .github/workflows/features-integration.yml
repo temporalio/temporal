@@ -30,6 +30,7 @@ jobs:
         with:
           snapshot: true
           single-arch: amd64
+          go-private-token: ${{ secrets.GO_PRIVATE_TOKEN }}
 
       - name: Build Docker images
         id: build-docker
