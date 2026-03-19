@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -59,6 +60,37 @@ type Operation struct {
 // NewOperation creates a new Operation component with the given persisted state.
 func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 	return &Operation{OperationState: state}
+}
+
+// newStandaloneOperation creates a standalone Nexus operation from a frontend Start request.
+func newStandaloneOperation(
+	ctx chasm.MutableContext,
+	req *nexusoperationpb.StartNexusOperationRequest,
+) (*Operation, error) {
+	frontendReq := req.GetFrontendRequest()
+	op := NewOperation(&nexusoperationpb.OperationState{
+		Endpoint:               frontendReq.GetEndpoint(),
+		Service:                frontendReq.GetService(),
+		Operation:              frontendReq.GetOperation(),
+		ScheduleToCloseTimeout: frontendReq.GetScheduleToCloseTimeout(),
+		ScheduledTime:          timestamppb.New(ctx.Now(nil)),
+		RequestId:              uuid.NewString(), // different from client-supplied RequestID!
+	})
+	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{
+		Input:        frontendReq.GetInput(),
+		NexusHeader:  frontendReq.GetNexusHeader(),
+		UserMetadata: frontendReq.GetUserMetadata(),
+		Identity:     frontendReq.GetIdentity(),
+	})
+	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+		ctx,
+		frontendReq.GetSearchAttributes().GetIndexedFields(),
+		nil,
+	))
+	if err := transitionScheduled.Apply(op, ctx, EventScheduled{}); err != nil {
+		return nil, err
+	}
+	return op, nil
 }
 
 // LifecycleState maps the operation's status to a CHASM lifecycle state.
