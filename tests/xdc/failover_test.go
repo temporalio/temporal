@@ -2542,9 +2542,13 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	err = resetRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
+	s.Eventually(func() bool {
+		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
+		if err != nil {
+			return false
+		}
+		return descResp.GetWorkflowExecutionInfo().Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 15*time.Second, 200*time.Millisecond, "reset workflow should be visible on cluster2")
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
