@@ -655,8 +655,8 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-gethistoryreverse"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -730,8 +730,8 @@ func (s *RawHistoryClientSuite) TestGetHistoryReverse_MultipleBranches() {
 		return nil
 	}
 
-	s.Worker().RegisterActivity(activityFn)
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfId := "functional-test-wf-gethistory-reverse-multiple-branches"
 	workflowOptions := sdkclient.StartWorkflowOptions{

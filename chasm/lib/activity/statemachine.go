@@ -236,6 +236,12 @@ var TransitionFailed = chasm.NewTransition(
 	},
 )
 
+type terminateEvent struct {
+	request        *activitypb.TerminateActivityExecutionRequest
+	metricsHandler metrics.Handler
+	fromStatus     activitypb.ActivityExecutionStatus
+}
+
 // TransitionTerminated transitions to Terminated status.
 var TransitionTerminated = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
@@ -263,14 +269,7 @@ var TransitionTerminated = chasm.NewTransition(
 				},
 			}
 
-			metricsHandler := enrichMetricsHandler(
-				a,
-				event.MetricsHandlerBuilderParams.Handler,
-				event.MetricsHandlerBuilderParams.NamespaceName,
-				metrics.ActivityTerminatedScope,
-				event.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue)
-
-			metrics.ActivityTerminate.With(metricsHandler).Record(1)
+			a.emitOnTerminatedMetrics(event.metricsHandler)
 
 			return nil
 		})

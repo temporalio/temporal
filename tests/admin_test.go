@@ -65,7 +65,7 @@ func rebuildMutableStateWorkflowHelper(s *AdminTestSuite, testWithChasm bool) {
 		return nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowID := tv.Any().String()
 	workflowOptions := sdkclient.StartWorkflowOptions{

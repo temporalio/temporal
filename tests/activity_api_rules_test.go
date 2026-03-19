@@ -277,8 +277,8 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	defer cancel()
 
 	testWorkflow := newInternalRulesTestWorkflow(ctx, &s.FunctionalTestBase, s.Logger)
-	s.Worker().RegisterWorkflow(testWorkflow.WorkflowFuncForRetryActivity)
-	s.Worker().RegisterActivity(testWorkflow.ActivityFuncForRetryActivity)
+	s.SdkWorker().RegisterWorkflow(testWorkflow.WorkflowFuncForRetryActivity)
+	s.SdkWorker().RegisterActivity(testWorkflow.ActivityFuncForRetryActivity)
 
 	workflowRun := s.createWorkflow(ctx, testWorkflow.WorkflowFuncForRetryActivity)
 
@@ -411,8 +411,8 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	s.initialRetryInterval = 4 * time.Second
 	s.activityRetryPolicy.InitialInterval = s.initialRetryInterval
 
-	s.Worker().RegisterWorkflow(testRetryTaskWorkflow.WorkflowFuncForRetryTask)
-	s.Worker().RegisterActivity(testRetryTaskWorkflow.ActivityFuncForRetryTask)
+	s.SdkWorker().RegisterWorkflow(testRetryTaskWorkflow.WorkflowFuncForRetryTask)
+	s.SdkWorker().RegisterActivity(testRetryTaskWorkflow.ActivityFuncForRetryTask)
 
 	// 1. Start workflow
 	workflowRun := s.createWorkflow(ctx, testRetryTaskWorkflow.WorkflowFuncForRetryTask)
@@ -543,8 +543,8 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 
 	testRetryTaskWorkflow := newInternalRulesTestWorkflow(ctx, &s.FunctionalTestBase, s.Logger)
 
-	s.Worker().RegisterWorkflow(testRetryTaskWorkflow.WorkflowFuncForPrePause)
-	s.Worker().RegisterActivity(testRetryTaskWorkflow.ActivityFuncForPrePause)
+	s.SdkWorker().RegisterWorkflow(testRetryTaskWorkflow.WorkflowFuncForPrePause)
+	s.SdkWorker().RegisterActivity(testRetryTaskWorkflow.ActivityFuncForPrePause)
 
 	// 1. Create rule to pause activity
 	ruleID := "pause-activity"

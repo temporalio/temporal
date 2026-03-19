@@ -1014,7 +1014,7 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 		)
 	}
 
-	runningStatusPayload, _ := searchattribute.EncodeValue(
+	runningStatusPayload, _ := sadefs.EncodeValue(
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)

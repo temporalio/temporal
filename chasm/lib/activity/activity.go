@@ -107,8 +107,8 @@ type requestCancelEvent struct {
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
 
-// terminateEvent wraps the TerminateActivityExecutionRequest with context-specific data.
-type terminateEvent struct {
+// terminateRequestEvent wraps the TerminateActivityExecutionRequest with context-specific data
+type terminateRequestEvent struct {
 	request                     *activitypb.TerminateActivityExecutionRequest
 	MetricsHandlerBuilderParams MetricsHandlerBuilderParams
 }
@@ -126,15 +126,6 @@ func (a *Activity) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	default:
 		return chasm.LifecycleStateRunning
 	}
-}
-
-// Terminate implements the chasm.RootComponent interface.
-func (a *Activity) Terminate(
-	_ chasm.MutableContext,
-	_ chasm.TerminateComponentRequest,
-) (chasm.TerminateComponentResponse, error) {
-	// TODO: Implement terminate logic.
-	return chasm.TerminateComponentResponse{}, nil
 }
 
 // NewStandaloneActivity creates a new activity component and adds associated tasks to start execution.
@@ -385,7 +376,49 @@ func (a *Activity) HandleCanceled(
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateEvent) (
+// Terminate implements the chasm.RootComponent interface.
+func (a *Activity) Terminate(
+	ctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// If already in terminated state, fail if request ID is different, else no-op
+	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
+		newReqID := req.RequestID
+		existingReqID := a.GetTerminateState().GetRequestId()
+
+		if existingReqID != newReqID {
+			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPrecondition(
+				fmt.Sprintf("already terminated with request ID %s", existingReqID))
+		}
+
+		return chasm.TerminateComponentResponse{}, nil
+	}
+
+	if !TransitionTerminated.Possible(a) {
+		if a.StateMachineState() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
+			return chasm.TerminateComponentResponse{}, nil
+		}
+		return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPrecondition(
+			fmt.Sprintf("cannot terminate activity in state %s", a.StateMachineState().String()),
+		)
+	}
+	event := terminateEvent{
+		request: &activitypb.TerminateActivityExecutionRequest{
+			FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
+				Reason:    req.Reason,
+				Identity:  req.Identity,
+				RequestId: req.RequestID,
+			},
+		},
+		// ctx.MetricsHandler() has no namespace tag; namespace-enriched metrics are only
+		// available when Terminate is called from the gRPC handler path via handleTerminated.
+		metricsHandler: ctx.MetricsHandler(),
+		fromStatus:     a.GetStatus(),
+	}
+	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(a, ctx, event)
+}
+
+func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateRequestEvent) (
 	*activitypb.TerminateActivityExecutionResponse, error,
 ) {
 	frontendReq := req.request.GetFrontendRequest()
@@ -403,7 +436,18 @@ func (a *Activity) handleTerminated(ctx chasm.MutableContext, req terminateEvent
 		return &activitypb.TerminateActivityExecutionResponse{}, nil
 	}
 
-	if err := TransitionTerminated.Apply(a, ctx, req); err != nil {
+	metricsHandler := enrichMetricsHandler(
+		a,
+		req.MetricsHandlerBuilderParams.Handler,
+		req.MetricsHandlerBuilderParams.NamespaceName,
+		metrics.ActivityTerminatedScope,
+		req.MetricsHandlerBuilderParams.BreakdownMetricsByTaskQueue,
+	)
+	if err := TransitionTerminated.Apply(a, ctx, terminateEvent{
+		request:        req.request,
+		metricsHandler: metricsHandler,
+		fromStatus:     a.GetStatus(),
+	}); err != nil {
 		return nil, err
 	}
 
@@ -904,6 +948,14 @@ func (a *Activity) emitOnFailedMetrics(ctx chasm.Context, handler metrics.Handle
 
 	metrics.ActivityTaskFail.With(handler).Record(1)
 	metrics.ActivityFail.With(handler).Record(1)
+}
+
+func (a *Activity) emitOnTerminatedMetrics(
+	handler metrics.Handler,
+) {
+	// Terminated activities do not count as properly finished activities so we do not
+	// record any of the latency metrics.
+	metrics.ActivityTerminate.With(handler).Record(1)
 }
 
 func (a *Activity) emitOnCanceledMetrics(
