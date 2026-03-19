@@ -26,6 +26,8 @@ const (
 	namespaceState = "namespace_state"
 	sourceCluster  = "source_cluster"
 	targetCluster  = "target_cluster"
+	taskSourceTag  = "source"
+	forwardedTag   = "forwarded"
 	fromCluster    = "from_cluster"
 	toCluster      = "to_cluster"
 	taskQueue      = "taskqueue"
@@ -267,6 +269,14 @@ func TaskPriorityTag(value string) Tag {
 	return Tag{Key: TaskPriorityTagName, Value: value}
 }
 
+func TaskSourceTag(source enumsspb.TaskSource) Tag {
+	return Tag{Key: taskSourceTag, Value: source.String()}
+}
+
+func ForwardedTag(forwarded bool) Tag {
+	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
+}
+
 func MatchingTaskPriorityTag(value int32) Tag {
 	priStr := ""
 	if value != 0 {
@@ -309,6 +319,10 @@ func VisibilityIndexNameTag(value string) Tag {
 
 func WorkerPluginNameTag(value string) Tag {
 	return Tag{Key: WorkerPluginNameTagName, Value: value}
+}
+
+func WorkerStorageDriverTypeTag(value string) Tag {
+	return Tag{Key: WorkerStorageDriverTypeTagName, Value: value}
 }
 
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.
