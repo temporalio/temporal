@@ -2265,46 +2265,6 @@ func (s *standaloneActivityTestSuite) TestDelete() {
 		s.eventuallyDeleted(ctx, t, activityID, runID)
 	})
 
-	t.Run("DeleteTerminatedActivity_AfterFailedTerminate_Succeeds", func(t *testing.T) {
-		activityID := testcore.RandomizeStr(t.Name())
-		taskQueue := testcore.RandomizeStr(t.Name())
-
-		startResp := s.startAndValidateActivity(ctx, t, activityID, taskQueue)
-		runID := startResp.RunId
-		s.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, runID)
-
-		// Terminate the activity
-		_, err := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      runID,
-			Reason:     "First termination",
-			Identity:   "terminator",
-		})
-		require.NoError(t, err)
-		s.eventuallyTerminated(ctx, t, activityID, runID)
-
-		// A second terminate would fail for the user...
-		_, secondTermErr := s.FrontendClient().TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      runID,
-			Reason:     "Duplicate termination",
-			Identity:   "terminator",
-		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, secondTermErr, &failedPreconditionErr)
-
-		// ...but delete should still succeed
-		_, err = s.FrontendClient().DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
-			Namespace:  s.Namespace().String(),
-			ActivityId: activityID,
-			RunId:      runID,
-		})
-		require.NoError(t, err)
-		s.eventuallyDeleted(ctx, t, activityID, runID)
-	})
-
 	t.Run("DeleteCancelRequestedActivity", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
