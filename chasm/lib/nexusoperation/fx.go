@@ -2,12 +2,14 @@ package nexusoperation
 
 import (
 	"go.temporal.io/server/chasm"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.uber.org/fx"
 )
 
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
+	fx.Provide(newHandler),
 	fx.Provide(NewOperationInvocationTaskExecutor),
 	fx.Provide(NewOperationBackoffTaskExecutor),
 	fx.Provide(NewOperationScheduleToStartTimeoutTaskExecutor),
@@ -21,6 +23,7 @@ var Module = fx.Module(
 
 var FrontendModule = fx.Module(
 	"chasm.lib.nexusoperation.frontend",
+	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 )
 

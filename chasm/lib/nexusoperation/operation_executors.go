@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.uber.org/fx"
@@ -42,7 +42,8 @@ func (e *OperationInvocationTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	// TODO: implement
+	return false, nil
 }
 
 func (e *OperationInvocationTaskExecutor) Execute(
@@ -75,7 +76,8 @@ func (e *OperationBackoffTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationBackoffTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	// TODO: implement
+	return false, nil
 }
 
 func (e *OperationBackoffTaskExecutor) Execute(
@@ -108,7 +110,8 @@ func (e *OperationScheduleToStartTimeoutTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToStartTimeoutTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	// TODO: implement
+	return false, nil
 }
 
 func (e *OperationScheduleToStartTimeoutTaskExecutor) Execute(
@@ -141,7 +144,8 @@ func (e *OperationStartToCloseTimeoutTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	// TODO: implement
+	return false, nil
 }
 
 func (e *OperationStartToCloseTimeoutTaskExecutor) Execute(
@@ -174,7 +178,8 @@ func (e *OperationScheduleToCloseTimeoutTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	return false, serviceerror.NewUnimplemented("unimplemented")
+	// TODO: implement
+	return false, nil
 }
 
 func (e *OperationScheduleToCloseTimeoutTaskExecutor) Execute(

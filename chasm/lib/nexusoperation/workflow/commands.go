@@ -3,9 +3,7 @@ package workflow
 import (
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -123,23 +121,17 @@ func (ch *commandHandler) handleScheduleCommand(
 		endpointID = endpoint.Id
 	}
 
-	if len(attrs.Service) > ch.config.MaxServiceNameLength(nsName) {
+	if err := nexusoperation.ValidateServiceName(attrs.Service, ch.config.MaxServiceNameLength(nsName)); err != nil {
 		return command.FailWorkflowTaskError{
-			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf(
-				"ScheduleNexusOperationCommandAttributes.Service exceeds length limit of %d",
-				ch.config.MaxServiceNameLength(nsName),
-			),
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.%v", err),
 		}
 	}
 
-	if len(attrs.Operation) > ch.config.MaxOperationNameLength(nsName) {
+	if err := nexusoperation.ValidateOperationName(attrs.Operation, ch.config.MaxOperationNameLength(nsName)); err != nil {
 		return command.FailWorkflowTaskError{
-			Cause: enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf(
-				"ScheduleNexusOperationCommandAttributes.Operation exceeds length limit of %d",
-				ch.config.MaxOperationNameLength(nsName),
-			),
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.%v", err),
 		}
 	}
 
@@ -175,24 +167,11 @@ func (ch *commandHandler) handleScheduleCommand(
 		}
 	}
 
-	headerLength := 0
-	lowerCaseHeader := make(map[string]string, len(attrs.NexusHeader))
-	for k, v := range attrs.NexusHeader {
-		lowerK := strings.ToLower(k)
-		lowerCaseHeader[lowerK] = v
-		headerLength += len(lowerK) + len(v)
-		if slices.Contains(ch.config.DisallowedOperationHeaders(), lowerK) {
-			return command.FailWorkflowTaskError{
-				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-				Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains a disallowed header key: %q", k),
-			}
-		}
-	}
-
-	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
+	lowerCaseHeader, err := nexusoperation.ValidateAndLowercaseNexusHeaders(attrs.NexusHeader, ch.config.DisallowedOperationHeaders(), ch.config.MaxOperationHeaderSize(nsName))
+	if err != nil {
 		return command.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-			Message: "ScheduleNexusOperationCommandAttributes.NexusHeader exceeds size limit",
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.%v", err),
 		}
 	}
 

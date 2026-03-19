@@ -5,7 +5,9 @@ package temporal.server.chasm.lib.nexusoperation.proto.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/api/sdk/v1/user_metadata.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
@@ -123,4 +125,21 @@ enum CancellationStatus {
     CANCELLATION_STATUS_TIMED_OUT = 5;
   // Cancellation request is blocked (eg: by circuit breaker).
     CANCELLATION_STATUS_BLOCKED = 6;
+}
+
+// OperationRequestData stores the original request data for a standalone Nexus operation.
+// For workflow-embedded operations, request data is stored in the workflow's history events.
+message OperationRequestData {
+    // Serialized operation input.
+    temporal.api.common.v1.Payload input = 1;
+
+    // Nexus headers from the start request.
+    // Keys have been normalized to lower case.
+    map<string, string> nexus_header = 2;
+
+    // Metadata for use by user interfaces to display the fixed as-of-start summary and details of the operation.
+    temporal.api.sdk.v1.UserMetadata user_metadata = 3;
+
+    // The identity of the client who started this operation.
+    string identity = 4;
 }
