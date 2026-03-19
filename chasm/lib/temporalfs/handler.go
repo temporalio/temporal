@@ -2,6 +2,12 @@ package temporalfs
 
 import (
 	"context"
+	"errors"
+	"math"
+	"time"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	"github.com/temporalio/temporal-fs/pkg/store"
@@ -9,6 +15,16 @@ import (
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+// Setattr valid bitmask values (matching FUSE FATTR_* constants).
+const (
+	setattrMode  = 1 << 0
+	setattrUID   = 1 << 1
+	setattrGID   = 1 << 2
+	setattrSize  = 1 << 3 // truncate
+	setattrAtime = 1 << 4
+	setattrMtime = 1 << 5
 )
 
 type handler struct {
@@ -155,13 +171,24 @@ func (h *handler) ArchiveFilesystem(
 	return &temporalfspb.ArchiveFilesystemResponse{}, nil
 }
 
-// FS operations — these use temporal-fs path-based APIs.
+// FS operations — these use temporal-fs inode-based APIs.
 
 func (h *handler) Lookup(_ context.Context, req *temporalfspb.LookupRequest) (*temporalfspb.LookupResponse, error) {
-	// Lookup requires resolving parent inode ID + name to a child inode.
-	// temporal-fs currently only exposes path-based ReadDir; inode-based directory
-	// reading requires codec-level access. Stubbed until temporal-fs adds ReadDirByID.
-	return nil, errNotImplemented
+	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	inode, err := f.LookupByID(req.GetParentInodeId(), req.GetName())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.LookupResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) Getattr(_ context.Context, req *temporalfspb.GetattrRequest) (*temporalfspb.GetattrResponse, error) {
@@ -181,9 +208,62 @@ func (h *handler) Getattr(_ context.Context, req *temporalfspb.GetattrRequest) (
 	}, nil
 }
 
-func (h *handler) Setattr(_ context.Context, _ *temporalfspb.SetattrRequest) (*temporalfspb.SetattrResponse, error) {
-	// TODO: Implement setattr (chmod, chown, utimens) via temporal-fs APIs.
-	return nil, errNotImplemented
+func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (*temporalfspb.SetattrResponse, error) {
+	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	inodeID := req.GetInodeId()
+	valid := req.GetValid()
+	attr := req.GetAttr()
+
+	if valid&setattrMode != 0 {
+		if err := f.ChmodByID(inodeID, uint16(attr.GetMode())); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+	if valid&setattrUID != 0 || valid&setattrGID != 0 {
+		uid := uint32(math.MaxUint32) // unchanged
+		gid := uint32(math.MaxUint32)
+		if valid&setattrUID != 0 {
+			uid = attr.GetUid()
+		}
+		if valid&setattrGID != 0 {
+			gid = attr.GetGid()
+		}
+		if err := f.ChownByID(inodeID, uid, gid); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+	if valid&setattrSize != 0 {
+		if err := f.TruncateByID(inodeID, int64(attr.GetFileSize())); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+	if valid&setattrAtime != 0 || valid&setattrMtime != 0 {
+		var atime, mtime time.Time
+		if valid&setattrAtime != 0 && attr.GetAtime() != nil {
+			atime = attr.GetAtime().AsTime()
+		}
+		if valid&setattrMtime != 0 && attr.GetMtime() != nil {
+			mtime = attr.GetMtime().AsTime()
+		}
+		if err := f.UtimensByID(inodeID, atime, mtime); err != nil {
+			return nil, mapFSError(err)
+		}
+	}
+
+	// Re-read the inode to return updated attributes.
+	inode, err := f.StatByID(inodeID)
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.SetattrResponse{
+		Attr: inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) ReadChunks(_ context.Context, req *temporalfspb.ReadChunksRequest) (*temporalfspb.ReadChunksResponse, error) {
@@ -227,9 +307,10 @@ func (h *handler) Truncate(_ context.Context, req *temporalfspb.TruncateRequest)
 	}
 	defer f.Close()
 
-	// Truncate requires a path. For inode-based truncate, we'd need path resolution.
-	// TODO: Add TruncateByID to temporal-fs or resolve inode→path.
-	return nil, errNotImplemented
+	if err := f.TruncateByID(req.GetInodeId(), req.GetNewSize()); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalfspb.TruncateResponse{}, nil
 }
 
 func (h *handler) Mkdir(_ context.Context, req *temporalfspb.MkdirRequest) (*temporalfspb.MkdirResponse, error) {
@@ -239,10 +320,15 @@ func (h *handler) Mkdir(_ context.Context, req *temporalfspb.MkdirRequest) (*tem
 	}
 	defer f.Close()
 
-	// Resolve parent inode, find its path, mkdir the child.
-	// For P1 with inode-based ops, we need to build the path.
-	// Use the parent_inode_id + name to create via MkdirByID if available.
-	return nil, errNotImplemented
+	inode, err := f.MkdirByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.MkdirResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) Unlink(_ context.Context, req *temporalfspb.UnlinkRequest) (*temporalfspb.UnlinkResponse, error) {
@@ -252,8 +338,10 @@ func (h *handler) Unlink(_ context.Context, req *temporalfspb.UnlinkRequest) (*t
 	}
 	defer f.Close()
 
-	_ = f // TODO: Implement using UnlinkEntry or path resolution.
-	return nil, errNotImplemented
+	if err := f.UnlinkByID(req.GetParentInodeId(), req.GetName()); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalfspb.UnlinkResponse{}, nil
 }
 
 func (h *handler) Rmdir(_ context.Context, req *temporalfspb.RmdirRequest) (*temporalfspb.RmdirResponse, error) {
@@ -263,8 +351,10 @@ func (h *handler) Rmdir(_ context.Context, req *temporalfspb.RmdirRequest) (*tem
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	if err := f.RmdirByID(req.GetParentInodeId(), req.GetName()); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalfspb.RmdirResponse{}, nil
 }
 
 func (h *handler) Rename(_ context.Context, req *temporalfspb.RenameRequest) (*temporalfspb.RenameResponse, error) {
@@ -274,14 +364,43 @@ func (h *handler) Rename(_ context.Context, req *temporalfspb.RenameRequest) (*t
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	if err := f.RenameByID(
+		req.GetOldParentInodeId(), req.GetOldName(),
+		req.GetNewParentInodeId(), req.GetNewName(),
+	); err != nil {
+		return nil, mapFSError(err)
+	}
+	return &temporalfspb.RenameResponse{}, nil
 }
 
 func (h *handler) ReadDir(_ context.Context, req *temporalfspb.ReadDirRequest) (*temporalfspb.ReadDirResponse, error) {
-	// ReadDir by inode ID requires codec-level access not yet exposed by temporal-fs.
-	// Stubbed until temporal-fs adds ReadDirByID.
-	return nil, errNotImplemented
+	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	entries, err := f.ReadDirByID(req.GetInodeId())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	protoEntries := make([]*temporalfspb.DirEntry, len(entries))
+	for i, e := range entries {
+		inode, err := f.StatByID(e.InodeID)
+		if err != nil {
+			return nil, mapFSError(err)
+		}
+		protoEntries[i] = &temporalfspb.DirEntry{
+			Name:    e.Name,
+			InodeId: e.InodeID,
+			Mode:    uint32(inode.Mode),
+		}
+	}
+
+	return &temporalfspb.ReadDirResponse{
+		Entries: protoEntries,
+	}, nil
 }
 
 func (h *handler) Link(_ context.Context, req *temporalfspb.LinkRequest) (*temporalfspb.LinkResponse, error) {
@@ -291,8 +410,14 @@ func (h *handler) Link(_ context.Context, req *temporalfspb.LinkRequest) (*tempo
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	inode, err := f.LinkByID(req.GetInodeId(), req.GetNewParentInodeId(), req.GetNewName())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.LinkResponse{
+		Attr: inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) Symlink(_ context.Context, req *temporalfspb.SymlinkRequest) (*temporalfspb.SymlinkResponse, error) {
@@ -302,8 +427,15 @@ func (h *handler) Symlink(_ context.Context, req *temporalfspb.SymlinkRequest) (
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	inode, err := f.SymlinkByID(req.GetParentInodeId(), req.GetName(), req.GetTarget())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.SymlinkResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) Readlink(_ context.Context, req *temporalfspb.ReadlinkRequest) (*temporalfspb.ReadlinkResponse, error) {
@@ -313,8 +445,14 @@ func (h *handler) Readlink(_ context.Context, req *temporalfspb.ReadlinkRequest)
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	target, err := f.ReadlinkByID(req.GetInodeId())
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.ReadlinkResponse{
+		Target: target,
+	}, nil
 }
 
 func (h *handler) CreateFile(_ context.Context, req *temporalfspb.CreateFileRequest) (*temporalfspb.CreateFileResponse, error) {
@@ -324,8 +462,15 @@ func (h *handler) CreateFile(_ context.Context, req *temporalfspb.CreateFileRequ
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	inode, err := f.CreateFileByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.CreateFileResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) Mknod(_ context.Context, req *temporalfspb.MknodRequest) (*temporalfspb.MknodResponse, error) {
@@ -335,19 +480,66 @@ func (h *handler) Mknod(_ context.Context, req *temporalfspb.MknodRequest) (*tem
 	}
 	defer f.Close()
 
-	_ = f
-	return nil, errNotImplemented
+	typ := modeToInodeType(req.GetMode())
+	inode, err := f.MknodByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()&0xFFF), typ, uint64(req.GetDev()))
+	if err != nil {
+		return nil, mapFSError(err)
+	}
+
+	return &temporalfspb.MknodResponse{
+		InodeId: inode.ID,
+		Attr:    inodeToAttr(inode),
+	}, nil
 }
 
 func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*temporalfspb.StatfsResponse, error) {
-	// Return synthetic statfs based on filesystem config.
-	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
-		NamespaceID: req.GetNamespaceId(),
-		BusinessID:  req.GetFilesystemId(),
-	})
+	f, _, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
 
-	_ = ref
-	return nil, errNotImplemented
+	quota := f.GetQuota()
+
+	bsize := uint32(f.ChunkSize())
+	if bsize == 0 {
+		bsize = 4096
+	}
+
+	var blocks, bfree, files, ffree uint64
+	if quota.MaxBytes > 0 {
+		blocks = uint64(quota.MaxBytes) / uint64(bsize)
+		used := uint64(quota.UsedBytes) / uint64(bsize)
+		if used > blocks {
+			used = blocks
+		}
+		bfree = blocks - used
+	} else {
+		blocks = 1 << 40 / uint64(bsize) // 1 TiB virtual
+		bfree = blocks
+	}
+	if quota.MaxInodes > 0 {
+		files = uint64(quota.MaxInodes)
+		used := uint64(quota.UsedInodes)
+		if used > files {
+			used = files
+		}
+		ffree = files - used
+	} else {
+		files = 1 << 20 // 1M virtual
+		ffree = files
+	}
+
+	return &temporalfspb.StatfsResponse{
+		Blocks:  blocks,
+		Bfree:   bfree,
+		Bavail:  bfree,
+		Files:   files,
+		Ffree:   ffree,
+		Bsize:   bsize,
+		Namelen: 255,
+		Frsize:  bsize,
+	}, nil
 }
 
 func (h *handler) CreateSnapshot(_ context.Context, req *temporalfspb.CreateSnapshotRequest) (*temporalfspb.CreateSnapshotResponse, error) {
@@ -367,6 +559,22 @@ func (h *handler) CreateSnapshot(_ context.Context, req *temporalfspb.CreateSnap
 	}, nil
 }
 
+// modeToInodeType extracts the inode type from POSIX mode bits.
+func modeToInodeType(mode uint32) tfs.InodeType {
+	switch mode & 0xF000 {
+	case 0x1000:
+		return tfs.InodeTypeFIFO
+	case 0x2000:
+		return tfs.InodeTypeCharDev
+	case 0x6000:
+		return tfs.InodeTypeBlockDev
+	case 0xC000:
+		return tfs.InodeTypeSocket
+	default:
+		return tfs.InodeTypeFile
+	}
+}
+
 // inodeToAttr converts a temporal-fs Inode to the proto InodeAttr.
 func inodeToAttr(inode *tfs.Inode) *temporalfspb.InodeAttr {
 	return &temporalfspb.InodeAttr{
@@ -382,11 +590,27 @@ func inodeToAttr(inode *tfs.Inode) *temporalfspb.InodeAttr {
 	}
 }
 
-// mapFSError converts temporal-fs errors to appropriate gRPC errors.
+// mapFSError converts temporal-fs errors to appropriate gRPC service errors.
 func mapFSError(err error) error {
 	if err == nil {
 		return nil
 	}
-	// TODO: Map tfs.ErrNotFound → serviceerror.NewNotFound, etc.
-	return err
+	switch {
+	case errors.Is(err, tfs.ErrNotFound), errors.Is(err, tfs.ErrSnapshotNotFound):
+		return serviceerror.NewNotFound(err.Error())
+	case errors.Is(err, tfs.ErrExist):
+		return serviceerror.NewAlreadyExists(err.Error())
+	case errors.Is(err, tfs.ErrPermission), errors.Is(err, tfs.ErrNotPermitted):
+		return serviceerror.NewPermissionDenied(err.Error(), "")
+	case errors.Is(err, tfs.ErrInvalidPath), errors.Is(err, tfs.ErrInvalidRename), errors.Is(err, tfs.ErrNameTooLong):
+		return serviceerror.NewInvalidArgument(err.Error())
+	case errors.Is(err, tfs.ErrNoSpace), errors.Is(err, tfs.ErrTooManyLinks):
+		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, err.Error())
+	case errors.Is(err, tfs.ErrNotDir), errors.Is(err, tfs.ErrIsDir),
+		errors.Is(err, tfs.ErrNotEmpty), errors.Is(err, tfs.ErrNotSymlink),
+		errors.Is(err, tfs.ErrReadOnly):
+		return serviceerror.NewFailedPrecondition(err.Error())
+	default:
+		return err
+	}
 }
