@@ -615,8 +615,10 @@ func mapFSError(err error) error {
 		return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT, err.Error())
 	case errors.Is(err, tfs.ErrNotDir), errors.Is(err, tfs.ErrIsDir),
 		errors.Is(err, tfs.ErrNotEmpty), errors.Is(err, tfs.ErrNotSymlink),
-		errors.Is(err, tfs.ErrReadOnly):
+		errors.Is(err, tfs.ErrReadOnly), errors.Is(err, tfs.ErrLockConflict):
 		return serviceerror.NewFailedPrecondition(err.Error())
+	case errors.Is(err, tfs.ErrClosed), errors.Is(err, tfs.ErrVersionMismatch):
+		return serviceerror.NewUnavailable(err.Error())
 	default:
 		return err
 	}
