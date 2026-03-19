@@ -20,9 +20,9 @@ runs:
   steps:
     - name: Configure git for private modules
       shell: bash
-      run: git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+      run: git config --global url."https://x-access-token:${GO_PRIVATE_TOKEN}@github.com/".insteadOf "https://github.com/"
       env:
-        GITHUB_TOKEN: ${{ github.token }}
+        GO_PRIVATE_TOKEN: ${{ github.token }}
 
     - name: Setup Go
       uses: actions/setup-go@v6
