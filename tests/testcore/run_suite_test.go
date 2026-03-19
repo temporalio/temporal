@@ -10,71 +10,57 @@ import (
 
 type noFieldsSuite struct{}
 
-func (*noFieldsSuite) TestA(t *testing.T) {}
+func (noFieldsSuite) TestA(t *testing.T) {}
 
-type valueFieldsValidSuite struct {
-	flag   bool
-	count  int
-	name   string
-	ratio  float64
-	ids    [3]int
-	nested struct{ x int }
+type withArgsSuite struct{}
+
+func (withArgsSuite) TestA(t *testing.T, name string, count int) {
+	require.Equal(t, "hello", name)
+	require.Equal(t, 42, count)
 }
 
-func (*valueFieldsValidSuite) TestA(t *testing.T) {}
-
-type unexportedMapInvalidSuite struct {
-	counts map[string]int //nolint:unused
+type hasFieldsSuite struct {
+	x int //nolint:unused
 }
 
-func (*unexportedMapInvalidSuite) TestA(t *testing.T) {}
-
-type exportedMapInvalidSuite struct {
-	Data map[string]int
-}
-
-func (*exportedMapInvalidSuite) TestA(t *testing.T) {}
-
-type sliceFieldInvalidSuite struct {
-	items []int //nolint:unused
-}
-
-func (*sliceFieldInvalidSuite) TestA(t *testing.T) {}
-
-type pointerFieldInvalidSuite struct {
-	ptr *int //nolint:unused
-}
-
-func (*pointerFieldInvalidSuite) TestA(t *testing.T) {}
-
-type noMethodsInvalidSuite struct{}
-
-type wrongSigInvalidSuite struct{}
-
-func (*wrongSigInvalidSuite) TestBad() {}
+func (hasFieldsSuite) TestA(t *testing.T) {}
 
 type badNameInvalidTests struct{}
 
 func (*badNameInvalidTests) TestA(t *testing.T) {}
 
+type noMethodsInvalidSuite struct{}
+
+type wrongSigInvalidSuite struct{}
+
+func (wrongSigInvalidSuite) TestBad() {}
+
 type nonTestMethodInvalidSuite struct{}
 
-func (*nonTestMethodInvalidSuite) TestA(t *testing.T) {}
-func (*nonTestMethodInvalidSuite) Helper()            {} //nolint:unused
+func (nonTestMethodInvalidSuite) TestA(t *testing.T) {}
+func (nonTestMethodInvalidSuite) Helper()            {} //nolint:unused
+
+type argMismatchSuite struct{}
+
+func (argMismatchSuite) TestA(t *testing.T, x int) {}
+
+type pointerReceiverSuite struct{}
+
+func (*pointerReceiverSuite) TestA(t *testing.T) {} //nolint:unused
 
 func TestRunSuiteAcceptsSuite(t *testing.T) {
 	tests := []struct {
 		name  string
 		suite any
+		args  []any
 	}{
-		{"no fields", &noFieldsSuite{}},
-		{"value-type fields", &valueFieldsValidSuite{flag: true, count: 42}},
+		{"no fields no args", noFieldsSuite{}, nil},
+		{"with args", withArgsSuite{}, []any{"hello", 42}},
 	}
 
 	for _, tt := range tests {
-		// RunSuite calls t.Parallel() so each valid suite needs its own subtest.
 		t.Run(tt.name+"Suite", func(t *testing.T) {
-			assert.NotPanics(t, func() { RunSuite(t, tt.suite) }, tt.name)
+			assert.NotPanics(t, func() { RunSuite(t, tt.suite, tt.args...) }, tt.name)
 		})
 	}
 }
@@ -83,22 +69,33 @@ func TestRunSuiteRejectsSuite(t *testing.T) {
 	tests := []struct {
 		name        string
 		suite       any
+		args        []any
 		errContains string
 	}{
-		{"struct name not ending in Suite", &badNameInvalidTests{}, `suite struct name "badNameInvalidTests" must end with "Suite"`},
-		{"unexported map field", &unexportedMapInvalidSuite{}, `field "counts" of type map[string]int which is not a value type`},
-		{"exported map field", &exportedMapInvalidSuite{}, `field "Data" of type map[string]int which is not a value type`},
-		{"slice field", &sliceFieldInvalidSuite{}, `field "items" of type []int which is not a value type`},
-		{"pointer field", &pointerFieldInvalidSuite{}, `field "ptr" of type *int which is not a value type`},
-		{"no Test methods", &noMethodsInvalidSuite{}, `suite noMethodsInvalidSuite has no Test* methods`},
-		{"wrong method signature", &wrongSigInvalidSuite{}, `method wrongSigInvalidSuite.TestBad has wrong signature`},
-		{"non-Test exported method", &nonTestMethodInvalidSuite{}, `exported method Helper that does not start with Test`},
+		{"not a struct", 42, nil,
+			`suite must be a struct`},
+		{"struct name not ending in Suite", badNameInvalidTests{}, nil,
+			`suite struct name "badNameInvalidTests" must end with "Suite"`},
+		{"has fields", hasFieldsSuite{}, nil,
+			`suite hasFieldsSuite must have no fields`},
+		{"no Test methods", noMethodsInvalidSuite{}, nil,
+			`suite noMethodsInvalidSuite has no Test* methods`},
+		{"wrong method signature", wrongSigInvalidSuite{}, nil,
+			`method wrongSigInvalidSuite.TestBad has wrong signature`},
+		{"non-Test exported method", nonTestMethodInvalidSuite{}, nil,
+			`exported method Helper that does not start with Test`},
+		{"arg count mismatch", noFieldsSuite{}, []any{"extra"},
+			`has wrong signature`},
+		{"arg type mismatch", argMismatchSuite{}, []any{"not-an-int"},
+			`parameter 1 has type int but RunSuite arg has type string`},
+		{"pointer receiver", pointerReceiverSuite{}, nil,
+			`has pointer-receiver methods; all methods must use value receivers`},
 	}
 
 	for _, tt := range tests {
 		// All invalid suites panic during validation, before RunSuite calls
 		// t.Parallel(), so it's safe to reuse the parent t here.
-		msg := fmt.Sprint(catchPanic(func() { RunSuite(t, tt.suite) }))
+		msg := fmt.Sprint(catchPanic(func() { RunSuite(t, tt.suite, tt.args...) }))
 		require.Contains(t, msg, tt.errContains, "case %q", tt.name)
 	}
 }

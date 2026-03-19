@@ -21,10 +21,10 @@ import (
 type MaxBufferedEventSuite struct{}
 
 func TestMaxBufferedEventSuite(t *testing.T) {
-	testcore.RunSuite(t, new(MaxBufferedEventSuite))
+	testcore.RunSuite(t, MaxBufferedEventSuite{})
 }
 
-func (suite *MaxBufferedEventSuite) opts() []testcore.TestOption {
+func (suite MaxBufferedEventSuite) opts() []testcore.TestOption {
 	return []testcore.TestOption{
 		testcore.WithSdkWorker(),
 		// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit.
@@ -35,7 +35,7 @@ func (suite *MaxBufferedEventSuite) opts() []testcore.TestOption {
 	}
 }
 
-func (suite *MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
+func (suite MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
 	s := testcore.NewEnv(t, suite.opts()...)
 
 	/*
@@ -127,7 +127,7 @@ func (suite *MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
 	s.Equal(1, failedCount)
 }
 
-func (suite *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit(t *testing.T) {
+func (suite MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit(t *testing.T) {
 	s := testcore.NewEnv(t, suite.opts()...)
 
 	/*
