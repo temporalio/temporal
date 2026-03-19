@@ -18,11 +18,20 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Configure git for private modules
+      shell: bash
+      run: git config --global url."https://x-access-token:${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+
     - name: Setup Go
       uses: actions/setup-go@v6
       with:
         go-version-file: "go.mod"
         cache: true
+      env:
+        GOPRIVATE: github.com/moedash/temporal-fs
+        GONOSUMCHECK: github.com/moedash/temporal-fs
 
     - name: Run GoReleaser (release)
       if: inputs.release == 'true'
@@ -33,6 +42,8 @@ runs:
         args: release ${{ inputs.snapshot == 'true' && '--snapshot --skip=publish' || '' }} --clean
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        GOPRIVATE: github.com/moedash/temporal-fs
+        GONOSUMCHECK: github.com/moedash/temporal-fs
 
     - name: Run GoReleaser (build - all architectures)
       if: inputs.release != 'true' && inputs.single-arch == ''
@@ -43,6 +54,8 @@ runs:
         args: build --snapshot
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        GOPRIVATE: github.com/moedash/temporal-fs
+        GONOSUMCHECK: github.com/moedash/temporal-fs
 
     - name: Run GoReleaser (build - single architecture)
       if: inputs.release != 'true' && inputs.single-arch != ''
@@ -53,5 +66,7 @@ runs:
         args: build --snapshot --single-target
       env:
         GITHUB_TOKEN: ${{ github.token }}
+        GOPRIVATE: github.com/moedash/temporal-fs
+        GONOSUMCHECK: github.com/moedash/temporal-fs
         GOOS: linux
         GOARCH: ${{ inputs.single-arch }}
