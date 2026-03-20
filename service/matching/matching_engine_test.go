@@ -213,9 +213,7 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	res := defaultTestConfig()
 	if s.fairness {
 		useFairness(res)
-	} else if s.newMatcher {
-		useNewMatcher(res)
-	} else {
+	} else if !s.newMatcher {
 		useClassicMatcher(res)
 	}
 	return res
@@ -3287,13 +3285,11 @@ func (s *matchingEngineSuite) addWorkflowTasksConcurrently(
 	taskQueue *taskqueuepb.TaskQueue, workflowExecution *commonpb.WorkflowExecution,
 ) {
 	for range numWorkers {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range taskCount {
 				s.addWorkflowTask(workflowExecution, taskQueue)
 			}
-			wg.Done()
-		}()
+		})
 	}
 }
 
@@ -3324,13 +3320,11 @@ func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 ) {
 	s.mockHistoryWhilePolling(workflowType)
 	for range numPollers {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for range taskCount {
 				s.createPollWorkflowTaskRequestAndPoll(taskQueue)
 			}
-			wg.Done()
-		}()
+		})
 	}
 }
 
@@ -5673,10 +5667,6 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 }
 
 // TODO(pri): cleanup; delete this
-func useNewMatcher(config *Config) {
-	config.NewMatcherSub = staticTrueChange
-}
-
 func useClassicMatcher(config *Config) {
 	config.NewMatcherSub = staticFalseChange
 }

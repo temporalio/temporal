@@ -79,9 +79,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	config := defaultTestConfig()
 	if s.fairness {
 		useFairness(config)
-	} else if s.newMatcher {
-		useNewMatcher(config)
-	} else {
+	} else if !s.newMatcher {
 		useClassicMatcher(config)
 	}
 
