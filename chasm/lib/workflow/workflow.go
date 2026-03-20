@@ -19,11 +19,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// EventRegistry provides access to event definitions by event type.
-type EventRegistry interface {
-	EventDefinition(t enumspb.EventType) (EventDefinition, bool)
-}
-
 type Workflow struct {
 	chasm.UnimplementedComponent
 
