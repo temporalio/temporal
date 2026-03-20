@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 // Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
@@ -162,13 +161,6 @@ func (m *taskManagerImpl) CreateTasks(
 	ctx context.Context,
 	request *CreateTasksRequest,
 ) (*CreateTasksResponse, error) {
-	taskQueueInfo := request.TaskQueueInfo.Data
-	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo)
-	if err != nil {
-		return nil, err
-	}
-
 	tasks := make([]*InternalCreateTask, len(request.Tasks))
 	for i, task := range request.Tasks {
 		taskBlob, err := m.serializer.TaskInfoToBlob(task)
@@ -190,7 +182,7 @@ func (m *taskManagerImpl) CreateTasks(
 		TaskQueue:     request.TaskQueueInfo.Data.GetName(),
 		TaskType:      request.TaskQueueInfo.Data.GetTaskType(),
 		RangeID:       request.TaskQueueInfo.RangeID,
-		TaskQueueInfo: taskQueueInfoBlob,
+		TaskQueueInfo: nil,
 		Tasks:         tasks,
 	}
 	return m.taskStore.CreateTasks(ctx, internalRequest)
