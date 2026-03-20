@@ -187,6 +187,7 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 		metrics.OperationCounter.With(metricsHandler).Record(
 			1,
 			metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+			metrics.ArchetypeTag(""),
 		)
 	}
 

@@ -3251,6 +3251,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		metrics.OperationTag("RecordWorkflowTaskStarted"),
 		metrics.NamespaceTag(pollReq.Namespace),
 		metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+		metrics.ArchetypeTag(""),
 	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{
@@ -3332,6 +3333,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		metrics.OperationTag("RecordActivityTaskStarted"),
 		metrics.NamespaceTag(pollReq.Namespace),
 		metrics.TaskTypeTag(""), // Added to make tags consistent with history task executor.
+		metrics.ArchetypeTag(""),
 	)
 	if e.rateLimiter != nil {
 		err := e.rateLimiter.Wait(ctx, quotas.Request{

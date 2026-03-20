@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
+	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
@@ -178,27 +179,20 @@ func loadSQLiteConfig(t *testing.T) *config.Config {
 
 // setTestPorts sets the ports of all services to something different from the default ports.
 func setTestPorts(cfg *config.Config) {
-	port := 10000
-
 	// The prometheus reporter does not shut down in-between test runs.
 	// This will assign a random port to the prometheus reporter,
 	// so that it doesn't conflict with other tests.
 	cfg.Global.Metrics.Prometheus.ListenAddress = ":0"
 
 	for k, v := range cfg.Services {
-		v.RPC.GRPCPort = port
-		port++
-
-		v.RPC.MembershipPort = port
-		port++
-
-		v.RPC.HTTPPort = port
-		port++
+		v.RPC.GRPCPort = freeport.MustGetFreePort()
+		v.RPC.MembershipPort = freeport.MustGetFreePort()
+		v.RPC.HTTPPort = freeport.MustGetFreePort()
 
 		cfg.Services[k] = v
 	}
 
-	cfg.Global.PProf.Port = port
+	cfg.Global.PProf.Port = freeport.MustGetFreePort()
 }
 
 func getFrontendInterceptors() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
