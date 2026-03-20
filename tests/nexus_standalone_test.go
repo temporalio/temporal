@@ -248,7 +248,6 @@ func TestStandaloneNexusOperationList(t *testing.T) {
 			Operation:            "test-operation",
 			Status:               enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
 			StateTransitionCount: op.GetStateTransitionCount(),
-			StateSizeBytes:       op.GetStateSizeBytes(),
 			SearchAttributes:     op.GetSearchAttributes(),
 			// Dynamic fields copied from actual response for comparison.
 			ScheduleTime: op.GetScheduleTime(),
