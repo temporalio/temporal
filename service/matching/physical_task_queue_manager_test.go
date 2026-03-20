@@ -174,6 +174,15 @@ func defaultTqId() *PhysicalTaskQueueKey {
 	return newTestUnversionedPhysicalQueueKey(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, 0)
 }
 
+// getTaskManager returns the underlying testTaskManager (which is accessed differently
+// depending on mode)
+func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
+	if s.fairness {
+		return s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager)
+	}
+	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+}
+
 // TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	if s.newMatcher {
@@ -357,12 +366,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
-	var tm *testTaskManager
-	if s.fairness {
-		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
-	} else {
-		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
-	}
+	tm := s.getTaskManager()
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
 		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
@@ -378,12 +382,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
-	var tm *testTaskManager
-	if s.fairness {
-		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
-	} else {
-		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
-	}
+	tm := s.getTaskManager()
 	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
 
 	// simulate stolen lock
