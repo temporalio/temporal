@@ -5,6 +5,7 @@ import (
 	"container/list"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -248,6 +249,9 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		}
 		var core zapcore.Core
 		if debugFile := os.Getenv(log.TestDebugLogFileEnvVar); debugFile != "" {
+			if err := os.MkdirAll(filepath.Dir(debugFile), 0o755); err != nil {
+				t.Logf("testlogger: failed to create debug log dir %s: %v", filepath.Dir(debugFile), err)
+			}
 			f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err == nil {
 				t.Logf("testlogger: debug logs → %s", debugFile)
@@ -256,6 +260,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 				infoCore := zapcore.NewCore(enc, writer, zap.InfoLevel)
 				core = zapcore.NewTee(fileCore, infoCore)
 			} else {
+				t.Logf("testlogger: failed to open debug log file %s: %v (falling back to normal logging)", debugFile, err)
 				core = zapcore.NewCore(enc, writer, level)
 			}
 		} else {
