@@ -69,7 +69,7 @@ func TestTransitionScheduled(t *testing.T) {
 			operation.ScheduleToCloseTimeout = durationpb.New(tc.scheduleToCloseTimeout)
 			event := EventScheduled{}
 
-			err := transitionScheduled.Apply(operation, ctx, event)
+			err := TransitionScheduled.Apply(operation, ctx, event)
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, operation.Status)
 

@@ -120,6 +120,10 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 		Attempt:                1,
 	})
 
+	if err := nexusoperation.TransitionScheduled.Apply(op, ctx, nexusoperation.EventScheduled{}); err != nil {
+		return err
+	}
+
 	key := strconv.FormatInt(event.GetEventId(), 10)
 	wf.AddNexusOperation(ctx, key, op)
 
@@ -299,10 +303,21 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 		return err
 	}
 
-	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
+	if err := nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
 		FromBackingOff: op.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
-	})
+	}); err != nil {
+		return err
+	}
+
+	// If cancellation was already requested, schedule sending the cancellation request now that we have
+	// an operation token.
+	cancellation, ok := op.Cancellation.TryGet(ctx)
+	if ok && cancellation.StateMachineState() == nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
+		return nexusoperation.TransitionCancellationScheduled.Apply(cancellation, ctx, nexusoperation.EventCancellationScheduled{})
+	}
+
+	return nil
 }
 
 func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {

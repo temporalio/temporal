@@ -91,7 +91,7 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	// Once started, the handler returns a token that can be used in the cancelation request.
 	// Until then, no need to schedule the cancelation.
 	if o.Status == nexusoperationpb.OPERATION_STATUS_STARTED {
-		return transitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
+		return TransitionCancellationScheduled.Apply(cancellation, ctx, EventCancellationScheduled{})
 	}
 
 	return nil
