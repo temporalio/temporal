@@ -15,16 +15,19 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
 
-type MaxBufferedEventSuite struct{}
-
-func TestMaxBufferedEventSuite(t *testing.T) {
-	testcore.RunSuite(t, MaxBufferedEventSuite{})
+type MaxBufferedEventSuite struct {
+	parallelsuite.Suite[*MaxBufferedEventSuite]
 }
 
-func (suite MaxBufferedEventSuite) opts() []testcore.TestOption {
+func TestMaxBufferedEventSuite(t *testing.T) {
+	parallelsuite.Run(t, &MaxBufferedEventSuite{})
+}
+
+func (s *MaxBufferedEventSuite) opts() []testcore.TestOption {
 	return []testcore.TestOption{
 		testcore.WithSdkWorker(),
 		// Set MaximumBufferedEventsSizeInBytes high so we don't hit that limit.
@@ -35,8 +38,8 @@ func (suite MaxBufferedEventSuite) opts() []testcore.TestOption {
 	}
 }
 
-func (suite MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
-	s := testcore.NewEnv(t, suite.opts()...)
+func (s *MaxBufferedEventSuite) TestMaxBufferedEventsLimit() {
+	env := testcore.NewEnv(s.T(), s.opts()...)
 
 	/*
 		This test starts a workflow, and block its workflow task, then sending
@@ -78,15 +81,15 @@ func (suite MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
 		return sigCount, nil
 	}
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	testCtx, cancel := context.WithTimeout(context.Background(), time.Second*20)
 	defer cancel()
 
 	wid := "test-max-buffered-events-limit"
-	wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
+	wf1, err1 := env.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
 		ID:                  wid,
-		TaskQueue:           s.WorkerTaskQueue(),
+		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: time.Second * 20,
 	}, workflowFn)
 
@@ -97,12 +100,12 @@ func (suite MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
 
 	// now send 100 signals, all of them will be buffered
 	for i := range 100 {
-		err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", i)
+		err := env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", i)
 		s.NoError(err)
 	}
 
 	// send 101 signal, this will fail the started workflow task
-	err := s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", 100)
+	err := env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", 100)
 	s.NoError(err)
 
 	// unblock goroutine that runs local activity
@@ -113,7 +116,7 @@ func (suite MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
 	s.NoError(err)
 	s.Equal(101, sigCount)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 	// Not using historyrequire here because history is not deterministic.
 	var failedCause enumspb.WorkflowTaskFailedCause
 	var failedCount int
@@ -127,8 +130,8 @@ func (suite MaxBufferedEventSuite) TestMaxBufferedEventsLimit(t *testing.T) {
 	s.Equal(1, failedCount)
 }
 
-func (suite MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit(t *testing.T) {
-	s := testcore.NewEnv(t, suite.opts()...)
+func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
+	env := testcore.NewEnv(s.T(), s.opts()...)
 
 	/*
 		This test starts a workflow, and blocks its workflow task, then sends
@@ -172,15 +175,15 @@ func (suite MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit(t *te
 		return sigCount, nil
 	}
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	testCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 
 	wid := "test-max-buffered-events-limit"
-	wf1, err1 := s.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
+	wf1, err1 := env.SdkClient().ExecuteWorkflow(testCtx, client.StartWorkflowOptions{
 		ID:                  wid,
-		TaskQueue:           s.WorkerTaskQueue(),
+		TaskQueue:           env.WorkerTaskQueue(),
 		WorkflowTaskTimeout: time.Second * 20,
 	}, workflowFn)
 
@@ -201,12 +204,12 @@ func (suite MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit(t *te
 	// With 410KB limit and 100KB payloads, the first 3 signals succeed but the 4th exceeds the limit.
 	// First three signals should succeed.
 	for i := range 3 {
-		err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+		err = env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 		s.NoError(err, "Signal %d should succeed", i+1)
 	}
 
 	// Fourth signal should fail due to mutable state size limit
-	err = s.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
+	err = env.SdkClient().SignalWorkflow(testCtx, wid, "", "test-signal", largePayload)
 	s.Error(err, "Fourth signal should fail due to mutable state size limit")
 	s.Contains(err.Error(), "mutable state size exceeds limit", "Expected mutable state size limit error")
 
@@ -218,7 +221,7 @@ func (suite MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit(t *te
 	// The workflow should be terminated, so we expect an error
 	s.Error(err)
 
-	historyEvents := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
+	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wf1.GetID()})
 
 	// Verify that the workflow was terminated due to mutable state size limit
 	var terminated bool
