@@ -2739,6 +2739,23 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		return nil, err
 	}
 
+	if tsc := startRequest.GetStartRequest().GetTimeSkippingConfig(); tsc.GetEnabled() {
+		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Enabled: true,
+		}
+		if autoSkip := tsc.GetAutoSkip(); autoSkip != nil {
+			if until := autoSkip.GetUntilTime(); until != nil {
+				ms.executionInfo.TimeSkippingInfo.Boundary = &persistencespb.TimeSkippingInfo_Until{
+					Until: until,
+				}
+			} else if totalDuration := autoSkip.GetUntilDuration(); totalDuration != nil {
+				ms.executionInfo.TimeSkippingInfo.Boundary = &persistencespb.TimeSkippingInfo_TotalDuration{
+					TotalDuration: totalDuration,
+				}
+			}
+		}
+	}
+
 	// Versioning Override set on StartWorkflowExecutionRequest
 	if startRequest.GetStartRequest().GetVersioningOverride() != nil {
 		metrics.WorkerDeploymentVersioningOverrideCounter.With(

@@ -295,7 +295,22 @@ message WorkflowExecutionInfo {
         temporal.api.enums.v1.WorkflowTaskFailedCause last_workflow_task_failure_cause = 107;
         temporal.api.enums.v1.TimeoutType last_workflow_task_timed_out_type = 108;
     }
+
+    // Time skipping info contains the metadata of the time skipping for the workflow.
+    // todo: using 120 to leave room for others' changes while working on this feature.
+    TimeSkippingInfo time_skipping_info = 120;
 }
+
+message TimeSkippingInfo {
+    // metadata
+    bool enabled = 1;
+    oneof boundary {
+        google.protobuf.Timestamp until = 2;
+        google.protobuf.Duration total_duration = 3;
+    }
+    // runtime history
+    repeated google.protobuf.Timestamp skipped_time_offsets = 4;
+} 
 
 message ExecutionStats {
     int64 history_size = 1;

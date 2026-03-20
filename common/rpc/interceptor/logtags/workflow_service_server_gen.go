@@ -9,6 +9,13 @@ import (
 
 func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []tag.Tag {
 	switch r := message.(type) {
+	case *workflowservice.AdvanceWorkflowExecutionTimePointRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
+		}
+	case *workflowservice.AdvanceWorkflowExecutionTimePointResponse:
+		return nil
 	case *workflowservice.CountActivityExecutionsRequest:
 		return nil
 	case *workflowservice.CountActivityExecutionsResponse:

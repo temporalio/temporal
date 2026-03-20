@@ -11,6 +11,21 @@ import (
 	"go.temporal.io/server/common/backoff"
 )
 
+func (c *retryableClient) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	request *workflowservice.AdvanceWorkflowExecutionTimePointRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	var resp *workflowservice.AdvanceWorkflowExecutionTimePointResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.AdvanceWorkflowExecutionTimePoint(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CountActivityExecutions(
 	ctx context.Context,
 	request *workflowservice.CountActivityExecutionsRequest,

@@ -9,6 +9,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+func (c *clientImpl) AdvanceWorkflowExecutionTimePoint(
+	ctx context.Context,
+	request *workflowservice.AdvanceWorkflowExecutionTimePointRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.AdvanceWorkflowExecutionTimePointResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.AdvanceWorkflowExecutionTimePoint(ctx, request, opts...)
+}
+
 func (c *clientImpl) CountActivityExecutions(
 	ctx context.Context,
 	request *workflowservice.CountActivityExecutionsRequest,
