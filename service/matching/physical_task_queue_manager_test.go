@@ -87,10 +87,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	engine.partitions[prtn.Key()] = prtnMgr
 
 	if s.fairness {
-		prtnMgr.config.NewMatcher = true
 		prtnMgr.config.EnableFairness = true
-	} else if s.newMatcher {
-		prtnMgr.config.NewMatcher = true
+	} else if !s.newMatcher {
+		prtnMgr.config.NewMatcher = false
 	}
 
 	s.tqMgr, err = newPhysicalTaskQueueManager(prtnMgr, s.physicalTaskQueueKey)
@@ -353,10 +352,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
