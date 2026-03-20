@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -42,6 +43,7 @@ type outboundQueueStandbyTaskExecutorSuite struct {
 	mockMutableState      *historyi.MockMutableState
 	mockExecutable        *queues.MockExecutable
 	mockChasmTree         *historyi.MockChasmTree
+	mockClientBean        *client.MockBean
 
 	logger         log.Logger
 	metricsHandler metrics.Handler
@@ -86,6 +88,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockMutableState = historyi.NewMockMutableState(s.controller)
 	s.mockExecutable = queues.NewMockExecutable(s.controller)
 	s.mockChasmTree = historyi.NewMockChasmTree(s.controller)
+	s.mockClientBean = client.NewMockBean(s.controller)
 
 	s.logger = s.mockShard.GetLogger()
 	s.metricsHandler = s.mockShard.GetMetricsHandler()
@@ -128,6 +131,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.logger,
 		s.metricsHandler,
 		s.mockChasmEngine,
+		s.mockClientBean,
 	)
 }
 
@@ -328,6 +332,7 @@ func (s *outboundQueueStandbyTaskExecutorSuite) TestExecute_ChasmTask_Discard() 
 			s.logger,
 			s.metricsHandler,
 			s.mockChasmEngine,
+			s.mockClientBean,
 		)
 
 		return executor, executable

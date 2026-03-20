@@ -217,20 +217,16 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 		return serviceerror.NewInternal("taskInfo is not a ChasmTask")
 	}
 
-	err := t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
-	if err == nil {
-		return nil
-	}
-	if !errors.Is(err, consts.ErrTaskDiscarded) {
-		return err
-	}
-
 	return discardChasmSideEffectTask(
 		ctx,
 		t.chasmEngine,
 		t.shardContext.ChasmRegistry(),
 		chasmTree,
 		chasmTask,
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
 	)
 }
 
