@@ -17,8 +17,9 @@ const (
 	// we put a default message when it is empty so that the log can be searchable/filterable
 	defaultMsgForEmpty = "none"
 	// TODO: once `NewTestLogger` has been removed, move these vars into testlogger.TestLogger
-	TestLogFormatEnvVar = "TEMPORAL_TEST_LOG_FORMAT" // set to "json" for json logs in tests
-	TestLogLevelEnvVar  = "TEMPORAL_TEST_LOG_LEVEL"  // set to "debug" for debug level logs in tests
+	TestLogFormatEnvVar    = "TEMPORAL_TEST_LOG_FORMAT"    // set to "json" for json logs in tests
+	TestLogLevelEnvVar     = "TEMPORAL_TEST_LOG_LEVEL"     // set to "debug" for debug level logs in tests
+	TestDebugLogFileEnvVar = "TEMPORAL_TEST_DEBUG_LOG_FILE" // set to a file path to write debug logs separately from test output
 )
 
 var DefaultZapEncoderConfig = zapcore.EncoderConfig{

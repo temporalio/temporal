@@ -246,7 +246,20 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
 			level = log.ParseZapLevel(levelV)
 		}
-		core := zapcore.NewCore(enc, writer, level)
+		var core zapcore.Core
+		if debugFile := os.Getenv(log.TestDebugLogFileEnvVar); debugFile != "" {
+			f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+			if err == nil {
+				// Debug+ goes to file; info+ goes to the test writer (visible in CI log).
+				fileCore := zapcore.NewCore(enc, zapcore.AddSync(f), zap.DebugLevel)
+				infoCore := zapcore.NewCore(enc, writer, zap.InfoLevel)
+				core = zapcore.NewTee(fileCore, infoCore)
+			} else {
+				core = zapcore.NewCore(enc, writer, level)
+			}
+		} else {
+			core = zapcore.NewCore(enc, writer, level)
+		}
 		zapOptions := []zap.Option{
 			// Send zap errors to the same writer and mark the test as failed if
 			// that happens.
