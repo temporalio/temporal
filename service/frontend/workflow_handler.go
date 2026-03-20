@@ -525,7 +525,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
-
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
 	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCompletionCallbacks()))
@@ -537,7 +536,30 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+		return nil, err
+	}
 	return request, nil
+}
+
+func (wh *WorkflowHandler) validateTimeSkippingConfig(
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	namespaceName namespace.Name,
+) error {
+	if timeSkippingConfig == nil {
+		return nil
+	}
+	if !timeSkippingConfig.GetEnabled() {
+		return nil
+	}
+	enabled := wh.config.TimeSkippingEnabled(namespaceName.String())
+	if !enabled {
+		return serviceerror.NewInvalidArgumentf(
+			"Time skipping is not enabled for namespace %s",
+			namespaceName,
+		)
+	}
+	return nil
 }
 
 func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
@@ -2173,6 +2195,9 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		request.WorkflowIdReusePolicy,
 		request.WorkflowIdConflictPolicy,
 	); err != nil {
+		return nil, err
+	}
+	if err := wh.validateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -6560,6 +6585,8 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
+// todo: to be removed
+// another entrypoint for time skipping config validation
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,
@@ -6584,6 +6611,9 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 		return nil, serviceerror.NewInvalidArgumentf("error parsing UpdateMask: %s", err.Error())
 	}
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 

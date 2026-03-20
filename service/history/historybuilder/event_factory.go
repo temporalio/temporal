@@ -401,6 +401,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
+	timeSkippingConfig *workflowpb.TimeSkippingConfig,
 ) *historypb.HistoryEvent {
 	event := b.createHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionOptionsUpdatedEventAttributes{
@@ -411,6 +412,7 @@ func (b *EventFactory) CreateWorkflowExecutionOptionsUpdatedEvent(
 			AttachedCompletionCallbacks: attachCompletionCallbacks,
 			Identity:                    identity,
 			Priority:                    priority,
+			TimeSkippingConfig:          timeSkippingConfig,
 		},
 	}
 	event.Links = links

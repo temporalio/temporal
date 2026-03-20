@@ -48,3 +48,5 @@
 
 # Ignoring AI agent files
 .agents/
+**/spec.md
+**/CLAUDE.md

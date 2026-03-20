@@ -3220,6 +3220,25 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
+func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	// nil config is valid
+	s.NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+
+	// config with enabled=false is valid
+	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+
+	// config with enabled=true but dynamic config disabled returns error
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Error(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+
+	// config with enabled=true and dynamic config enabled is valid
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+}
+
 func (s *WorkflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }
