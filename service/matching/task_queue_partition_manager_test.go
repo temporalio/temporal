@@ -21,6 +21,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -77,6 +78,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	s.ns = ns
 	config := defaultTestConfig()
+	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	if s.fairness {
 		useFairness(config)
 	} else if !s.newMatcher {

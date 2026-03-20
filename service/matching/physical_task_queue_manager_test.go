@@ -353,10 +353,16 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
-	tm, _ := s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
+	var tm *testTaskManager
+	if s.fairness {
+		tm = s.tqMgr.partitionMgr.engine.fairTaskManager.(*testTaskManager) // nolint:revive
+	} else {
+		tm = s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager) // nolint:revive
+	}
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
 		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
@@ -366,6 +372,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
+	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
