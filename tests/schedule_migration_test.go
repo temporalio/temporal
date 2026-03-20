@@ -2,6 +2,7 @@ package tests
 
 import (
 	"encoding/binary"
+	"errors"
 	"testing"
 	"time"
 
@@ -420,6 +421,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
 	)
 
 	ctx := testcore.NewContext()
@@ -492,18 +494,38 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Wait for the V1 system scheduler workflow to start by describing it directly,
-	// independent of frontend routing controlled by the DC knob.
-	sysWorkflowID := scheduler.WorkflowIDPrefix + sid
+	// Wait for the CHASM scheduler to be closed after migration.
+	var failedPreconditionErr *serviceerror.FailedPrecondition
 	require.Eventually(t, func() bool {
-		_, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: nsName,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: sysWorkflowID},
-		})
-		return err == nil
+		_, chasmErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
+			ctx,
+			&schedulerpb.DescribeScheduleRequest{
+				NamespaceId:     nsID,
+				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
+			},
+		)
+		return errors.As(chasmErr, &failedPreconditionErr)
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Also verify DescribeSchedule routes to the V1 path (EnableCHASMSchedulerCreation is false).
+	// Wait for the V1 system scheduler workflow to be running.
+	sysWorkflowID := scheduler.WorkflowIDPrefix + sid
+	require.Eventually(t, func() bool {
+		_, descErr := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: sysWorkflowID},
+				},
+			},
+		)
+		return descErr == nil
+	}, 10*time.Second, 500*time.Millisecond)
+
+	// Describe the schedule via the frontend. With EnableCHASMSchedulerRouting
+	// enabled, the request routes to CHASM first; since the CHASM schedule is
+	// closed, it falls back to the V1 path.
 	var v1Desc *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
 		v1Desc, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
@@ -511,7 +533,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 			ScheduleId: sid,
 		})
 		return err == nil
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 
 	v1Schedule := v1Desc.GetSchedule()
 
@@ -552,19 +574,8 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 	v1Token := int64(binary.BigEndian.Uint64(v1ConflictToken))
 	require.Equal(t, v2Token, v1Token)
 
-	// Verify the CHASM scheduler is closed after migration.
-	_, err = env.GetTestCluster().SchedulerClient().DescribeSchedule(
-		ctx,
-		&schedulerpb.DescribeScheduleRequest{
-			NamespaceId:     nsID,
-			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
-		},
-	)
-	// Closed CHASM schedulers return ErrClosed (FailedPrecondition).
-	var failedPreconditionErr *serviceerror.FailedPrecondition
-	require.ErrorAs(t, err, &failedPreconditionErr)
-
-	// Validate ListSchedules returns exactly one entry (no duplicates from V1+V2).
+	// Validate ListSchedules returns exactly one entry once the V1 workflow
+	// has written its visibility records (no duplicates from V1+V2).
 	var listResp *workflowservice.ListSchedulesResponse
 	require.Eventually(t, func() bool {
 		listResp, err = env.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
@@ -572,7 +583,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 			MaximumPageSize: 10,
 		})
 		return err == nil && len(listResp.GetSchedules()) == 1
-	}, 10*time.Second, 500*time.Millisecond)
+	}, 30*time.Second, 500*time.Millisecond)
 	require.Equal(t, sid, listResp.GetSchedules()[0].GetScheduleId())
 }
 
@@ -581,6 +592,7 @@ func TestScheduleMigrationV2ToV1Idempotent(t *testing.T) {
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
 	)
 
 	ctx := testcore.NewContext()

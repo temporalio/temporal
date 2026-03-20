@@ -19,9 +19,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
 )
@@ -145,7 +148,11 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 		return fmt.Errorf("failed to serialize schedule args: %w", err)
 	}
 
-	// Build and send StartWorkflowExecution request.
+	// Build the start request to match createScheduleWorkflow in the frontend
+	// as closely as possible. Include TemporalNamespaceDivision so the V1
+	// workflow is discoverable via ListSchedules.
+	sa := &commonpb.SearchAttributes{IndexedFields: result.searchAttributes}
+	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(legacyscheduler.NamespaceDivision))
 	workflowID := legacyscheduler.WorkflowIDPrefix + result.scheduleID
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
@@ -158,7 +165,8 @@ func (e *SchedulerMigrateToWorkflowTaskExecutor) Execute(
 		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
 		Memo:                     &commonpb.Memo{Fields: result.memo},
-		SearchAttributes:         &commonpb.SearchAttributes{IndexedFields: result.searchAttributes},
+		SearchAttributes:         sa,
+		Priority:                 &commonpb.Priority{},
 	}
 
 	_, err = e.historyClient.StartWorkflowExecution(

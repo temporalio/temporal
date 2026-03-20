@@ -112,8 +112,8 @@ func TestPatch_UnpauseBlockedDuringMigration(t *testing.T) {
 		},
 	})
 
-	var failedPreconditionErr *serviceerror.FailedPrecondition
-	require.ErrorAs(t, err, &failedPreconditionErr)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
 	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
 }
 
@@ -141,7 +141,7 @@ func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
 	require.True(t, sched.Schedule.State.Paused)
 }
 
-func TestUpdate_ForcesPauseDuringMigration(t *testing.T) {
+func TestUpdate_RejectedDuringMigration(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
@@ -150,7 +150,7 @@ func TestUpdate_ForcesPauseDuringMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Update with an unpaused schedule should still result in paused.
+	// Update should be rejected outright when a migration is pending.
 	newSchedule := defaultSchedule()
 	newSchedule.State.Paused = false
 	newSchedule.State.Notes = "user unpaused"
@@ -163,8 +163,7 @@ func TestUpdate_ForcesPauseDuringMigration(t *testing.T) {
 			Schedule:   newSchedule,
 		},
 	})
-	require.NoError(t, err)
-
-	require.True(t, sched.Schedule.State.Paused)
-	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
 }
