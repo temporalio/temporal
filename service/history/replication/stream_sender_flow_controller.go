@@ -26,6 +26,8 @@ type (
 	SenderFlowController interface {
 		// Wait will block go routine until the sender is allowed to send a task
 		Wait(ctx context.Context, priority enumsspb.TaskPriority) error
+		// IsPaused returns true if the given priority lane is currently paused, without blocking.
+		IsPaused(priority enumsspb.TaskPriority) bool
 		RefreshReceiverFlowControlInfo(syncState *replicationspb.SyncReplicationState)
 	}
 	SenderFlowControllerImpl struct {
@@ -96,6 +98,16 @@ func (s *SenderFlowControllerImpl) setState(state *flowControlState, flowControl
 		defer state.mu.Unlock()
 		state.resume = false
 	}
+}
+
+func (s *SenderFlowControllerImpl) IsPaused(priority enumsspb.TaskPriority) bool {
+	state, ok := s.flowControlStates[priority]
+	if !ok {
+		return false
+	}
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return !state.resume
 }
 
 func (s *SenderFlowControllerImpl) Wait(ctx context.Context, priority enumsspb.TaskPriority) error {

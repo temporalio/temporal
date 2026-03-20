@@ -1146,6 +1146,208 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_TieredStack_ClearsThrot
 	s.Empty(m)
 }
 
+// TestSendTasks_TieredStack_ThrottledPaused_SkipsAndAnchors verifies that when a THROTTLED
+// task is encountered while the THROTTLED flow control lane is paused, the task is skipped
+// (no blocking), an anchor beacon is sent to hold the receiver's THROTTLED tracker, and
+// throttledCatchupStart is set to the task ID. Subsequent HIGH tasks are sent normally.
+func (s *streamSenderSuite) TestSendTasks_TieredStack_ThrottledPaused_SkipsAndAnchors() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.clientClusterShardCount = 1 // all workflow IDs map to shard 1
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"throttled-ns": {}})
+
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	throttledTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "throttled-ns", WorkflowID: "w1"},
+		TaskID:      110,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH, // will be demoted to THROTTLED
+	}
+	highTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "normal-ns", WorkflowID: "w2"},
+		TaskID:      120,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	convertedHighTask := &replicationspb.ReplicationTask{
+		SourceTaskId:   120,
+		VisibilityTime: timestamppb.New(time.Unix(0, 1)),
+		Priority:       enumsspb.TASK_PRIORITY_HIGH,
+	}
+
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{throttledTask, highTask}, nil, nil
+		},
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(gomock.Any(), string(s.clientShardKey.ClusterID), beginInclusiveWatermark, endExclusiveWatermark).Return(iter, nil)
+
+	// THROTTLED is paused: non-blocking check for the throttled task.
+	s.senderFlowController.EXPECT().IsPaused(enumsspb.TASK_PRIORITY_THROTTLED).Return(true).Times(1)
+	// The high task is not THROTTLED so IsPaused is not called for it; normal Wait is used.
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).Times(1)
+	s.taskConverter.EXPECT().Convert(highTask, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_HIGH).Return(convertedHighTask, nil)
+
+	gomock.InOrder(
+		// Anchor beacon for the skipped THROTTLED task.
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, msgs.Priority)
+			s.Equal(int64(110), msgs.ExclusiveHighWatermark)
+			s.Empty(msgs.ReplicationTasks)
+			return nil
+		}),
+		// The HIGH task after the skipped one is sent normally.
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.Equal(enumsspb.TASK_PRIORITY_HIGH, msgs.Priority)
+			s.Len(msgs.ReplicationTasks, 1)
+			return nil
+		}),
+		// End-of-batch watermark beacon.
+		s.server.EXPECT().Send(gomock.Any()).Return(nil),
+	)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_HIGH, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
+	s.Equal(int64(110), s.streamSender.throttledCatchupStart, "catchup start must be set to the first skipped task ID")
+}
+
+// TestSendThrottledCatchup_SendsSkippedTasks verifies that sendThrottledCatchup re-reads
+// the gap range, sends originally-HIGH tasks as THROTTLED, and clears throttledCatchupStart.
+func (s *streamSenderSuite) TestSendThrottledCatchup_SendsSkippedTasks() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.throttledNamespaceIDs.Store(map[string]struct{}{"throttled-ns": {}})
+	s.streamSender.throttledCatchupStart = 110
+	s.streamSender.throttledCatchupNamespaces = map[string]struct{}{"throttled-ns": {}}
+
+	throttledTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "throttled-ns", WorkflowID: "w1"},
+		TaskID:      110,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	// This task belongs to a non-throttled namespace — it was already sent as HIGH during
+	// the pause and must not be re-sent by the catchup.
+	normalTask := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "normal-ns", WorkflowID: "w2"},
+		TaskID:      130,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	convertedTask := &replicationspb.ReplicationTask{
+		SourceTaskId:   110,
+		VisibilityTime: timestamppb.New(time.Unix(0, 1)),
+		Priority:       enumsspb.TASK_PRIORITY_THROTTLED,
+	}
+
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{throttledTask, normalTask}, nil, nil
+		},
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(gomock.Any(), string(s.clientShardKey.ClusterID), int64(110), int64(200)).Return(iter, nil)
+
+	// THROTTLED is not paused during catchup.
+	s.senderFlowController.EXPECT().IsPaused(enumsspb.TASK_PRIORITY_THROTTLED).Return(false).Times(1)
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_THROTTLED).Return(nil).Times(1)
+	s.taskConverter.EXPECT().Convert(throttledTask, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_THROTTLED).Return(convertedTask, nil)
+
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		msgs := resp.GetMessages()
+		s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, msgs.Priority)
+		s.Len(msgs.ReplicationTasks, 1)
+		return nil
+	})
+
+	err := s.streamSender.sendThrottledCatchup(110, 200)
+	s.NoError(err)
+	s.Zero(s.streamSender.throttledCatchupStart, "catchup start must be cleared on completion")
+}
+
+// TestSendThrottledCatchup_RepauseMidCatchup verifies that if THROTTLED pauses again during
+// catchup, sendThrottledCatchup stops immediately, updates throttledCatchupStart to the
+// current task ID, and sends a new anchor beacon.
+func (s *streamSenderSuite) TestSendThrottledCatchup_RepauseMidCatchup() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.throttledCatchupStart = 110
+	s.streamSender.throttledCatchupNamespaces = map[string]struct{}{"throttled-ns": {}}
+
+	task1 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "throttled-ns", WorkflowID: "w1"},
+		TaskID:      110,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	task2 := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{NamespaceID: "throttled-ns", WorkflowID: "w2"},
+		TaskID:      150,
+		Priority:    enumsspb.TASK_PRIORITY_HIGH,
+	}
+	converted1 := &replicationspb.ReplicationTask{
+		SourceTaskId:   110,
+		VisibilityTime: timestamppb.New(time.Unix(0, 1)),
+		Priority:       enumsspb.TASK_PRIORITY_THROTTLED,
+	}
+
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{task1, task2}, nil, nil
+		},
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(gomock.Any(), string(s.clientShardKey.ClusterID), int64(110), int64(200)).Return(iter, nil)
+
+	gomock.InOrder(
+		// task1: THROTTLED not paused — send it.
+		s.senderFlowController.EXPECT().IsPaused(enumsspb.TASK_PRIORITY_THROTTLED).Return(false),
+		// task2: THROTTLED re-paused — stop catchup.
+		s.senderFlowController.EXPECT().IsPaused(enumsspb.TASK_PRIORITY_THROTTLED).Return(true),
+	)
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_THROTTLED).Return(nil).Times(1)
+	s.taskConverter.EXPECT().Convert(task1, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_THROTTLED).Return(converted1, nil)
+
+	gomock.InOrder(
+		// task1 sent.
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, msgs.Priority)
+			s.Len(msgs.ReplicationTasks, 1)
+			return nil
+		}),
+		// New anchor beacon for task2 (re-pause point).
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.Equal(enumsspb.TASK_PRIORITY_THROTTLED, msgs.Priority)
+			s.Equal(int64(150), msgs.ExclusiveHighWatermark)
+			s.Empty(msgs.ReplicationTasks)
+			return nil
+		}),
+	)
+
+	err := s.streamSender.sendThrottledCatchup(110, 200)
+	s.NoError(err)
+	s.Equal(int64(150), s.streamSender.throttledCatchupStart, "catchup start must be updated to the re-pause task ID")
+}
+
 func (s *streamSenderSuite) TestLivenessMonitor() {
 	s.streamSender.recvSignalChan <- struct{}{}
 	livenessMonitor(

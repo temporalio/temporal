@@ -66,6 +66,15 @@ type (
 		// throttledNamespaceIDs stores a map[string]struct{} of namespace IDs that the
 		// receiver has reported as throttled; updated on each SyncReplicationState ACK.
 		throttledNamespaceIDs atomic.Value
+		// throttledCatchupStart is the task ID of the first THROTTLED task skipped during a
+		// flow control pause. Non-zero means a catchup is pending. Only accessed by the HIGH
+		// sender goroutine so no synchronization is needed.
+		throttledCatchupStart      int64
+		// throttledCatchupNamespaces is the snapshot of throttled namespace IDs taken when
+		// throttledCatchupStart was first set. The catchup must only re-send tasks from these
+		// namespaces — tasks for other namespaces were sent normally as HIGH and must not be
+		// duplicated. The atomic.Value stores an immutable map so the snapshot is safe to hold.
+		throttledCatchupNamespaces map[string]struct{}
 	}
 )
 
@@ -445,6 +454,15 @@ func (s *StreamSenderImpl) sendLive(
 			return err
 		}
 		beginInclusiveWatermark = endExclusiveWatermark
+		// If THROTTLED tasks were skipped during a pause, run a catchup once the lane
+		// resumes so those tasks are delivered before the HIGH reader advances further.
+		if priority == enumsspb.TASK_PRIORITY_HIGH &&
+			s.throttledCatchupStart > 0 &&
+			!s.flowController.IsPaused(enumsspb.TASK_PRIORITY_THROTTLED) {
+			if err := s.sendThrottledCatchup(s.throttledCatchupStart, beginInclusiveWatermark); err != nil {
+				return err
+			}
+		}
 		if !syncStatusTimer.Stop() {
 			select {
 			case <-syncStatusTimer.C:
@@ -557,6 +575,28 @@ Loop:
 			}
 		}
 		if !s.shouldProcessTask(item) {
+			continue Loop
+		}
+		// Non-blocking THROTTLED skip: if this task has been demoted to THROTTLED and the
+		// THROTTLED flow control lane is currently paused, skip it so the HIGH goroutine
+		// is not blocked. On the first skip, send an anchor beacon so the receiver's
+		// THROTTLED tracker holds the synthetic HIGH watermark back to this task ID —
+		// preventing the sender from reading past it on reconnect. A catchup pass will
+		// re-send the skipped tasks once the lane resumes.
+		if s.isTieredStackEnabled &&
+			taskPriority == enumsspb.TASK_PRIORITY_THROTTLED &&
+			s.flowController.IsPaused(enumsspb.TASK_PRIORITY_THROTTLED) {
+			if s.throttledCatchupStart == 0 {
+				s.throttledCatchupStart = item.GetTaskID()
+				// Snapshot the throttled namespace set so the catchup re-sends only
+				// tasks that were actually skipped. Tasks for other namespaces were
+				// already sent as HIGH and must not be duplicated.
+				m, _ := s.throttledNamespaceIDs.Load().(map[string]struct{})
+				s.throttledCatchupNamespaces = m
+				if err := s.sendThrottledAnchor(item.GetTaskID(), item.GetVisibilityTime()); err != nil {
+					return err
+				}
+			}
 			continue Loop
 		}
 		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
@@ -687,6 +727,138 @@ Loop:
 			},
 		},
 	})
+}
+
+// sendThrottledAnchor sends an empty THROTTLED-priority batch with ExclusiveHighWatermark=taskID
+// to the receiver. This anchors the receiver's THROTTLED tracker so the synthetic HIGH watermark
+// (min of HIGH and THROTTLED trackers) does not advance past unacknowledged THROTTLED tasks.
+func (s *StreamSenderImpl) sendThrottledAnchor(taskID int64, visibilityTime time.Time) error {
+	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ExclusiveHighWatermark:     taskID,
+				ExclusiveHighWatermarkTime: timestamppb.New(visibilityTime),
+				Priority:                   enumsspb.TASK_PRIORITY_THROTTLED,
+			},
+		},
+	})
+}
+
+// sendThrottledCatchup re-reads tasks in [start, end) and sends originally-HIGH tasks
+// as THROTTLED priority to fill the gap left by skipping them during a THROTTLED pause.
+// It uses non-blocking pause checks so a re-pause mid-catchup updates throttledCatchupStart
+// and returns immediately without blocking the HIGH sender goroutine. On full completion it
+// clears throttledCatchupStart.
+func (s *StreamSenderImpl) sendThrottledCatchup(start, end int64) error {
+	if start >= end {
+		s.throttledCatchupStart = 0
+		s.throttledCatchupNamespaces = nil
+		return nil
+	}
+	s.logger.Info("starting THROTTLED catchup", tag.NewInt64("start", start), tag.NewInt64("end", end))
+
+	callerInfo := getReplicaitonCallerInfo(enumsspb.TASK_PRIORITY_THROTTLED)
+	ctx := headers.SetCallerInfo(s.server.Context(), callerInfo)
+	iter, err := s.historyEngine.GetReplicationTasksIter(ctx, string(s.clientShardKey.ClusterID), start, end)
+	if err != nil {
+		return err
+	}
+
+	for iter.HasNext() {
+		if s.shutdownChan.IsShutdown() {
+			return nil
+		}
+		item, err := iter.Next()
+		if err != nil {
+			return fmt.Errorf("sendThrottledCatchup unable to get next replication task: %w", err)
+		}
+		// Only re-send tasks that (a) are originally HIGH priority and (b) belong to a
+		// namespace that was throttled when the skip occurred. Tasks for other namespaces
+		// were sent normally as HIGH during the pause and must not be duplicated.
+		// Always-LOW tasks (e.g. SyncWorkflowStateTask) are served by the LOW reader.
+		if s.getTaskPriority(item) != enumsspb.TASK_PRIORITY_HIGH {
+			continue
+		}
+		if _, wasThrottled := s.throttledCatchupNamespaces[item.GetNamespaceID()]; !wasThrottled {
+			continue
+		}
+		if !s.shouldProcessTask(item) {
+			continue
+		}
+		// Non-blocking re-pause check: if THROTTLED paused again, update the catchup start
+		// and send a new anchor beacon so the synthetic HIGH watermark stays correct,
+		// then return so the HIGH goroutine is not blocked.
+		if s.flowController.IsPaused(enumsspb.TASK_PRIORITY_THROTTLED) {
+			if s.throttledCatchupStart != item.GetTaskID() {
+				s.throttledCatchupStart = item.GetTaskID()
+				if err := s.sendThrottledAnchor(item.GetTaskID(), item.GetVisibilityTime()); err != nil {
+					return err
+				}
+			}
+			s.logger.Info("THROTTLED catchup interrupted by re-pause", tag.NewInt64("taskID", item.GetTaskID()))
+			return nil
+		}
+
+		var attempt int64
+		operation := func() error {
+			attempt++
+			startTime := time.Now().UTC()
+			defer func() {
+				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
+					time.Since(startTime),
+					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+					metrics.ReplicationTaskPriorityTag(enumsspb.TASK_PRIORITY_THROTTLED),
+				)
+			}()
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_THROTTLED)
+			if err != nil {
+				return err
+			}
+			if task == nil {
+				return nil
+			}
+			task.Priority = enumsspb.TASK_PRIORITY_THROTTLED
+			if err := s.flowController.Wait(s.server.Context(), enumsspb.TASK_PRIORITY_THROTTLED); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return err
+				}
+			}
+			return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+					Messages: &replicationspb.WorkflowReplicationMessages{
+						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+						ExclusiveHighWatermark:     task.SourceTaskId + 1,
+						ExclusiveHighWatermarkTime: task.VisibilityTime,
+						Priority:                   enumsspb.TASK_PRIORITY_THROTTLED,
+					},
+				},
+			})
+		}
+
+		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
+		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
+		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
+			attempt,
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+			metrics.ReplicationTaskPriorityTag(enumsspb.TASK_PRIORITY_THROTTLED),
+		)
+		if err != nil {
+			return fmt.Errorf("sendThrottledCatchup failed to send task: %v, cause: %w", item, err)
+		}
+	}
+
+	s.logger.Info("THROTTLED catchup complete", tag.NewInt64("start", start), tag.NewInt64("end", end))
+	s.throttledCatchupStart = 0
+	s.throttledCatchupNamespaces = nil
+	return nil
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {
