@@ -3,13 +3,20 @@ package nexusoperation
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // FrontendHandler provides the frontend-facing API for standalone Nexus operations.
@@ -113,20 +120,116 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 	return resp.GetFrontendResponse(), err
 }
 
-func (*frontendHandler) ListNexusOperationExecutions(context.Context, *workflowservice.ListNexusOperationExecutionsRequest) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
-	return nil, ErrStandaloneNexusOperationDisabled
+func (h *frontendHandler) ListNexusOperationExecutions(
+	ctx context.Context,
+	req *workflowservice.ListNexusOperationExecutionsRequest,
+) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
+	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
+
+	pageSize := req.GetPageSize()
+	maxPageSize := int32(h.config.VisibilityMaxPageSize(req.GetNamespace()))
+	if pageSize <= 0 || pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	resp, err := chasm.ListExecutions[*Operation, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
+		NamespaceName: req.GetNamespace(),
+		PageSize:      int(pageSize),
+		NextPageToken: req.GetNextPageToken(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	operations := make([]*nexuspb.NexusOperationExecutionListInfo, 0, len(resp.Executions))
+	for _, exec := range resp.Executions {
+		endpoint, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, EndpointSearchAttribute)
+		service, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, ServiceSearchAttribute)
+		operation, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, OperationSearchAttribute)
+		statusStr, _ := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, StatusSearchAttribute)
+		status, _ := enumspb.NexusOperationExecutionStatusFromString(statusStr)
+
+		var closeTime *timestamppb.Timestamp
+		var executionDuration *durationpb.Duration
+		if !exec.CloseTime.IsZero() {
+			closeTime = timestamppb.New(exec.CloseTime)
+			if !exec.StartTime.IsZero() {
+				executionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
+			}
+		}
+
+		operations = append(operations, &nexuspb.NexusOperationExecutionListInfo{
+			OperationId:          exec.BusinessID,
+			RunId:                exec.RunID,
+			Endpoint:             endpoint,
+			Service:              service,
+			Operation:            operation,
+			Status:               status,
+			ScheduleTime:         timestamppb.New(exec.StartTime),
+			CloseTime:            closeTime,
+			ExecutionDuration:    executionDuration,
+			StateTransitionCount: exec.StateTransitionCount,
+			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: exec.CustomSearchAttributes},
+		})
+	}
+
+	return &workflowservice.ListNexusOperationExecutionsResponse{
+		Operations:    operations,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
-func (*frontendHandler) PollNexusOperationExecution(context.Context, *workflowservice.PollNexusOperationExecutionRequest) (*workflowservice.PollNexusOperationExecutionResponse, error) {
-	return nil, ErrStandaloneNexusOperationDisabled
+func (h *frontendHandler) CountNexusOperationExecutions(
+	ctx context.Context,
+	req *workflowservice.CountNexusOperationExecutionsRequest,
+) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
+	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
+
+	resp, err := chasm.CountExecutions[*Operation](ctx, &chasm.CountExecutionsRequest{
+		NamespaceName: req.GetNamespace(),
+		Query:         req.GetQuery(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	groups := make([]*workflowservice.CountNexusOperationExecutionsResponse_AggregationGroup, 0, len(resp.Groups))
+	for _, g := range resp.Groups {
+		groups = append(groups, &workflowservice.CountNexusOperationExecutionsResponse_AggregationGroup{
+			GroupValues: g.Values,
+			Count:       g.Count,
+		})
+	}
+
+	return &workflowservice.CountNexusOperationExecutionsResponse{
+		Count:  resp.Count,
+		Groups: groups,
+	}, nil
 }
 
-func (*frontendHandler) RequestCancelNexusOperationExecution(context.Context, *workflowservice.RequestCancelNexusOperationExecutionRequest) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
-	return nil, ErrStandaloneNexusOperationDisabled
+func (h *frontendHandler) RequestCancelNexusOperationExecution(
+	_ context.Context,
+	req *workflowservice.RequestCancelNexusOperationExecutionRequest,
+) (*workflowservice.RequestCancelNexusOperationExecutionResponse, error) {
+	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
+	return nil, serviceerror.NewUnimplemented("RequestCancelNexusOperationExecution not implemented")
 }
 
-func (*frontendHandler) TerminateNexusOperationExecution(context.Context, *workflowservice.TerminateNexusOperationExecutionRequest) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
-	return nil, ErrStandaloneNexusOperationDisabled
+func (h *frontendHandler) TerminateNexusOperationExecution(
+	_ context.Context,
+	req *workflowservice.TerminateNexusOperationExecutionRequest,
+) (*workflowservice.TerminateNexusOperationExecutionResponse, error) {
+	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
+		return nil, ErrStandaloneNexusOperationDisabled
+	}
+	return nil, serviceerror.NewUnimplemented("TerminateNexusOperationExecution not implemented")
 }
 
 func (h *frontendHandler) DeleteNexusOperationExecution(_ context.Context, req *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
