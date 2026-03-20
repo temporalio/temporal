@@ -26,6 +26,7 @@ var Module = fx.Module(
 	fx.Provide(NewInvokerExecuteTaskExecutor),
 	fx.Provide(NewInvokerProcessBufferTaskExecutor),
 	fx.Provide(NewBackfillerTaskExecutor),
+	fx.Provide(NewSchedulerMigrateToWorkflowTaskExecutor),
 	fx.Provide(NewLibrary),
 	fx.Invoke(Register),
 )
