@@ -93,11 +93,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configure git for private modules
+        run: git config --global url."https://x-access-token:${GO_PRIVATE_TOKEN}@github.com/".insteadOf "https://github.com/"
+        env:
+          GO_PRIVATE_TOKEN: ${{ secrets.GO_PRIVATE_TOKEN }}
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           check-latest: true
           cache: true
+        env:
+          GOPRIVATE: github.com/moedash/temporal-fs
+          GONOSUMCHECK: github.com/moedash/temporal-fs
 
       - name: format golang import statements
         run: |
@@ -145,11 +153,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Configure git for private modules
+        run: git config --global url."https://x-access-token:${GO_PRIVATE_TOKEN}@github.com/".insteadOf "https://github.com/"
+        env:
+          GO_PRIVATE_TOKEN: ${{ secrets.GO_PRIVATE_TOKEN }}
+
       - uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
           check-latest: true
           cache: true
+        env:
+          GOPRIVATE: github.com/moedash/temporal-fs
+          GONOSUMCHECK: github.com/moedash/temporal-fs
 
       - name: lint code
         run: |

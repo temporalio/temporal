@@ -19,10 +19,10 @@ var (
 type library struct {
 	chasm.UnimplementedLibrary
 
-	handler                      *handler
-	chunkGCTaskExecutor          *chunkGCTaskExecutor
-	manifestCompactTaskExecutor  *manifestCompactTaskExecutor
-	quotaCheckTaskExecutor       *quotaCheckTaskExecutor
+	handler                     *handler
+	chunkGCTaskExecutor         *chunkGCTaskExecutor
+	manifestCompactTaskExecutor *manifestCompactTaskExecutor
+	quotaCheckTaskExecutor      *quotaCheckTaskExecutor
 }
 
 func newLibrary(
@@ -32,10 +32,10 @@ func newLibrary(
 	quotaCheckTaskExecutor *quotaCheckTaskExecutor,
 ) *library {
 	return &library{
-		handler:                      handler,
-		chunkGCTaskExecutor:          chunkGCTaskExecutor,
-		manifestCompactTaskExecutor:  manifestCompactTaskExecutor,
-		quotaCheckTaskExecutor:       quotaCheckTaskExecutor,
+		handler:                     handler,
+		chunkGCTaskExecutor:         chunkGCTaskExecutor,
+		manifestCompactTaskExecutor: manifestCompactTaskExecutor,
+		quotaCheckTaskExecutor:      quotaCheckTaskExecutor,
 	}
 }
 

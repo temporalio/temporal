@@ -28,7 +28,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/temporalio/temporal-fs/pkg/failpoint"
 	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
