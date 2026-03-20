@@ -45,6 +45,24 @@ func (e *activityDispatchTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
 ) error {
+	return e.pushToMatching(ctx, activityRef)
+}
+
+// Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
+// dispatch task has been pending past the discard delay.
+func (e *activityDispatchTaskExecutor) Discard(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
+	_ chasm.TaskAttributes,
+	_ *activitypb.ActivityDispatchTask,
+) error {
+	return e.pushToMatching(ctx, activityRef)
+}
+
+func (e *activityDispatchTaskExecutor) pushToMatching(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
+) error {
 	request, err := chasm.ReadComponent(
 		ctx,
 		activityRef,
