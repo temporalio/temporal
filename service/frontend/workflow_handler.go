@@ -3480,15 +3480,19 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
 // indicates that the request should be routed to the legacy (V1) scheduler stack.
-// This accounts for three situations:
+// This accounts for two situations:
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
 //   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
-//   - FailedPrecondition (closed): the CHASM schedule was migrated to V1 and closed
+//
+// TODO: should ErrClosed (FailedPrecondition) from a CHASM schedule that was
+// migrated to V1 also be routable? Currently closed schedules return
+// FailedPrecondition which does not fall back to V1. This means callers with
+// routing enabled must handle the closed schedule case themselves or wait for
+// the CHASM entity to be cleaned up.
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
-	var failedPreconditionErr *serviceerror.FailedPrecondition
-	return errors.As(err, &notFoundErr) || errors.As(err, &failedPreconditionErr)
+	return errors.As(err, &notFoundErr)
 }
 
 // Validates inner start workflow request. Note that this can mutate search attributes if present.

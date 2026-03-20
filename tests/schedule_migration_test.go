@@ -421,7 +421,7 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 		t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerRouting, false),
 	)
 
 	ctx := testcore.NewContext()
@@ -523,9 +523,9 @@ func TestScheduleMigrationV2ToV1(t *testing.T) {
 		return descErr == nil
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Describe the schedule via the frontend. With EnableCHASMSchedulerRouting
-	// enabled, the request routes to CHASM first; since the CHASM schedule is
-	// closed, it falls back to the V1 path.
+	// Describe the V1 schedule via the frontend. With routing disabled, this
+	// goes directly to the V1 path. The per-namespace worker must pick up
+	// the workflow and register query handlers before this succeeds.
 	var v1Desc *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
 		v1Desc, err = env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
