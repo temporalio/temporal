@@ -596,6 +596,7 @@ func (e *InvokerExecuteTaskExecutor) startWorkflow(
 	// BufferedStarts in recordExecuteResult.
 	start.RunId = result.RunId
 	start.StartTime = timestamppb.New(actualStartTime)
+	start.HasCallback = true
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {
