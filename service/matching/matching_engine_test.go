@@ -215,6 +215,8 @@ func (s *matchingEngineSuite) newConfig() *Config {
 		useFairness(res)
 	} else if s.newMatcher {
 		useNewMatcher(res)
+	} else {
+		useClassicMatcher(res)
 	}
 	return res
 }
@@ -5675,12 +5677,20 @@ func useNewMatcher(config *Config) {
 	config.NewMatcherSub = staticTrueChange
 }
 
+func useClassicMatcher(config *Config) {
+	config.NewMatcherSub = staticFalseChange
+}
+
 func useFairness(config *Config) {
 	config.EnableFairnessSub = staticTrueChange
 }
 
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
+}
+
+func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
+	return dynamicconfig.StaticGradualChange(false), func() {}
 }
 
 func TestCancelOutstandingWorkerPolls(t *testing.T) {

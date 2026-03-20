@@ -81,6 +81,8 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 		useFairness(config)
 	} else if s.newMatcher {
 		useNewMatcher(config)
+	} else {
+		useClassicMatcher(config)
 	}
 
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
