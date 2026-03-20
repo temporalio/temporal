@@ -2,6 +2,7 @@ package chasm
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -24,9 +25,27 @@ type MockContext struct {
 	HandleMetricsHandler       func() metrics.Handler
 
 	// GoCtx is the underlying context.Context used for context value lookups.
-	// Any values set on it will be available via the CHASM mock context's Value method.
+	// Any values set on it will be available via the CHASM mock context's Value method,
+	// and take precedence over any registered context values.
 	// Defaults to context.Background() if nil.
 	GoCtx context.Context
+
+	registeredContextValues map[any]any
+}
+
+func (c *MockContext) RegisterComponentContextValues(
+	keyValues map[any]any,
+) {
+	if c.registeredContextValues == nil {
+		c.registeredContextValues = make(map[any]any)
+	}
+	for k, v := range keyValues {
+		if _, exists := c.registeredContextValues[k]; exists {
+			// nolint:forbidigo
+			panic(fmt.Sprintf("context value key already registered: %v", k))
+		}
+		c.registeredContextValues[k] = v
+	}
 }
 
 func (c *MockContext) goContext() context.Context {
