@@ -18,12 +18,17 @@ package tests
 // PebbleStoreProvider → store.Store → tfs.FS
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 	tfs "github.com/temporalio/temporal-fs/pkg/fs"
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/temporalfs"
+	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/tests/testcore"
@@ -180,4 +185,135 @@ func (s *TemporalFSTestSuite) TestResearchAgent_RealServer() {
 	assert.Equal(t, int64(3), m.FilesCreated.Load(), "3 files created")
 	assert.Equal(t, int64(2), m.DirsCreated.Load(), "2 dirs created")
 	assert.Positive(t, m.BytesWritten.Load())
+}
+
+// TestResearchAgent_Workflow runs the research agent as a real Temporal workflow
+// with activities. Each step of the research agent is an activity that operates
+// on TemporalFS. The workflow orchestrates the 3 steps sequentially. After the
+// workflow completes, the test verifies MVCC snapshot isolation.
+//
+// This demonstrates the real-world pattern: a Temporal workflow orchestrating
+// an AI agent whose activities read/write a durable versioned filesystem.
+func (s *TemporalFSTestSuite) TestResearchAgent_Workflow() {
+	t := s.T()
+
+	sourcesV1 := []byte("# Sources v1\n1. Feynman (1982)\n2. Shor (1994)\n")
+	sourcesV2 := []byte("# Sources v2\n1. Feynman (1982)\n2. Shor (1994)\n3. Preskill (2018)\n")
+	analysisContent := []byte("# Analysis\nQuantum error correction is the bottleneck.\n")
+	reportContent := []byte("# Final Report\nQC has reached an inflection point.\n")
+
+	// Create FS backed by the real server's PebbleStoreProvider.
+	store, err := s.storeProvider.GetStore(1, s.NamespaceID().String(), "research-wf-fs")
+	s.NoError(err)
+
+	f, err := tfs.Create(store, tfs.Options{})
+	s.NoError(err)
+	defer func() { s.NoError(f.Close()) }()
+
+	// ─── Define activities ───────────────────────────────────────────────
+	// Each activity performs one step of the research agent workflow.
+	// Activities share the FS instance via closure (in-process worker).
+
+	gatherSources := func(ctx context.Context) error {
+		if err := f.Mkdir("/research", 0o755); err != nil {
+			return err
+		}
+		if err := f.Mkdir("/research/quantum-computing", 0o755); err != nil {
+			return err
+		}
+		if err := f.WriteFile("/research/quantum-computing/sources.md", sourcesV1, 0o644); err != nil {
+			return err
+		}
+		_, err := f.CreateSnapshot("step-1-sources")
+		return err
+	}
+
+	analyzeSources := func(ctx context.Context) error {
+		if err := f.WriteFile("/research/quantum-computing/sources.md", sourcesV2, 0o644); err != nil {
+			return err
+		}
+		if err := f.WriteFile("/research/quantum-computing/analysis.md", analysisContent, 0o644); err != nil {
+			return err
+		}
+		_, err := f.CreateSnapshot("step-2-analysis")
+		return err
+	}
+
+	writeFinalReport := func(ctx context.Context) error {
+		if err := f.WriteFile("/research/quantum-computing/report.md", reportContent, 0o644); err != nil {
+			return err
+		}
+		_, err := f.CreateSnapshot("step-3-final")
+		return err
+	}
+
+	// ─── Define workflow ─────────────────────────────────────────────────
+
+	researchAgentWorkflow := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second * debug.TimeoutMultiplier,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		if err := workflow.ExecuteActivity(ctx, gatherSources).Get(ctx, nil); err != nil {
+			return err
+		}
+		if err := workflow.ExecuteActivity(ctx, analyzeSources).Get(ctx, nil); err != nil {
+			return err
+		}
+		return workflow.ExecuteActivity(ctx, writeFinalReport).Get(ctx, nil)
+	}
+
+	// ─── Register and execute ────────────────────────────────────────────
+
+	s.Worker().RegisterWorkflow(researchAgentWorkflow)
+	s.Worker().RegisterActivity(gatherSources)
+	s.Worker().RegisterActivity(analyzeSources)
+	s.Worker().RegisterActivity(writeFinalReport)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second*debug.TimeoutMultiplier)
+	defer cancel()
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        "research-agent-workflow",
+		TaskQueue: s.TaskQueue(),
+	}, researchAgentWorkflow)
+	s.NoError(err)
+	s.NoError(run.Get(ctx, nil))
+
+	// ─── Verify FS state after workflow completion ───────────────────────
+
+	entries, err := f.ReadDir("/research/quantum-computing")
+	s.NoError(err)
+	assert.Len(t, entries, 3, "workflow should have created 3 files")
+
+	gotSources, err := f.ReadFile("/research/quantum-computing/sources.md")
+	s.NoError(err)
+	assert.Equal(t, sourcesV2, gotSources)
+
+	// Verify MVCC snapshot isolation.
+	snap1FS, err := f.OpenSnapshot("step-1-sources")
+	s.NoError(err)
+	snap1Data, err := snap1FS.ReadFile("/research/quantum-computing/sources.md")
+	s.NoError(err)
+	assert.Equal(t, sourcesV1, snap1Data, "snapshot 1 should have v1")
+	s.NoError(snap1FS.Close())
+
+	snap2FS, err := f.OpenSnapshot("step-2-analysis")
+	s.NoError(err)
+	snap2Entries, err := snap2FS.ReadDir("/research/quantum-computing")
+	s.NoError(err)
+	assert.Len(t, snap2Entries, 2, "snapshot 2 should have 2 files")
+	s.NoError(snap2FS.Close())
+
+	snap3FS, err := f.OpenSnapshot("step-3-final")
+	s.NoError(err)
+	snap3Entries, err := snap3FS.ReadDir("/research/quantum-computing")
+	s.NoError(err)
+	assert.Len(t, snap3Entries, 3, "snapshot 3 should have 3 files")
+	s.NoError(snap3FS.Close())
+
+	snapshots, err := f.ListSnapshots()
+	s.NoError(err)
+	s.Len(snapshots, 3)
 }
