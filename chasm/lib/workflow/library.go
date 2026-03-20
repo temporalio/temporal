@@ -22,7 +22,7 @@ func (l *Library) Name() string {
 
 type chasmCtxKey struct{}
 
-var eventRegistryChasmCtxKey chasmCtxKey = chasmCtxKey{}
+var eventRegistryChasmCtxKey = chasmCtxKey{}
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
