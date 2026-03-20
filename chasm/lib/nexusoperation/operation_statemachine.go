@@ -110,7 +110,7 @@ type EventStarted struct {
 	FromBackingOff bool
 }
 
-var transitionStarted = chasm.NewTransition(
+var TransitionStarted = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
@@ -153,7 +153,7 @@ var transitionStarted = chasm.NewTransition(
 type EventSucceeded struct {
 }
 
-var transitionSucceeded = chasm.NewTransition(
+var TransitionSucceeded = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
@@ -171,7 +171,7 @@ var transitionSucceeded = chasm.NewTransition(
 type EventFailed struct {
 }
 
-var transitionFailed = chasm.NewTransition(
+var TransitionFailed = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,
@@ -207,7 +207,7 @@ var TransitionCanceled = chasm.NewTransition(
 type EventTimedOut struct {
 }
 
-var transitionTimedOut = chasm.NewTransition(
+var TransitionTimedOut = chasm.NewTransition(
 	[]nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SCHEDULED,
 		nexusoperationpb.OPERATION_STATUS_STARTED,

@@ -257,7 +257,7 @@ func TestTransitionStarted(t *testing.T) {
 				FromBackingOff: tc.startStatus == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 			}
 
-			err := transitionStarted.Apply(operation, ctx, event)
+			err := TransitionStarted.Apply(operation, ctx, event)
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, operation.Status)
@@ -307,7 +307,7 @@ func TestTransitionSucceeded(t *testing.T) {
 
 			event := EventSucceeded{}
 
-			err := transitionSucceeded.Apply(operation, ctx, event)
+			err := TransitionSucceeded.Apply(operation, ctx, event)
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, operation.Status)
@@ -350,7 +350,7 @@ func TestTransitionFailed(t *testing.T) {
 
 			event := EventFailed{}
 
-			err := transitionFailed.Apply(operation, ctx, event)
+			err := TransitionFailed.Apply(operation, ctx, event)
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_FAILED, operation.Status)
@@ -436,7 +436,7 @@ func TestTransitionTimedOut(t *testing.T) {
 
 			event := EventTimedOut{}
 
-			err := transitionTimedOut.Apply(operation, ctx, event)
+			err := TransitionTimedOut.Apply(operation, ctx, event)
 			require.NoError(t, err)
 
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_TIMED_OUT, operation.Status)

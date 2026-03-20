@@ -1,11 +1,18 @@
 package workflow
 
 import (
+	"fmt"
+	"strconv"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // registerEvents registers all event definitions (handlers) for nexus operations.
@@ -41,11 +48,27 @@ func registerEvents(
 	return registry.RegisterEventDefinition(newTimedOutEventDefinition(config, nexusProcessor))
 }
 
-// TODO: Implement these event definitions.
 type baseNexusEventDefinition struct {
 	config         *nexusoperation.Config
 	nexusProcessor *chasm.NexusEndpointProcessor
 }
+
+// getOperation looks up a Nexus operation from the workflow by its scheduled event ID.
+func getOperation(
+	ctx chasm.MutableContext,
+	wf *chasmworkflow.Workflow,
+	scheduledEventID int64,
+) (*nexusoperation.Operation, string, error) {
+	key := strconv.FormatInt(scheduledEventID, 10)
+	field, ok := wf.Operations[key]
+	if !ok {
+		return nil, "", fmt.Errorf("nexus operation not found for scheduled event ID %d", scheduledEventID)
+	}
+	return field.Get(ctx), key, nil
+}
+
+// ScheduledEventDefinition
+
 type ScheduledEventDefinition struct {
 	baseNexusEventDefinition
 }
@@ -68,19 +91,47 @@ func (d ScheduledEventDefinition) Type() enumspb.EventType {
 }
 
 func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// token, err := hsm.GenerateEventLoadToken(event)
-	// if err != nil {
-	// 	return err
-	// }
-	// _, err = AddChild(root, strconv.FormatInt(event.EventId, 10), event, token)
-	// return err
+	attrs := event.GetNexusOperationScheduledEventAttributes()
+
+	scheduledTime := event.GetEventTime()
+	if scheduledTime == nil {
+		scheduledTime = timestamppb.Now()
+	}
+
+	parentData, err := anypb.New(&workflowpb.NexusOperationParentData{
+		ScheduledEventId:      event.GetEventId(),
+		ScheduledEventBatchId: attrs.GetWorkflowTaskCompletedEventId(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal parent data: %w", err)
+	}
+
+	op := nexusoperation.NewOperation(&nexusoperationpb.OperationState{
+		EndpointId:             attrs.GetEndpointId(),
+		Endpoint:               attrs.GetEndpoint(),
+		Service:                attrs.GetService(),
+		Operation:              attrs.GetOperation(),
+		ScheduledTime:          scheduledTime,
+		ScheduleToStartTimeout: attrs.GetScheduleToStartTimeout(),
+		StartToCloseTimeout:    attrs.GetStartToCloseTimeout(),
+		ScheduleToCloseTimeout: attrs.GetScheduleToCloseTimeout(),
+		RequestId:              attrs.GetRequestId(),
+		ParentData:             parentData,
+		Attempt:                1,
+	})
+
+	key := strconv.FormatInt(event.GetEventId(), 10)
+	wf.AddNexusOperation(ctx, key, op)
+
 	return nil
 }
 
-func (d ScheduledEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+func (d ScheduledEventDefinition) CherryPick(_ chasm.MutableContext, _ *chasmworkflow.Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
 	return chasmworkflow.ErrEventNotCherryPickable
 }
+
+// CancelRequestedEventDefinition
 
 type CancelRequestedEventDefinition struct {
 	baseNexusEventDefinition
@@ -104,17 +155,31 @@ func (d CancelRequestedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// _, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	return o.Cancel(node, event.EventTime.AsTime(), event.EventId)
-	// })
-	// return err
-	return nil
+	attrs := event.GetNexusOperationCancelRequestedEventAttributes()
+	key := strconv.FormatInt(attrs.GetScheduledEventId(), 10)
+	field, ok := wf.Operations[key]
+	if !ok {
+		// Operation may have already completed (buffered terminal event). Ignore.
+		return nil
+	}
+
+	op := field.Get(ctx)
+	cancelParentData, err := anypb.New(&workflowpb.NexusCancellationParentData{
+		RequestedEventId: event.GetEventId(),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to marshal cancellation parent data: %w", err)
+	}
+
+	return op.Cancel(ctx, cancelParentData)
 }
 
-func (d CancelRequestedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+func (d CancelRequestedEventDefinition) CherryPick(_ chasm.MutableContext, _ *chasmworkflow.Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
 	return chasmworkflow.ErrEventNotCherryPickable
 }
+
+// CancelRequestCompletedEventDefinition
 
 type CancelRequestCompletedEventDefinition struct {
 	baseNexusEventDefinition
@@ -138,23 +203,18 @@ func (d CancelRequestCompletedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// _, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	child, err := o.CancelationNode(node)
-	// 	if err != nil {
-	// 		return hsm.TransitionOutput{}, err
-	// 	}
-	// 	if child != nil {
-	// 		return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-	// 			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
-	// 				Time: event.EventTime.AsTime(),
-	// 				Node: child,
-	// 			})
-	// 		})
-	// 	}
-	// 	return hsm.TransitionOutput{}, nil
-	// })
-	// return err
-	return nil
+	attrs := event.GetNexusOperationCancelRequestCompletedEventAttributes()
+	op, _, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	cancellation, ok := op.Cancellation.TryGet(ctx)
+	if !ok {
+		// No cancellation child — nothing to do.
+		return nil
+	}
+	return nexusoperation.TransitionCancellationSucceeded.Apply(cancellation, ctx, nexusoperation.EventCancellationSucceeded{})
 }
 
 func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -163,6 +223,8 @@ func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableConte
 	}
 	return d.Apply(ctx, wf, event)
 }
+
+// CancelRequestFailedEventDefinition
 
 type CancelRequestFailedEventDefinition struct {
 	baseNexusEventDefinition
@@ -186,24 +248,18 @@ func (d CancelRequestFailedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// _, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	child, err := o.CancelationNode(node)
-	// 	if err != nil {
-	// 		return hsm.TransitionOutput{}, err
-	// 	}
-	// 	if child != nil {
-	// 		return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-	// 			return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-	// 				Time:    event.EventTime.AsTime(),
-	// 				Failure: event.GetNexusOperationCancelRequestFailedEventAttributes().GetFailure(),
-	// 				Node:    child,
-	// 			})
-	// 		})
-	// 	}
-	// 	return hsm.TransitionOutput{}, nil
-	// })
-	// return err
-	return nil
+	attrs := event.GetNexusOperationCancelRequestFailedEventAttributes()
+	op, _, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	cancellation, ok := op.Cancellation.TryGet(ctx)
+	if !ok {
+		// No cancellation child — nothing to do.
+		return nil
+	}
+	return nexusoperation.TransitionCancellationFailed.Apply(cancellation, ctx, nexusoperation.EventCancellationFailed{})
 }
 
 func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -212,6 +268,8 @@ func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext,
 	}
 	return d.Apply(ctx, wf, event)
 }
+
+// StartedEventDefinition
 
 type StartedEventDefinition struct {
 	baseNexusEventDefinition
@@ -235,15 +293,16 @@ func (d StartedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// _, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	return TransitionStarted.Apply(o, EventStarted{
-	// 		Time:       event.EventTime.AsTime(),
-	// 		Node:       node,
-	// 		Attributes: event.GetNexusOperationStartedEventAttributes(),
-	// 	})
-	// })
-	// return err
-	return nil
+	attrs := event.GetNexusOperationStartedEventAttributes()
+	op, _, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
+		OperationToken: attrs.GetOperationToken(),
+		FromBackingOff: op.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	})
 }
 
 func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
@@ -252,6 +311,8 @@ func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmwo
 	}
 	return d.Apply(ctx, wf, event)
 }
+
+// CompletedEventDefinition
 
 type CompletedEventDefinition struct {
 	baseNexusEventDefinition
@@ -275,16 +336,16 @@ func (d CompletedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	return TransitionSucceeded.Apply(o, EventSucceeded{
-	// 		Time: event.EventTime.AsTime(),
-	// 		Node: node,
-	// 	})
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-	// return node.Parent.DeleteChild(node.Key)
+	attrs := event.GetNexusOperationCompletedEventAttributes()
+	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{}); err != nil {
+		return err
+	}
+	wf.RemoveNexusOperation(key)
 	return nil
 }
 
@@ -294,6 +355,8 @@ func (d CompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasm
 	}
 	return d.Apply(ctx, wf, event)
 }
+
+// FailedEventDefinition
 
 type FailedEventDefinition struct {
 	baseNexusEventDefinition
@@ -317,17 +380,16 @@ func (d FailedEventDefinition) Type() enumspb.EventType {
 }
 
 func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	return TransitionFailed.Apply(o, EventFailed{
-	// 		Time:       event.EventTime.AsTime(),
-	// 		Attributes: event.GetNexusOperationFailedEventAttributes(),
-	// 		Node:       node,
-	// 	})
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-	// return node.Parent.DeleteChild(node.Key)
+	attrs := event.GetNexusOperationFailedEventAttributes()
+	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{}); err != nil {
+		return err
+	}
+	wf.RemoveNexusOperation(key)
 	return nil
 }
 
@@ -337,6 +399,8 @@ func (d FailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmwor
 	}
 	return d.Apply(ctx, wf, event)
 }
+
+// CanceledEventDefinition
 
 type CanceledEventDefinition struct {
 	baseNexusEventDefinition
@@ -360,16 +424,16 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 }
 
 func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	return TransitionCanceled.Apply(o, EventCanceled{
-	// 		Time: event.EventTime.AsTime(),
-	// 		Node: node,
-	// 	})
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-	// return node.Parent.DeleteChild(node.Key)
+	attrs := event.GetNexusOperationCanceledEventAttributes()
+	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{}); err != nil {
+		return err
+	}
+	wf.RemoveNexusOperation(key)
 	return nil
 }
 
@@ -379,6 +443,8 @@ func (d CanceledEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmw
 	}
 	return d.Apply(ctx, wf, event)
 }
+
+// TimedOutEventDefinition
 
 type TimedOutEventDefinition struct {
 	baseNexusEventDefinition
@@ -402,15 +468,16 @@ func (d TimedOutEventDefinition) Type() enumspb.EventType {
 }
 
 func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
-	// node, err := transitionOperation(root, event, func(node *hsm.Node, o Operation) (hsm.TransitionOutput, error) {
-	// 	return TransitionTimedOut.Apply(o, EventTimedOut{
-	// 		Node: node,
-	// 	})
-	// })
-	// if err != nil {
-	// 	return err
-	// }
-	// return node.Parent.DeleteChild(node.Key)
+	attrs := event.GetNexusOperationTimedOutEventAttributes()
+	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	if err != nil {
+		return err
+	}
+
+	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
+		return err
+	}
+	wf.RemoveNexusOperation(key)
 	return nil
 }
 

@@ -48,7 +48,7 @@ var transitionCancellationAttemptFailed = chasm.NewTransition(
 type EventCancellationFailed struct {
 }
 
-var transitionCancellationFailed = chasm.NewTransition(
+var TransitionCancellationFailed = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{
 		// We can immediately transition to failed to since we don't know how to send a cancellation request for an
 		// unstarted operation.
@@ -65,7 +65,7 @@ var transitionCancellationFailed = chasm.NewTransition(
 type EventCancellationSucceeded struct {
 }
 
-var transitionCancellationSucceeded = chasm.NewTransition(
+var TransitionCancellationSucceeded = chasm.NewTransition(
 	[]nexusoperationpb.CancellationStatus{nexusoperationpb.CANCELLATION_STATUS_SCHEDULED},
 	nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED,
 	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationSucceeded) error {

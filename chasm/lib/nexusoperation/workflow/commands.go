@@ -15,14 +15,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
-	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type commandHandler struct {
@@ -230,7 +226,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		}
 	}
 
-	event, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
+	_, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 				Endpoint:                     attrs.Endpoint,
@@ -248,41 +244,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		}
 		he.UserMetadata = cmd.UserMetadata
 	})
-	if err != nil {
-		return err
-	}
-
-	scheduledTime := event.GetEventTime()
-	if scheduledTime == nil {
-		scheduledTime = timestamppb.Now()
-	}
-
-	parentData, err := anypb.New(&workflowpb.NexusOperationParentData{
-		ScheduledEventId:      event.GetEventId(),
-		ScheduledEventBatchId: opts.WorkflowTaskCompletedEventID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to marshal parent data: %w", err)
-	}
-
-	op := nexusoperation.NewOperation(&nexusoperationpb.OperationState{
-		EndpointId:             endpointID,
-		Endpoint:               attrs.Endpoint,
-		Service:                attrs.Service,
-		Operation:              attrs.Operation,
-		ScheduledTime:          scheduledTime,
-		ScheduleToStartTimeout: attrs.ScheduleToStartTimeout,
-		StartToCloseTimeout:    attrs.StartToCloseTimeout,
-		ScheduleToCloseTimeout: attrs.ScheduleToCloseTimeout,
-		RequestId:              requestID,
-		ParentData:             parentData,
-		Attempt:                1,
-	})
-
-	key := strconv.FormatInt(event.GetEventId(), 10)
-	wf.AddNexusOperation(chasmCtx, key, op)
-
-	return nil
+	return err
 }
 
 func (ch *commandHandler) handleCancelCommand(
@@ -306,7 +268,7 @@ func (ch *commandHandler) handleCancelCommand(
 	}
 
 	key := strconv.FormatInt(attrs.ScheduledEventId, 10)
-	operationField, operationFound := wf.Operations[key]
+	_, operationFound := wf.Operations[key]
 	hasBufferedEvent := func() bool {
 		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	}
@@ -321,7 +283,7 @@ func (ch *commandHandler) handleCancelCommand(
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
 	// The event will be applied before the completion since buffered events are reordered and put at the end of the
 	// batch, after command events from the workflow task.
-	event, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+	_, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
 				ScheduledEventId:             attrs.ScheduledEventId,
@@ -330,24 +292,6 @@ func (ch *commandHandler) handleCancelCommand(
 		}
 		he.UserMetadata = cmd.UserMetadata
 	})
-	if err != nil {
-		return err
-	}
-
-	if !operationFound {
-		// Operation not found but there's a buffered terminal event. The workflow couldn't know
-		// the operation completed while its task was in flight. Ignore.
-		return nil
-	}
-
-	op := operationField.Get(chasmCtx)
-	cancelParentData, err := anypb.New(&workflowpb.NexusCancellationParentData{
-		RequestedEventId: event.GetEventId(),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to marshal cancellation parent data: %w", err)
-	}
-	err = op.Cancel(chasmCtx, cancelParentData)
 	if errors.Is(err, nexusoperation.ErrCancellationAlreadyRequested) {
 		return chasmworkflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,

@@ -103,7 +103,7 @@ func (o *Operation) OnStarted(ctx chasm.MutableContext, _ *Operation, operationT
 	if ok {
 		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
 	}
-	return transitionStarted.Apply(o, ctx, EventStarted{
+	return TransitionStarted.Apply(o, ctx, EventStarted{
 		OperationToken: operationToken,
 		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	})
@@ -115,7 +115,7 @@ func (o *Operation) OnCompleted(ctx chasm.MutableContext, _ *Operation, result *
 	if ok {
 		return store.OnNexusOperationCompleted(ctx, o, result, links)
 	}
-	return transitionSucceeded.Apply(o, ctx, EventSucceeded{})
+	return TransitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
 // OnFailed applies the failed transition or delegates to the store if one is present.
@@ -124,7 +124,7 @@ func (o *Operation) OnFailed(ctx chasm.MutableContext, _ *Operation, cause *fail
 	if ok {
 		return store.OnNexusOperationFailed(ctx, o, cause)
 	}
-	return transitionFailed.Apply(o, ctx, EventFailed{})
+	return TransitionFailed.Apply(o, ctx, EventFailed{})
 }
 
 // OnCancelled applies the canceled transition or delegates to the store if one is present.
@@ -142,5 +142,5 @@ func (o *Operation) OnTimedOut(ctx chasm.MutableContext, _ *Operation, cause *fa
 	if ok {
 		return store.OnNexusOperationTimedOut(ctx, o, cause)
 	}
-	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
+	return TransitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
