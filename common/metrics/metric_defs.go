@@ -29,7 +29,7 @@ const (
 	PriorityTagName                = "priority"
 	PersistenceDBKindTagName       = "db_kind"
 	WorkerPluginNameTagName        = "worker_plugin_name"
-  WorkerStorageDriverTypeTagName = "worker_storage_driver_type"
+	WorkerStorageDriverTypeTagName = "worker_storage_driver_type"
 	headerCallsiteTagName          = "header_callsite"
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
