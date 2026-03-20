@@ -3438,7 +3438,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 
 	namespaceName := namespace.Name(request.Namespace)
 
-	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	useChasmScheduler := wh.chasmSchedulerCreationEnabled(ctx, namespaceName.String())
 	wh.logger.Debug("Received CreateSchedule",
 		tag.ScheduleID(request.ScheduleId),
 		tag.WorkflowNamespace(namespaceName.String()),
@@ -3462,13 +3462,20 @@ func (wh *WorkflowHandler) CreateSchedule(
 	return wh.createScheduleWorkflow(ctx, request)
 }
 
-// chasmSchedulerEnabled returns true when CHASM codepaths should be enabled for
-// the request. All handlers must be capable of falling back to V1 codepaths for
-// schedules that haven't been migrated to CHASM.
-func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+// chasmSchedulerCreationEnabled returns true when CreateSchedule should create on
+// the CHASM scheduler.
+func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, namespaceName string) bool {
 	return (headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
 		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName)) ||
 		wh.config.EnableCHASMSchedulerCreation(namespaceName)
+}
+
+// chasmSchedulerEnabled returns true when schedule RPCs should route to CHASM
+// first. Handlers must be capable of falling back to V1 codepaths for schedules
+// that haven't been migrated to CHASM.
+func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
+		wh.config.EnableCHASMSchedulerRouting(namespaceName)
 }
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
