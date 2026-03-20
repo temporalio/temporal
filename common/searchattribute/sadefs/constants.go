@@ -142,16 +142,16 @@ var (
 		RootRunID:            enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	}
 
-	// predefinedWhiteList contains a subset of predefined Search Attributes (SAs)
+	// predefinedAllowList contains a subset of predefined Search Attributes (SAs)
 	// that are currently allowed for use in production environments. These attributes
 	// are internal and were not originally intended for end-user usage, but may be
 	// in active use by users at the moment.
 	//
 	// The long-term plan is to deprecate and disallow the use of these attributes
 	// once it is confirmed that they are no longer being relied upon in any
-	// production workflows. Until then, this whitelist acts as a temporary allowance
+	// production workflows. Until then, this allow list acts as a temporary allowance
 	// to ensure backward compatibility and avoid breaking existing use cases.
-	predefinedWhiteList = map[string]enumspb.IndexedValueType{
+	predefinedAllowList = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion:      enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BinaryChecksums:            enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BuildIds:                   enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
@@ -166,7 +166,7 @@ var (
 	}
 
 	// predefined are internal search attributes which are passed and stored in SearchAttributes object together with custom search attributes.
-	// Attributes listed here but not in predefinedWhiteList are considered internal-only and are banned from user-facing usage.
+	// Attributes listed here but not in predefinedAllowList are considered internal-only and are banned from user-facing usage.
 	predefined = map[string]enumspb.IndexedValueType{
 		TemporalChangeVersion: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
 		BinaryChecksums:       enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
@@ -263,9 +263,9 @@ func Predefined() map[string]enumspb.IndexedValueType {
 	return maps.Clone(predefined)
 }
 
-// PredefinedWhiteList returns a clone of the predefined whitelist search attributes map.
-func PredefinedWhiteList() map[string]enumspb.IndexedValueType {
-	return maps.Clone(predefinedWhiteList)
+// PredefinedAllowList returns a clone of the predefined allow list search attributes map.
+func PredefinedAllowList() map[string]enumspb.IndexedValueType {
+	return maps.Clone(predefinedAllowList)
 }
 
 // Reserved returns a clone of the reserved field names map.
