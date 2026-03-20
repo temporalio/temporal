@@ -20,6 +20,7 @@ type activityContext struct {
 // activityContextFromChasm extracts the activityContext from a chasm.Context.
 // Panics if the context value is missing, which indicates a library registration bug.
 func activityContextFromChasm(ctx chasm.Context) *activityContext {
+	//nolint:revive // unchecked-type-assertion: intentional panic on missing context value
 	return ctx.Value(ctxKeyActivityContext).(*activityContext)
 }
 

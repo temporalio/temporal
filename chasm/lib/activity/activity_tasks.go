@@ -60,18 +60,11 @@ func (e *activityDispatchTaskExecutor) Execute(
 	return err
 }
 
-type timeoutTaskExecutorOptions struct {
-	fx.In
-}
-
 type scheduleToStartTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
 }
 
-func newScheduleToStartTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToStartTimeoutTaskExecutor {
-	return &scheduleToStartTimeoutTaskExecutor{
-		opts,
-	}
+func newScheduleToStartTimeoutTaskExecutor() *scheduleToStartTimeoutTaskExecutor {
+	return &scheduleToStartTimeoutTaskExecutor{}
 }
 
 func (e *scheduleToStartTimeoutTaskExecutor) Validate(
@@ -104,14 +97,10 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type scheduleToCloseTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type scheduleToCloseTimeoutTaskExecutor struct{}
 
-func newScheduleToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToCloseTimeoutTaskExecutor {
-	return &scheduleToCloseTimeoutTaskExecutor{
-		opts,
-	}
+func newScheduleToCloseTimeoutTaskExecutor() *scheduleToCloseTimeoutTaskExecutor {
+	return &scheduleToCloseTimeoutTaskExecutor{}
 }
 
 func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
@@ -142,14 +131,10 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type startToCloseTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type startToCloseTimeoutTaskExecutor struct{}
 
-func newStartToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *startToCloseTimeoutTaskExecutor {
-	return &startToCloseTimeoutTaskExecutor{
-		opts,
-	}
+func newStartToCloseTimeoutTaskExecutor() *startToCloseTimeoutTaskExecutor {
+	return &startToCloseTimeoutTaskExecutor{}
 }
 
 func (e *startToCloseTimeoutTaskExecutor) Validate(
@@ -195,14 +180,10 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
-type heartbeatTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type heartbeatTimeoutTaskExecutor struct{}
 
-func newHeartbeatTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *heartbeatTimeoutTaskExecutor {
-	return &heartbeatTimeoutTaskExecutor{
-		opts,
-	}
+func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
+	return &heartbeatTimeoutTaskExecutor{}
 }
 
 // Validate validates a HeartbeatTimeoutTask.
