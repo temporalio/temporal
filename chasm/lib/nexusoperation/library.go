@@ -12,6 +12,10 @@ type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
 }
 
+func newComponentOnlyLibrary() *componentOnlyLibrary {
+	return &componentOnlyLibrary{}
+}
+
 func (l *componentOnlyLibrary) Name() string {
 	return "nexusoperation"
 }
