@@ -6,12 +6,11 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 )
 
 // registerEvents registers all event definitions (handlers) for nexus operations.
 func registerEvents(
-	registry *workflowregistry.Registry,
+	registry *chasmworkflow.Registry,
 	config *nexusoperation.Config,
 	nexusProcessor *chasm.NexusEndpointProcessor,
 ) error {

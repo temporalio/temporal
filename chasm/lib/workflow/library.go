@@ -7,12 +7,12 @@ import (
 type Library struct {
 	chasm.UnimplementedLibrary
 
-	eventRegistry EventRegistry
+	registry *Registry
 }
 
-func NewLibrary(eventRegistry EventRegistry) *Library {
+func NewLibrary(registry *Registry) *Library {
 	return &Library{
-		eventRegistry: eventRegistry,
+		registry: registry,
 	}
 }
 
@@ -27,7 +27,13 @@ var eventRegistryChasmCtxKey chasmCtxKey = chasmCtxKey{}
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
-			eventRegistryChasmCtxKey: l.eventRegistry,
+			eventRegistryChasmCtxKey: l.registry,
 		})),
 	}
+}
+
+// SetEventRegistryOnContext injects the event registry into a CHASM context. This is primarily
+// useful for tests that construct MockMutableContext directly.
+func SetEventRegistryOnContext[C chasm.Context](ctx C, registry *Registry) C {
+	return chasm.ContextWithValue(ctx, eventRegistryChasmCtxKey, registry)
 }

@@ -20,7 +20,6 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
-	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -48,8 +47,8 @@ type testContext struct {
 	wf              *chasmworkflow.Workflow
 	backend         *chasm.MockNodeBackend
 	execInfo        *persistencespb.WorkflowExecutionInfo
-	scheduleHandler workflowregistry.CommandHandler
-	cancelHandler   workflowregistry.CommandHandler
+	scheduleHandler chasmworkflow.CommandHandler
+	cancelHandler   chasmworkflow.CommandHandler
 	history         *historypb.History
 }
 
@@ -80,8 +79,10 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 			return &persistencespb.NexusEndpointEntry{Id: "endpoint-id"}, nil
 		},
 	}
-	chReg := workflowregistry.NewRegistry()
-	require.NoError(t, registerCommandHandlers(chReg, cfg, chasm.NewNexusEndpointProcessor()))
+	chReg := chasmworkflow.NewRegistry()
+	nexusProcessor := chasm.NewNexusEndpointProcessor()
+	require.NoError(t, registerCommandHandlers(chReg, cfg, nexusProcessor))
+	require.NoError(t, registerEvents(chReg, cfg, nexusProcessor))
 
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	backend := &chasm.MockNodeBackend{
@@ -107,7 +108,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 		return e
 	}
 
-	chasmCtx := &chasm.MockMutableContext{
+	chasmCtx := chasmworkflow.SetEventRegistryOnContext(&chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNamespaceEntry: func() *namespace.Namespace {
 				return tests.GlobalNamespaceEntry
@@ -116,7 +117,7 @@ func newTestContext(t *testing.T, cfg *nexusoperation.Config) testContext {
 				return endpointReg.GetByName(context.Background(), tests.GlobalNamespaceEntry.ID(), name)
 			},
 		},
-	}
+	}, chReg)
 
 	wf := &chasmworkflow.Workflow{
 		MSPointer: chasm.NewMSPointer(backend),
@@ -143,15 +144,15 @@ func TestHandleScheduleCommand(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
 			ChasmNexusEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		})
-		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		require.ErrorIs(t, err, workflowregistry.ErrCommandNotSupported)
+		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.ErrorIs(t, err, chasmworkflow.ErrCommandNotSupported)
 		require.Empty(t, tcx.history.Events)
 	})
 
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -168,8 +169,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -186,8 +187,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -204,8 +205,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -222,8 +223,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Operation: "too long",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -243,8 +244,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					},
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -264,8 +265,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					},
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -285,8 +286,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					},
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.True(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -305,7 +306,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 						Operation: "op",
 					},
 				},
-			}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+			}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 			require.NoError(t, err)
 		}
 		err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
@@ -316,8 +317,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED, failWFTErr.Cause)
@@ -337,7 +338,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					ScheduleToCloseTimeout: durationpb.New(time.Hour * 2),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		require.Equal(t, time.Hour, tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
@@ -357,7 +358,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					ScheduleToCloseTimeout: durationpb.New(time.Hour),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		require.Equal(t, time.Minute, tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
@@ -409,7 +410,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 						ScheduleToCloseTimeout: tc.commandTimeout,
 					},
 				},
-			}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+			}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 			require.NoError(t, err)
 			require.Len(t, tcx.history.Events, 1)
 			require.Equal(t, tc.expectedTimeout.AsDuration(), tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().ScheduleToCloseTimeout.AsDuration())
@@ -427,8 +428,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					ScheduleToStartTimeout: durationpb.New(-1 * time.Second),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -446,8 +447,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					StartToCloseTimeout: durationpb.New(-1 * time.Second),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -467,7 +468,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					ScheduleToStartTimeout: durationpb.New(time.Hour),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
@@ -488,7 +489,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(time.Hour),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
@@ -510,7 +511,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(2 * time.Hour),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
@@ -533,7 +534,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 					StartToCloseTimeout:    durationpb.New(30 * time.Minute),
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		eAttrs := tcx.history.Events[0].GetNexusOperationScheduledEventAttributes()
@@ -570,7 +571,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 				ScheduleNexusOperationCommandAttributes: cAttrs,
 			},
 			UserMetadata: userMetadata,
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 
@@ -609,8 +610,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					NexusHeader: map[string]string{"key": "value"},
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -627,8 +628,8 @@ func TestHandleScheduleCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -642,15 +643,15 @@ func TestHandleCancelCommand(t *testing.T) {
 		tcx := newTestContext(t, &nexusoperation.Config{
 			ChasmNexusEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		})
-		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		require.ErrorIs(t, err, workflowregistry.ErrCommandNotSupported)
+		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		require.ErrorIs(t, err, chasmworkflow.ErrCommandNotSupported)
 		require.Empty(t, tcx.history.Events)
 	})
 
 	t.Run("empty attributes", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
-		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		err := tcx.cancelHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -666,8 +667,8 @@ func TestHandleCancelCommand(t *testing.T) {
 					ScheduledEventId: 5,
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -685,7 +686,7 @@ func TestHandleCancelCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		event := tcx.history.Events[0]
@@ -700,8 +701,8 @@ func TestHandleCancelCommand(t *testing.T) {
 					ScheduledEventId: event.EventId,
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
@@ -720,7 +721,7 @@ func TestHandleCancelCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		event := tcx.history.Events[0]
@@ -735,7 +736,7 @@ func TestHandleCancelCommand(t *testing.T) {
 					ScheduledEventId: event.EventId,
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 2) // Both scheduled and cancel requested events should be recorded.
 		crAttrs := tcx.history.Events[1].GetNexusOperationCancelRequestedEventAttributes()
@@ -752,7 +753,7 @@ func TestHandleCancelCommand(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 
 		// TODO: Replace with CHASM equivalent of ScheduledEventDefinition.Apply().
@@ -780,7 +781,7 @@ func TestHandleCancelCommand(t *testing.T) {
 				},
 			},
 			UserMetadata: userMetadata,
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 
 		opField, operationFound := tcx.wf.Operations[key]
@@ -817,7 +818,7 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 					Operation: "op",
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 		require.NoError(t, err)
 		require.Len(t, tcx.history.Events, 1)
 		scheduledEvent = tcx.history.Events[0]
@@ -877,8 +878,8 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 					ScheduledEventId: scheduledEventID,
 				},
 			},
-		}, workflowregistry.CommandHandlerOptions{WorkflowTaskCompletedEventID: 2})
-		var failWFTErr workflowregistry.FailWorkflowTaskError
+		}, chasmworkflow.CommandHandlerOptions{WorkflowTaskCompletedEventID: 2})
+		var failWFTErr chasmworkflow.FailWorkflowTaskError
 		require.ErrorAs(t, err, &failWFTErr)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
 		require.Len(t, tcx.history.Events, 1, "no new events after attempting to cancel a terminated operation")

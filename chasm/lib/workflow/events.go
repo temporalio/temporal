@@ -25,8 +25,3 @@ type EventDefinition interface {
 	// cherry pick process.
 	CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
 }
-
-// EventRegistry provides access to event definitions by event type.
-type EventRegistry interface {
-	EventDefinition(t enumspb.EventType) (EventDefinition, bool)
-}

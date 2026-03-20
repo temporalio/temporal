@@ -1,4 +1,4 @@
-package workflowregistry
+package workflow
 
 import (
 	"errors"
@@ -6,10 +6,9 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
-	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 )
 
-// ErrNotSupported is returned by a [CommandHandler] when the command type is registered but not supported;
+// ErrCommandNotSupported is returned by a [CommandHandler] when the command type is registered but not supported;
 // for example, because of a disabled feature flag.
 var ErrCommandNotSupported = errors.New("command not supported")
 
@@ -21,7 +20,7 @@ type CommandHandlerOptions struct {
 // worker request.
 type CommandHandler func(
 	chasmCtx chasm.MutableContext,
-	wf *chasmworkflow.Workflow,
+	wf *Workflow,
 	validator Validator,
 	command *commandpb.Command,
 	opts CommandHandlerOptions,

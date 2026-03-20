@@ -17,7 +17,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	chasmworkflowregistry "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -68,7 +67,7 @@ func (s *historyAPISuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 
 	s.chasmRegistry = chasm.NewRegistry(s.logger)
-	err := s.chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflowregistry.NewRegistry()))
+	err := s.chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 }
 

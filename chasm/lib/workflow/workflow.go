@@ -150,8 +150,8 @@ func (w *Workflow) AddHistoryEvent(
 }
 
 // eventRegistry retrieves the EventRegistry from the CHASM context.
-func eventRegistry(ctx chasm.Context) EventRegistry {
-	reg, ok := ctx.Value(eventRegistryChasmCtxKey).(EventRegistry)
+func eventRegistry(ctx chasm.Context) *Registry {
+	reg, ok := ctx.Value(eventRegistryChasmCtxKey).(*Registry)
 	if !ok {
 		return nil
 	}

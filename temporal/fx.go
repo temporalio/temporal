@@ -25,7 +25,6 @@ import (
 	chasmnexusworkflow "go.temporal.io/server/chasm/lib/nexusoperation/workflow"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/authorization"
@@ -154,7 +153,6 @@ var (
 
 	ChasmLibraryOptions = fx.Options(
 		chasm.Module,
-		workflowregistry.Module,
 		chasmworkflow.Module,
 		chasmscheduler.Module,
 		chasmcallback.Module,
