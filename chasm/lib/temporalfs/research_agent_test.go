@@ -23,11 +23,13 @@ package temporalfs
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/temporalio/temporal-fs/pkg/failpoint"
 	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 )
@@ -310,4 +312,152 @@ quantum computers remain years away, but near-term applications are emerging.
 	assert.Equal(t, "step-1-sources", snapshots[0].Name)
 	assert.Equal(t, "step-2-analysis", snapshots[1].Name)
 	assert.Equal(t, "step-3-final", snapshots[2].Name)
+}
+
+// TestResearchAgent_HandlerCrashRecovery verifies that handler operations are
+// atomic: if a failpoint causes an operation to fail mid-batch, the next handler
+// call (which reopens the FS) sees only the previously committed state.
+func TestResearchAgent_HandlerCrashRecovery(t *testing.T) {
+	injected := func() error { return errors.New("injected crash") }
+
+	h, provider := newTestHandler(t)
+	nsID, fsID := "ns-crash", "fs-crash-agent"
+	initHandlerFS(t, h, nsID, fsID)
+
+	ctx := context.Background()
+	const rootInode uint64 = 1
+
+	// ─── Complete step 1 via handler ─────────────────────────────────────
+
+	researchDir, err := h.Mkdir(ctx, &temporalfspb.MkdirRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: rootInode, Name: "research", Mode: 0o755,
+	})
+	require.NoError(t, err)
+
+	qcDir, err := h.Mkdir(ctx, &temporalfspb.MkdirRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: researchDir.InodeId, Name: "quantum-computing", Mode: 0o755,
+	})
+	require.NoError(t, err)
+	qcInodeID := qcDir.InodeId
+
+	sourcesFile, err := h.CreateFile(ctx, &temporalfspb.CreateFileRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: qcInodeID, Name: "sources.md", Mode: 0o644,
+	})
+	require.NoError(t, err)
+	sourcesInodeID := sourcesFile.InodeId
+
+	sourcesV1 := []byte("# Sources v1\n")
+	_, err = h.WriteChunks(ctx, &temporalfspb.WriteChunksRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		InodeId: sourcesInodeID, Offset: 0, Data: sourcesV1,
+	})
+	require.NoError(t, err)
+
+	_, err = h.CreateSnapshot(ctx, &temporalfspb.CreateSnapshotRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		SnapshotName: "step-1-sources",
+	})
+	require.NoError(t, err)
+
+	// ─── Step 2: inject failure during CreateFile (analysis.md) ──────────
+	// The first op (creating analysis.md inode) fails via failpoint.
+	// The handler returns an error. On the next call, the FS reopens and
+	// shows step 1 state — the failed CreateFile left no trace.
+
+	failpoint.Enable("after-create-inode", injected)
+	_, err = h.CreateFile(ctx, &temporalfspb.CreateFileRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: qcInodeID, Name: "analysis.md", Mode: 0o644,
+	})
+	require.Error(t, err, "CreateFile should fail with injected error")
+	failpoint.Disable("after-create-inode")
+
+	// Verify: handler still works, ReadDir shows only step 1 files.
+	dirResp, err := h.ReadDir(ctx, &temporalfspb.ReadDirRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		InodeId: qcInodeID,
+	})
+	require.NoError(t, err)
+	assert.Len(t, dirResp.Entries, 1, "after failed CreateFile, only sources.md should exist")
+
+	// Verify: step 1 snapshot intact via library.
+	s, err := provider.GetStore(0, nsID, fsID)
+	require.NoError(t, err)
+	f, err := tfs.Open(s)
+	require.NoError(t, err)
+
+	snap1, err := f.OpenSnapshot("step-1-sources")
+	require.NoError(t, err)
+	snap1Entries, err := snap1.ReadDir("/research/quantum-computing")
+	require.NoError(t, err)
+	assert.Len(t, snap1Entries, 1, "step-1 snapshot should have 1 file")
+	require.NoError(t, snap1.Close())
+
+	// No step-2 snapshot should exist.
+	_, err = f.OpenSnapshot("step-2-analysis")
+	require.ErrorIs(t, err, tfs.ErrSnapshotNotFound)
+	require.NoError(t, f.Close())
+
+	// ─── Recovery: retry step 2 successfully ─────────────────────────────
+
+	analysisFile, err := h.CreateFile(ctx, &temporalfspb.CreateFileRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: qcInodeID, Name: "analysis.md", Mode: 0o644,
+	})
+	require.NoError(t, err)
+
+	_, err = h.WriteChunks(ctx, &temporalfspb.WriteChunksRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		InodeId: analysisFile.InodeId, Offset: 0, Data: []byte("# Analysis\n"),
+	})
+	require.NoError(t, err)
+
+	_, err = h.CreateSnapshot(ctx, &temporalfspb.CreateSnapshotRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		SnapshotName: "step-2-analysis",
+	})
+	require.NoError(t, err)
+
+	// ─── Step 3: inject failure during Mkdir (wrong op type) ─────────────
+	// This tests that failures in unexpected operations are also atomic.
+
+	failpoint.Enable("after-create-inode", injected)
+	_, err = h.CreateFile(ctx, &temporalfspb.CreateFileRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: qcInodeID, Name: "report.md", Mode: 0o644,
+	})
+	require.Error(t, err)
+	failpoint.Disable("after-create-inode")
+
+	// Verify step 2 state intact.
+	dirResp, err = h.ReadDir(ctx, &temporalfspb.ReadDirRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		InodeId: qcInodeID,
+	})
+	require.NoError(t, err)
+	assert.Len(t, dirResp.Entries, 2, "after failed step 3, should still have 2 files")
+
+	// ─── Recovery: complete step 3 ───────────────────────────────────────
+
+	reportFile, err := h.CreateFile(ctx, &temporalfspb.CreateFileRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		ParentInodeId: qcInodeID, Name: "report.md", Mode: 0o644,
+	})
+	require.NoError(t, err)
+
+	_, err = h.WriteChunks(ctx, &temporalfspb.WriteChunksRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		InodeId: reportFile.InodeId, Offset: 0, Data: []byte("# Report\n"),
+	})
+	require.NoError(t, err)
+
+	dirResp, err = h.ReadDir(ctx, &temporalfspb.ReadDirRequest{
+		NamespaceId: nsID, FilesystemId: fsID,
+		InodeId: qcInodeID,
+	})
+	require.NoError(t, err)
+	assert.Len(t, dirResp.Entries, 3, "all 3 files after recovery + completion")
 }
