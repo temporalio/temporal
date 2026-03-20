@@ -92,6 +92,9 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 		scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
 			Config: config,
 		}),
+		scheduler.NewSchedulerCallbacksTaskExecutor(scheduler.SchedulerCallbacksTaskExecutorOptions{
+			Config: config,
+		}),
 		scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
 			Config:         config,
 			MetricsHandler: metrics.NoopMetricsHandler,
@@ -106,6 +109,11 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 			MetricsHandler: metrics.NoopMetricsHandler,
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
+		}),
+		scheduler.NewSchedulerMigrateToWorkflowTaskExecutor(scheduler.SchedulerMigrateToWorkflowTaskExecutorOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
 		}),
 	)
 }
