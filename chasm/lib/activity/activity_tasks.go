@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
@@ -61,22 +60,11 @@ func (e *activityDispatchTaskExecutor) Execute(
 	return err
 }
 
-type timeoutTaskExecutorOptions struct {
-	fx.In
-
-	Config            *Config
-	MetricsHandler    metrics.Handler
-	NamespaceRegistry namespace.Registry
-}
-
 type scheduleToStartTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
 }
 
-func newScheduleToStartTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToStartTimeoutTaskExecutor {
-	return &scheduleToStartTimeoutTaskExecutor{
-		opts,
-	}
+func newScheduleToStartTimeoutTaskExecutor() *scheduleToStartTimeoutTaskExecutor {
+	return &scheduleToStartTimeoutTaskExecutor{}
 }
 
 func (e *scheduleToStartTimeoutTaskExecutor) Validate(
@@ -95,18 +83,10 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
 
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -117,14 +97,10 @@ func (e *scheduleToStartTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type scheduleToCloseTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type scheduleToCloseTimeoutTaskExecutor struct{}
 
-func newScheduleToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *scheduleToCloseTimeoutTaskExecutor {
-	return &scheduleToCloseTimeoutTaskExecutor{
-		opts,
-	}
+func newScheduleToCloseTimeoutTaskExecutor() *scheduleToCloseTimeoutTaskExecutor {
+	return &scheduleToCloseTimeoutTaskExecutor{}
 }
 
 func (e *scheduleToCloseTimeoutTaskExecutor) Validate(
@@ -142,19 +118,10 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) error {
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
-
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		metricsHandler: metricsHandler,
@@ -164,14 +131,10 @@ func (e *scheduleToCloseTimeoutTaskExecutor) Execute(
 	return TransitionTimedOut.Apply(activity, ctx, event)
 }
 
-type startToCloseTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type startToCloseTimeoutTaskExecutor struct{}
 
-func newStartToCloseTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *startToCloseTimeoutTaskExecutor {
-	return &startToCloseTimeoutTaskExecutor{
-		opts,
-	}
+func newStartToCloseTimeoutTaskExecutor() *startToCloseTimeoutTaskExecutor {
+	return &startToCloseTimeoutTaskExecutor{}
 }
 
 func (e *startToCloseTimeoutTaskExecutor) Validate(
@@ -198,18 +161,10 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
 
 	if rescheduled {
 		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
@@ -225,14 +180,10 @@ func (e *startToCloseTimeoutTaskExecutor) Execute(
 }
 
 // HeartbeatTimeoutTask is a pure task that enforces heartbeat timeouts.
-type heartbeatTimeoutTaskExecutor struct {
-	opts timeoutTaskExecutorOptions
-}
+type heartbeatTimeoutTaskExecutor struct{}
 
-func newHeartbeatTimeoutTaskExecutor(opts timeoutTaskExecutorOptions) *heartbeatTimeoutTaskExecutor {
-	return &heartbeatTimeoutTaskExecutor{
-		opts,
-	}
+func newHeartbeatTimeoutTaskExecutor() *heartbeatTimeoutTaskExecutor {
+	return &heartbeatTimeoutTaskExecutor{}
 }
 
 // Validate validates a HeartbeatTimeoutTask.
@@ -289,18 +240,10 @@ func (e *heartbeatTimeoutTaskExecutor) Execute(
 		return err
 	}
 
-	nsID := namespace.ID(ctx.ExecutionKey().NamespaceID)
-	namespaceName, err := e.opts.NamespaceRegistry.GetNamespaceName(nsID)
+	metricsHandler, err := activity.enrichMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	if err != nil {
 		return err
 	}
-
-	metricsHandler := enrichMetricsHandler(
-		activity,
-		e.opts.MetricsHandler,
-		namespaceName.String(),
-		metrics.TimerActiveTaskActivityTimeoutScope,
-		e.opts.Config.BreakdownMetricsByTaskQueue)
 
 	if rescheduled {
 		activity.emitOnAttemptTimedOutMetrics(ctx, metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)
