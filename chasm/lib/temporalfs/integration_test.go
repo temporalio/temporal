@@ -28,7 +28,7 @@ func TestFilesystemLifecycle_EndToEnd(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.EqualValues(t, 1, attrResp.Attr.InodeId)
-	require.True(t, attrResp.Attr.Mode > 0, "root inode should have a mode set")
+	require.Positive(t, attrResp.Attr.Mode, "root inode should have a mode set")
 
 	// 3. Create a file via temporal-fs, then write/read via handler.
 	//    (WriteChunks requires an existing inode, so we create a file first.)
@@ -41,7 +41,7 @@ func TestFilesystemLifecycle_EndToEnd(t *testing.T) {
 	inode, err := f.Stat("/hello.txt")
 	require.NoError(t, err)
 	inodeID := inode.ID
-	f.Close()
+	_ = f.Close()
 
 	// 4. Write via handler.
 	payload := []byte("hello from integration test!")
@@ -73,8 +73,8 @@ func TestFilesystemLifecycle_EndToEnd(t *testing.T) {
 		InodeId:      inodeID,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, inodeID, fileAttr.Attr.InodeId)
-	require.Greater(t, fileAttr.Attr.FileSize, uint64(0))
+	require.Equal(t, inodeID, fileAttr.Attr.InodeId)
+	require.Positive(t, fileAttr.Attr.FileSize)
 
 	// 7. Create a snapshot.
 	snapResp, err := h.CreateSnapshot(context.Background(), &temporalfspb.CreateSnapshotRequest{
@@ -83,7 +83,7 @@ func TestFilesystemLifecycle_EndToEnd(t *testing.T) {
 		SnapshotName: "e2e-snap",
 	})
 	require.NoError(t, err)
-	require.Greater(t, snapResp.SnapshotTxnId, uint64(0))
+	require.Positive(t, snapResp.SnapshotTxnId)
 }
 
 // TestPebbleStoreProvider_Isolation tests that different filesystem IDs get

@@ -41,7 +41,7 @@ func initTestFS(t *testing.T, provider *PebbleStoreProvider, nsID, fsID string) 
 	require.NoError(t, err)
 	f, err := tfs.Create(s, tfs.Options{})
 	require.NoError(t, err)
-	f.Close()
+	_ = f.Close()
 }
 
 // --- Validate tests ---
@@ -193,7 +193,7 @@ func TestQuotaCheckExecute_WithWrites(t *testing.T) {
 
 	// Verify metrics are tracked on the open FS instance.
 	m := f.Metrics()
-	require.Greater(t, m.BytesWritten.Load(), int64(0))
+	require.Positive(t, m.BytesWritten.Load())
 	require.EqualValues(t, 1, m.FilesCreated.Load())
-	f.Close()
+	_ = f.Close()
 }

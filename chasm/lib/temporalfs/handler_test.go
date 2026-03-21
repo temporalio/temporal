@@ -26,7 +26,7 @@ func initHandlerFS(t *testing.T, h *handler, nsID, fsID string) {
 	t.Helper()
 	f, err := h.createFS(0, nsID, fsID, &temporalfspb.FilesystemConfig{ChunkSize: 256 * 1024})
 	require.NoError(t, err)
-	f.Close()
+	_ = f.Close()
 }
 
 func TestOpenFS(t *testing.T) {
@@ -37,7 +37,7 @@ func TestOpenFS(t *testing.T) {
 	f, err := h.openFS(0, nsID, fsID)
 	require.NoError(t, err)
 	require.NotNil(t, f)
-	f.Close()
+	_ = f.Close()
 }
 
 func TestCreateFS(t *testing.T) {
@@ -48,7 +48,7 @@ func TestCreateFS(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	require.EqualValues(t, 512*1024, f.ChunkSize())
-	f.Close()
+	_ = f.Close()
 }
 
 func TestCreateFS_DefaultChunkSize(t *testing.T) {
@@ -60,7 +60,7 @@ func TestCreateFS_DefaultChunkSize(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, f)
 	require.EqualValues(t, defaultChunkSize, f.ChunkSize())
-	f.Close()
+	_ = f.Close()
 }
 
 func TestInodeToAttr(t *testing.T) {
@@ -107,7 +107,7 @@ func TestGetattr(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Attr)
 	require.EqualValues(t, rootInodeID, resp.Attr.InodeId)
-	require.True(t, resp.Attr.Mode > 0)
+	require.Positive(t, resp.Attr.Mode)
 }
 
 func TestReadWriteChunks(t *testing.T) {
@@ -125,7 +125,7 @@ func TestReadWriteChunks(t *testing.T) {
 	inode, err := f.Stat("/test.txt")
 	require.NoError(t, err)
 	inodeID := inode.ID
-	f.Close()
+	_ = f.Close()
 
 	// Write via handler.
 	data := []byte("hello temporalfs")
@@ -162,7 +162,7 @@ func TestCreateSnapshot(t *testing.T) {
 		SnapshotName: "snap-1",
 	})
 	require.NoError(t, err)
-	require.Greater(t, resp.SnapshotTxnId, uint64(0))
+	require.Positive(t, resp.SnapshotTxnId)
 }
 
 func TestLookup(t *testing.T) {
@@ -611,8 +611,8 @@ func TestStatfs(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-	require.Greater(t, resp.Blocks, uint64(0))
-	require.Greater(t, resp.Files, uint64(0))
-	require.Greater(t, resp.Bsize, uint32(0))
+	require.Positive(t, resp.Blocks)
+	require.Positive(t, resp.Files)
+	require.Positive(t, resp.Bsize)
 	require.EqualValues(t, 255, resp.Namelen)
 }

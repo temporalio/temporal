@@ -36,8 +36,8 @@ import (
 )
 
 type TemporalFSTestSuite struct {
-	testcore.FunctionalTestBase
-	storeProvider temporalfs.FSStoreProvider
+	testcore.FunctionalTestBase //nolint:forbidigo // NewEnv doesn't support WithFxOptionsForService needed for fx.Populate
+	storeProvider               temporalfs.FSStoreProvider
 }
 
 func TestTemporalFS(t *testing.T) {
@@ -46,7 +46,7 @@ func TestTemporalFS(t *testing.T) {
 }
 
 func (s *TemporalFSTestSuite) SetupSuite() {
-	s.FunctionalTestBase.SetupSuiteWithCluster(
+	s.SetupSuiteWithCluster( //nolint:forbidigo // NewEnv doesn't support WithFxOptionsForService
 		testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
 			dynamicconfig.EnableChasm.Key(): true,
 		}),
@@ -59,7 +59,7 @@ func (s *TemporalFSTestSuite) SetupSuite() {
 }
 
 func (s *TemporalFSTestSuite) TearDownSuite() {
-	s.FunctionalTestBase.TearDownSuite()
+	s.FunctionalTestBase.TearDownSuite() //nolint:forbidigo // NewEnv doesn't support WithFxOptionsForService
 }
 
 // TestResearchAgent_RealServer runs the 3-iteration research agent scenario

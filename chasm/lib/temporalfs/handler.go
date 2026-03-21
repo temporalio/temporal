@@ -186,7 +186,7 @@ func (h *handler) Lookup(_ context.Context, req *temporalfspb.LookupRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inode, err := f.LookupByID(req.GetParentInodeId(), req.GetName())
 	if err != nil {
@@ -204,7 +204,7 @@ func (h *handler) Getattr(_ context.Context, req *temporalfspb.GetattrRequest) (
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inode, err := f.StatByID(req.GetInodeId())
 	if err != nil {
@@ -221,7 +221,7 @@ func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inodeID := req.GetInodeId()
 	valid := req.GetValid()
@@ -250,17 +250,8 @@ func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (
 			return nil, mapFSError(err)
 		}
 	}
-	if valid&setattrAtime != 0 || valid&setattrMtime != 0 {
-		var atime, mtime time.Time
-		if valid&setattrAtime != 0 && attr.GetAtime() != nil {
-			atime = attr.GetAtime().AsTime()
-		}
-		if valid&setattrMtime != 0 && attr.GetMtime() != nil {
-			mtime = attr.GetMtime().AsTime()
-		}
-		if err := f.UtimensByID(inodeID, atime, mtime); err != nil {
-			return nil, mapFSError(err)
-		}
+	if err := h.applyUtimens(f, inodeID, valid, attr); err != nil {
+		return nil, err
 	}
 
 	// Re-read the inode to return updated attributes.
@@ -274,12 +265,26 @@ func (h *handler) Setattr(_ context.Context, req *temporalfspb.SetattrRequest) (
 	}, nil
 }
 
+func (h *handler) applyUtimens(f *tfs.FS, inodeID uint64, valid uint32, attr *temporalfspb.InodeAttr) error {
+	if valid&setattrAtime == 0 && valid&setattrMtime == 0 {
+		return nil
+	}
+	var atime, mtime time.Time
+	if valid&setattrAtime != 0 && attr.GetAtime() != nil {
+		atime = attr.GetAtime().AsTime()
+	}
+	if valid&setattrMtime != 0 && attr.GetMtime() != nil {
+		mtime = attr.GetMtime().AsTime()
+	}
+	return mapFSError(f.UtimensByID(inodeID, atime, mtime))
+}
+
 func (h *handler) ReadChunks(_ context.Context, req *temporalfspb.ReadChunksRequest) (*temporalfspb.ReadChunksResponse, error) {
 	f, err := h.openFS(0, req.GetNamespaceId(), req.GetFilesystemId())
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	data, err := f.ReadAtByID(req.GetInodeId(), req.GetOffset(), int(req.GetReadSize()))
 	if err != nil {
@@ -296,7 +301,7 @@ func (h *handler) WriteChunks(_ context.Context, req *temporalfspb.WriteChunksRe
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	err = f.WriteAtByID(req.GetInodeId(), req.GetOffset(), req.GetData())
 	if err != nil {
@@ -313,7 +318,7 @@ func (h *handler) Truncate(_ context.Context, req *temporalfspb.TruncateRequest)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := f.TruncateByID(req.GetInodeId(), req.GetNewSize()); err != nil {
 		return nil, mapFSError(err)
@@ -326,7 +331,7 @@ func (h *handler) Mkdir(_ context.Context, req *temporalfspb.MkdirRequest) (*tem
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inode, err := f.MkdirByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()))
 	if err != nil {
@@ -344,7 +349,7 @@ func (h *handler) Unlink(_ context.Context, req *temporalfspb.UnlinkRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := f.UnlinkByID(req.GetParentInodeId(), req.GetName()); err != nil {
 		return nil, mapFSError(err)
@@ -357,7 +362,7 @@ func (h *handler) Rmdir(_ context.Context, req *temporalfspb.RmdirRequest) (*tem
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := f.RmdirByID(req.GetParentInodeId(), req.GetName()); err != nil {
 		return nil, mapFSError(err)
@@ -370,7 +375,7 @@ func (h *handler) Rename(_ context.Context, req *temporalfspb.RenameRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	if err := f.RenameByID(
 		req.GetOldParentInodeId(), req.GetOldName(),
@@ -386,7 +391,7 @@ func (h *handler) ReadDir(_ context.Context, req *temporalfspb.ReadDirRequest) (
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	entries, err := f.ReadDirPlusByID(req.GetInodeId())
 	if err != nil {
@@ -420,7 +425,7 @@ func (h *handler) Link(_ context.Context, req *temporalfspb.LinkRequest) (*tempo
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inode, err := f.LinkByID(req.GetInodeId(), req.GetNewParentInodeId(), req.GetNewName())
 	if err != nil {
@@ -437,7 +442,7 @@ func (h *handler) Symlink(_ context.Context, req *temporalfspb.SymlinkRequest) (
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inode, err := f.SymlinkByID(req.GetParentInodeId(), req.GetName(), req.GetTarget())
 	if err != nil {
@@ -455,7 +460,7 @@ func (h *handler) Readlink(_ context.Context, req *temporalfspb.ReadlinkRequest)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	target, err := f.ReadlinkByID(req.GetInodeId())
 	if err != nil {
@@ -472,7 +477,7 @@ func (h *handler) CreateFile(_ context.Context, req *temporalfspb.CreateFileRequ
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	inode, err := f.CreateFileByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()))
 	if err != nil {
@@ -490,7 +495,7 @@ func (h *handler) Mknod(_ context.Context, req *temporalfspb.MknodRequest) (*tem
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	typ := modeToInodeType(req.GetMode())
 	inode, err := f.MknodByID(req.GetParentInodeId(), req.GetName(), uint16(req.GetMode()&0xFFF), typ, uint64(req.GetDev()))
@@ -509,7 +514,7 @@ func (h *handler) Statfs(_ context.Context, req *temporalfspb.StatfsRequest) (*t
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	quota := f.GetQuota()
 
@@ -553,7 +558,7 @@ func (h *handler) CreateSnapshot(_ context.Context, req *temporalfspb.CreateSnap
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	snap, err := f.CreateSnapshot(req.GetSnapshotName())
 	if err != nil {
