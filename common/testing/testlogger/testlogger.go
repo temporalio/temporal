@@ -254,7 +254,6 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			}
 			f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 			if err == nil {
-				t.Logf("testlogger: debug logs → %s", debugFile)
 				// Debug+ goes to file; info+ goes to the test writer (visible in CI log).
 				fileCore := zapcore.NewCore(enc, zapcore.AddSync(f), zap.DebugLevel)
 				infoCore := zapcore.NewCore(enc, writer, zap.InfoLevel)
