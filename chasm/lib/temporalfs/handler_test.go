@@ -90,7 +90,7 @@ func TestInodeToAttr(t *testing.T) {
 }
 
 func TestMapFSError(t *testing.T) {
-	require.Nil(t, mapFSError(nil))
+	require.NoError(t, mapFSError(nil))
 	require.Error(t, mapFSError(tfs.ErrNotFound))
 }
 
@@ -106,7 +106,7 @@ func TestGetattr(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, resp.Attr)
-	require.EqualValues(t, rootInodeID, resp.Attr.InodeId)
+	require.Equal(t, rootInodeID, resp.Attr.InodeId)
 	require.Positive(t, resp.Attr.Mode)
 }
 
@@ -320,7 +320,7 @@ func TestMkdir(t *testing.T) {
 		InodeId:      resp.InodeId,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, resp.InodeId, getattrResp.Attr.InodeId)
+	require.Equal(t, resp.InodeId, getattrResp.Attr.InodeId)
 }
 
 func TestUnlink(t *testing.T) {
@@ -507,7 +507,7 @@ func TestLink(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, linkResp.Attr)
 	// Hard link should point to the same inode.
-	require.EqualValues(t, createResp.InodeId, linkResp.Attr.InodeId)
+	require.Equal(t, createResp.InodeId, linkResp.Attr.InodeId)
 	require.EqualValues(t, 2, linkResp.Attr.Nlink)
 }
 
@@ -577,7 +577,7 @@ func TestCreateFile(t *testing.T) {
 		InodeId:      resp.InodeId,
 	})
 	require.NoError(t, err)
-	require.EqualValues(t, resp.InodeId, getattrResp.Attr.InodeId)
+	require.Equal(t, resp.InodeId, getattrResp.Attr.InodeId)
 }
 
 func TestMknod(t *testing.T) {
