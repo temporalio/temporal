@@ -425,3 +425,65 @@ func (s *PollerScalingIntegSuite) testPollerScalingOnPromotedVersionConsidersUnv
 	s.NotNil(actResp.PollerScalingDecision)
 	s.Equal(int32(1), actResp.PollerScalingDecision.PollRequestDeltaSuggestion)
 }
+
+func (s *PollerScalingIntegSuite) TestPollerScalingIdleQueueNoDecision() {
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	// Poll with a short deadline on an idle queue (no workflows started).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: s.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.Require().NoError(err)
+	s.Require().Empty(resp.TaskToken)
+	s.Require().Nil(resp.PollerScalingDecision)
+
+	// Verify DescribeNamespace returns PollerAutoscaling capability, which is
+	// the signal SDKs use to scale down on empty responses.
+	descCtx, descCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer descCancel()
+	descResp, err := s.FrontendClient().DescribeNamespace(descCtx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: s.Namespace().String(),
+	})
+	s.Require().NoError(err)
+	s.Require().True(descResp.GetNamespaceInfo().GetCapabilities().GetPollerAutoscaling())
+}
+
+func (s *PollerScalingIntegSuite) TestPollerScalingLightlyUsedQueueScalesDown() {
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPollerScalingWaitTime, 200*time.Millisecond)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	tq := testcore.RandomizeStr(s.T().Name())
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowTaskQueueResponse
+		err  error
+	}
+	pollResultCh := make(chan pollResult, 1)
+
+	go func() {
+		pollResp, pollErr := s.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		pollResultCh <- pollResult{resp: pollResp, err: pollErr}
+	}()
+
+	// Let the poller sit idle well past the 200ms wait-time threshold.
+	time.Sleep(1 * time.Second) //nolint:forbidigo
+
+	_, err := s.SdkClient().ExecuteWorkflow(
+		ctx, sdkclient.StartWorkflowOptions{TaskQueue: tq}, "wf")
+	s.Require().NoError(err)
+
+	poll := <-pollResultCh
+	s.Require().NoError(poll.err)
+	s.Require().NotEmpty(poll.resp.TaskToken)
+	s.Require().NotNil(poll.resp.PollerScalingDecision)
+	s.Require().Equal(int32(-1), poll.resp.PollerScalingDecision.PollRequestDeltaSuggestion)
+}
