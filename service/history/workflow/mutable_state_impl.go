@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -6917,6 +6918,8 @@ func (ms *MutableStateImpl) StartTransaction(
 	return flushBeforeReady, nil
 }
 
+// todo @feiyang this is a place for triggering time skipping changes so that it is inside the transaction
+// won't get lost, the whole process is a transaction
 func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
@@ -6963,6 +6966,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	return workflowMutation, result.workflowEventsSeq, nil
 }
 
+// todo @feiyang this is a place for triggering time skipping changes so that it is inside the transaction
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
@@ -7150,6 +7154,16 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	ms.executionInfo.StateTransitionCount += 1
 	ms.executionInfo.LastUpdateTime = timestamppb.New(ms.shard.GetTimeSource().Now())
+
+	// whenever time skipping is enabled && mutable state changes,
+	// we need to schedule a time skipping timer task to check possible time skipping opportunities
+	timeSkippingInfo := ms.executionInfo.GetTimeSkippingInfo()
+	if timeSkippingInfo != nil && timeSkippingInfo.Enabled {
+		ms.InsertTasks[tasks.CategoryTimer] = append(ms.InsertTasks[tasks.CategoryTimer], &tasks.TimeSkippingTimerTask{
+			WorkflowKey:         ms.GetWorkflowKey(),
+			VisibilityTimestamp: ms.shard.GetTimeSource().Now(),
+		})
+	}
 
 	// We generate checksum here based on the assumption that the returned
 	// snapshot object is considered immutable. As of this writing, the only
@@ -9104,6 +9118,43 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
+}
+
+func (ms *MutableStateImpl) AddTimeSkippingEvent(advancedTimeDuration time.Duration) (*historypb.HistoryEvent, error) {
+	// todo: @feiyang to be implemented
+	return nil, nil
+}
+func (ms *MutableStateImpl) IsAutoTimeSkippable() bool {
+	noSkippingReason := ""
+	defer func() {
+		if noSkippingReason != "" {
+			ms.logInfo(fmt.Sprintf("no auto time skipping allowed: %s", noSkippingReason),
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			)
+		}
+	}()
+	if !ms.IsWorkflowExecutionRunning() {
+		noSkippingReason = "workflow is not running"
+		return false
+	}
+	if ms.HasPendingWorkflowTask() {
+		noSkippingReason = "pending workflow task"
+		return false
+	}
+	if len(ms.GetPendingActivityInfos()) > 0 {
+		noSkippingReason = "pending activity"
+		return false
+	}
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		noSkippingReason = "pending child execution"
+		return false
+	}
+	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+		noSkippingReason = "pending Nexus operations"
+		return false
+	}
+	return true
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

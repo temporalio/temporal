@@ -556,6 +556,21 @@ func (mr *MockMutableStateMockRecorder) AddTasks(arg0 ...any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockMutableState)(nil).AddTasks), arg0...)
 }
 
+// AddTimeSkippingEvent mocks base method.
+func (m *MockMutableState) AddTimeSkippingEvent(advancedTimeDuration time.Duration) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddTimeSkippingEvent", advancedTimeDuration)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddTimeSkippingEvent indicates an expected call of AddTimeSkippingEvent.
+func (mr *MockMutableStateMockRecorder) AddTimeSkippingEvent(advancedTimeDuration any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTimeSkippingEvent", reflect.TypeOf((*MockMutableState)(nil).AddTimeSkippingEvent), advancedTimeDuration)
+}
+
 // AddTimeoutWorkflowEvent mocks base method.
 func (m *MockMutableState) AddTimeoutWorkflowEvent(arg0 int64, arg1 enums.RetryState, arg2 string) (*history.HistoryEvent, error) {
 	m.ctrl.T.Helper()
@@ -3007,6 +3022,20 @@ func (m *MockMutableState) InitTransitionHistory() {
 func (mr *MockMutableStateMockRecorder) InitTransitionHistory() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitTransitionHistory", reflect.TypeOf((*MockMutableState)(nil).InitTransitionHistory))
+}
+
+// IsAutoTimeSkippable mocks base method.
+func (m *MockMutableState) IsAutoTimeSkippable() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsAutoTimeSkippable")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsAutoTimeSkippable indicates an expected call of IsAutoTimeSkippable.
+func (mr *MockMutableStateMockRecorder) IsAutoTimeSkippable() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAutoTimeSkippable", reflect.TypeOf((*MockMutableState)(nil).IsAutoTimeSkippable))
 }
 
 // IsCancelRequested mocks base method.

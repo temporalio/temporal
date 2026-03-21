@@ -112,6 +112,8 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		err = t.executeWorkflowExecutionTimeoutTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
 		err = t.executeActivityRetryTimerTask(ctx, task)
+	case *tasks.TimeSkippingTimerTask:
+		err = t.executeTimeSkippingTimerTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
 		err = t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
@@ -131,6 +133,76 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 		ExecutedAsActive:    true,
 		ExecutionErr:        err,
 	}
+}
+
+func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
+	ctx context.Context,
+	task *tasks.TimeSkippingTimerTask,
+) (retError error) {
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+	noSkippingReason := ""
+	defer func() {
+		if noSkippingReason != "" {
+			reason := fmt.Sprintf("no skipping reason: %s", noSkippingReason)
+			t.logger.Debug(reason,
+				tag.WorkflowID(task.WorkflowID),
+				tag.WorkflowRunID(task.RunID),
+				tag.WorkflowScheduledEventID(task.TaskID),
+			)
+		}
+	}()
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.shardContext, t.cache, task)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTimerTask(ctx, t.shardContext, weContext, task, t.metricsHandler, t.logger)
+	if err != nil {
+		return err
+	}
+	if mutableState == nil {
+		release(nil)
+		return nil
+	}
+	timeSkippingInfo := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if timeSkippingInfo == nil || !timeSkippingInfo.GetEnabled() {
+		t.logger.Warn("time skipping is not disabled when runnign this task, this should be a rare case")
+		release(nil)
+		return nil
+	}
+
+	// GUARD: check if time skipping is allowed by current state
+	if !mutableState.IsAutoTimeSkippable() {
+		release(nil)
+		return nil
+	}
+
+	// time-skipping logic:
+	// Find the next pending user timer.
+	timerSequence := t.getTimerSequence(mutableState)
+	userTimers := timerSequence.LoadAndSortUserTimers()
+	if len(userTimers) == 0 {
+		release(nil)
+		noSkippingReason = "no pending user timers"
+		return nil
+	}
+
+	now := t.Now()
+	nextTimerTs := userTimers[0].Timestamp // todo: @feiyang need to reorder?
+	if !nextTimerTs.After(now) {
+		// Already expired; the normal timer queue will handle it.
+		noSkippingReason = "next timer already expired"
+		release(nil)
+		return nil
+	}
+	durationToAdvance := nextTimerTs.Sub(now)
+
+	// key step: of time skipping (event, mutable state update)
+	mutableState.AddTimeSkippingEvent(durationToAdvance)
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, true)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
