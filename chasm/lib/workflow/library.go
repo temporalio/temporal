@@ -46,6 +46,7 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
 			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
 		})),
+		chasm.NewRegistrableComponent[*WorkflowUpdate]("update"),
 	}
 }
 

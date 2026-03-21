@@ -220,6 +220,11 @@ type (
 			ctx context.Context,
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
+		GetNexusUpdateCompletion(
+			ctx context.Context,
+			updateID string,
+			requestID string,
+		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
 	}
 
