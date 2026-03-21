@@ -102,8 +102,8 @@ func (h *handler) CreateFilesystem(
 			}
 
 			err := TransitionCreate.Apply(fs, mCtx, CreateEvent{
-				Config:          req.GetConfig(),
-				OwnerWorkflowID: req.GetOwnerWorkflowId(),
+				Config:           req.GetConfig(),
+				OwnerWorkflowIDs: req.GetOwnerWorkflowIds(),
 			})
 			if err != nil {
 				return nil, err
@@ -177,6 +177,74 @@ func (h *handler) ArchiveFilesystem(
 		return nil, err
 	}
 	return &temporalfspb.ArchiveFilesystemResponse{}, nil
+}
+
+func (h *handler) AttachWorkflow(
+	ctx context.Context,
+	req *temporalfspb.AttachWorkflowRequest,
+) (*temporalfspb.AttachWorkflowResponse, error) {
+	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFilesystemId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(fs *Filesystem, _ chasm.MutableContext, _ any) (*temporalfspb.AttachWorkflowResponse, error) {
+			wfID := req.GetWorkflowId()
+			for _, id := range fs.OwnerWorkflowIds {
+				if id == wfID {
+					return &temporalfspb.AttachWorkflowResponse{}, nil
+				}
+			}
+			fs.OwnerWorkflowIds = append(fs.OwnerWorkflowIds, wfID)
+			return &temporalfspb.AttachWorkflowResponse{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &temporalfspb.AttachWorkflowResponse{}, nil
+}
+
+func (h *handler) DetachWorkflow(
+	ctx context.Context,
+	req *temporalfspb.DetachWorkflowRequest,
+) (*temporalfspb.DetachWorkflowResponse, error) {
+	ref := chasm.NewComponentRef[*Filesystem](chasm.ExecutionKey{
+		NamespaceID: req.GetNamespaceId(),
+		BusinessID:  req.GetFilesystemId(),
+	})
+
+	_, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(fs *Filesystem, mCtx chasm.MutableContext, _ any) (*temporalfspb.DetachWorkflowResponse, error) {
+			wfID := req.GetWorkflowId()
+			filtered := fs.OwnerWorkflowIds[:0]
+			for _, id := range fs.OwnerWorkflowIds {
+				if id != wfID {
+					filtered = append(filtered, id)
+				}
+			}
+			fs.OwnerWorkflowIds = filtered
+
+			// If all owners are gone, transition to DELETED.
+			if len(fs.OwnerWorkflowIds) == 0 {
+				if err := TransitionDelete.Apply(fs, mCtx, nil); err != nil {
+					return nil, err
+				}
+			}
+			return &temporalfspb.DetachWorkflowResponse{}, nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &temporalfspb.DetachWorkflowResponse{}, nil
 }
 
 // FS operations — these use temporal-fs inode-based APIs.

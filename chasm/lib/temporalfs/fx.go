@@ -27,10 +27,16 @@ var HistoryModule = fx.Module(
 			},
 			fx.As(new(FSStoreProvider)),
 		),
+		fx.Annotate(
+			newNoopWorkflowExistenceChecker,
+			fx.As(new(WorkflowExistenceChecker)),
+		),
 		newHandler,
 		newChunkGCTaskExecutor,
 		newManifestCompactTaskExecutor,
 		newQuotaCheckTaskExecutor,
+		newOwnerCheckTaskExecutor,
+		newDataCleanupTaskExecutor,
 		newLibrary,
 	),
 	fx.Invoke(func(l *library, registry *chasm.Registry) error {

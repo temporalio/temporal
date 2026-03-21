@@ -41,6 +41,8 @@ const (
 	TemporalFSService_Mknod_FullMethodName             = "/temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService/Mknod"
 	TemporalFSService_Statfs_FullMethodName            = "/temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService/Statfs"
 	TemporalFSService_CreateSnapshot_FullMethodName    = "/temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService/CreateSnapshot"
+	TemporalFSService_AttachWorkflow_FullMethodName    = "/temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService/AttachWorkflow"
+	TemporalFSService_DetachWorkflow_FullMethodName    = "/temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService/DetachWorkflow"
 )
 
 // TemporalFSServiceClient is the client API for TemporalFSService service.
@@ -75,6 +77,9 @@ type TemporalFSServiceClient interface {
 	Statfs(ctx context.Context, in *StatfsRequest, opts ...grpc.CallOption) (*StatfsResponse, error)
 	// Snapshots
 	CreateSnapshot(ctx context.Context, in *CreateSnapshotRequest, opts ...grpc.CallOption) (*CreateSnapshotResponse, error)
+	// Owner management
+	AttachWorkflow(ctx context.Context, in *AttachWorkflowRequest, opts ...grpc.CallOption) (*AttachWorkflowResponse, error)
+	DetachWorkflow(ctx context.Context, in *DetachWorkflowRequest, opts ...grpc.CallOption) (*DetachWorkflowResponse, error)
 }
 
 type temporalFSServiceClient struct {
@@ -274,6 +279,24 @@ func (c *temporalFSServiceClient) CreateSnapshot(ctx context.Context, in *Create
 	return out, nil
 }
 
+func (c *temporalFSServiceClient) AttachWorkflow(ctx context.Context, in *AttachWorkflowRequest, opts ...grpc.CallOption) (*AttachWorkflowResponse, error) {
+	out := new(AttachWorkflowResponse)
+	err := c.cc.Invoke(ctx, TemporalFSService_AttachWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *temporalFSServiceClient) DetachWorkflow(ctx context.Context, in *DetachWorkflowRequest, opts ...grpc.CallOption) (*DetachWorkflowResponse, error) {
+	out := new(DetachWorkflowResponse)
+	err := c.cc.Invoke(ctx, TemporalFSService_DetachWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TemporalFSServiceServer is the server API for TemporalFSService service.
 // All implementations must embed UnimplementedTemporalFSServiceServer
 // for forward compatibility
@@ -306,6 +329,9 @@ type TemporalFSServiceServer interface {
 	Statfs(context.Context, *StatfsRequest) (*StatfsResponse, error)
 	// Snapshots
 	CreateSnapshot(context.Context, *CreateSnapshotRequest) (*CreateSnapshotResponse, error)
+	// Owner management
+	AttachWorkflow(context.Context, *AttachWorkflowRequest) (*AttachWorkflowResponse, error)
+	DetachWorkflow(context.Context, *DetachWorkflowRequest) (*DetachWorkflowResponse, error)
 	mustEmbedUnimplementedTemporalFSServiceServer()
 }
 
@@ -375,6 +401,12 @@ func (UnimplementedTemporalFSServiceServer) Statfs(context.Context, *StatfsReque
 }
 func (UnimplementedTemporalFSServiceServer) CreateSnapshot(context.Context, *CreateSnapshotRequest) (*CreateSnapshotResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSnapshot not implemented")
+}
+func (UnimplementedTemporalFSServiceServer) AttachWorkflow(context.Context, *AttachWorkflowRequest) (*AttachWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AttachWorkflow not implemented")
+}
+func (UnimplementedTemporalFSServiceServer) DetachWorkflow(context.Context, *DetachWorkflowRequest) (*DetachWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DetachWorkflow not implemented")
 }
 func (UnimplementedTemporalFSServiceServer) mustEmbedUnimplementedTemporalFSServiceServer() {}
 
@@ -767,6 +799,42 @@ func _TemporalFSService_CreateSnapshot_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TemporalFSService_AttachWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AttachWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TemporalFSServiceServer).AttachWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TemporalFSService_AttachWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TemporalFSServiceServer).AttachWorkflow(ctx, req.(*AttachWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TemporalFSService_DetachWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DetachWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TemporalFSServiceServer).DetachWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TemporalFSService_DetachWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TemporalFSServiceServer).DetachWorkflow(ctx, req.(*DetachWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TemporalFSService_ServiceDesc is the grpc.ServiceDesc for TemporalFSService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -857,6 +925,14 @@ var TemporalFSService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateSnapshot",
 			Handler:    _TemporalFSService_CreateSnapshot_Handler,
+		},
+		{
+			MethodName: "AttachWorkflow",
+			Handler:    _TemporalFSService_AttachWorkflow_Handler,
+		},
+		{
+			MethodName: "DetachWorkflow",
+			Handler:    _TemporalFSService_DetachWorkflow_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

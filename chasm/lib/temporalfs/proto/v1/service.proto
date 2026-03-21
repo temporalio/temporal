@@ -120,4 +120,15 @@ service TemporalFSService {
         option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
+
+    // Owner management
+    rpc AttachWorkflow(AttachWorkflowRequest) returns (AttachWorkflowResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc DetachWorkflow(DetachWorkflowRequest) returns (DetachWorkflowResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "filesystem_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
 }

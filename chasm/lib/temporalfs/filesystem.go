@@ -32,10 +32,13 @@ func (f *Filesystem) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 
 // Terminate implements chasm.RootComponent.
 func (f *Filesystem) Terminate(
-	_ chasm.MutableContext,
+	ctx chasm.MutableContext,
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	f.Status = temporalfspb.FILESYSTEM_STATUS_DELETED
+	ctx.AddTask(f, chasm.TaskAttributes{
+		ScheduledTime: chasm.TaskScheduledTimeImmediate,
+	}, &temporalfspb.DataCleanupTask{})
 	return chasm.TerminateComponentResponse{}, nil
 }
 

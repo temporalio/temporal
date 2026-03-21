@@ -1,6 +1,7 @@
 package temporalfs
 
 import (
+	"encoding/binary"
 	"fmt"
 	"hash/fnv"
 	"os"
@@ -41,6 +42,22 @@ func (p *PebbleStoreProvider) GetStore(_ int32, namespaceID string, filesystemID
 
 	partitionID := p.getPartitionID(namespaceID, filesystemID)
 	return store.NewPrefixedStore(db, partitionID), nil
+}
+
+func (p *PebbleStoreProvider) DeleteStore(_ int32, namespaceID string, filesystemID string) error {
+	db, err := p.getOrCreateDB()
+	if err != nil {
+		return err
+	}
+
+	partitionID := p.getPartitionID(namespaceID, filesystemID)
+	// Delete all keys with this partition's 8-byte prefix by constructing
+	// a range [prefix, prefixEnd) where prefixEnd is prefix+1.
+	prefix := make([]byte, 8)
+	binary.BigEndian.PutUint64(prefix, partitionID)
+	prefixEnd := make([]byte, 8)
+	binary.BigEndian.PutUint64(prefixEnd, partitionID+1)
+	return db.DeleteRange(prefix, prefixEnd)
 }
 
 func (p *PebbleStoreProvider) Close() error {

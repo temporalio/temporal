@@ -961,3 +961,89 @@ func (c *TemporalFSServiceLayeredClient) CreateSnapshot(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *TemporalFSServiceLayeredClient) callAttachWorkflowNoRetry(
+	ctx context.Context,
+	request *AttachWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*AttachWorkflowResponse, error) {
+	var response *AttachWorkflowResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TemporalFSService.AttachWorkflow"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFilesystemId(), c.numShards)
+	op := func(ctx context.Context, client TemporalFSServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.AttachWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TemporalFSServiceLayeredClient) AttachWorkflow(
+	ctx context.Context,
+	request *AttachWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*AttachWorkflowResponse, error) {
+	call := func(ctx context.Context) (*AttachWorkflowResponse, error) {
+		return c.callAttachWorkflowNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *TemporalFSServiceLayeredClient) callDetachWorkflowNoRetry(
+	ctx context.Context,
+	request *DetachWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*DetachWorkflowResponse, error) {
+	var response *DetachWorkflowResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TemporalFSService.DetachWorkflow"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFilesystemId(), c.numShards)
+	op := func(ctx context.Context, client TemporalFSServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.DetachWorkflow(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TemporalFSServiceLayeredClient) DetachWorkflow(
+	ctx context.Context,
+	request *DetachWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*DetachWorkflowResponse, error) {
+	call := func(ctx context.Context) (*DetachWorkflowResponse, error) {
+		return c.callDetachWorkflowNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

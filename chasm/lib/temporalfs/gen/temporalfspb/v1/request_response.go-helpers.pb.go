@@ -1632,3 +1632,151 @@ func (this *DirEntry) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type AttachWorkflowRequest to the protobuf v3 wire format
+func (val *AttachWorkflowRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AttachWorkflowRequest from the protobuf v3 wire format
+func (val *AttachWorkflowRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AttachWorkflowRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AttachWorkflowRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AttachWorkflowRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AttachWorkflowRequest
+	switch t := that.(type) {
+	case *AttachWorkflowRequest:
+		that1 = t
+	case AttachWorkflowRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AttachWorkflowResponse to the protobuf v3 wire format
+func (val *AttachWorkflowResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AttachWorkflowResponse from the protobuf v3 wire format
+func (val *AttachWorkflowResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AttachWorkflowResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AttachWorkflowResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AttachWorkflowResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AttachWorkflowResponse
+	switch t := that.(type) {
+	case *AttachWorkflowResponse:
+		that1 = t
+	case AttachWorkflowResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DetachWorkflowRequest to the protobuf v3 wire format
+func (val *DetachWorkflowRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DetachWorkflowRequest from the protobuf v3 wire format
+func (val *DetachWorkflowRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DetachWorkflowRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DetachWorkflowRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DetachWorkflowRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DetachWorkflowRequest
+	switch t := that.(type) {
+	case *DetachWorkflowRequest:
+		that1 = t
+	case DetachWorkflowRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DetachWorkflowResponse to the protobuf v3 wire format
+func (val *DetachWorkflowResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DetachWorkflowResponse from the protobuf v3 wire format
+func (val *DetachWorkflowResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DetachWorkflowResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DetachWorkflowResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DetachWorkflowResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DetachWorkflowResponse
+	switch t := that.(type) {
+	case *DetachWorkflowResponse:
+		that1 = t
+	case DetachWorkflowResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

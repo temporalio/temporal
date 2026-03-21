@@ -19,8 +19,9 @@ message FilesystemState {
     FSStats stats = 3;
     uint64 next_inode_id = 4;
     uint64 next_txn_id = 5;
-    // P1: single owner workflow
-    string owner_workflow_id = 6;
+    // Set of workflow IDs that own this filesystem.
+    // TFS is eligible for GC only when this set is empty.
+    repeated string owner_workflow_ids = 7;
 }
 
 message FilesystemConfig {
@@ -34,6 +35,8 @@ message FilesystemConfig {
     google.protobuf.Duration gc_interval = 4;
     // How long to retain snapshots.
     google.protobuf.Duration snapshot_retention = 5;
+    // Interval between owner liveness checks (default: 10m).
+    google.protobuf.Duration owner_check_interval = 6;
 }
 
 message FSStats {

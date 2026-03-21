@@ -25,8 +25,8 @@ func (f *Filesystem) SetStateMachineState(state temporalfspb.FilesystemStatus) {
 
 // CreateEvent carries the configuration for creating a new filesystem.
 type CreateEvent struct {
-	Config          *temporalfspb.FilesystemConfig
-	OwnerWorkflowID string
+	Config           *temporalfspb.FilesystemConfig
+	OwnerWorkflowIDs []string
 }
 
 // TransitionCreate transitions from UNSPECIFIED → RUNNING.
@@ -43,13 +43,34 @@ var TransitionCreate = chasm.NewTransition(
 		fs.NextInodeId = 2 // root inode = 1
 		fs.NextTxnId = 1
 		fs.Stats = &temporalfspb.FSStats{}
-		fs.OwnerWorkflowId = event.OwnerWorkflowID
+
+		// Build deduplicated owner set.
+		owners := make(map[string]struct{})
+		for _, id := range event.OwnerWorkflowIDs {
+			if id != "" {
+				owners[id] = struct{}{}
+			}
+		}
+		for id := range owners {
+			fs.OwnerWorkflowIds = append(fs.OwnerWorkflowIds, id)
+		}
 
 		// Schedule periodic GC task.
 		if gcInterval := fs.Config.GetGcInterval().AsDuration(); gcInterval > 0 {
 			ctx.AddTask(fs, chasm.TaskAttributes{
 				ScheduledTime: ctx.Now(fs).Add(gcInterval),
 			}, &temporalfspb.ChunkGCTask{})
+		}
+
+		// Schedule periodic owner check task if there are owners.
+		if len(fs.OwnerWorkflowIds) > 0 {
+			interval := fs.Config.GetOwnerCheckInterval().AsDuration()
+			if interval <= 0 {
+				interval = defaultOwnerCheckInterval
+			}
+			ctx.AddTask(fs, chasm.TaskAttributes{
+				ScheduledTime: ctx.Now(fs).Add(interval),
+			}, &temporalfspb.OwnerCheckTask{})
 		}
 
 		return nil
@@ -68,13 +89,17 @@ var TransitionArchive = chasm.NewTransition(
 )
 
 // TransitionDelete transitions from RUNNING or ARCHIVED → DELETED.
+// Schedules a DataCleanupTask to delete all FS data from the store.
 var TransitionDelete = chasm.NewTransition(
 	[]temporalfspb.FilesystemStatus{
 		temporalfspb.FILESYSTEM_STATUS_RUNNING,
 		temporalfspb.FILESYSTEM_STATUS_ARCHIVED,
 	},
 	temporalfspb.FILESYSTEM_STATUS_DELETED,
-	func(_ *Filesystem, _ chasm.MutableContext, _ any) error {
+	func(fs *Filesystem, ctx chasm.MutableContext, _ any) error {
+		ctx.AddTask(fs, chasm.TaskAttributes{
+			ScheduledTime: chasm.TaskScheduledTimeImmediate,
+		}, &temporalfspb.DataCleanupTask{})
 		return nil
 	},
 )

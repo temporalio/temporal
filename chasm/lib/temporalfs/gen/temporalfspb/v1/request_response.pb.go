@@ -24,14 +24,15 @@ const (
 )
 
 type CreateFilesystemRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId     string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	FilesystemId    string                 `protobuf:"bytes,2,opt,name=filesystem_id,json=filesystemId,proto3" json:"filesystem_id,omitempty"`
-	OwnerWorkflowId string                 `protobuf:"bytes,3,opt,name=owner_workflow_id,json=ownerWorkflowId,proto3" json:"owner_workflow_id,omitempty"`
-	Config          *FilesystemConfig      `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
-	RequestId       string                 `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId  string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FilesystemId string                 `protobuf:"bytes,2,opt,name=filesystem_id,json=filesystemId,proto3" json:"filesystem_id,omitempty"`
+	// Initial set of owner workflow IDs for this filesystem.
+	OwnerWorkflowIds []string          `protobuf:"bytes,6,rep,name=owner_workflow_ids,json=ownerWorkflowIds,proto3" json:"owner_workflow_ids,omitempty"`
+	Config           *FilesystemConfig `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
+	RequestId        string            `protobuf:"bytes,5,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CreateFilesystemRequest) Reset() {
@@ -78,11 +79,11 @@ func (x *CreateFilesystemRequest) GetFilesystemId() string {
 	return ""
 }
 
-func (x *CreateFilesystemRequest) GetOwnerWorkflowId() string {
+func (x *CreateFilesystemRequest) GetOwnerWorkflowIds() []string {
 	if x != nil {
-		return x.OwnerWorkflowId
+		return x.OwnerWorkflowIds
 	}
-	return ""
+	return nil
 }
 
 func (x *CreateFilesystemRequest) GetConfig() *FilesystemConfig {
@@ -2632,15 +2633,207 @@ func (x *DirEntry) GetMode() uint32 {
 	return 0
 }
 
+type AttachWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FilesystemId  string                 `protobuf:"bytes,2,opt,name=filesystem_id,json=filesystemId,proto3" json:"filesystem_id,omitempty"`
+	WorkflowId    string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachWorkflowRequest) Reset() {
+	*x = AttachWorkflowRequest{}
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachWorkflowRequest) ProtoMessage() {}
+
+func (x *AttachWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*AttachWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *AttachWorkflowRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *AttachWorkflowRequest) GetFilesystemId() string {
+	if x != nil {
+		return x.FilesystemId
+	}
+	return ""
+}
+
+func (x *AttachWorkflowRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+type AttachWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AttachWorkflowResponse) Reset() {
+	*x = AttachWorkflowResponse{}
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AttachWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AttachWorkflowResponse) ProtoMessage() {}
+
+func (x *AttachWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AttachWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*AttachWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDescGZIP(), []int{45}
+}
+
+type DetachWorkflowRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	FilesystemId  string                 `protobuf:"bytes,2,opt,name=filesystem_id,json=filesystemId,proto3" json:"filesystem_id,omitempty"`
+	WorkflowId    string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachWorkflowRequest) Reset() {
+	*x = DetachWorkflowRequest{}
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachWorkflowRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachWorkflowRequest) ProtoMessage() {}
+
+func (x *DetachWorkflowRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachWorkflowRequest.ProtoReflect.Descriptor instead.
+func (*DetachWorkflowRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *DetachWorkflowRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *DetachWorkflowRequest) GetFilesystemId() string {
+	if x != nil {
+		return x.FilesystemId
+	}
+	return ""
+}
+
+func (x *DetachWorkflowRequest) GetWorkflowId() string {
+	if x != nil {
+		return x.WorkflowId
+	}
+	return ""
+}
+
+type DetachWorkflowResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DetachWorkflowResponse) Reset() {
+	*x = DetachWorkflowResponse{}
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DetachWorkflowResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DetachWorkflowResponse) ProtoMessage() {}
+
+func (x *DetachWorkflowResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DetachWorkflowResponse.ProtoReflect.Descriptor instead.
+func (*DetachWorkflowResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDescGZIP(), []int{47}
+}
+
 var File_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/temporalfs/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.temporalfs.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a9temporal/server/chasm/lib/temporalfs/proto/v1/state.proto\"\x85\x02\n" +
+	"Dtemporal/server/chasm/lib/temporalfs/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.temporalfs.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a9temporal/server/chasm/lib/temporalfs/proto/v1/state.proto\"\x87\x02\n" +
 	"\x17CreateFilesystemRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
-	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12*\n" +
-	"\x11owner_workflow_id\x18\x03 \x01(\tR\x0fownerWorkflowId\x12W\n" +
+	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12,\n" +
+	"\x12owner_workflow_ids\x18\x06 \x03(\tR\x10ownerWorkflowIds\x12W\n" +
 	"\x06config\x18\x04 \x01(\v2?.temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfigR\x06config\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x05 \x01(\tR\trequestId\"1\n" +
@@ -2809,7 +3002,19 @@ const file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_
 	"\bDirEntry\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\binode_id\x18\x02 \x01(\x04R\ainodeId\x12\x12\n" +
-	"\x04mode\x18\x03 \x01(\rR\x04modeBJZHgo.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspbb\x06proto3"
+	"\x04mode\x18\x03 \x01(\rR\x04mode\"\x80\x01\n" +
+	"\x15AttachWorkflowRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
+	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x1f\n" +
+	"\vworkflow_id\x18\x03 \x01(\tR\n" +
+	"workflowId\"\x18\n" +
+	"\x16AttachWorkflowResponse\"\x80\x01\n" +
+	"\x15DetachWorkflowRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12#\n" +
+	"\rfilesystem_id\x18\x02 \x01(\tR\ffilesystemId\x12\x1f\n" +
+	"\vworkflow_id\x18\x03 \x01(\tR\n" +
+	"workflowId\"\x18\n" +
+	"\x16DetachWorkflowResponseBJZHgo.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -2823,7 +3028,7 @@ func file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_r
 	return file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 44)
+var file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
 var file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_goTypes = []any{
 	(*CreateFilesystemRequest)(nil),   // 0: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemRequest
 	(*CreateFilesystemResponse)(nil),  // 1: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemResponse
@@ -2869,13 +3074,17 @@ var file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_go
 	(*CreateSnapshotResponse)(nil),    // 41: temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse
 	(*InodeAttr)(nil),                 // 42: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr
 	(*DirEntry)(nil),                  // 43: temporal.server.chasm.lib.temporalfs.proto.v1.DirEntry
-	(*FilesystemConfig)(nil),          // 44: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig
-	(*FilesystemState)(nil),           // 45: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemState
-	(*timestamppb.Timestamp)(nil),     // 46: google.protobuf.Timestamp
+	(*AttachWorkflowRequest)(nil),     // 44: temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowRequest
+	(*AttachWorkflowResponse)(nil),    // 45: temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowResponse
+	(*DetachWorkflowRequest)(nil),     // 46: temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowRequest
+	(*DetachWorkflowResponse)(nil),    // 47: temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowResponse
+	(*FilesystemConfig)(nil),          // 48: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig
+	(*FilesystemState)(nil),           // 49: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemState
+	(*timestamppb.Timestamp)(nil),     // 50: google.protobuf.Timestamp
 }
 var file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_depIdxs = []int32{
-	44, // 0: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemRequest.config:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig
-	45, // 1: temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse.state:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemState
+	48, // 0: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemRequest.config:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig
+	49, // 1: temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse.state:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemState
 	42, // 2: temporal.server.chasm.lib.temporalfs.proto.v1.LookupResponse.attr:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr
 	42, // 3: temporal.server.chasm.lib.temporalfs.proto.v1.MkdirResponse.attr:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr
 	43, // 4: temporal.server.chasm.lib.temporalfs.proto.v1.ReadDirResponse.entries:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.DirEntry
@@ -2886,9 +3095,9 @@ var file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_de
 	42, // 9: temporal.server.chasm.lib.temporalfs.proto.v1.SymlinkResponse.attr:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr
 	42, // 10: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileResponse.attr:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr
 	42, // 11: temporal.server.chasm.lib.temporalfs.proto.v1.MknodResponse.attr:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr
-	46, // 12: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr.atime:type_name -> google.protobuf.Timestamp
-	46, // 13: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr.mtime:type_name -> google.protobuf.Timestamp
-	46, // 14: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr.ctime:type_name -> google.protobuf.Timestamp
+	50, // 12: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr.atime:type_name -> google.protobuf.Timestamp
+	50, // 13: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr.mtime:type_name -> google.protobuf.Timestamp
+	50, // 14: temporal.server.chasm.lib.temporalfs.proto.v1.InodeAttr.ctime:type_name -> google.protobuf.Timestamp
 	15, // [15:15] is the sub-list for method output_type
 	15, // [15:15] is the sub-list for method input_type
 	15, // [15:15] is the sub-list for extension type_name
@@ -2908,7 +3117,7 @@ func file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_i
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_temporalfs_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   44,
+			NumMessages:   48,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

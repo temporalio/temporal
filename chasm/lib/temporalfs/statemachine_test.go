@@ -30,38 +30,42 @@ func TestTransitionCreate(t *testing.T) {
 	testCases := []struct {
 		name              string
 		config            *temporalfspb.FilesystemConfig
-		ownerWorkflowID   string
+		ownerWorkflowIDs  []string
 		expectDefaultConf bool
 		expectGCTask      bool
+		expectOwnerCheck  bool
 	}{
 		{
-			name: "with custom config",
+			name: "with custom config and owner",
 			config: &temporalfspb.FilesystemConfig{
 				ChunkSize:  512 * 1024,
 				MaxSize:    2 << 30,
 				MaxFiles:   50_000,
 				GcInterval: durationpb.New(10 * time.Minute),
 			},
-			ownerWorkflowID:   "wf-123",
+			ownerWorkflowIDs:  []string{"wf-123"},
 			expectDefaultConf: false,
 			expectGCTask:      true,
+			expectOwnerCheck:  true,
 		},
 		{
 			name:              "with nil config uses defaults",
 			config:            nil,
-			ownerWorkflowID:   "wf-456",
+			ownerWorkflowIDs:  []string{"wf-456"},
 			expectDefaultConf: true,
 			expectGCTask:      true,
+			expectOwnerCheck:  true,
 		},
 		{
-			name: "with zero GC interval schedules no task",
+			name: "with zero GC interval and no owners",
 			config: &temporalfspb.FilesystemConfig{
 				ChunkSize:  256 * 1024,
 				GcInterval: durationpb.New(0),
 			},
-			ownerWorkflowID:   "",
+			ownerWorkflowIDs:  nil,
 			expectDefaultConf: false,
 			expectGCTask:      false,
+			expectOwnerCheck:  false,
 		},
 	}
 
@@ -74,8 +78,8 @@ func TestTransitionCreate(t *testing.T) {
 			}
 
 			err := TransitionCreate.Apply(fs, ctx, CreateEvent{
-				Config:          tc.config,
-				OwnerWorkflowID: tc.ownerWorkflowID,
+				Config:           tc.config,
+				OwnerWorkflowIDs: tc.ownerWorkflowIDs,
 			})
 			require.NoError(t, err)
 
@@ -89,8 +93,8 @@ func TestTransitionCreate(t *testing.T) {
 			// Verify stats initialized.
 			require.NotNil(t, fs.Stats)
 
-			// Verify owner workflow ID.
-			require.Equal(t, tc.ownerWorkflowID, fs.OwnerWorkflowId)
+			// Verify owner workflow IDs.
+			require.ElementsMatch(t, tc.ownerWorkflowIDs, fs.OwnerWorkflowIds)
 
 			// Verify config.
 			require.NotNil(t, fs.Config)
@@ -104,15 +108,21 @@ func TestTransitionCreate(t *testing.T) {
 				require.Equal(t, tc.config.ChunkSize, fs.Config.ChunkSize)
 			}
 
-			// Verify GC task.
+			// Verify tasks.
+			expectedTasks := 0
 			if tc.expectGCTask {
-				require.Len(t, ctx.Tasks, 1)
+				expectedTasks++
+			}
+			if tc.expectOwnerCheck {
+				expectedTasks++
+			}
+			require.Len(t, ctx.Tasks, expectedTasks)
+
+			if tc.expectGCTask {
 				task := ctx.Tasks[0]
 				require.IsType(t, &temporalfspb.ChunkGCTask{}, task.Payload)
 				expectedTime := defaultTime.Add(fs.Config.GcInterval.AsDuration())
 				require.Equal(t, expectedTime, task.Attributes.ScheduledTime)
-			} else {
-				require.Empty(t, ctx.Tasks)
 			}
 		})
 	}
@@ -176,6 +186,9 @@ func TestTransitionDelete_FromRunning(t *testing.T) {
 	err := TransitionDelete.Apply(fs, ctx, nil)
 	require.NoError(t, err)
 	require.Equal(t, temporalfspb.FILESYSTEM_STATUS_DELETED, fs.Status)
+	// Verify DataCleanupTask is scheduled.
+	require.Len(t, ctx.Tasks, 1)
+	require.IsType(t, &temporalfspb.DataCleanupTask{}, ctx.Tasks[0].Payload)
 }
 
 func TestTransitionDelete_FromArchived(t *testing.T) {
@@ -189,6 +202,9 @@ func TestTransitionDelete_FromArchived(t *testing.T) {
 	err := TransitionDelete.Apply(fs, ctx, nil)
 	require.NoError(t, err)
 	require.Equal(t, temporalfspb.FILESYSTEM_STATUS_DELETED, fs.Status)
+	// Verify DataCleanupTask is scheduled.
+	require.Len(t, ctx.Tasks, 1)
+	require.IsType(t, &temporalfspb.DataCleanupTask{}, ctx.Tasks[0].Payload)
 }
 
 func TestTransitionDelete_InvalidSourceStates(t *testing.T) {

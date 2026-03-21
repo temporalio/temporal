@@ -95,10 +95,11 @@ type FilesystemState struct {
 	Stats       *FSStats               `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
 	NextInodeId uint64                 `protobuf:"varint,4,opt,name=next_inode_id,json=nextInodeId,proto3" json:"next_inode_id,omitempty"`
 	NextTxnId   uint64                 `protobuf:"varint,5,opt,name=next_txn_id,json=nextTxnId,proto3" json:"next_txn_id,omitempty"`
-	// P1: single owner workflow
-	OwnerWorkflowId string `protobuf:"bytes,6,opt,name=owner_workflow_id,json=ownerWorkflowId,proto3" json:"owner_workflow_id,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Set of workflow IDs that own this filesystem.
+	// TFS is eligible for GC only when this set is empty.
+	OwnerWorkflowIds []string `protobuf:"bytes,7,rep,name=owner_workflow_ids,json=ownerWorkflowIds,proto3" json:"owner_workflow_ids,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *FilesystemState) Reset() {
@@ -166,11 +167,11 @@ func (x *FilesystemState) GetNextTxnId() uint64 {
 	return 0
 }
 
-func (x *FilesystemState) GetOwnerWorkflowId() string {
+func (x *FilesystemState) GetOwnerWorkflowIds() []string {
 	if x != nil {
-		return x.OwnerWorkflowId
+		return x.OwnerWorkflowIds
 	}
-	return ""
+	return nil
 }
 
 type FilesystemConfig struct {
@@ -185,8 +186,10 @@ type FilesystemConfig struct {
 	GcInterval *durationpb.Duration `protobuf:"bytes,4,opt,name=gc_interval,json=gcInterval,proto3" json:"gc_interval,omitempty"`
 	// How long to retain snapshots.
 	SnapshotRetention *durationpb.Duration `protobuf:"bytes,5,opt,name=snapshot_retention,json=snapshotRetention,proto3" json:"snapshot_retention,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Interval between owner liveness checks (default: 10m).
+	OwnerCheckInterval *durationpb.Duration `protobuf:"bytes,6,opt,name=owner_check_interval,json=ownerCheckInterval,proto3" json:"owner_check_interval,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *FilesystemConfig) Reset() {
@@ -250,6 +253,13 @@ func (x *FilesystemConfig) GetGcInterval() *durationpb.Duration {
 func (x *FilesystemConfig) GetSnapshotRetention() *durationpb.Duration {
 	if x != nil {
 		return x.SnapshotRetention
+	}
+	return nil
+}
+
+func (x *FilesystemConfig) GetOwnerCheckInterval() *durationpb.Duration {
+	if x != nil {
+		return x.OwnerCheckInterval
 	}
 	return nil
 }
@@ -342,14 +352,14 @@ var File_temporal_server_chasm_lib_temporalfs_proto_v1_state_proto protoreflect.
 
 const file_temporal_server_chasm_lib_temporalfs_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/temporalfs/proto/v1/state.proto\x12-temporal.server.chasm.lib.temporalfs.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"\x81\x03\n" +
+	"9temporal/server/chasm/lib/temporalfs/proto/v1/state.proto\x12-temporal.server.chasm.lib.temporalfs.proto.v1\x1a\x1egoogle/protobuf/duration.proto\"\x83\x03\n" +
 	"\x0fFilesystemState\x12W\n" +
 	"\x06status\x18\x01 \x01(\x0e2?.temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemStatusR\x06status\x12W\n" +
 	"\x06config\x18\x02 \x01(\v2?.temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfigR\x06config\x12L\n" +
 	"\x05stats\x18\x03 \x01(\v26.temporal.server.chasm.lib.temporalfs.proto.v1.FSStatsR\x05stats\x12\"\n" +
 	"\rnext_inode_id\x18\x04 \x01(\x04R\vnextInodeId\x12\x1e\n" +
-	"\vnext_txn_id\x18\x05 \x01(\x04R\tnextTxnId\x12*\n" +
-	"\x11owner_workflow_id\x18\x06 \x01(\tR\x0fownerWorkflowId\"\xef\x01\n" +
+	"\vnext_txn_id\x18\x05 \x01(\x04R\tnextTxnId\x12,\n" +
+	"\x12owner_workflow_ids\x18\a \x03(\tR\x10ownerWorkflowIds\"\xbc\x02\n" +
 	"\x10FilesystemConfig\x12\x1d\n" +
 	"\n" +
 	"chunk_size\x18\x01 \x01(\rR\tchunkSize\x12\x19\n" +
@@ -357,7 +367,8 @@ const file_temporal_server_chasm_lib_temporalfs_proto_v1_state_proto_rawDesc = "
 	"\tmax_files\x18\x03 \x01(\x04R\bmaxFiles\x12:\n" +
 	"\vgc_interval\x18\x04 \x01(\v2\x19.google.protobuf.DurationR\n" +
 	"gcInterval\x12H\n" +
-	"\x12snapshot_retention\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x11snapshotRetention\"\xd1\x01\n" +
+	"\x12snapshot_retention\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\x11snapshotRetention\x12K\n" +
+	"\x14owner_check_interval\x18\x06 \x01(\v2\x19.google.protobuf.DurationR\x12ownerCheckInterval\"\xd1\x01\n" +
 	"\aFSStats\x12\x1d\n" +
 	"\n" +
 	"total_size\x18\x01 \x01(\x04R\ttotalSize\x12\x1d\n" +
@@ -402,11 +413,12 @@ var file_temporal_server_chasm_lib_temporalfs_proto_v1_state_proto_depIdxs = []i
 	3, // 2: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemState.stats:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.FSStats
 	4, // 3: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig.gc_interval:type_name -> google.protobuf.Duration
 	4, // 4: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig.snapshot_retention:type_name -> google.protobuf.Duration
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	4, // 5: temporal.server.chasm.lib.temporalfs.proto.v1.FilesystemConfig.owner_check_interval:type_name -> google.protobuf.Duration
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_temporalfs_proto_v1_state_proto_init() }

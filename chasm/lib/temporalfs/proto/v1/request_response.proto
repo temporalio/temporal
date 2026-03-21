@@ -12,7 +12,8 @@ import "chasm/lib/temporalfs/proto/v1/state.proto";
 message CreateFilesystemRequest {
     string namespace_id = 1;
     string filesystem_id = 2;
-    string owner_workflow_id = 3;
+    // Initial set of owner workflow IDs for this filesystem.
+    repeated string owner_workflow_ids = 6;
     FilesystemConfig config = 4;
     string request_id = 5;
 }
@@ -311,3 +312,23 @@ message DirEntry {
     uint64 inode_id = 2;
     uint32 mode = 3;
 }
+
+// AttachWorkflow
+
+message AttachWorkflowRequest {
+    string namespace_id = 1;
+    string filesystem_id = 2;
+    string workflow_id = 3;
+}
+
+message AttachWorkflowResponse {}
+
+// DetachWorkflow
+
+message DetachWorkflowRequest {
+    string namespace_id = 1;
+    string filesystem_id = 2;
+    string workflow_id = 3;
+}
+
+message DetachWorkflowResponse {}

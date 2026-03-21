@@ -115,3 +115,77 @@ func (this *QuotaCheckTask) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type OwnerCheckTask to the protobuf v3 wire format
+func (val *OwnerCheckTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type OwnerCheckTask from the protobuf v3 wire format
+func (val *OwnerCheckTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *OwnerCheckTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two OwnerCheckTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *OwnerCheckTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *OwnerCheckTask
+	switch t := that.(type) {
+	case *OwnerCheckTask:
+		that1 = t
+	case OwnerCheckTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DataCleanupTask to the protobuf v3 wire format
+func (val *DataCleanupTask) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DataCleanupTask from the protobuf v3 wire format
+func (val *DataCleanupTask) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DataCleanupTask) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DataCleanupTask values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DataCleanupTask) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DataCleanupTask
+	switch t := that.(type) {
+	case *DataCleanupTask:
+		that1 = t
+	case DataCleanupTask:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

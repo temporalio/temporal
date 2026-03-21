@@ -27,7 +27,7 @@ var File_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto protoreflec
 
 const file_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	";temporal/server/chasm/lib/temporalfs/proto/v1/service.proto\x12-temporal.server.chasm.lib.temporalfs.proto.v1\x1aDtemporal/server/chasm/lib/temporalfs/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto\x1a0temporal/server/api/common/v1/api_category.proto2\x9a\x1c\n" +
+	";temporal/server/chasm/lib/temporalfs/proto/v1/service.proto\x12-temporal.server.chasm.lib.temporalfs.proto.v1\x1aDtemporal/server/chasm/lib/temporalfs/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto\x1a0temporal/server/api/common/v1/api_category.proto2\x90\x1f\n" +
 	"\x11TemporalFSService\x12\xbe\x01\n" +
 	"\x10CreateFilesystem\x12F.temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemRequest\x1aG.temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\xc1\x01\n" +
 	"\x11GetFilesystemInfo\x12G.temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoRequest\x1aH.temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\xc1\x01\n" +
@@ -51,7 +51,9 @@ const file_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto_rawDesc =
 	"CreateFile\x12@.temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileRequest\x1aA.temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\x9d\x01\n" +
 	"\x05Mknod\x12;.temporal.server.chasm.lib.temporalfs.proto.v1.MknodRequest\x1a<.temporal.server.chasm.lib.temporalfs.proto.v1.MknodResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\xa0\x01\n" +
 	"\x06Statfs\x12<.temporal.server.chasm.lib.temporalfs.proto.v1.StatfsRequest\x1a=.temporal.server.chasm.lib.temporalfs.proto.v1.StatfsResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\xb8\x01\n" +
-	"\x0eCreateSnapshot\x12D.temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotRequest\x1aE.temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01BJZHgo.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspbb\x06proto3"
+	"\x0eCreateSnapshot\x12D.temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotRequest\x1aE.temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\xb8\x01\n" +
+	"\x0eAttachWorkflow\x12D.temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowRequest\x1aE.temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01\x12\xb8\x01\n" +
+	"\x0eDetachWorkflow\x12D.temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowRequest\x1aE.temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowResponse\"\x19\x92\xc4\x03\x0f\x1a\rfilesystem_id\x8a\xb5\x18\x02\b\x01BJZHgo.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspbb\x06proto3"
 
 var file_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto_goTypes = []any{
 	(*CreateFilesystemRequest)(nil),   // 0: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemRequest
@@ -75,27 +77,31 @@ var file_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto_goTypes = [
 	(*MknodRequest)(nil),              // 18: temporal.server.chasm.lib.temporalfs.proto.v1.MknodRequest
 	(*StatfsRequest)(nil),             // 19: temporal.server.chasm.lib.temporalfs.proto.v1.StatfsRequest
 	(*CreateSnapshotRequest)(nil),     // 20: temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotRequest
-	(*CreateFilesystemResponse)(nil),  // 21: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemResponse
-	(*GetFilesystemInfoResponse)(nil), // 22: temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse
-	(*ArchiveFilesystemResponse)(nil), // 23: temporal.server.chasm.lib.temporalfs.proto.v1.ArchiveFilesystemResponse
-	(*LookupResponse)(nil),            // 24: temporal.server.chasm.lib.temporalfs.proto.v1.LookupResponse
-	(*GetattrResponse)(nil),           // 25: temporal.server.chasm.lib.temporalfs.proto.v1.GetattrResponse
-	(*SetattrResponse)(nil),           // 26: temporal.server.chasm.lib.temporalfs.proto.v1.SetattrResponse
-	(*ReadChunksResponse)(nil),        // 27: temporal.server.chasm.lib.temporalfs.proto.v1.ReadChunksResponse
-	(*WriteChunksResponse)(nil),       // 28: temporal.server.chasm.lib.temporalfs.proto.v1.WriteChunksResponse
-	(*TruncateResponse)(nil),          // 29: temporal.server.chasm.lib.temporalfs.proto.v1.TruncateResponse
-	(*MkdirResponse)(nil),             // 30: temporal.server.chasm.lib.temporalfs.proto.v1.MkdirResponse
-	(*UnlinkResponse)(nil),            // 31: temporal.server.chasm.lib.temporalfs.proto.v1.UnlinkResponse
-	(*RmdirResponse)(nil),             // 32: temporal.server.chasm.lib.temporalfs.proto.v1.RmdirResponse
-	(*RenameResponse)(nil),            // 33: temporal.server.chasm.lib.temporalfs.proto.v1.RenameResponse
-	(*ReadDirResponse)(nil),           // 34: temporal.server.chasm.lib.temporalfs.proto.v1.ReadDirResponse
-	(*LinkResponse)(nil),              // 35: temporal.server.chasm.lib.temporalfs.proto.v1.LinkResponse
-	(*SymlinkResponse)(nil),           // 36: temporal.server.chasm.lib.temporalfs.proto.v1.SymlinkResponse
-	(*ReadlinkResponse)(nil),          // 37: temporal.server.chasm.lib.temporalfs.proto.v1.ReadlinkResponse
-	(*CreateFileResponse)(nil),        // 38: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileResponse
-	(*MknodResponse)(nil),             // 39: temporal.server.chasm.lib.temporalfs.proto.v1.MknodResponse
-	(*StatfsResponse)(nil),            // 40: temporal.server.chasm.lib.temporalfs.proto.v1.StatfsResponse
-	(*CreateSnapshotResponse)(nil),    // 41: temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse
+	(*AttachWorkflowRequest)(nil),     // 21: temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowRequest
+	(*DetachWorkflowRequest)(nil),     // 22: temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowRequest
+	(*CreateFilesystemResponse)(nil),  // 23: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemResponse
+	(*GetFilesystemInfoResponse)(nil), // 24: temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse
+	(*ArchiveFilesystemResponse)(nil), // 25: temporal.server.chasm.lib.temporalfs.proto.v1.ArchiveFilesystemResponse
+	(*LookupResponse)(nil),            // 26: temporal.server.chasm.lib.temporalfs.proto.v1.LookupResponse
+	(*GetattrResponse)(nil),           // 27: temporal.server.chasm.lib.temporalfs.proto.v1.GetattrResponse
+	(*SetattrResponse)(nil),           // 28: temporal.server.chasm.lib.temporalfs.proto.v1.SetattrResponse
+	(*ReadChunksResponse)(nil),        // 29: temporal.server.chasm.lib.temporalfs.proto.v1.ReadChunksResponse
+	(*WriteChunksResponse)(nil),       // 30: temporal.server.chasm.lib.temporalfs.proto.v1.WriteChunksResponse
+	(*TruncateResponse)(nil),          // 31: temporal.server.chasm.lib.temporalfs.proto.v1.TruncateResponse
+	(*MkdirResponse)(nil),             // 32: temporal.server.chasm.lib.temporalfs.proto.v1.MkdirResponse
+	(*UnlinkResponse)(nil),            // 33: temporal.server.chasm.lib.temporalfs.proto.v1.UnlinkResponse
+	(*RmdirResponse)(nil),             // 34: temporal.server.chasm.lib.temporalfs.proto.v1.RmdirResponse
+	(*RenameResponse)(nil),            // 35: temporal.server.chasm.lib.temporalfs.proto.v1.RenameResponse
+	(*ReadDirResponse)(nil),           // 36: temporal.server.chasm.lib.temporalfs.proto.v1.ReadDirResponse
+	(*LinkResponse)(nil),              // 37: temporal.server.chasm.lib.temporalfs.proto.v1.LinkResponse
+	(*SymlinkResponse)(nil),           // 38: temporal.server.chasm.lib.temporalfs.proto.v1.SymlinkResponse
+	(*ReadlinkResponse)(nil),          // 39: temporal.server.chasm.lib.temporalfs.proto.v1.ReadlinkResponse
+	(*CreateFileResponse)(nil),        // 40: temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileResponse
+	(*MknodResponse)(nil),             // 41: temporal.server.chasm.lib.temporalfs.proto.v1.MknodResponse
+	(*StatfsResponse)(nil),            // 42: temporal.server.chasm.lib.temporalfs.proto.v1.StatfsResponse
+	(*CreateSnapshotResponse)(nil),    // 43: temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse
+	(*AttachWorkflowResponse)(nil),    // 44: temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowResponse
+	(*DetachWorkflowResponse)(nil),    // 45: temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowResponse
 }
 var file_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateFilesystem:input_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemRequest
@@ -119,29 +125,33 @@ var file_temporal_server_chasm_lib_temporalfs_proto_v1_service_proto_depIdxs = [
 	18, // 18: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Mknod:input_type -> temporal.server.chasm.lib.temporalfs.proto.v1.MknodRequest
 	19, // 19: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Statfs:input_type -> temporal.server.chasm.lib.temporalfs.proto.v1.StatfsRequest
 	20, // 20: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateSnapshot:input_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotRequest
-	21, // 21: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateFilesystem:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemResponse
-	22, // 22: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.GetFilesystemInfo:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse
-	23, // 23: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.ArchiveFilesystem:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ArchiveFilesystemResponse
-	24, // 24: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Lookup:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.LookupResponse
-	25, // 25: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Getattr:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.GetattrResponse
-	26, // 26: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Setattr:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.SetattrResponse
-	27, // 27: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.ReadChunks:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ReadChunksResponse
-	28, // 28: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.WriteChunks:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.WriteChunksResponse
-	29, // 29: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Truncate:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.TruncateResponse
-	30, // 30: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Mkdir:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.MkdirResponse
-	31, // 31: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Unlink:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.UnlinkResponse
-	32, // 32: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Rmdir:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.RmdirResponse
-	33, // 33: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Rename:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.RenameResponse
-	34, // 34: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.ReadDir:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ReadDirResponse
-	35, // 35: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Link:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.LinkResponse
-	36, // 36: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Symlink:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.SymlinkResponse
-	37, // 37: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Readlink:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ReadlinkResponse
-	38, // 38: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateFile:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileResponse
-	39, // 39: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Mknod:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.MknodResponse
-	40, // 40: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Statfs:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.StatfsResponse
-	41, // 41: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateSnapshot:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse
-	21, // [21:42] is the sub-list for method output_type
-	0,  // [0:21] is the sub-list for method input_type
+	21, // 21: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.AttachWorkflow:input_type -> temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowRequest
+	22, // 22: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.DetachWorkflow:input_type -> temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowRequest
+	23, // 23: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateFilesystem:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateFilesystemResponse
+	24, // 24: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.GetFilesystemInfo:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.GetFilesystemInfoResponse
+	25, // 25: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.ArchiveFilesystem:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ArchiveFilesystemResponse
+	26, // 26: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Lookup:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.LookupResponse
+	27, // 27: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Getattr:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.GetattrResponse
+	28, // 28: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Setattr:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.SetattrResponse
+	29, // 29: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.ReadChunks:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ReadChunksResponse
+	30, // 30: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.WriteChunks:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.WriteChunksResponse
+	31, // 31: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Truncate:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.TruncateResponse
+	32, // 32: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Mkdir:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.MkdirResponse
+	33, // 33: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Unlink:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.UnlinkResponse
+	34, // 34: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Rmdir:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.RmdirResponse
+	35, // 35: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Rename:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.RenameResponse
+	36, // 36: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.ReadDir:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ReadDirResponse
+	37, // 37: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Link:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.LinkResponse
+	38, // 38: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Symlink:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.SymlinkResponse
+	39, // 39: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Readlink:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.ReadlinkResponse
+	40, // 40: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateFile:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateFileResponse
+	41, // 41: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Mknod:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.MknodResponse
+	42, // 42: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.Statfs:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.StatfsResponse
+	43, // 43: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.CreateSnapshot:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.CreateSnapshotResponse
+	44, // 44: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.AttachWorkflow:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.AttachWorkflowResponse
+	45, // 45: temporal.server.chasm.lib.temporalfs.proto.v1.TemporalFSService.DetachWorkflow:output_type -> temporal.server.chasm.lib.temporalfs.proto.v1.DetachWorkflowResponse
+	23, // [23:46] is the sub-list for method output_type
+	0,  // [0:23] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name

@@ -148,6 +148,97 @@ func (*QuotaCheckTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDescGZIP(), []int{2}
 }
 
+type OwnerCheckTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Per-workflow consecutive not-found counts, keyed by workflow ID.
+	// Guards against transient NotFound from history service.
+	NotFoundCounts map[string]int32 `protobuf:"bytes,1,rep,name=not_found_counts,json=notFoundCounts,proto3" json:"not_found_counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OwnerCheckTask) Reset() {
+	*x = OwnerCheckTask{}
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OwnerCheckTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OwnerCheckTask) ProtoMessage() {}
+
+func (x *OwnerCheckTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OwnerCheckTask.ProtoReflect.Descriptor instead.
+func (*OwnerCheckTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OwnerCheckTask) GetNotFoundCounts() map[string]int32 {
+	if x != nil {
+		return x.NotFoundCounts
+	}
+	return nil
+}
+
+type DataCleanupTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Retry attempt count for exponential backoff on failure.
+	Attempt       int32 `protobuf:"varint,1,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DataCleanupTask) Reset() {
+	*x = DataCleanupTask{}
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DataCleanupTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DataCleanupTask) ProtoMessage() {}
+
+func (x *DataCleanupTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DataCleanupTask.ProtoReflect.Descriptor instead.
+func (*DataCleanupTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *DataCleanupTask) GetAttempt() int32 {
+	if x != nil {
+		return x.Attempt
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDesc = "" +
@@ -157,7 +248,14 @@ const file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDesc = "
 	"\x15last_processed_txn_id\x18\x01 \x01(\x04R\x12lastProcessedTxnId\"A\n" +
 	"\x13ManifestCompactTask\x12*\n" +
 	"\x11checkpoint_txn_id\x18\x01 \x01(\x04R\x0fcheckpointTxnId\"\x10\n" +
-	"\x0eQuotaCheckTaskBJZHgo.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspbb\x06proto3"
+	"\x0eQuotaCheckTask\"\xd0\x01\n" +
+	"\x0eOwnerCheckTask\x12{\n" +
+	"\x10not_found_counts\x18\x01 \x03(\v2Q.temporal.server.chasm.lib.temporalfs.proto.v1.OwnerCheckTask.NotFoundCountsEntryR\x0enotFoundCounts\x1aA\n" +
+	"\x13NotFoundCountsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"+\n" +
+	"\x0fDataCleanupTask\x12\x18\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattemptBJZHgo.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb;temporalfspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -171,18 +269,22 @@ func file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDescGZIP(
 	return file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_goTypes = []any{
 	(*ChunkGCTask)(nil),         // 0: temporal.server.chasm.lib.temporalfs.proto.v1.ChunkGCTask
 	(*ManifestCompactTask)(nil), // 1: temporal.server.chasm.lib.temporalfs.proto.v1.ManifestCompactTask
 	(*QuotaCheckTask)(nil),      // 2: temporal.server.chasm.lib.temporalfs.proto.v1.QuotaCheckTask
+	(*OwnerCheckTask)(nil),      // 3: temporal.server.chasm.lib.temporalfs.proto.v1.OwnerCheckTask
+	(*DataCleanupTask)(nil),     // 4: temporal.server.chasm.lib.temporalfs.proto.v1.DataCleanupTask
+	nil,                         // 5: temporal.server.chasm.lib.temporalfs.proto.v1.OwnerCheckTask.NotFoundCountsEntry
 }
 var file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5, // 0: temporal.server.chasm.lib.temporalfs.proto.v1.OwnerCheckTask.not_found_counts:type_name -> temporal.server.chasm.lib.temporalfs.proto.v1.OwnerCheckTask.NotFoundCountsEntry
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_init() }
@@ -196,7 +298,7 @@ func file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_temporalfs_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -15,6 +15,10 @@ type FSStoreProvider interface {
 	// The returned store provides full key isolation for that execution.
 	GetStore(shardID int32, namespaceID string, filesystemID string) (store.Store, error)
 
+	// DeleteStore deletes all FS data for a specific filesystem execution.
+	// Called by DataCleanupTask when a filesystem transitions to DELETED.
+	DeleteStore(shardID int32, namespaceID string, filesystemID string) error
+
 	// Close releases all resources (PebbleDB instances, Walker sessions, etc.)
 	Close() error
 }

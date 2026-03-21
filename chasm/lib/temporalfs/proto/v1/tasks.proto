@@ -17,3 +17,14 @@ message ManifestCompactTask {
 message QuotaCheckTask {
     // Enforce storage quotas. Triggered after writes.
 }
+
+message OwnerCheckTask {
+    // Per-workflow consecutive not-found counts, keyed by workflow ID.
+    // Guards against transient NotFound from history service.
+    map<string, int32> not_found_counts = 1;
+}
+
+message DataCleanupTask {
+    // Retry attempt count for exponential backoff on failure.
+    int32 attempt = 1;
+}

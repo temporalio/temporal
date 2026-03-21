@@ -23,6 +23,8 @@ type library struct {
 	chunkGCTaskExecutor         *chunkGCTaskExecutor
 	manifestCompactTaskExecutor *manifestCompactTaskExecutor
 	quotaCheckTaskExecutor      *quotaCheckTaskExecutor
+	ownerCheckTaskExecutor      *ownerCheckTaskExecutor
+	dataCleanupTaskExecutor     *dataCleanupTaskExecutor
 }
 
 func newLibrary(
@@ -30,12 +32,16 @@ func newLibrary(
 	chunkGCTaskExecutor *chunkGCTaskExecutor,
 	manifestCompactTaskExecutor *manifestCompactTaskExecutor,
 	quotaCheckTaskExecutor *quotaCheckTaskExecutor,
+	ownerCheckTaskExecutor *ownerCheckTaskExecutor,
+	dataCleanupTaskExecutor *dataCleanupTaskExecutor,
 ) *library {
 	return &library{
 		handler:                     handler,
 		chunkGCTaskExecutor:         chunkGCTaskExecutor,
 		manifestCompactTaskExecutor: manifestCompactTaskExecutor,
 		quotaCheckTaskExecutor:      quotaCheckTaskExecutor,
+		ownerCheckTaskExecutor:      ownerCheckTaskExecutor,
+		dataCleanupTaskExecutor:     dataCleanupTaskExecutor,
 	}
 }
 
@@ -71,6 +77,16 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			"quotaCheck",
 			l.quotaCheckTaskExecutor,
 			l.quotaCheckTaskExecutor,
+		),
+		chasm.NewRegistrablePureTask(
+			"ownerCheck",
+			l.ownerCheckTaskExecutor,
+			l.ownerCheckTaskExecutor,
+		),
+		chasm.NewRegistrableSideEffectTask(
+			"dataCleanup",
+			l.dataCleanupTaskExecutor,
+			l.dataCleanupTaskExecutor,
 		),
 	}
 }

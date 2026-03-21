@@ -22,6 +22,9 @@ const (
 	defaultMaxFiles          = 100_000
 	defaultGCInterval        = 5 * time.Minute
 	defaultSnapshotRetention = 24 * time.Hour
+	defaultOwnerCheckInterval   = 10 * time.Minute
+	ownerCheckNotFoundThreshold = int32(2)
+	dataCleanupMaxBackoff       = 30 * time.Minute
 )
 
 type Config struct {
