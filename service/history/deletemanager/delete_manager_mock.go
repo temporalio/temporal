@@ -85,3 +85,39 @@ func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecutionByRetention(ctx,
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecutionByRetention", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecutionByRetention), ctx, nsID, we, weCtx, ms, stage)
 }
+
+// MockPostDeleteHook is a mock of PostDeleteHook interface.
+type MockPostDeleteHook struct {
+	ctrl     *gomock.Controller
+	recorder *MockPostDeleteHookMockRecorder
+	isgomock struct{}
+}
+
+// MockPostDeleteHookMockRecorder is the mock recorder for MockPostDeleteHook.
+type MockPostDeleteHookMockRecorder struct {
+	mock *MockPostDeleteHook
+}
+
+// NewMockPostDeleteHook creates a new mock instance.
+func NewMockPostDeleteHook(ctrl *gomock.Controller) *MockPostDeleteHook {
+	mock := &MockPostDeleteHook{ctrl: ctrl}
+	mock.recorder = &MockPostDeleteHookMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPostDeleteHook) EXPECT() *MockPostDeleteHookMockRecorder {
+	return m.recorder
+}
+
+// AfterWorkflowDeletion mocks base method.
+func (m *MockPostDeleteHook) AfterWorkflowDeletion(ctx context.Context, namespaceID, workflowID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AfterWorkflowDeletion", ctx, namespaceID, workflowID)
+}
+
+// AfterWorkflowDeletion indicates an expected call of AfterWorkflowDeletion.
+func (mr *MockPostDeleteHookMockRecorder) AfterWorkflowDeletion(ctx, namespaceID, workflowID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AfterWorkflowDeletion", reflect.TypeOf((*MockPostDeleteHook)(nil).AfterWorkflowDeletion), ctx, namespaceID, workflowID)
+}
