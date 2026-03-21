@@ -31,6 +31,7 @@ var HistoryModule = fx.Module(
 			newNoopWorkflowExistenceChecker,
 			fx.As(new(WorkflowExistenceChecker)),
 		),
+		newTFSPostDeleteHook,
 		newHandler,
 		newChunkGCTaskExecutor,
 		newManifestCompactTaskExecutor,

@@ -31,16 +31,20 @@ func TestLifecycleState(t *testing.T) {
 }
 
 func TestTerminate(t *testing.T) {
+	ctx := newMockMutableContext()
 	fs := &Filesystem{
 		FilesystemState: &temporalfspb.FilesystemState{
 			Status: temporalfspb.FILESYSTEM_STATUS_RUNNING,
 		},
 	}
 
-	resp, err := fs.Terminate(nil, chasm.TerminateComponentRequest{})
+	resp, err := fs.Terminate(ctx, chasm.TerminateComponentRequest{})
 	require.NoError(t, err)
 	require.Equal(t, chasm.TerminateComponentResponse{}, resp)
 	require.Equal(t, temporalfspb.FILESYSTEM_STATUS_DELETED, fs.Status)
+	// Verify DataCleanupTask is scheduled.
+	require.Len(t, ctx.Tasks, 1)
+	require.IsType(t, &temporalfspb.DataCleanupTask{}, ctx.Tasks[0].Payload)
 }
 
 func TestSearchAttributes(t *testing.T) {

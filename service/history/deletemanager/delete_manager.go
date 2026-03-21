@@ -45,6 +45,12 @@ type (
 		) error
 	}
 
+	// PostDeleteHook is called after a workflow execution is successfully deleted.
+	// Implementations should be best-effort and not block deletion on failure.
+	PostDeleteHook interface {
+		AfterWorkflowDeletion(ctx context.Context, namespaceID string, workflowID string)
+	}
+
 	DeleteManagerImpl struct {
 		shardContext      historyi.ShardContext
 		workflowCache     wcache.Cache
@@ -52,6 +58,7 @@ type (
 		metricsHandler    metrics.Handler
 		timeSource        clock.TimeSource
 		visibilityManager manager.VisibilityManager
+		postDeleteHooks   []PostDeleteHook
 	}
 )
 
@@ -63,6 +70,7 @@ func NewDeleteManager(
 	config *configs.Config,
 	timeSource clock.TimeSource,
 	visibilityManager manager.VisibilityManager,
+	postDeleteHooks ...PostDeleteHook,
 ) *DeleteManagerImpl {
 	deleteManager := &DeleteManagerImpl{
 		shardContext:      shardContext,
@@ -71,6 +79,7 @@ func NewDeleteManager(
 		config:            config,
 		timeSource:        timeSource,
 		visibilityManager: visibilityManager,
+		postDeleteHooks:   postDeleteHooks,
 	}
 
 	return deleteManager
@@ -172,6 +181,11 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 
 	// Clear workflow execution context here to prevent further readers to get stale copy of non-exiting workflow execution.
 	weCtx.Clear()
+
+	// Notify post-delete hooks (best-effort, e.g., TFS DetachWorkflow).
+	for _, hook := range m.postDeleteHooks {
+		hook.AfterWorkflowDeletion(ctx, namespaceID.String(), we.GetWorkflowId())
+	}
 
 	metrics.WorkflowCleanupDeleteCount.With(metricsHandler).Record(1)
 	return nil
