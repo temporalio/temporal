@@ -6,10 +6,9 @@ import (
 	"math"
 	"time"
 
+	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
-	tfs "github.com/temporalio/temporal-fs/pkg/fs"
 	"go.temporal.io/server/chasm"
 	temporalfspb "go.temporal.io/server/chasm/lib/temporalfs/gen/temporalfspb/v1"
 	"go.temporal.io/server/common/log"

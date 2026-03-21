@@ -172,11 +172,11 @@ func TestLookup(t *testing.T) {
 
 	// Create a directory via handler so it shows up under root.
 	mkdirResp, err := h.Mkdir(context.Background(), &temporalfspb.MkdirRequest{
-		NamespaceId:    nsID,
-		FilesystemId:   fsID,
-		ParentInodeId:  rootInodeID,
-		Name:           "testdir",
-		Mode:           0o755,
+		NamespaceId:   nsID,
+		FilesystemId:  fsID,
+		ParentInodeId: rootInodeID,
+		Name:          "testdir",
+		Mode:          0o755,
 	})
 	require.NoError(t, err)
 	require.NotZero(t, mkdirResp.InodeId)
@@ -214,7 +214,7 @@ func TestSetattr(t *testing.T) {
 		NamespaceId:  nsID,
 		FilesystemId: fsID,
 		InodeId:      inodeID,
-		Valid:         setattrMode,
+		Valid:        setattrMode,
 		Attr: &temporalfspb.InodeAttr{
 			Mode: 0o600,
 		},
@@ -243,7 +243,7 @@ func TestSetattr_Utimens(t *testing.T) {
 		NamespaceId:  nsID,
 		FilesystemId: fsID,
 		InodeId:      createResp.InodeId,
-		Valid:         setattrMtime,
+		Valid:        setattrMtime,
 		Attr: &temporalfspb.InodeAttr{
 			Mtime: timestamppb.New(newTime),
 		},
