@@ -6,12 +6,14 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	. "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/payloads"
@@ -1187,4 +1189,411 @@ func assertAborted(t *testing.T, upd *update.Update, expectedErr error) {
 			require.ErrorIs(t, err, expectedErr)
 		}
 	}
+}
+
+func TestAttachCallbacks(t *testing.T) {
+	tv := testvars.New(t)
+	testCallbacks := []*commonpb.Callback{
+		{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url: "http://localhost:1234/callback",
+				},
+			},
+		},
+	}
+	testRequest := &updatepb.Request{
+		Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+		Input:               &updatepb.Input{Name: "not_empty"},
+		RequestId:           tv.RequestID(),
+		CompletionCallbacks: testCallbacks,
+	}
+
+	capturingStore := func(effects *effect.Buffer) (mockEventStore, *[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate) {
+		var captured []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate
+		store := mockEventStore{
+			Controller: effects,
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				captured = workflowUpdateOptions
+				return &historypb.HistoryEvent{}, nil
+			},
+		}
+		return store, &captured
+	}
+
+	trackingStore := func(effects *effect.Buffer) (mockEventStore, *bool) {
+		eventCreated := false
+		store := mockEventStore{
+			Controller: effects,
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				eventCreated = true
+				return &historypb.HistoryEvent{}, nil
+			},
+		}
+		return store, &eventCreated
+	}
+
+	countingOptionsStore := func(effects *effect.Buffer) (mockEventStore, *int) {
+		count := 0
+		store := mockEventStore{
+			Controller: effects,
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				count++
+				return &historypb.HistoryEvent{}, nil
+			},
+		}
+		return store, &count
+	}
+
+	t.Run("on stateAccepted fires callbacks and returns true", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, capturedOptions := capturingStore(effects)
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+		require.Len(t, *capturedOptions, 1)
+		require.Equal(t, tv.UpdateID(), (*capturedOptions)[0].UpdateId)
+		require.Equal(t, tv.RequestID(), (*capturedOptions)[0].AttachedRequestId)
+		require.Equal(t, testCallbacks, (*capturedOptions)[0].AttachedCompletionCallbacks)
+	})
+
+	t.Run("on stateCompleted returns true without attaching callbacks", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, eventCreated := trackingStore(effects)
+		upd := update.NewCompleted(tv.UpdateID(), future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+		require.False(t, *eventCreated, "should not attach callbacks when update is already completed")
+	})
+
+	t.Run("on stateCreated returns false without creating event", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, eventCreated := trackingStore(effects)
+		upd := update.New(tv.UpdateID())
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired)
+		require.False(t, *eventCreated)
+	})
+
+	t.Run("on stateAdmitted returns false without creating event", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, eventCreated := trackingStore(effects)
+		upd := update.NewAdmitted(tv.UpdateID(), nil)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired)
+		require.False(t, *eventCreated)
+	})
+
+	t.Run("on stateSent buffers callbacks and returns true", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		msg := send(t, upd, skipAlreadySent)
+		require.NotNil(t, msg)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		// Accept the update — this should flush the buffered callbacks.
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount, "should flush one buffered callback on acceptance")
+	})
+
+	t.Run("on stateSent dedup by requestID buffers only once", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		// Call AttachCallbacks twice with the same requestID.
+		fired1, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired1)
+		fired2, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired2)
+
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount, "duplicate requestID should be deduped, only one event written")
+	})
+
+	t.Run("on stateSent multiple different requestIDs", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		req1 := &updatepb.Request{
+			Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input:               &updatepb.Input{Name: "not_empty"},
+			RequestId:           "request-1",
+			CompletionCallbacks: testCallbacks,
+		}
+		req2 := &updatepb.Request{
+			Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input:               &updatepb.Input{Name: "not_empty"},
+			RequestId:           "request-2",
+			CompletionCallbacks: testCallbacks,
+		}
+		fired1, err := upd.AttachCallbacks(req1, store)
+		require.NoError(t, err)
+		require.True(t, fired1)
+		fired2, err := upd.AttachCallbacks(req2, store)
+		require.NoError(t, err)
+		require.True(t, fired2)
+
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 2, *optionsEventCount, "two different requestIDs should produce two events")
+	})
+
+	t.Run("on stateSent flush skips already-persisted requestID", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		store.HasRequestIDFunc = func(requestID string) bool {
+			return requestID == tv.RequestID()
+		}
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		require.NoError(t, accept(t, store, upd))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 0, *optionsEventCount, "already-persisted requestID should be skipped during flush")
+	})
+
+	t.Run("on stateSent flush error fails acceptance", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store := mockEventStore{
+			Controller: effects,
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				return nil, serviceerror.NewInternal("flush error")
+			},
+		}
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		err = accept(t, store, upd)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "flush error")
+	})
+
+	t.Run("provisional states still return ResourceExhausted", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store := mockEventStore{Controller: effects}
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		// Accept but do NOT apply effects — update is in stateProvisionallyAccepted.
+		require.NoError(t, accept(t, store, upd))
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.False(t, fired)
+		require.Error(t, err)
+		var resourceExhaustedErr *serviceerror.ResourceExhausted
+		require.ErrorAs(t, err, &resourceExhaustedErr)
+	})
+
+	t.Run("on stateSent rejection clears buffer", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		err = reject(t, store, upd)
+		require.NoError(t, err)
+		effects.Apply(context.Background())
+
+		require.Equal(t, 0, *optionsEventCount, "rejected update should not flush buffered callbacks")
+	})
+
+	t.Run("buffered callbacks lost when Update struct is recreated", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		// Simulate Update struct being lost — create a new one from mutable state.
+		upd2 := update.NewAdmitted(tv.UpdateID(), nil)
+		require.NoError(t, accept(t, store, upd2))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 0, *optionsEventCount,
+			"callbacks buffered on the lost Update struct should NOT be flushed on the new struct's acceptance")
+	})
+
+	t.Run("same requestID can be re-buffered on new Update struct after loss", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		upd := update.New(tv.UpdateID())
+		mustAdmit(t, store, upd)
+		effects.Apply(context.Background())
+		_ = send(t, upd, skipAlreadySent)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+
+		// Simulate loss — new struct from mutable state.
+		upd2 := update.NewAdmitted(tv.UpdateID(), nil)
+		_ = send(t, upd2, skipAlreadySent)
+
+		// Same requestID can buffer again on new struct.
+		fired2, err := upd2.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired2)
+
+		require.NoError(t, accept(t, store, upd2))
+		effects.Apply(context.Background())
+
+		require.Equal(t, 1, *optionsEventCount,
+			"re-buffered callbacks on new struct should be flushed on acceptance")
+	})
+
+	t.Run("re-buffered requestID deduped against persisted state after loss", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, optionsEventCount := countingOptionsStore(effects)
+		store.HasRequestIDFunc = func(requestID string) bool {
+			return requestID == tv.RequestID()
+		}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+		require.Equal(t, 0, *optionsEventCount,
+			"already-persisted requestID should not write another event")
+	})
+
+	t.Run("with EventStore error returns error", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store := mockEventStore{
+			Controller: effects,
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				return nil, serviceerror.NewInternal("store error")
+			},
+		}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.False(t, fired)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "store error")
+	})
+
+	t.Run("skips event when request has no callbacks and no request ID", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, eventCreated := trackingStore(effects)
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+		emptyRequest := &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input: &updatepb.Input{Name: "not_empty"},
+		}
+
+		fired, err := upd.AttachCallbacks(emptyRequest, store)
+		require.NoError(t, err)
+		require.False(t, fired, "should return false when no callbacks to attach — preserves existing caller behavior")
+		require.False(t, *eventCreated, "should not create event when no callbacks and no request ID")
+	})
+
+	t.Run("dedup by requestID on stateAccepted returns true without creating event", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		eventCreated := false
+		store := mockEventStore{
+			Controller: effects,
+			HasRequestIDFunc: func(requestID string) bool {
+				return requestID == tv.RequestID()
+			},
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				eventCreated = true
+				return &historypb.HistoryEvent{}, nil
+			},
+		}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired, "should return true so caller can wait on existing update")
+		require.False(t, eventCreated, "should not create event for duplicate requestID")
+	})
+
+	t.Run("different requestID on stateAccepted creates event normally", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store, capturedOptions := capturingStore(effects)
+		store.HasRequestIDFunc = func(requestID string) bool {
+			return false // different requestID, not seen before
+		}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		fired, err := upd.AttachCallbacks(testRequest, store)
+		require.NoError(t, err)
+		require.True(t, fired)
+		require.Len(t, *capturedOptions, 1)
+		require.Equal(t, tv.UpdateID(), (*capturedOptions)[0].UpdateId)
+		require.Equal(t, tv.RequestID(), (*capturedOptions)[0].AttachedRequestId)
+	})
 }

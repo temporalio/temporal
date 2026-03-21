@@ -971,6 +971,7 @@ func reapplyEvents(
 				attr.GetIdentity(),
 				attr.GetPriority(),
 				attr.GetTimeSkippingConfig(),
+				attr.GetWorkflowUpdateOptions(),
 			); err != nil {
 				return reappliedEvents, err
 			}

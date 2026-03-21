@@ -868,6 +868,7 @@ func (d *namespaceHandler) createResponse(
 			StandaloneActivities:            d.config.Activity.Enabled(info.Name),
 			WorkerPollCompleteOnShutdown:    d.config.EnableCancelWorkerPollsOnShutdown(info.Name),
 			WorkerCommands:                  d.config.WorkerCommandsEnabled(info.Name),
+			WorkflowUpdateCallbacks:         d.config.EnableWorkflowUpdateCallbacks(info.Name),
 			PollerAutoscaling:               true,
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{

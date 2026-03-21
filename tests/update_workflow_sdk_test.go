@@ -6,14 +6,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -397,4 +401,96 @@ func (s *UpdateWorkflowSdkSuite) pollUpdate(ctx context.Context, tv *testvars.Te
 		Identity:   tv.ClientIdentity(),
 		WaitPolicy: waitPolicy,
 	})
+}
+
+// TestUpdateSameRequestIDDeduplicatesCallbacks verifies requestID-based
+// deduplication in AttachCallbacks. The update blocks (stays in stateAccepted), then:
+//   - A second request with the same requestID is deduped (no new callback).
+//   - A third request with a different requestID creates an additional callback.
+//
+// The workflow should end up with exactly 2 update callbacks (from requestID1 and requestID2).
+func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() {
+	s.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	s.OverrideDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	updateID := "dedup-callbacks-test"
+	requestID1 := uuid.NewString()
+	requestID2 := uuid.NewString()
+
+	// Workflow where the update handler blocks until signaled.
+	wf := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
+			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
+			signalCh.Receive(ctx, nil)
+			return "updated: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return "done: " + input, nil
+	}
+
+	w := worker.New(s.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wf"),
+		TaskQueue: taskQueue,
+	}, wf, "input")
+	s.NoError(err)
+
+	makeRequest := func(reqID string) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+			Request: &updatepb.Request{
+				Meta:      &updatepb.Meta{UpdateId: updateID},
+				Input:     &updatepb.Input{Name: "update", Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
+				RequestId: reqID,
+				CompletionCallbacks: []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
+				}},
+			},
+		}
+	}
+
+	// First request: triggers the update, waits for acceptance (update blocks in handler).
+	_, err = s.FrontendClient().UpdateWorkflowExecution(ctx, makeRequest(requestID1))
+	s.NoError(err)
+
+	// Second request: same requestID → should be deduped by AttachCallbacks (no new callback).
+	_, err = s.FrontendClient().UpdateWorkflowExecution(ctx, makeRequest(requestID1))
+	s.NoError(err)
+
+	// Third request: different requestID → should create a new callback via AttachCallbacks.
+	_, err = s.FrontendClient().UpdateWorkflowExecution(ctx, makeRequest(requestID2))
+	s.NoError(err)
+
+	// Verify exactly 2 update callbacks: one from requestID1 (first request),
+	// one from requestID2 (third request). The second request was deduped.
+	descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+	})
+	s.NoError(err)
+	updateCallbackCount := 0
+	for _, cb := range descResp.GetCallbacks() {
+		if cb.GetTrigger().GetUpdateWorkflowExecutionCompleted() != nil {
+			updateCallbackCount++
+		}
+	}
+	s.Equal(2, updateCallbackCount, "expected 2 callbacks: requestID1 (original) + requestID2 (new), with duplicate requestID1 deduped")
+
+	// Clean up.
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "complete-update", nil))
+	s.NoError(s.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
 }

@@ -735,6 +735,119 @@ func (ms *MutableStateImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return ms.endpointRegistry
 }
 
+func (ms *MutableStateImpl) GetNexusUpdateCompletion(
+	ctx context.Context,
+	updateID string,
+	requestID string,
+) (_ nexusrpc.CompleteOperationOptions, err error) {
+	if ms.executionInfo.UpdateInfos == nil {
+		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewNotFound("update not found")
+	}
+
+	var closeTime time.Time
+	outcome, err := ms.GetUpdateOutcome(ctx, updateID)
+	if err != nil {
+		// If the workflow is complete but the update outcome is missing we need to respond to all callbacks
+		ce, errCE := ms.GetCompletionEvent(ctx)
+		if errors.Is(errCE, ErrMissingWorkflowCompletionEvent) {
+			return nexusrpc.CompleteOperationOptions{}, err
+		} else if errCE != nil {
+			return nexusrpc.CompleteOperationOptions{}, errCE
+		}
+		outcome = &updatepb.Outcome{
+			Value: &updatepb.Outcome_Failure{
+				Failure: update.AcceptedUpdateCompletedWorkflowFailure,
+			},
+		}
+		closeTime = ce.GetEventTime().AsTime()
+	} else {
+		cevent, err := ms.GetUpdateOutcomeEvent(ctx, updateID)
+		if err != nil {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
+		closeTime = cevent.GetEventTime().AsTime()
+	}
+
+	// Create a RequestIdReference link for the update callback. This is preferred over an
+	// EventReference link because the requestID is always available, whereas the accepted
+	// event ID may not be resolvable (e.g., when the workflow completed before the update).
+	// Note: rejected updates are removed from mutable state, so this code path is only
+	// reachable for accepted/completed updates.
+	link := &commonpb.Link_WorkflowEvent{
+		Namespace:  ms.namespaceEntry.Name().String(),
+		WorkflowId: ms.executionInfo.WorkflowId,
+		RunId:      ms.executionState.RunId,
+	}
+	requestIDInfo := ms.executionState.RequestIds[requestID]
+	if requestIDInfo != nil {
+		link.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: requestID,
+				EventType: requestIDInfo.GetEventType(),
+			},
+		}
+	}
+	startLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(link)
+
+	startTime := ms.executionState.GetStartTime().AsTime()
+	links := []nexus.Link{startLink}
+
+	if outcome.GetSuccess() != nil {
+		return nexusCompleteOperationSuccess(outcome.GetSuccess(), startTime, closeTime, links), nil
+	} else if outcome.GetFailure() != nil {
+		return nexusCompleteOperationFailure(outcome.GetFailure(), nexus.OperationStateFailed, "operation failed", startTime, closeTime, links)
+	}
+	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("unknown update outcome for update ID: %s", updateID)
+}
+
+// nexusCompleteOperationSuccess constructs a successful CompleteOperationOptions from the given payloads.
+// Only the first payload is used since Nexus does not support multi-value returns.
+func nexusCompleteOperationSuccess(
+	result *commonpb.Payloads,
+	startTime, closeTime time.Time,
+	links []nexus.Link,
+) nexusrpc.CompleteOperationOptions {
+	var p *commonpb.Payload
+	if payloads := result.GetPayloads(); len(payloads) > 0 {
+		p = payloads[0]
+	}
+	return nexusrpc.CompleteOperationOptions{
+		Result:    p,
+		StartTime: startTime,
+		CloseTime: closeTime,
+		Links:     links,
+	}
+}
+
+// nexusCompleteOperationFailure constructs a failed CompleteOperationOptions from the given failure.
+func nexusCompleteOperationFailure(
+	f *failurepb.Failure,
+	state nexus.OperationState,
+	message string,
+	startTime, closeTime time.Time,
+	links []nexus.Link,
+) (nexusrpc.CompleteOperationOptions, error) {
+	nexusFailure, err := commonnexus.TemporalFailureToNexusFailure(f)
+	if err != nil {
+		return nexusrpc.CompleteOperationOptions{}, err
+	}
+	opErr := &nexus.OperationError{
+		Message: message,
+		State:   state,
+		Cause:   &nexus.FailureError{Failure: nexusFailure},
+	}
+	if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
+		return nexusrpc.CompleteOperationOptions{}, err
+	}
+	return nexusrpc.CompleteOperationOptions{
+		Error:     opErr,
+		StartTime: startTime,
+		CloseTime: closeTime,
+		Links:     links,
+	}, nil
+>>>>>>> c3db1d092 (Nexus Workflow Update code -- squashed)
+}
+
 // GetNexusCompletion converts a workflow completion event into a [nexus.OperationCompletion].
 // Completions may be sent to arbitrary third parties, we intentionally do not include any termination reasons, and
 // expose only failure messages.
@@ -776,118 +889,57 @@ func (ms *MutableStateImpl) GetNexusCompletion(
 	}
 	startLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(link)
 
+	startTime := ms.executionState.GetStartTime().AsTime()
+	closeTime := ce.GetEventTime().AsTime()
+	links := []nexus.Link{startLink}
+
 	switch ce.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
-		payloads := ce.GetWorkflowExecutionCompletedEventAttributes().GetResult().GetPayloads()
-		var p *commonpb.Payload // default to nil, the payload serializer converts nil to Nexus nil Content.
-		if len(payloads) > 0 {
-			// All of our SDKs support returning a single value from workflows, we can safely ignore the
-			// rest of the payloads. Additionally, even if a workflow could return more than a single value,
-			// Nexus does not support it.
-			p = payloads[0]
-		}
-		return nexusrpc.CompleteOperationOptions{
-			Result:    p,
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			CloseTime: ce.GetEventTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		}, nil
+		return nexusCompleteOperationSuccess(
+			ce.GetWorkflowExecutionCompletedEventAttributes().GetResult(),
+			startTime, closeTime, links,
+		), nil
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
-		f, err := commonnexus.TemporalFailureToNexusFailure(ce.GetWorkflowExecutionFailedEventAttributes().GetFailure())
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		opErr := &nexus.OperationError{
-			Message: "operation failed",
-			State:   nexus.OperationStateFailed,
-			Cause:   &nexus.FailureError{Failure: f},
-		}
-		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		return nexusrpc.CompleteOperationOptions{
-			Error:     opErr,
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			CloseTime: ce.GetEventTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		}, nil
+		return nexusCompleteOperationFailure(
+			ce.GetWorkflowExecutionFailedEventAttributes().GetFailure(),
+			nexus.OperationStateFailed, "operation failed",
+			startTime, closeTime, links,
+		)
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
-		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
-			Message: "operation canceled",
-			FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-				CanceledFailureInfo: &failurepb.CanceledFailureInfo{
-					Details: ce.GetWorkflowExecutionCanceledEventAttributes().GetDetails(),
+		return nexusCompleteOperationFailure(
+			&failurepb.Failure{
+				Message: "operation canceled",
+				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+					CanceledFailureInfo: &failurepb.CanceledFailureInfo{
+						Details: ce.GetWorkflowExecutionCanceledEventAttributes().GetDetails(),
+					},
 				},
 			},
-		})
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		opErr := &nexus.OperationError{
-			State:   nexus.OperationStateCanceled,
-			Message: "operation canceled",
-			Cause:   &nexus.FailureError{Failure: f},
-		}
-		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		return nexusrpc.CompleteOperationOptions{
-			Error:     opErr,
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			CloseTime: ce.GetEventTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		}, nil
+			nexus.OperationStateCanceled, "operation canceled",
+			startTime, closeTime, links,
+		)
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
-		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
-			Message: "operation terminated",
-			FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
-				TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
-			},
-		})
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		opErr := &nexus.OperationError{
-			State:   nexus.OperationStateFailed,
-			Message: "operation failed",
-			Cause:   &nexus.FailureError{Failure: f},
-		}
-		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		return nexusrpc.CompleteOperationOptions{
-			Error:     opErr,
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			CloseTime: ce.GetEventTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		}, nil
-	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
-		f, err := commonnexus.TemporalFailureToNexusFailure(&failurepb.Failure{
-			Message: "operation exceeded internal timeout",
-			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
-				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
-					// Not filling in timeout type and other information, it's not particularly interesting to a Nexus
-					// caller.
+		return nexusCompleteOperationFailure(
+			&failurepb.Failure{
+				Message: "operation terminated",
+				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{
+					TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{},
 				},
 			},
-		})
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		opErr := &nexus.OperationError{
-			State:   nexus.OperationStateFailed,
-			Message: "operation failed",
-			Cause:   &nexus.FailureError{Failure: f},
-		}
-		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		return nexusrpc.CompleteOperationOptions{
-			Error:     opErr,
-			StartTime: ms.executionState.GetStartTime().AsTime(),
-			CloseTime: ce.GetEventTime().AsTime(),
-			Links:     []nexus.Link{startLink},
-		}, nil
+			nexus.OperationStateFailed, "operation failed",
+			startTime, closeTime, links,
+		)
+	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
+		return nexusCompleteOperationFailure(
+			&failurepb.Failure{
+				Message: "operation exceeded internal timeout",
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
+				},
+			},
+			nexus.OperationStateFailed, "operation failed",
+			startTime, closeTime, links,
+		)
 	}
 	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("invalid workflow execution status: %v", ce.GetEventType())
 }
@@ -1431,6 +1483,21 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	ctx context.Context,
 	updateID string,
 ) (*updatepb.Outcome, error) {
+	event, err := ms.GetUpdateOutcomeEvent(ctx, updateID)
+	if err != nil {
+		return nil, err
+	}
+	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
+	if attrs == nil {
+		return nil, serviceerror.NewInternal("event pointer does not reference an update completed event")
+	}
+	return attrs.GetOutcome(), nil
+}
+
+func (ms *MutableStateImpl) GetUpdateOutcomeEvent(
+	ctx context.Context,
+	updateID string,
+) (*historypb.HistoryEvent, error) {
 	if ms.executionInfo.UpdateInfos == nil {
 		return nil, serviceerror.NewNotFound("update not found")
 	}
@@ -1457,11 +1524,10 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	if err != nil {
 		return nil, err
 	}
-	attrs := event.GetWorkflowExecutionUpdateCompletedEventAttributes()
-	if attrs == nil {
+	if event.GetWorkflowExecutionUpdateCompletedEventAttributes() == nil {
 		return nil, serviceerror.NewInternal("event pointer does not reference an update completed event")
 	}
-	return attrs.GetOutcome(), nil
+	return event, nil
 }
 
 func (ms *MutableStateImpl) GetActivityScheduledEvent(
@@ -3179,6 +3245,43 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	return ms.updatePauseInfoSearchAttribute()
 }
 
+func (ms *MutableStateImpl) addUpdateCallbacks(
+	event *historypb.HistoryEvent,
+	updateID string,
+	requestID string,
+	updateCallbacks []*commonpb.Callback,
+) error {
+	if len(updateCallbacks) == 0 {
+		return nil
+	}
+	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
+		// Initialize chasm tree once for new workflows.
+		// Using context.Background() because this is done outside an actual request context and the
+		// chasmworkflow.NewWorkflow does not actually use it currently.
+		ms.ensureChasmWorkflowComponent(context.Background())
+		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
+	}
+
+	return nil
+}
+
+func (ms *MutableStateImpl) addUpdateCallbacksChasm(
+	event *historypb.HistoryEvent,
+	updateID string,
+	requestID string,
+	updateCallbacks []*commonpb.Callback,
+) error {
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+
+	nsName := ms.GetNamespaceEntry().Name().String()
+	maxCallbacksPerWorkflow := ms.config.MaxCHASMCallbacksPerWorkflow(nsName)
+	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+}
+
 func (ms *MutableStateImpl) addCompletionCallbacks(
 	event *historypb.HistoryEvent,
 	requestID string,
@@ -4770,7 +4873,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionFailedEvent(
 	if attrs.RetryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return ms.processCloseCallbacks()
 	}
-	return nil
+	// Workflow-level callbacks are inherited by the retry run, but update callbacks
+	// must fire now because the update was aborted on the old run.
+	return ms.processUpdateCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
@@ -4818,7 +4923,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimedoutEvent(
 	if attrs.RetryState != enumspb.RETRY_STATE_IN_PROGRESS {
 		return ms.processCloseCallbacks()
 	}
-	return nil
+	// Workflow-level callbacks are inherited by the retry run, but update callbacks
+	// must fire now because the update was aborted on the old run.
+	return ms.processUpdateCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionCancelRequestedEvent(
@@ -5479,22 +5586,44 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	ms.approximateSize += sizeDelta
 	ms.updateInfoUpdated[updateID] = struct{}{}
 	ms.writeEventToCache(event)
-	return nil
+
+	// Store completion callbacks from the update request at admission time.
+	// This is needed for the reset/reapply case where the UpdateAccepted event
+	// may have a nil AcceptedRequest (because the UpdateAdmitted event already
+	// contains the request), causing callbacks to be lost at acceptance time.
+	requestID := attrs.GetRequest().GetRequestId()
+	if requestID != "" {
+		ms.AttachRequestID(requestID, event.EventType, event.EventId)
+	}
+	return ms.addUpdateCallbacks(
+		event,
+		updateID,
+		requestID,
+		attrs.GetRequest().GetCompletionCallbacks(),
+	)
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
-	protocolInstanceID string,
-	acceptedRequestMessageId string,
-	acceptedRequestSequencingEventId int64,
+	updateID string,
+	acceptedRequestMessageID string,
+	acceptedRequestSequencingEventID int64,
 	acceptedRequest *updatepb.Request,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateAccepted); err != nil {
 		return nil, err
 	}
-	event := ms.hBuilder.AddWorkflowExecutionUpdateAcceptedEvent(protocolInstanceID, acceptedRequestMessageId, acceptedRequestSequencingEventId, acceptedRequest)
+	event := ms.hBuilder.AddWorkflowExecutionUpdateAcceptedEvent(updateID, acceptedRequestMessageID, acceptedRequestSequencingEventID, acceptedRequest)
 	if err := ms.ApplyWorkflowExecutionUpdateAcceptedEvent(event); err != nil {
 		return nil, err
 	}
+	// Add links from Nexus callbacks to the event.
+	callbacksLinks := make([]*commonpb.Link, 0)
+	for _, cb := range acceptedRequest.GetCompletionCallbacks() {
+		if cb.GetNexus() != nil {
+			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
+		}
+	}
+	event.Links = callbacksLinks
 	return event, nil
 }
 
@@ -5532,6 +5661,27 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	ms.approximateSize += sizeDelta
 	ms.updateInfoUpdated[updateID] = struct{}{}
 	ms.writeEventToCache(event)
+	// Add update completion callbacks.
+	// This is the primary path for registering callbacks — AcceptedRequest is
+	// present in the normal flow. The exception is the reset/reapply case where
+	// callbacks are registered at admission time instead (because the
+	// UpdateAccepted event has a nil AcceptedRequest after reset). In that case,
+	// addCallbacksToMap is a no-op since the requestID-indexed keys already
+	// exist from the admitted event.
+	if attrs.GetAcceptedRequest() != nil {
+		requestID := attrs.GetAcceptedRequest().GetRequestId()
+		if requestID != "" {
+			ms.AttachRequestID(requestID, event.EventType, event.EventId)
+		}
+		if err := ms.addUpdateCallbacks(
+			event,
+			updateID,
+			requestID,
+			attrs.GetAcceptedRequest().GetCompletionCallbacks(),
+		); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -5578,13 +5728,60 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateCompletedEvent(
 	sizeDelta = ui.Size() - sizeBefore
 	ms.approximateSize += sizeDelta
 	ms.updateInfoUpdated[updateID] = struct{}{}
+	if ms.ChasmEnabled() {
+		if err := ms.processUpdateCallbacks(updateID); err != nil {
+			return err
+		}
+	}
 	ms.writeEventToCache(event)
 	return nil
 }
 
-func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(_ string, _ *updatepb.Rejection) error {
-	// TODO (alex-update): This method is noop because we don't currently write rejections to the history.
-	return nil
+func (ms *MutableStateImpl) RejectWorkflowExecutionUpdate(updateID string, failure *failurepb.Failure) error {
+	if !ms.chasmCallbacksEnabled() {
+		return nil
+	}
+
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+
+	// Return early if there are no CHASM update callbacks for this update.
+	if _, ok := wf.Updates[updateID]; !ok {
+		return nil
+	}
+
+	// Store the rejection failure and fire the callbacks.
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return wf.RejectUpdate(ctx, updateID, failure)
+}
+
+// processUpdateCallbacks triggers "UpdateFinished" callbacks using the CHASM implementation.
+func (ms *MutableStateImpl) processUpdateCallbacks(updateID string) error {
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+
+	// Return early if there are no chasm callbacks to process for this update ID.
+	if len(wf.Updates) == 0 {
+		return nil
+	}
+	if _, ok := wf.Updates[updateID]; !ok {
+		return nil
+	}
+
+	// If there are callbacks to process, create a writable workflow component.
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+
+	return wf.ProcessUpdateCallbacks(ctx, updateID)
 }
 
 func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
@@ -5596,6 +5793,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	identity string,
 	priority *commonpb.Priority,
 	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
@@ -5609,6 +5807,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 		identity,
 		priority,
 		timeSkippingConfig,
+		workflowUpdateOptions,
 	)
 	prevEffectiveVersioningBehavior := ms.GetEffectiveVersioningBehavior()
 	prevEffectiveDeployment := ms.GetEffectiveDeployment()
@@ -5659,6 +5858,33 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		attributes.GetAttachedCompletionCallbacks(),
 	); err != nil {
 		return err
+	}
+
+	// Add update callbacks
+	for _, updateOptions := range attributes.GetWorkflowUpdateOptions() {
+		updateID := updateOptions.GetUpdateId()
+		requestID := updateOptions.GetAttachedRequestId()
+		if requestID != "" {
+			ms.AttachRequestID(requestID, event.EventType, event.EventId)
+		}
+		if err := ms.addUpdateCallbacks(
+			event,
+			updateID,
+			requestID,
+			updateOptions.GetAttachedCompletionCallbacks(),
+		); err != nil {
+			return err
+		}
+		// If the update is already completed, fire the callbacks immediately.
+		if ms.ChasmEnabled() {
+			if ui, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
+				if _, isCompleted := ui.Value.(*persistencespb.UpdateInfo_Completion); isCompleted {
+					if err := ms.processUpdateCallbacks(updateID); err != nil {
+						return err
+					}
+				}
+			}
+		}
 	}
 
 	// Update priority.
@@ -6026,7 +6252,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionContinuedAsNewEvent(
 	ms.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
 	ms.ClearStickyTaskQueue()
 	ms.writeEventToCache(continueAsNewEvent)
-	return nil
+	// Workflow-level callbacks are inherited by the new run, but update callbacks
+	// must fire now because the update was aborted on the old run.
+	return ms.processUpdateCloseCallbacks()
 }
 
 func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
@@ -6846,6 +7074,35 @@ func (ms *MutableStateImpl) AddExternalPayloadCount(count int64) {
 	ms.executionInfo.ExecutionStats.ExternalPayloadCount += count
 }
 
+// processUpdateCloseCallbacks triggers only update-level callbacks, leaving workflow-level
+// callbacks untouched. This is used when the workflow is continuing to a new run
+// (ContinueAsNew, retry, cron): workflow-level callbacks are inherited by the new run,
+// but update callbacks must fire now because the update was aborted on the old run.
+//
+// Note: unlike processCloseCallbacks, this does not need a WorkflowWasReset guard.
+// Reset always terminates the old run (via terminateWorkflow), which goes through
+// processCloseCallbacks — not through the retry/CAN paths that call this method.
+func (ms *MutableStateImpl) processUpdateCloseCallbacks() error {
+	if !ms.ChasmEnabled() {
+		// Update callbacks are only supported in CHASM mode.
+		return nil
+	}
+
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	if len(wf.Updates) == 0 {
+		return nil
+	}
+
+	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	return wf.ProcessAllUpdateCloseCallbacks(ctx)
+}
+
 // processCloseCallbacks triggers "WorkflowClosed" callbacks, applying the state machine transition that schedules
 // callback tasks.
 func (ms *MutableStateImpl) processCloseCallbacks() error {
@@ -6898,7 +7155,7 @@ func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
 	}
 
 	// Return early if there are no chasm callbacks to process.
-	if len(wf.Callbacks) == 0 {
+	if len(wf.Callbacks) == 0 && len(wf.Updates) == 0 {
 		return nil
 	}
 

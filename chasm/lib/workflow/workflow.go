@@ -41,6 +41,9 @@ type Workflow struct {
 
 	// Operations map is used to store the Nexus operations for the workflow, keyed by scheduled event ID.
 	Operations chasm.Map[int64, *nexusoperation.Operation]
+
+	// Updates indexed by update ID, used to store the update components.
+	Updates chasm.Map[string, *WorkflowUpdate]
 }
 
 func NewWorkflow(
@@ -62,6 +65,7 @@ func (w *Workflow) LifecycleState(
 	return chasm.LifecycleStateRunning
 }
 
+<<<<<<< HEAD
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
 	// TODO: Export workflow metadata from the CHASM workflow root instead of CloseTransaction().
 	return nil
@@ -86,19 +90,101 @@ func (w *Workflow) AddCompletionCallbacks(
 	// Check CHASM max callbacks limit
 	currentCallbackCount := len(w.Callbacks)
 	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerWorkflow {
+=======
+// scheduleStandbyCallbacks transitions all STANDBY callbacks in the map to SCHEDULED state.
+func scheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[string, *callback.Callback]) error {
+	for _, field := range callbacks {
+		cb := field.Get(ctx)
+		if cb.Status != callbackspb.CALLBACK_STATUS_STANDBY {
+			continue
+		}
+		if err := callback.TransitionScheduled.Apply(cb, ctx, callback.EventScheduled{}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ProcessCloseCallbacks triggers "WorkflowClosed" callbacks using the CHASM implementation.
+// It schedules all workflow-level and update-level callbacks that are in STANDBY state.
+func (w *Workflow) ProcessCloseCallbacks(ctx chasm.MutableContext) error {
+	if err := scheduleStandbyCallbacks(ctx, w.Callbacks); err != nil {
+		return err
+	}
+	return w.ProcessAllUpdateCloseCallbacks(ctx)
+}
+
+// ProcessAllUpdateCloseCallbacks triggers callbacks for all updates without touching
+// workflow-level callbacks. This is used when the workflow is continuing to a new run
+// (ContinueAsNew, retry, cron): workflow-level callbacks are inherited by the new run,
+// but update callbacks must fire now because the update was aborted on the old run.
+func (w *Workflow) ProcessAllUpdateCloseCallbacks(ctx chasm.MutableContext) error {
+	for _, updateField := range w.Updates {
+		if err := scheduleStandbyCallbacks(ctx, updateField.Get(ctx).Callbacks); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *Workflow) ProcessUpdateCallbacks(ctx chasm.MutableContext, updateID string) error {
+	update, exists := w.Updates[updateID]
+	if !exists {
+		return serviceerror.NewNotFoundf("update with ID %s not found", updateID)
+	}
+	return scheduleStandbyCallbacks(ctx, update.Get(ctx).Callbacks)
+}
+
+// RejectUpdate stores the rejection failure on the WorkflowUpdate component and
+// fires any pending callbacks. This is used when a reapplied update (after reset)
+// is rejected by the worker's validator - the callbacks need to deliver the
+// rejection failure to the caller.
+func (w *Workflow) RejectUpdate(ctx chasm.MutableContext, updateID string, rejectionFailure *failurepb.Failure) error {
+	updateField, exists := w.Updates[updateID]
+	if !exists {
+		return nil // no callbacks registered for this update
+	}
+
+	upd := updateField.Get(ctx)
+	upd.RejectionFailure = rejectionFailure
+
+	return scheduleStandbyCallbacks(ctx, upd.Callbacks)
+}
+
+// totalCallbackCount returns the total number of callbacks across workflow-level
+// and all update-level callback maps.
+func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
+	count := len(w.Callbacks)
+	for _, updateField := range w.Updates {
+		count += len(updateField.Get(ctx).Callbacks)
+	}
+	return count
+}
+
+// checkWorkflowCallbackLimit returns an error if adding newCount callbacks would
+// exceed the per-workflow maximum.
+func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCallbacksPerWorkflow int) error {
+	current := w.totalCallbackCount(ctx)
+	if newCount+current > maxCallbacksPerWorkflow {
+>>>>>>> c3db1d092 (Nexus Workflow Update code -- squashed)
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
-			currentCallbackCount,
+			current,
 		)
 	}
+	return nil
+}
 
-	// Initialize map if needed
-	if w.Callbacks == nil {
-		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
-	}
-
-	// Add each callback
+// addCallbacksToMap converts common callbacks to CHASM callback components and
+// inserts them into the target map, keyed by "<requestID>-<index>".
+func addCallbacksToMap(
+	ctx chasm.MutableContext,
+	target chasm.Map[string, *callback.Callback],
+	requestID string,
+	eventTime *timestamppb.Timestamp,
+	completionCallbacks []*commonpb.Callback,
+) (chasm.Map[string, *callback.Callback], error) {
 	for idx, cb := range completionCallbacks {
 		chasmCB := &callbackspb.Callback{
 			Links: cb.GetLinks(),
@@ -112,19 +198,85 @@ func (w *Workflow) AddCompletionCallbacks(
 				},
 			}
 		default:
+<<<<<<< HEAD
 			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+=======
+			return target, fmt.Errorf("unsupported callback variant: %T", variant)
+>>>>>>> c3db1d092 (Nexus Workflow Update code -- squashed)
 		}
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
 		// cross-cluster IDs based on event version are not needed.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
-
-		// Create and add callback
 		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
-		w.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+		target[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
-	return nil
+	return target, nil
+}
+
+// AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
+// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
+func (w *Workflow) AddCompletionCallbacks(
+	ctx chasm.MutableContext,
+	eventTime *timestamppb.Timestamp,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacksPerWorkflow int,
+) error {
+	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
+		return err
+	}
+
+	if w.Callbacks == nil {
+		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+	}
+
+	var err error
+	w.Callbacks, err = addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
+	return err
+}
+
+// AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
+// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
+// maxCallbacksPerUpdateID is the configured maximum number of callbacks allowed per update ID.
+func (w *Workflow) AddUpdateCompletionCallbacks(
+	ctx chasm.MutableContext,
+	eventTime *timestamppb.Timestamp,
+	updateID string,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+	maxCallbacksPerWorkflow int,
+	maxCallbacksPerUpdateID int,
+) error {
+	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
+		return err
+	}
+
+	if w.Updates == nil {
+		w.Updates = make(chasm.Map[string, *WorkflowUpdate], 1)
+	}
+	if _, ok := w.Updates[updateID]; !ok {
+		workflowUpdateObj := NewWorkflowUpdate(ctx, updateID, w.MSPointer)
+		workflowUpdateObj.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+		w.Updates[updateID] = chasm.NewComponentField(ctx, workflowUpdateObj)
+	}
+
+	update := w.Updates[updateID].Get(ctx)
+
+	currentCallbackCount := len(update.Callbacks)
+	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerUpdateID {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
+			maxCallbacksPerUpdateID,
+			updateID,
+			currentCallbackCount,
+		)
+	}
+
+	var err error
+	update.Callbacks, err = addCallbacksToMap(ctx, update.Callbacks, requestID, eventTime, completionCallbacks)
+	return err
 }
 
 // AddNexusOperation adds a Nexus operation component to the workflow.

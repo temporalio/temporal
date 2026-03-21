@@ -479,7 +479,11 @@ func buildCallbackInfosFromChasm(
 	for _, field := range wf.Callbacks {
 		callback := field.Get(chasmCtx)
 
-		callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, outboundQueueCBPool)
+		trigger := &workflowpb.CallbackInfo_Trigger{
+			Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
+		}
+
+		callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, trigger, outboundQueueCBPool)
 		if err != nil {
 			logger.Error(
 				"failed to build callback info from CHASM callback",
@@ -495,6 +499,38 @@ func buildCallbackInfosFromChasm(
 		}
 		result = append(result, callbackInfo)
 	}
+	// Collect update callbacks
+	for updateID, ufield := range wf.Updates {
+		updates := ufield.Get(chasmCtx)
+
+		for _, ucfield := range updates.Callbacks {
+			callback := ucfield.Get(chasmCtx)
+
+			trigger := &workflowpb.CallbackInfo_Trigger{
+				Variant: &workflowpb.CallbackInfo_Trigger_UpdateWorkflowExecutionCompleted{
+					UpdateWorkflowExecutionCompleted: &workflowpb.CallbackInfo_UpdateWorkflowExecutionCompleted{
+						UpdateId: updateID,
+					},
+				},
+			}
+
+			callbackInfo, err := buildCallbackInfoFromChasm(ctx, namespaceID, callback, trigger, outboundQueueCBPool)
+			if err != nil {
+				logger.Error(
+					"failed to build callback info from CHASM update callback",
+					tag.WorkflowNamespaceID(namespaceID.String()),
+					tag.WorkflowID(executionInfo.WorkflowId),
+					tag.WorkflowRunID(executionState.RunId),
+					tag.Error(err),
+				)
+				return nil, serviceerror.NewInternal("failed to construct describe response")
+			}
+			if callbackInfo == nil {
+				continue
+			}
+			result = append(result, callbackInfo)
+		}
+	}
 
 	return result, nil
 }
@@ -504,6 +540,7 @@ func buildCallbackInfoFromChasm(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	callback *chasmcallback.Callback,
+	trigger *workflowpb.CallbackInfo_Trigger,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 ) (*workflowpb.CallbackInfo, error) {
 	// Create a circuit breaker state checker function
@@ -516,7 +553,7 @@ func buildCallbackInfoFromChasm(
 		return cb.State() != gobreaker.StateClosed
 	}
 
-	return buildChasmCallbackInfo(ctx, namespaceID.String(), callback, circuitBreakerState)
+	return buildChasmCallbackInfo(ctx, namespaceID.String(), callback, trigger, circuitBreakerState)
 }
 
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
@@ -525,6 +562,7 @@ func buildChasmCallbackInfo(
 	ctx context.Context,
 	namespaceID string,
 	cb *chasmcallback.Callback,
+	trigger *workflowpb.CallbackInfo_Trigger,
 	circuitBreakerState func(destination string) bool,
 ) (*workflowpb.CallbackInfo, error) {
 	nexusVariant := cb.GetCallback().GetNexus()
@@ -562,10 +600,6 @@ func buildChasmCallbackInfo(
 			state = enumspb.CALLBACK_STATE_BLOCKED
 			blockedReason = "The circuit breaker is open."
 		}
-	}
-
-	trigger := &workflowpb.CallbackInfo_Trigger{
-		Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
 	}
 
 	return &workflowpb.CallbackInfo{

@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -55,6 +56,26 @@ func (env *NexusTestEnv) createNexusEndpoint(t *testing.T, name string, taskQueu
 		})
 	})
 	return resp.Endpoint
+}
+
+// setupExternalNexusEndpoint creates an external nexus server and registers it as an endpoint.
+func (env *NexusTestEnv) setupExternalNexusEndpoint(ctx context.Context, t *testing.T, endpointName string, handler nexustest.Handler) {
+	listenAddr := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(t, listenAddr, handler)
+
+	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+		Spec: &nexuspb.EndpointSpec{
+			Name: endpointName,
+			Target: &nexuspb.EndpointTarget{
+				Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{
+						Url: "http://" + listenAddr,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.

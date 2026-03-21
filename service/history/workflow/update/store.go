@@ -3,8 +3,11 @@ package update
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/effect"
 )
@@ -43,7 +46,33 @@ type (
 			resp *updatepb.Response,
 		) (*historypb.HistoryEvent, error)
 
+		// AddWorkflowExecutionOptionsUpdatedEvent writes a workflow execution
+		// options updated event. This is used to attach completion callbacks,
+		// request IDs, links, and per-update callback options to the workflow.
+		// The data may not be durable when this function returns.
+		AddWorkflowExecutionOptionsUpdatedEvent(
+			versioningOverride *workflowpb.VersioningOverride,
+			unsetVersioningOverride bool,
+			attachRequestID string,
+			attachCompletionCallbacks []*commonpb.Callback,
+			links []*commonpb.Link,
+			identity string,
+			priority *commonpb.Priority,
+			workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+		) (*historypb.HistoryEvent, error)
+
 		// CanAddEvent returns true if an event can be added to the EventStore.
 		CanAddEvent() bool
+
+		// RejectWorkflowExecutionUpdate notifies the store that an update was
+		// rejected by the worker's validator. The store uses this to fire any
+		// completion callbacks that were registered at admission time and to
+		// clean up the update's mutable-state entry.
+		RejectWorkflowExecutionUpdate(updateID string, rejectionFailure *failurepb.Failure) error
+
+		// HasRequestID checks whether the given requestID has already been
+		// recorded for this workflow execution. Used by AttachCallbacks to deduplicate
+		// callback attachment when the same request is retried.
+		HasRequestID(requestID string) bool
 	}
 )

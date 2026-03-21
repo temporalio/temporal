@@ -231,3 +231,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/long-nt-tran/api-go v0.0.0-20260420151320-834f1c6a9ade

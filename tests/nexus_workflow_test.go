@@ -97,22 +97,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 			return nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:           taskQueue,
@@ -314,22 +299,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -432,22 +402,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(c
 			return &nexus.HandlerStartOperationResultSync[any]{Value: strings.Repeat("a", (2*1024*1024)-10)}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -616,22 +571,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 			}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err = env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
@@ -1235,22 +1175,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -1827,22 +1752,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 			return nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -1956,22 +1866,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(cha
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
@@ -2650,22 +2545,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 			}
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	w := worker.New(
 		env.SdkClient(),
@@ -3112,22 +2992,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartToCloseTimeout(chasmEnab
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-op-token"}, nil
 		},
 	}
-	listenAddr := nexustest.AllocListenAddress()
-	nexustest.NewNexusServer(s.T(), listenAddr, h)
-
-	_, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
-		Spec: &nexuspb.EndpointSpec{
-			Name: endpointName,
-			Target: &nexuspb.EndpointTarget{
-				Variant: &nexuspb.EndpointTarget_External_{
-					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
-					},
-				},
-			},
-		},
-	})
-	s.NoError(err)
+	env.setupExternalNexusEndpoint(ctx, s.T(), endpointName, h)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
