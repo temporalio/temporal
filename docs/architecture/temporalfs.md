@@ -28,7 +28,7 @@ classDiagram
         FSStats stats
         uint64 next_inode_id
         uint64 next_txn_id
-        string owner_workflow_id
+        repeated string owner_workflow_ids
     }
     class FilesystemConfig {
         uint32 chunk_size
@@ -36,6 +36,7 @@ classDiagram
         uint64 max_files
         Duration gc_interval
         Duration snapshot_retention
+        Duration owner_check_interval
     }
     class FSStats {
         uint64 total_size
@@ -65,23 +66,25 @@ stateDiagram-v2
     ARCHIVED --> DELETED : TransitionDelete
 ```
 
-- **TransitionCreate** (`UNSPECIFIED → RUNNING`): Initializes the filesystem with configuration (or defaults), sets `next_inode_id = 2` (root inode = 1), creates empty stats, records the owner workflow ID, and schedules the first ChunkGC task.
+- **TransitionCreate** (`UNSPECIFIED → RUNNING`): Initializes the filesystem with configuration (or defaults), sets `next_inode_id = 2` (root inode = 1), creates empty stats, records owner workflow IDs (deduplicated), schedules the first ChunkGC task (if gc_interval > 0), and schedules an OwnerCheckTask if owners are present.
 - **TransitionArchive** (`RUNNING → ARCHIVED`): Marks the filesystem as archived. The underlying FS data remains accessible for reads but no further writes are expected.
-- **TransitionDelete** (`RUNNING/ARCHIVED → DELETED`): Marks the filesystem for deletion. `Terminate()` also sets this status.
+- **TransitionDelete** (`RUNNING/ARCHIVED → DELETED`): Marks the filesystem for deletion and schedules a DataCleanupTask immediately. `Terminate()` also sets this status and schedules DataCleanupTask.
 
 Lifecycle mapping: `RUNNING` and `UNSPECIFIED` → `LifecycleStateRunning`; `ARCHIVED` and `DELETED` → `LifecycleStateCompleted`.
 
 ### Tasks
 
-Three task types are registered in the [`library`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/library.go), with executors in [`tasks.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/tasks.go):
+Five task types are registered in the [`library`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/library.go), with executors in [`tasks.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/tasks.go):
 
 | Task | Type | Description |
 |------|------|-------------|
 | **ChunkGC** | Periodic timer | Runs `temporal-fs` garbage collection (`f.RunGC()`) to process tombstones and delete orphaned chunks. Reschedules itself at the configured `gc_interval`. Updates `TransitionCount` and `ChunkCount` in stats. |
 | **ManifestCompact** | Placeholder | Reserved for future per-filesystem PebbleDB compaction triggers. Currently a no-op since compaction operates at the shard level. |
 | **QuotaCheck** | On-demand | Reads `temporal-fs` metrics to update `FSStats` (total size, file count, dir count). Logs a warning if the filesystem exceeds its configured `max_size` quota. |
+| **OwnerCheckTask** | Periodic timer | Checks if owner workflows still exist via `WorkflowExistenceChecker`. Uses a not-found counter with threshold of 2 (must miss twice before removal) to avoid transient false positives. Removes owners that are confirmed gone. Transitions filesystem to DELETED when all owners are removed. Reschedules at `owner_check_interval`. |
+| **DataCleanupTask** | Side-effect | Runs after filesystem transitions to DELETED. Calls `FSStoreProvider.DeleteStore()` to remove all filesystem data. On failure, reschedules with exponential backoff (capped at 30 minutes). |
 
-All task validators check that the filesystem is in `RUNNING` status before allowing execution.
+ChunkGC, ManifestCompact, QuotaCheck, and OwnerCheckTask validators check that the filesystem is in `RUNNING` status. DataCleanupTask validates `DELETED` status.
 
 ### Storage Architecture
 
@@ -91,6 +94,7 @@ TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments c
 ┌─────────────────────────────────────┐
 │           FSStoreProvider           │  ← Interface (store_provider.go)
 │  GetStore(shard, ns, fsID)          │
+│  DeleteStore(shard, ns, fsID)       │
 │  Close()                            │
 ├──────────────────┬──────────────────┤
 │  PebbleStore     │  CDSStore        │
@@ -113,7 +117,7 @@ TemporalFS uses a pluggable storage interface so that OSS and SaaS deployments c
 
 ### gRPC Service
 
-The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/proto/v1/service.proto) defines 20 RPCs for filesystem operations. The [`handler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/handler.go) implements these using CHASM APIs for lifecycle and `temporal-fs` APIs for FS operations.
+The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/proto/v1/service.proto) defines 22 RPCs for filesystem operations. The [`handler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/handler.go) implements these using CHASM APIs for lifecycle and `temporal-fs` APIs for FS operations.
 
 **Lifecycle RPCs:**
 
@@ -122,6 +126,10 @@ The [`TemporalFSService`](https://github.com/temporalio/temporal/blob/main/chasm
 | `CreateFilesystem` | `chasm.StartExecution` | `tfs.Create()` |
 | `GetFilesystemInfo` | `chasm.ReadComponent` | — |
 | `ArchiveFilesystem` | `chasm.UpdateComponent` | — |
+| `AttachWorkflow` | `chasm.UpdateComponent` | — |
+| `DetachWorkflow` | `chasm.UpdateComponent` | — |
+
+`AttachWorkflow` adds an owner workflow ID to the filesystem (deduplicated). `DetachWorkflow` removes one; if no owners remain, the filesystem transitions to DELETED.
 
 **FS operation RPCs** (all use inode-based `ByID` methods from `temporal-fs`):
 
@@ -171,10 +179,18 @@ temporal-fs write → walEngine → LP WAL → ack → stateTracker buffer
 
 The [`HistoryModule`](https://github.com/temporalio/temporal/blob/main/chasm/lib/temporalfs/fx.go) wires everything together via `go.uber.org/fx`:
 
-1. **Provides**: `Config` (dynamic config), `FSStoreProvider` (PebbleStoreProvider), `handler` (gRPC service), task executors (chunkGC, manifestCompact, quotaCheck), `library`.
+1. **Provides**: `Config` (dynamic config), `FSStoreProvider` (PebbleStoreProvider), `WorkflowExistenceChecker` (noop in OSS), `PostDeleteHook` (noop in OSS), `handler` (gRPC service), task executors (chunkGC, manifestCompact, quotaCheck, ownerCheck, dataCleanup), `library`.
 2. **Invokes**: `registry.Register(library)` to register the archetype with the CHASM engine.
 
 The module is included in [`service/history/fx.go`](https://github.com/temporalio/temporal/blob/main/service/history/fx.go) alongside other archetype modules (Activity, Scheduler, etc.).
+
+### Owner Lifecycle & GC
+
+TemporalFS uses a belt-and-suspenders approach for garbage collection when owner workflows are deleted:
+
+- **Pull path (OwnerCheckTask)**: Periodic safety net. Checks if each owner workflow still exists and removes confirmed-gone owners. Transitions to DELETED when all owners are removed, which triggers DataCleanupTask.
+- **Push path (PostDeleteHook)**: Fast path. A `PostDeleteHook` on the workflow delete manager calls `DetachWorkflow` when a workflow is deleted. OSS implementation is a noop (relies on pull path). SaaS overrides via `fx.Decorate` to query visibility for owned filesystems.
+- **WorkflowExistenceChecker**: Interface for checking workflow existence. OSS provides a noop (always returns true). SaaS overrides to query the history service.
 
 ### Configuration
 
@@ -188,5 +204,8 @@ The module is included in [`service/history/fx.go`](https://github.com/temporali
 | Default max files | 100,000 | Per-filesystem inode quota |
 | Default GC interval | 5 min | How often ChunkGC runs |
 | Default snapshot retention | 24 h | How long snapshots are kept |
+| Default owner check interval | 10 min | How often OwnerCheckTask runs |
+| Owner check not-found threshold | 2 | Consecutive misses before owner removal |
+| Data cleanup max backoff | 30 min | Max retry interval for DataCleanupTask |
 
 Per-filesystem configuration can override these defaults via `FilesystemConfig` at creation time.
