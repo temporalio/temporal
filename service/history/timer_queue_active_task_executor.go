@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -169,7 +170,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 	timeSkippingInfo := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
 	if timeSkippingInfo == nil || !timeSkippingInfo.GetEnabled() {
-		t.logger.Warn("time skipping is not disabled when runnign this task, this should be a rare case")
+		t.logger.Warn("time skipping is not enabled when running this task, this should be a rare case")
 		release(nil)
 		return nil
 	}
@@ -190,19 +191,18 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return nil
 	}
 
-	now := t.Now()
-	nextTimerTs := userTimers[0].Timestamp // todo: @feiyang need to reorder?
-	if !nextTimerTs.After(now) {
-		// Already expired; the normal timer queue will handle it.
-		noSkippingReason = "next timer already expired"
+	advanceToTimePoint := userTimers[0].Timestamp // todo: @feiyang need to reorder?
+	if !advanceToTimePoint.After(mutableState.VirtualTimeNow().Add(1 * time.Second)) {
+		noSkippingReason = "next timer is close to now, skipping is not necessary"
 		release(nil)
 		return nil
 	}
-	durationToAdvance := nextTimerTs.Sub(now)
 
-	// key step: of time skipping (event, mutable state update)
-	mutableState.AddTimeSkippingEvent(durationToAdvance)
-	return t.updateWorkflowExecution(ctx, weContext, mutableState, true)
+	// Persist the time skipped event, updated mutable state, and refreshed tasks atomically.
+	if _, err := mutableState.AddWorkflowExecutionTimeSkippedEvent(ctx, advanceToTimePoint); err != nil {
+		return err
+	}
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
@@ -228,7 +228,8 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 
 	timerSequence := t.getTimerSequence(mutableState)
-	referenceTime := t.Now()
+	// Use virtual time as reference so time-skipped timers are recognized as expired.
+	referenceTime := mutableState.VirtualTimeNow()
 	timerFired := false
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortUserTimers() {

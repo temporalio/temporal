@@ -258,7 +258,7 @@ type (
 		clusterMetadata        cluster.Metadata
 		eventsCache            events.Cache
 		config                 *configs.Config
-		timeSource             clock.TimeSource
+		timeSource clock.TimeSource
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
 		stateMachineNode       *hsm.Node
@@ -501,6 +501,13 @@ func NewMutableStateFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
+
+	if mutableState.executionInfo.GetTimeSkippingInfo().GetEnabled() {
+		mutableState.timeSource = newTimeSkippingTimeSource(
+			mutableState.timeSource,
+			mutableState.executionInfo.TimeSkippingInfo.TimeSkippedDetails,
+		)
+	}
 
 	// StartTime was moved from ExecutionInfo to executionState
 	if mutableState.executionState.StartTime == nil && dbRecord.ExecutionInfo.StartTime != nil {
@@ -2756,6 +2763,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Enabled: true,
 		}
+		ms.timeSource = newTimeSkippingTimeSource(ms.timeSource, nil)
 	}
 
 	// Versioning Override set on StartWorkflowExecutionRequest
@@ -3926,6 +3934,124 @@ func (ms *MutableStateImpl) ApplyWorkflowTaskFailedEvent() error {
 	return ms.workflowTaskManager.ApplyWorkflowTaskFailedEvent()
 }
 
+// AddWorkflowExecutionTimeSkippedEvent adds a WorkflowExecutionTimeSkippedEvent to the history
+// and refreshes tasks to reflect the advanced time point.
+func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippedEvent(
+	ctx context.Context,
+	advanceToTimePoint time.Time,
+) (*historypb.HistoryEvent, error) {
+	opTag := tag.WorkflowActionWorkflowTimeSkipped
+	if err := ms.checkMutability(opTag); err != nil {
+		return nil, err
+	}
+
+	durationToAdvance := advanceToTimePoint.Sub(ms.timeSource.Now())
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippedEvent(advanceToTimePoint, durationToAdvance)
+	if err := ms.ApplyWorkflowExecutionTimeSkippedEvent(ctx, event); err != nil {
+		return nil, err
+	}
+	return event, nil
+}
+
+func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
+	executionInfo := ms.GetExecutionInfo()
+	newDetails := buildTimeSkippedDetails(executionInfo.TimeSkippingInfo.TimeSkippedDetails, event)
+	executionInfo.TimeSkippingInfo.TimeSkippedDetails = append(
+		executionInfo.TimeSkippingInfo.TimeSkippedDetails,
+		newDetails,
+	)
+	if ts, ok := ms.timeSource.(*TimeSkippingTimeSource); ok {
+		ts.advance(timeSkippedDurationFromTimestamp(newDetails.GetDurationToSkip()))
+	}
+	return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
+}
+
+// buildTimeSkippedDetails constructs a TimeSkippedDetails entry for a single skip event,
+// accumulating previously skipped durations to compute the correct virtual time at the moment of this skip.
+//
+// VirtualTimeWhenSkipped = RealTime + sum(all previous DurationToSkip)
+// TargetVirtualTimePoint = VirtualTimeWhenSkipped + DurationToSkip
+func buildTimeSkippedDetails(
+	existingDetails []*persistencespb.TimeSkippedDetails,
+	event *historypb.HistoryEvent,
+) *persistencespb.TimeSkippedDetails {
+	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
+
+	var totalPreviouslySkipped time.Duration
+	for _, d := range existingDetails {
+		totalPreviouslySkipped += timeSkippedDurationFromTimestamp(d.GetDurationToSkip())
+	}
+
+	realTime := event.GetEventTime().AsTime()
+	virtualTimeWhenSkipped := realTime.Add(totalPreviouslySkipped)
+	skipDuration := attrs.GetSkippedDuration().AsDuration()
+
+	return &persistencespb.TimeSkippedDetails{
+		RealTimePointWhenSkipped:    event.GetEventTime(),
+		VirtualTimePointWhenSkipped: timestamppb.New(virtualTimeWhenSkipped),
+		DurationToSkip:              timeSkippedDurationToTimestamp(skipDuration),
+		TargetVirtualTimePoint:      attrs.GetSkipToTimePoint(),
+	}
+}
+
+// timeSkippedDurationToTimestamp encodes a time.Duration into a *timestamppb.Timestamp
+// by storing seconds and nanoseconds directly in the Timestamp fields.
+// This is a convention for the DurationToSkip field in TimeSkippedDetails.
+func timeSkippedDurationToTimestamp(d time.Duration) *timestamppb.Timestamp {
+	return &timestamppb.Timestamp{
+		Seconds: int64(d / time.Second),
+		Nanos:   int32(d % time.Second),
+	}
+}
+
+// timeSkippedDurationFromTimestamp reverses timeSkippedDurationToTimestamp.
+func timeSkippedDurationFromTimestamp(ts *timestamppb.Timestamp) time.Duration {
+	if ts == nil {
+		return 0
+	}
+	return time.Duration(ts.GetSeconds())*time.Second + time.Duration(ts.GetNanos())
+}
+
+// VirtualTimeNow returns the current effective time for this workflow.
+// For workflows with time skipping enabled, this returns the virtual (advanced) time.
+// For regular workflows, this returns the real shard time.
+func (ms *MutableStateImpl) VirtualTimeNow() time.Time {
+	return ms.timeSource.Now()
+}
+
+func (ms *MutableStateImpl) IsAutoTimeSkippable() bool {
+	noSkippingReason := ""
+	defer func() {
+		if noSkippingReason != "" {
+			ms.logInfo(fmt.Sprintf("no auto time skipping allowed: %s", noSkippingReason),
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			)
+		}
+	}()
+	if !ms.IsWorkflowExecutionRunning() {
+		noSkippingReason = "workflow is not running"
+		return false
+	}
+	if ms.HasPendingWorkflowTask() {
+		noSkippingReason = "pending workflow task"
+		return false
+	}
+	if len(ms.GetPendingActivityInfos()) > 0 {
+		noSkippingReason = "pending activity"
+		return false
+	}
+	if len(ms.GetPendingChildExecutionInfos()) > 0 {
+		noSkippingReason = "pending child execution"
+		return false
+	}
+	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
+		noSkippingReason = "pending Nexus operations"
+		return false
+	}
+	return true
+}
+
 func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
@@ -3954,7 +4080,6 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 			return nil, nil, err
 		}
 	}
-
 	return event, ai, err
 }
 
@@ -5472,8 +5597,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 
 	// Update time skipping config.
 	if tsc := attributes.GetTimeSkippingConfig(); tsc != nil {
-		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Enabled: tsc.GetEnabled(),
+		if ms.executionInfo.TimeSkippingInfo == nil {
+			ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{}
+		}
+		ms.executionInfo.TimeSkippingInfo.Enabled = tsc.GetEnabled()
+
+		if tsc.GetEnabled() {
+			if _, alreadySkipping := ms.timeSource.(*TimeSkippingTimeSource); !alreadySkipping {
+				ms.timeSource = newTimeSkippingTimeSource(
+					ms.timeSource,
+					ms.executionInfo.TimeSkippingInfo.GetTimeSkippedDetails(),
+				)
+			}
 		}
 	}
 
@@ -9118,43 +9253,6 @@ func (ms *MutableStateImpl) SetVersioningRevisionNumber(revisionNumber int64) {
 		ms.GetExecutionInfo().VersioningInfo = &workflowpb.WorkflowExecutionVersioningInfo{}
 	}
 	ms.GetExecutionInfo().GetVersioningInfo().RevisionNumber = revisionNumber
-}
-
-func (ms *MutableStateImpl) AddTimeSkippingEvent(advancedTimeDuration time.Duration) (*historypb.HistoryEvent, error) {
-	// todo: @feiyang to be implemented
-	return nil, nil
-}
-func (ms *MutableStateImpl) IsAutoTimeSkippable() bool {
-	noSkippingReason := ""
-	defer func() {
-		if noSkippingReason != "" {
-			ms.logInfo(fmt.Sprintf("no auto time skipping allowed: %s", noSkippingReason),
-				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(ms.GetExecutionState().RunId),
-			)
-		}
-	}()
-	if !ms.IsWorkflowExecutionRunning() {
-		noSkippingReason = "workflow is not running"
-		return false
-	}
-	if ms.HasPendingWorkflowTask() {
-		noSkippingReason = "pending workflow task"
-		return false
-	}
-	if len(ms.GetPendingActivityInfos()) > 0 {
-		noSkippingReason = "pending activity"
-		return false
-	}
-	if len(ms.GetPendingChildExecutionInfos()) > 0 {
-		noSkippingReason = "pending child execution"
-		return false
-	}
-	if nexusoperations.MachineCollection(ms.HSM()).Size() > 0 {
-		noSkippingReason = "pending Nexus operations"
-		return false
-	}
-	return true
 }
 
 // reschedulePendingActivities reschedules all the activities that are not started, so they are

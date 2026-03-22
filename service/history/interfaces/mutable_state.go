@@ -89,8 +89,10 @@ type (
 		AddTimeoutWorkflowEvent(int64, enumspb.RetryState, string) (*historypb.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *commandpb.CancelTimerCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddTimerFiredEvent(string) (*historypb.HistoryEvent, error)
-		AddTimeSkippingEvent(advancedTimeDuration time.Duration) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTimeSkippedEvent(ctx context.Context, advanceToTimePoint time.Time) (*historypb.HistoryEvent, error)
+		ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, event *historypb.HistoryEvent) error
 		IsAutoTimeSkippable() bool
+		VirtualTimeNow() time.Time
 		AddTimerStartedEvent(int64, *commandpb.StartTimerCommandAttributes) (*historypb.HistoryEvent, *persistencespb.TimerInfo, error)
 		AddUpsertWorkflowSearchAttributesEvent(int64, *commandpb.UpsertWorkflowSearchAttributesCommandAttributes) (*historypb.HistoryEvent, error)
 		AddWorkflowPropertiesModifiedEvent(int64, *commandpb.ModifyWorkflowPropertiesCommandAttributes) (*historypb.HistoryEvent, error)

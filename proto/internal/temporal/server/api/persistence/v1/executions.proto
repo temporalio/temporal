@@ -331,8 +331,15 @@ message TimeSkippingInfo {
     // metadata
     bool enabled = 1;
     // runtime history
-    repeated google.protobuf.Timestamp skipped_time_offsets = 4;
+    repeated TimeSkippedDetails time_skipped_details = 2;
 } 
+
+message TimeSkippedDetails {
+    google.protobuf.Timestamp real_time_point_when_skipped = 1;
+    google.protobuf.Timestamp virtual_time_point_when_skipped = 2;
+    google.protobuf.Timestamp duration_to_skip = 3;
+    google.protobuf.Timestamp target_virtual_time_point = 4;
+}
 
 message ExecutionStats {
     int64 history_size = 1;
