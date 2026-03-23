@@ -212,6 +212,46 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 
 var _ log.Logger = (*TestLogger)(nil)
 
+// globalFileCore is a process-wide singleton zapcore.Core that writes to the file specified
+// by TEMPORAL_TEST_LOG_FILE. It is nil when the env var is unset.
+var (
+	globalFileCore     zapcore.Core
+	globalFileCoreOnce sync.Once
+)
+
+func getGlobalFileCore() zapcore.Core {
+	globalFileCoreOnce.Do(func() {
+		logFile := os.Getenv(log.TestLogFileEnvVar)
+		if logFile == "" {
+			return
+		}
+		if err := os.MkdirAll(filepath.Dir(logFile), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "testlogger: failed to create log file dir %s: %v\n", filepath.Dir(logFile), err)
+			return
+		}
+		f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "testlogger: failed to open log file %s: %v\n", logFile, err)
+			return
+		}
+		format := cmp.Or(os.Getenv(log.TestLogFileFormatEnvVar), "json")
+		var enc zapcore.Encoder
+		switch strings.ToLower(format) {
+		case "console":
+			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+		default: // "json" and anything unrecognized
+			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+		}
+		level := zapcore.DebugLevel
+		if levelV := os.Getenv(log.TestLogFileLevelEnvVar); levelV != "" {
+			level = log.ParseZapLevel(levelV)
+		}
+		globalFileCore = zapcore.NewCore(enc, zapcore.AddSync(f), level)
+		fmt.Fprintf(os.Stderr, "testlogger: file logging enabled → %s (format=%s level=%s)\n", logFile, format, level)
+	})
+	return globalFileCore
+}
+
 // NewTestLogger creates a new TestLogger that logs to the provided testing.T.
 // Mode controls the behavior of the logger for when an expected or unexpected error is encountered.
 func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
@@ -233,38 +273,30 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	}
 	if tl.wrapped == nil {
 		writer := zaptest.NewTestingWriter(t)
-		var enc zapcore.Encoder
+
+		// Console core: format and level controlled by TEMPORAL_TEST_LOG_FORMAT / TEMPORAL_TEST_LOG_LEVEL.
+		var consoleEnc zapcore.Encoder
 		format := cmp.Or(os.Getenv(log.TestLogFormatEnvVar), "console")
 		switch strings.ToLower(format) {
 		case "console":
-			enc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
+			consoleEnc = zapcore.NewConsoleEncoder(log.DefaultZapEncoderConfig)
 		case "json":
-			enc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
+			consoleEnc = zapcore.NewJSONEncoder(log.DefaultZapEncoderConfig)
 		default:
 			t.Fatalf("unknown log encoding %q", format)
 		}
-		level := tl.state.level
+		consoleLevel := tl.state.level
 		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
-			level = log.ParseZapLevel(levelV)
+			consoleLevel = log.ParseZapLevel(levelV)
 		}
+		consoleCore := zapcore.NewCore(consoleEnc, writer, consoleLevel)
 		var core zapcore.Core
-		if debugFile := os.Getenv(log.TestDebugLogFileEnvVar); debugFile != "" {
-			if err := os.MkdirAll(filepath.Dir(debugFile), 0o755); err != nil {
-				t.Logf("testlogger: failed to create debug log dir %s: %v", filepath.Dir(debugFile), err)
-			}
-			f, err := os.OpenFile(debugFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-			if err == nil {
-				// Debug+ goes to file; info+ goes to the test writer (visible in CI log).
-				fileCore := zapcore.NewCore(enc, zapcore.AddSync(f), zap.DebugLevel)
-				consoleCore := zapcore.NewCore(enc, writer, zap.InfoLevel)
-				core = zapcore.NewTee(fileCore, consoleCore)
-			} else {
-				t.Logf("testlogger: failed to open debug log file %s: %v (falling back to normal logging)", debugFile, err)
-				core = zapcore.NewCore(enc, writer, level)
-			}
+		if fc := getGlobalFileCore(); fc != nil {
+			core = zapcore.NewTee(consoleCore, fc)
 		} else {
-			core = zapcore.NewCore(enc, writer, level)
+			core = consoleCore
 		}
+
 		zapOptions := []zap.Option{
 			// Send zap errors to the same writer and mark the test as failed if
 			// that happens.
