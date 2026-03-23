@@ -200,10 +200,10 @@ func WithoutCaller() LoggerOption {
 // SetLogLevel overrides the temporal test log level during this test.
 func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 	return func(t *TestLogger) {
-		oldLevel := os.Getenv("TEMPORAL_TEST_LOG_LEVEL")
-		_ = os.Setenv("TEMPORAL_TEST_LOG_LEVEL", level.String())
+		oldLevel := os.Getenv(log.TestLogLevelEnvVar)
+		_ = os.Setenv(log.TestLogLevelEnvVar, level.String())
 		tt.Cleanup(func() {
-			_ = os.Setenv("TEMPORAL_TEST_LOG_LEVEL", oldLevel)
+			_ = os.Setenv(log.TestLogLevelEnvVar, oldLevel)
 		})
 
 		t.state.level = level
@@ -213,9 +213,9 @@ func SetLogLevel(tt CleanupCapableT, level zapcore.Level) LoggerOption {
 var _ log.Logger = (*TestLogger)(nil)
 
 // globalFileCore is a process-wide singleton zapcore.Core that writes to the file specified
-// by TEMPORAL_TEST_LOG_FILE. It is nil when the env var is unset.
+// by TEMPORAL_TEST_LOG_FILE. It is a NopCore when the env var is unset.
 var (
-	globalFileCore     zapcore.Core
+	globalFileCore     zapcore.Core = zapcore.NewNopCore()
 	globalFileCoreOnce sync.Once
 )
 
@@ -289,13 +289,9 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		if levelV := os.Getenv(log.TestLogLevelEnvVar); levelV != "" {
 			consoleLevel = log.ParseZapLevel(levelV)
 		}
-		consoleCore := zapcore.NewCore(consoleEnc, writer, consoleLevel)
-		var core zapcore.Core
-		if fc := getGlobalFileCore(); fc != nil {
-			core = zapcore.NewTee(consoleCore, fc)
-		} else {
-			core = consoleCore
-		}
+		core := zapcore.NewTee(
+			zapcore.NewCore(consoleEnc, writer, consoleLevel),
+			getGlobalFileCore())
 
 		zapOptions := []zap.Option{
 			// Send zap errors to the same writer and mark the test as failed if
