@@ -1,5 +1,7 @@
 name: Promote Docker Image
 
+permissions: {}
+
 on:
   workflow_call:
     inputs:
