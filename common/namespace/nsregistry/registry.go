@@ -613,6 +613,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 	r.stateChangedDuringReadthrough = nil
 	r.nsMapsLock.Unlock()
 
+	metrics.TotalNamespaces.With(r.metricsHandler).Record(float64(len(newIDToNamespace)))
+
 	r.stateChangeCallbacks.Range(
 		func(_, value any) bool {
 			//revive:disable-next-line:unchecked-type-assertion
@@ -657,6 +659,9 @@ func (r *registry) processWatchEvent(event *persistence.NamespaceWatchEvent) err
 	default:
 		r.logger.Warn("Unknown namespace watch event type", tag.Int("eventType", int(event.Type)))
 	}
+
+	idCount, _ := r.GetRegistrySize()
+	metrics.TotalNamespaces.With(r.metricsHandler).Record(float64(idCount))
 
 	if executeCallbacks {
 		isDelete := event.Type == persistence.NamespaceWatchEventTypeDelete

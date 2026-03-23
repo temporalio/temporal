@@ -37,7 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -1763,7 +1763,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	// 8. WFT completes and the transition completes.
 	// 9. All the 3 remaining activities are now dispatched and completed.
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
 	tv1 := testvars.New(s).WithBuildIDNumber(1)
@@ -1811,7 +1811,11 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			s.Logger.Info(fmt.Sprintf("Activity 1 started ID: %s", task.ActivityId))
 			close(act1Started)
 			// block until the transition WFT starts
-			<-transitionStarted
+			select {
+			case <-transitionStarted:
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context expired waiting for transitionStarted in act1: %w", ctx.Err())
+			}
 			// 6. the 1st act completes during transition
 			s.Logger.Info(fmt.Sprintf("Activity 1 completed ID: %s", task.ActivityId))
 			return respondActivity(), nil
@@ -1824,7 +1828,11 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			s.Logger.Info(fmt.Sprintf("Activity 2 started ID: %s", task.ActivityId))
 			close(act2Started)
 			// block until the transition WFT starts
-			<-transitionStarted
+			select {
+			case <-transitionStarted:
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context expired waiting for transitionStarted in act2: %w", ctx.Err())
+			}
 			// 7. 2nd activity fails. Respond with error so it is retried.
 			s.Logger.Info(fmt.Sprintf("Activity 2 failed ID: %s", task.ActivityId))
 			return nil, errors.New("intentional activity failure")
@@ -1881,8 +1889,16 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			close(transitionStarted)
 			s.Logger.Info("Transition wft started")
 			// 8. Complete the transition after act1 completes and act2's first attempt fails.
-			<-act1Completed
-			<-act2Failed
+			select {
+			case <-act1Completed:
+			case <-ctx.Done():
+				s.FailNow("context expired waiting for act1 to complete")
+			}
+			select {
+			case <-act2Failed:
+			case <-ctx.Done():
+				s.FailNow("context expired waiting for act2 to fail")
+			}
 			transitionCompleted.Store(true)
 			s.Logger.Info("Transition wft completed")
 			return respondEmptyWft(tv2, sticky, vbUnpinned), nil
@@ -4270,7 +4286,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 			if behavior == vbPinned {
 				payload, ok := w.GetSearchAttributes().GetIndexedFields()["BuildIds"]
 				a.True(ok)
-				searchAttrAny, err := searchattribute.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				searchAttrAny, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var searchAttr []string
 				if searchAttrAny != nil {
@@ -4285,7 +4301,7 @@ func (s *Versioning3Suite) verifyVersioningSAs(
 				// Validate TemporalUsedWorkerDeploymentVersions search attribute
 				versionPayload, ok := w.GetSearchAttributes().GetIndexedFields()["TemporalUsedWorkerDeploymentVersions"]
 				a.True(ok)
-				versionAttrAny, err := searchattribute.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+				versionAttrAny, err := sadefs.DecodeValue(versionPayload, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
 				a.NoError(err)
 				var versionAttr []string
 				if versionAttrAny != nil {

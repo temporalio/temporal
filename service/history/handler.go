@@ -518,11 +518,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -530,11 +525,6 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 			activity.RespondCompletedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -579,11 +569,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -591,11 +576,6 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 			activity.RespondFailedEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -640,11 +620,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 
 	// Handle standalone activity if component ref is present in the token.
 	if componentRef := taskToken.GetComponentRef(); len(componentRef) > 0 {
-		namespaceName, err := h.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
-		if err != nil {
-			return nil, err
-		}
-
 		response, _, err := chasm.UpdateComponent(
 			ctx,
 			componentRef,
@@ -652,11 +627,6 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 			activity.RespondCancelledEvent{
 				Request: request,
 				Token:   taskToken,
-				MetricsHandlerBuilderParams: activity.MetricsHandlerBuilderParams{
-					Handler:                     h.metricsHandler,
-					NamespaceName:               namespaceName.String(),
-					BreakdownMetricsByTaskQueue: h.config.BreakdownMetricsByTaskQueue,
-				},
 			},
 		)
 		if err != nil {
@@ -2321,6 +2291,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.
+// NOTE: Keep in sync with ChasmEngine.convertError in chasm_engine.go, which is a superset of this function.
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:

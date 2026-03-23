@@ -1300,6 +1300,12 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
+		"matching.emitTaskDispatchLatencyAtPoll",
+		true,
+		`When enabled, TaskDispatchLatencyPerTaskQueue is emitted when responding to poll requests (with extra tags
+like partition and worker-version) instead of being emitted at the matcher level.`,
+	)
 	MatchingListNexusEndpointsLongPollTimeout = NewGlobalDurationSetting(
 		"matching.listNexusEndpointsLongPollTimeout",
 		5*time.Minute-10*time.Second,
@@ -2805,6 +2811,13 @@ that task will be sent to DLQ.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerRouting",
+		false,
+		`EnableCHASMSchedulerRouting controls whether schedule RPCs are routed to the CHASM (V2) implementation
+first (with fallback to V1), excluding CreateSchedule.`,
+	)
+
 	EnableCHASMSchedulerMigration = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerMigration",
 		false,
@@ -3157,10 +3170,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
+	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
+	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,
-		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
+		`Deprecated: no longer honored. ListWorkers and DescribeWorker are always enabled.`,
 	)
 
 	WorkerCommandsEnabled = NewNamespaceBoolSetting(

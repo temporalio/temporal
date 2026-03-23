@@ -14,6 +14,7 @@ type WorkerMetricsConfig struct {
 	EnablePluginMetrics            dynamicconfig.BoolPropertyFn
 	EnablePollerAutoscalingMetrics dynamicconfig.BoolPropertyFn
 	BreakdownMetricsByTaskQueue    dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	ExternalPayloadsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
@@ -25,8 +26,10 @@ type workerMetricsEmitter struct {
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
+	enableStorageDriverMetrics := e.config.ExternalPayloadsEnabled != nil && e.config.ExternalPayloadsEnabled(nsName.String())
 
 	recordedPlugins := make(map[string]bool)
+	recordedDrivers := make(map[string]bool)
 
 	for _, hb := range heartbeats {
 		// Activity slots metric (always enabled)
@@ -50,6 +53,19 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 		// Poller autoscaling metrics (if enabled)
 		if enablePollerAutoscalingMetrics {
 			e.emitPollerAutoscaling(nsID, nsName, hb)
+		}
+
+		// Storage driver metrics (if external payloads enabled)
+		if enableStorageDriverMetrics {
+			for _, driver := range hb.GetDrivers() {
+				driverType := driver.GetType()
+				if !recordedDrivers[driverType] {
+					metrics.WorkerStorageDriverTypeMetric.
+						With(e.handler).
+						Record(1, metrics.NamespaceTag(nsName.String()), metrics.WorkerStorageDriverTypeTag(driverType))
+					recordedDrivers[driverType] = true
+				}
+			}
 		}
 	}
 }

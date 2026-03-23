@@ -79,9 +79,9 @@ func (s *ClientMiscTestSuite) TestTooManyChildWorkflows() {
 	}
 
 	// register all the workflows
-	s.Worker().RegisterWorkflow(blockingChildWorkflow)
-	s.Worker().RegisterWorkflow(childWorkflow)
-	s.Worker().RegisterWorkflow(parentWorkflow)
+	s.SdkWorker().RegisterWorkflow(blockingChildWorkflow)
+	s.SdkWorker().RegisterWorkflow(childWorkflow)
+	s.SdkWorker().RegisterWorkflow(parentWorkflow)
 
 	// start the parent workflow
 	timeout := time.Minute * 5
@@ -130,11 +130,11 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 		pendingActivities <- activity.GetInfo(ctx)
 		return activity.ErrResultPending
 	}
-	s.Worker().RegisterActivity(pendingActivity)
+	s.SdkWorker().RegisterActivity(pendingActivity)
 	lastActivity := func(ctx context.Context) error {
 		return nil
 	}
-	s.Worker().RegisterActivity(lastActivity)
+	s.SdkWorker().RegisterActivity(lastActivity)
 
 	readyToScheduleLastActivity := "ready-to-schedule-last-activity"
 	myWorkflow := func(ctx workflow.Context) error {
@@ -152,7 +152,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingActivities() {
 			ActivityID:          "last-activity",
 		}), lastActivity).Get(ctx, nil)
 	}
-	s.Worker().RegisterWorkflow(myWorkflow)
+	s.SdkWorker().RegisterWorkflow(myWorkflow)
 
 	workflowID := uuid.NewString()
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
@@ -204,7 +204,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			return false
 		})
 	}
-	s.Worker().RegisterWorkflow(targetWorkflow)
+	s.SdkWorker().RegisterWorkflow(targetWorkflow)
 	for i := range numTargetWorkflows {
 		_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 			ID:        fmt.Sprintf("workflow-%d", i),
@@ -227,7 +227,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 		}
 		return nil
 	}
-	s.Worker().RegisterWorkflow(cancelWorkflowsInRange)
+	s.SdkWorker().RegisterWorkflow(cancelWorkflowsInRange)
 
 	// try to cancel all the workflows at once and verify that we can't because of the limit violation
 	s.Run("CancelAllWorkflowsAtOnce", func() {
@@ -298,7 +298,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 		}
 		return errs
 	}
-	s.Worker().RegisterWorkflow(sender)
+	s.SdkWorker().RegisterWorkflow(sender)
 
 	receiver := func(ctx workflow.Context) error {
 		channel := workflow.GetSignalChannel(ctx, signalName)
@@ -306,7 +306,7 @@ func (s *ClientMiscTestSuite) TestTooManyPendingSignals() {
 			channel.Receive(ctx, nil)
 		}
 	}
-	s.Worker().RegisterWorkflow(receiver)
+	s.SdkWorker().RegisterWorkflow(receiver)
 	_, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		TaskQueue: s.TaskQueue(),
 		ID:        receiverId,
@@ -366,7 +366,7 @@ func continueAsNewTightLoop(ctx workflow.Context, currCount, maxCount int) (int,
 func (s *ClientMiscTestSuite) TestContinueAsNewTightLoop() {
 	// Simulate continue as new tight loop, and verify server throttle the rate.
 	workflowId := "continue_as_new_tight_loop"
-	s.Worker().RegisterWorkflow(continueAsNewTightLoop)
+	s.SdkWorker().RegisterWorkflow(continueAsNewTightLoop)
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
@@ -402,7 +402,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 		return msg, nil
 	}
 
-	s.Worker().RegisterWorkflow(wfFn)
+	s.SdkWorker().RegisterWorkflow(wfFn)
 
 	ctx, cancel := rpc.NewContextWithTimeoutAndVersionHeaders(time.Minute)
 	defer cancel()
@@ -432,7 +432,7 @@ func (s *ClientMiscTestSuite) TestStickyAutoReset() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// stop worker
-	s.Worker().Stop()
+	s.SdkWorker().Stop()
 	//nolint:forbidigo
 	time.Sleep(time.Second * 11) // wait 11s (longer than 10s timeout), after this time, matching will detect StickyWorkerUnavailable
 	resp, err := s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
@@ -517,7 +517,7 @@ func (s *ClientMiscTestSuite) TestWorkflowCanBeCompletedDespiteAdmittedUpdate() 
 		return workflow.ExecuteLocalActivity(laCtx, localActivityFn).Get(laCtx, nil)
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:                  tv.WorkflowID(),
@@ -612,7 +612,7 @@ func (s *ClientMiscTestSuite) Test_CancelActivityAndTimerBeforeComplete() {
 		return nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := s.T().Name()
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -656,9 +656,9 @@ func (s *ClientMiscTestSuite) Test_FinishWorkflowWithDeferredCommands() {
 		return nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterWorkflow(childWorkflowFn)
-	s.Worker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(childWorkflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
 
 	id := "functional-test-finish-workflow-with-deffered-commands"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -738,8 +738,8 @@ func (s *ClientMiscTestSuite) TestInvalidCommandAttribute() {
 		return workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
 
 	id := "functional-test-invalid-command-attributes"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -810,7 +810,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 		return multierr.Combine(err1, workflow.Sleep(ctx, 5*time.Second))
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	id := "functional-test-buffered-query"
 	workflowOptions := sdkclient.StartWorkflowOptions{
@@ -918,7 +918,7 @@ func (s *ClientMiscTestSuite) TestBufferedSignalCausesUnhandledCommandAndSchedul
 		return nil
 	}
 
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
@@ -1088,7 +1088,7 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 		workflow.GetSignalChannel(ctx, "my-signal").Receive(ctx, &receivedData)
 		return receivedData, nil
 	}
-	s.Worker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 		ID:                       uuid.NewString(),
@@ -1150,8 +1150,8 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, &result)
 		return result, err
 	}
-	s.Worker().RegisterWorkflow(workflowFn)
-	s.Worker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFn)
 
 	workflowRun, err := s.SdkClient().ExecuteWorkflow(context.Background(), sdkclient.StartWorkflowOptions{
 		ID:                       uuid.NewString(),

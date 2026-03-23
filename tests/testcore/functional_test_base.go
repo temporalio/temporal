@@ -79,7 +79,7 @@ type (
 
 		// Fields used by SDK based tests.
 		sdkClient sdkclient.Client
-		worker    sdkworker.Worker
+		sdkWorker sdkworker.Worker
 		taskQueue string
 
 		// TODO (alex): replace with v2
@@ -211,8 +211,8 @@ func (s *FunctionalTestBase) WorkerGRPCAddress() string {
 	return s.GetTestCluster().WorkerGRPCAddress()
 }
 
-func (s *FunctionalTestBase) Worker() sdkworker.Worker {
-	return s.worker
+func (s *FunctionalTestBase) SdkWorker() sdkworker.Worker {
+	return s.sdkWorker
 }
 
 func (s *FunctionalTestBase) SdkClient() sdkclient.Client {
@@ -387,8 +387,8 @@ func (s *FunctionalTestBase) setupSdk() {
 	s.taskQueue = RandomizeStr("tq")
 
 	workerOptions := sdkworker.Options{}
-	s.worker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
-	err = s.worker.Start()
+	s.sdkWorker = sdkworker.New(s.sdkClient, s.taskQueue, workerOptions)
+	err = s.sdkWorker.Start()
 	s.NoError(err)
 }
 
@@ -432,8 +432,8 @@ func (s *FunctionalTestBase) TearDownSubTest() {
 }
 
 func (s *FunctionalTestBase) tearDownSdk() {
-	if s.worker != nil {
-		s.worker.Stop()
+	if s.sdkWorker != nil {
+		s.sdkWorker.Stop()
 	}
 	if s.sdkClient != nil {
 		s.sdkClient.Close()

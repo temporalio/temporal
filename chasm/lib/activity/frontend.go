@@ -175,13 +175,7 @@ func (h *frontendHandler) ListActivityExecutions(
 		pageSize = maxPageSize
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.ListExecutions[*Activity, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		PageSize:      int(pageSize),
 		NextPageToken: req.GetNextPageToken(),
@@ -233,13 +227,7 @@ func (h *frontendHandler) CountActivityExecutions(
 		return nil, ErrStandaloneActivityDisabled
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.CountExecutions[*Activity](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),
 	})
@@ -259,6 +247,35 @@ func (h *frontendHandler) CountActivityExecutions(
 		Count:  resp.Count,
 		Groups: groups,
 	}, nil
+}
+
+// DeleteActivityExecution terminates and schedules a standalone activity execution for deletion.
+func (h *frontendHandler) DeleteActivityExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteActivityExecutionRequest,
+) (*workflowservice.DeleteActivityExecutionResponse, error) {
+	if !h.config.Enabled(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityDisabled
+	}
+
+	if err := validateDeleteActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteActivityExecution(ctx, &activitypb.DeleteActivityExecutionRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteActivityExecutionResponse{}, nil
 }
 
 // TerminateActivityExecution terminates a standalone activity execution
@@ -354,7 +371,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 
 	opts := activityOptionsFromStartRequest(req)
-	err := ValidateAndNormalizeActivityAttributes(
+	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,

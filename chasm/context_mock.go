@@ -23,14 +23,17 @@ type MockContext struct {
 	HandleStateTransitionCount func() int64
 	HandleMetricsHandler       func() metrics.Handler
 
-	ctx context.Context
+	// GoCtx is the underlying context.Context used for context value lookups.
+	// Any values set on it will be available via the CHASM mock context's Value method.
+	// Defaults to context.Background() if nil.
+	GoCtx context.Context
 }
 
 func (c *MockContext) goContext() context.Context {
-	if c.ctx == nil {
-		c.ctx = context.Background()
+	if c.GoCtx == nil {
+		c.GoCtx = context.Background()
 	}
-	return c.ctx
+	return c.GoCtx
 }
 
 func (c *MockContext) Now(cmp Component) time.Time {
@@ -100,7 +103,7 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleExecutionCloseTime:   c.HandleExecutionCloseTime,
 		HandleStateTransitionCount: c.HandleStateTransitionCount,
 		HandleMetricsHandler:       c.HandleMetricsHandler,
-		ctx:                        context.WithValue(c.goContext(), key, value),
+		GoCtx:                      context.WithValue(c.goContext(), key, value),
 	}
 }
 

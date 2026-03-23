@@ -80,7 +80,7 @@ func (s *HttpApiTestSuite) runHTTPAPIBasicsTest(
 		}
 		return arg, nil
 	}
-	s.Worker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: "http-basic-workflow"})
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: "http-basic-workflow"})
 
 	// Capture metrics
 	capture := s.GetTestCluster().Host().CaptureMetricsHandler().StartCapture()

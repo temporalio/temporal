@@ -3438,7 +3438,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 
 	namespaceName := namespace.Name(request.Namespace)
 
-	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	useChasmScheduler := wh.chasmSchedulerCreationEnabled(ctx, namespaceName.String())
 	wh.logger.Debug("Received CreateSchedule",
 		tag.ScheduleID(request.ScheduleId),
 		tag.WorkflowNamespace(namespaceName.String()),
@@ -3462,13 +3462,20 @@ func (wh *WorkflowHandler) CreateSchedule(
 	return wh.createScheduleWorkflow(ctx, request)
 }
 
-// chasmSchedulerEnabled returns true when CHASM codepaths should be enabled for
-// the request. All handlers must be capable of falling back to V1 codepaths for
-// schedules that haven't been migrated to CHASM.
-func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+// chasmSchedulerCreationEnabled returns true when CreateSchedule should create on
+// the CHASM scheduler.
+func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, namespaceName string) bool {
 	return (headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
 		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName)) ||
 		wh.config.EnableCHASMSchedulerCreation(namespaceName)
+}
+
+// chasmSchedulerEnabled returns true when schedule RPCs should route to CHASM
+// first. Handlers must be capable of falling back to V1 codepaths for schedules
+// that haven't been migrated to CHASM.
+func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
+		wh.config.EnableCHASMSchedulerRouting(namespaceName)
 }
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
@@ -3477,6 +3484,12 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
 //   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
+//
+// TODO: should ErrClosed (FailedPrecondition) from a CHASM schedule that was
+// migrated to V1 also be routable? Currently closed schedules return
+// FailedPrecondition which does not fall back to V1. This means callers with
+// routing enabled must handle the closed schedule case themselves or wait for
+// the CHASM entity to be cleaned up.
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
 	return errors.As(err, &notFoundErr)
@@ -4639,11 +4652,10 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 	query string,
 ) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	resp, err := chasm.ListExecutions[*chasmscheduler.Scheduler, *schedulepb.ScheduleListInfo](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
+		NamespaceName: namespaceName.String(),
 		PageSize:      int(request.GetMaximumPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         query,
-		NamespaceName: namespaceName.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -4770,7 +4782,6 @@ func (wh *WorkflowHandler) countSchedulesChasm(
 	query string,
 ) (*workflowservice.CountSchedulesResponse, error) {
 	resp, err := chasm.CountExecutions[*chasmscheduler.Scheduler](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: namespaceName.String(),
 		Query:         query,
 	})
@@ -6732,9 +6743,6 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 func (wh *WorkflowHandler) ListWorkers(
 	ctx context.Context, request *workflowservice.ListWorkersRequest,
 ) (*workflowservice.ListWorkersResponse, error) {
-	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("method ListWorkers not supported")
-	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
@@ -6841,9 +6849,6 @@ func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workfl
 
 func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflowservice.DescribeWorkerRequest,
 ) (*workflowservice.DescribeWorkerResponse, error) {
-	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
-		return nil, serviceerror.NewUnimplemented("DescribeWorker command is not enabled.")
-	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {

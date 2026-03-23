@@ -6,7 +6,6 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -22,7 +21,7 @@ import (
 
 type (
 	DeleteManager interface {
-		AddDeleteWorkflowExecutionTask(
+		AddDeleteExecutionTask(
 			ctx context.Context,
 			nsID namespace.ID,
 			we *commonpb.WorkflowExecution,
@@ -77,28 +76,38 @@ func NewDeleteManager(
 	return deleteManager
 }
 
-func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
+func (m *DeleteManagerImpl) AddDeleteExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
 	we *commonpb.WorkflowExecution,
 	ms historyi.MutableState,
 ) error {
+	return AddDeleteExecutionTask(ctx, m.shardContext, nsID, we, ms)
+}
 
-	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(m.shardContext, ms)
+// AddDeleteExecutionTask creates a DeleteExecutionTask and adds it to the shard's task queue.
+// This is a package-level function so it can be used by callers that don't have a DeleteManager instance.
+func AddDeleteExecutionTask(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	nsID namespace.ID,
+	we *commonpb.WorkflowExecution,
+	ms historyi.MutableState,
+) error {
+	taskGenerator := workflow.GetTaskGeneratorProvider().NewTaskGenerator(shardContext, ms)
 
-	// We can make this task immediately because the task itself will keep rescheduling itself until the workflow is
-	// closed before actually deleting the workflow.
+	// We can make this task immediately because the task itself will keep rescheduling itself until the
+	// execution is closed before actually deleting it.
 	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask()
 	if err != nil {
 		return err
 	}
 
-	return m.shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
-		ShardID: m.shardContext.GetShardID(),
-		// RangeID is set by shardContext
+	return shardContext.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID:     shardContext.GetShardID(),
 		NamespaceID: nsID.String(),
 		WorkflowID:  we.GetWorkflowId(),
-		ArchetypeID: chasm.WorkflowArchetypeID, // this method is specific to workflow executions
+		ArchetypeID: ms.ChasmTree().ArchetypeID(),
 		Tasks: map[tasks.Category][]tasks.Task{
 			tasks.CategoryTransfer: {deleteTask},
 		},

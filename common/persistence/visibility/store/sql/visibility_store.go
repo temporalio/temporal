@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 type (
@@ -711,7 +712,7 @@ func (s *VisibilityStore) countGroupByExecutions(
 	for _, row := range rows {
 		groupValues := make([]*commonpb.Payload, len(row.GroupValues))
 		for i, val := range row.GroupValues {
-			groupValues[i], err = searchattribute.EncodeValue(val, groupByTypes[i])
+			groupValues[i], err = sadefs.EncodeValue(val, groupByTypes[i])
 			if err != nil {
 				return nil, err
 			}
@@ -887,7 +888,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		tp, err := combinedTypeMap.GetType(name)
 		if err != nil {
-			if errors.Is(err, searchattribute.ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				continue
 			}
 			return nil, err
