@@ -190,21 +190,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	go blm.taskReader.dispatchBufferedTasks()
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
+		assert.InDelta(collect, time.Minute, blm.taskReader.getBacklogHeadAge(), float64(time.Second))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err := blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.InDelta(s.T(), 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
+		assert.InDelta(collect, 10*time.Second, blm.taskReader.getBacklogHeadAge(), float64(500*time.Millisecond))
 	}, time.Second, 10*time.Millisecond)
 
 	_, err = blm.pqMgr.PollTask(context.Background(), makePollMetadata(rpsInf))
 	s.NoError(err)
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equalf(s.T(), time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
+		assert.Equalf(collect, time.Duration(0), blm.taskReader.getBacklogHeadAge(), "backlog age being reset because of no tasks in the buffer")
 	}, time.Second, 10*time.Millisecond)
 }
 
