@@ -1503,7 +1503,7 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
-	s.Equal(1, len(listResp.Schedules))
+	s.Len(listResp.Schedules, 1)
 
 	countResp, err := s.FrontendClient().CountSchedules(ctx, &workflowservice.CountSchedulesRequest{
 		Namespace: s.Namespace().String(),
@@ -1574,7 +1574,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 		MaximumPageSize: 5,
 	})
 	s.NoError(err)
-	s.Equal(1, len(listResp.Schedules))
+	s.Len(listResp.Schedules, 1)
 
 	countResp, err := s.FrontendClient().CountSchedules(ctx, &workflowservice.CountSchedulesRequest{
 		Namespace: s.Namespace().String(),
