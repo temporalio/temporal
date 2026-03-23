@@ -256,8 +256,8 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 			if err == nil {
 				// Debug+ goes to file; info+ goes to the test writer (visible in CI log).
 				fileCore := zapcore.NewCore(enc, zapcore.AddSync(f), zap.DebugLevel)
-				infoCore := zapcore.NewCore(enc, writer, zap.InfoLevel)
-				core = zapcore.NewTee(fileCore, infoCore)
+				consoleCore := zapcore.NewCore(enc, writer, zap.InfoLevel)
+				core = zapcore.NewTee(fileCore, consoleCore)
 			} else {
 				t.Logf("testlogger: failed to open debug log file %s: %v (falling back to normal logging)", debugFile, err)
 				core = zapcore.NewCore(enc, writer, level)
