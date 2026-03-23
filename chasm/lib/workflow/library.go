@@ -20,14 +20,26 @@ func (l *Library) Name() string {
 	return chasm.WorkflowLibraryName
 }
 
-type chasmCtxKey struct{}
+type workflowContext struct {
+	registry *Registry
+}
 
-var eventRegistryChasmCtxKey = chasmCtxKey{}
+type ctxKeyWorkflowContextType struct{}
+
+var ctxKeyWorkflowContext = ctxKeyWorkflowContextType{}
+
+func workflowContextFromChasm(ctx chasm.Context) workflowContext {
+	wc, ok := ctx.Value(ctxKeyWorkflowContext).(workflowContext)
+	if !ok {
+		panic("Workflow CHASM component context uninitialized")
+	}
+	return wc
+}
 
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
-			eventRegistryChasmCtxKey: l.registry,
+			ctxKeyWorkflowContext: workflowContext{registry: l.registry},
 		})),
 	}
 }
@@ -35,5 +47,5 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 // SetEventRegistryOnContext injects the event registry into a CHASM context. This is primarily
 // useful for tests that construct MockMutableContext directly.
 func SetEventRegistryOnContext[C chasm.Context](ctx C, registry *Registry) C {
-	return chasm.ContextWithValue(ctx, eventRegistryChasmCtxKey, registry)
+	return chasm.ContextWithValue(ctx, ctxKeyWorkflowContext, &workflowContext{registry: registry})
 }

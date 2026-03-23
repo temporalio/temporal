@@ -151,11 +151,11 @@ func (w *Workflow) AddAndApplyHistoryEvent(
 
 // eventRegistry retrieves the EventRegistry from the CHASM context.
 func eventRegistry(ctx chasm.Context) *Registry {
-	reg, ok := ctx.Value(eventRegistryChasmCtxKey).(*Registry)
+	reg, ok := ctx.Value(ctxKeyWorkflowContext).(*workflowContext)
 	if !ok {
 		return nil
 	}
-	return reg
+	return reg.registry
 }
 
 // HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.
