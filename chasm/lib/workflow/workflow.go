@@ -135,8 +135,8 @@ func (w *Workflow) AddNexusOperation(
 	w.Operations[key] = chasm.NewComponentField(ctx, op)
 }
 
-// AddHistoryEvent adds a history event to the workflow and applies the corresponding event definition.
-func (w *Workflow) AddHistoryEvent(
+// AddAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition.
+func (w *Workflow) AddAndApplyHistoryEvent(
 	ctx chasm.MutableContext,
 	t enumspb.EventType,
 	setAttributes func(*historypb.HistoryEvent),
@@ -176,7 +176,7 @@ func (w *Workflow) OnNexusOperationStarted(
 		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
-	_, err := w.AddHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 				ScheduledEventId: parentData.GetScheduledEventId(),
@@ -202,7 +202,7 @@ func (w *Workflow) OnNexusOperationCancelled(
 	}
 
 	scheduledEventID := parentData.GetScheduledEventId()
-	_, err := w.AddHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 			NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
 				ScheduledEventId: scheduledEventID,
@@ -227,7 +227,7 @@ func (w *Workflow) OnNexusOperationFailed(
 	}
 
 	scheduledEventID := parentData.GetScheduledEventId()
-	_, err := w.AddHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
 				ScheduledEventId: scheduledEventID,
@@ -252,7 +252,7 @@ func (w *Workflow) OnNexusOperationCompleted(
 		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
 	}
 
-	_, err := w.AddHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: parentData.GetScheduledEventId(),
@@ -278,7 +278,7 @@ func (w *Workflow) OnNexusOperationTimedOut(
 	}
 
 	scheduledEventID := parentData.GetScheduledEventId()
-	_, err := w.AddHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 			NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 				ScheduledEventId: scheduledEventID,

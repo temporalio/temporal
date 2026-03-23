@@ -230,7 +230,7 @@ func (ch *commandHandler) handleScheduleCommand(
 		}
 	}
 
-	event, err := wf.AddHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
+	event, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
 			NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{
 				Endpoint:                     attrs.Endpoint,
@@ -321,7 +321,7 @@ func (ch *commandHandler) handleCancelCommand(
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
 	// The event will be applied before the completion since buffered events are reordered and put at the end of the
 	// batch, after command events from the workflow task.
-	event, err := wf.AddHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
+	event, err := wf.AddAndApplyHistoryEvent(chasmCtx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, func(he *historypb.HistoryEvent) {
 		he.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
 				ScheduledEventId:             attrs.ScheduledEventId,
