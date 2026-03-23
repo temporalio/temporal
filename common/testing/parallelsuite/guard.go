@@ -4,45 +4,7 @@ import (
 	"fmt"
 	"sync/atomic"
 	"testing"
-
-	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/testing/historyrequire"
-	"go.temporal.io/server/common/testing/protorequire"
 )
-
-// assertions bundles require-style (fail-fast) assertions, proto assertions, and
-// history assertions. It is embedded by both [Suite] and [Suite] to provide an
-// identical assertion surface.
-//
-// It enforces a strict rule: a test method (or subtest) must either use assertions
-// directly OR create subtests via Run — not both. Mixing is detected in both
-// directions via a shared [guard].
-type base struct {
-	*require.Assertions
-	protorequire.ProtoAssertions
-	historyrequire.HistoryRequire
-
-	guardT guardT
-}
-
-func (b *base) initBase(t *testing.T) {
-	g := &b.guardT
-	g.name = t.Name()
-	g.T = t
-	g.asserted.Store(false)
-	g.hasSubtests.Store(false)
-	b.Assertions = require.New(g)
-	b.ProtoAssertions = protorequire.New(g)
-	b.HistoryRequire = historyrequire.New(g)
-}
-
-// T returns the *testing.T, panicking if the guard has been sealed.
-func (b *base) T() *testing.T {
-	if b.guardT.hasSubtests.Load() {
-		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
-	}
-	return b.guardT.T
-}
 
 // guardT is a [require.TestingT] wrapper that detects mixing of assertions and Run.
 //

@@ -6,7 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	testifysuite "github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 // testingSuite is the constraint for suite types.
@@ -17,12 +20,16 @@ type testingSuite interface {
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
-// The type parameter T is a pointer to the concrete suite type:
 //
-//	type MySuite struct{ parallelsuite.Suite[*MySuite] }
+// It enforces a strict rule: a test method (or subtest) must either use assertions
+// directly OR create subtests via Run — not both.
 type Suite[T testingSuite] struct {
 	testifyBase
-	base
+	*require.Assertions
+	protorequire.ProtoAssertions
+	historyrequire.HistoryRequire
+
+	guardT guardT
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
@@ -33,8 +40,22 @@ func (s *Suite[T]) copySuite(t *testing.T) testingSuite {
 }
 
 func (s *Suite[T]) initSuite(t *testing.T) {
-	s.testifyBase.Suite.SetT(t) //nolint:staticcheck // must bypass our panicking override
-	s.initBase(t)
+	g := &s.guardT
+	g.name = t.Name()
+	g.T = t
+	g.asserted.Store(false)
+	g.hasSubtests.Store(false)
+	s.Assertions = require.New(g)
+	s.ProtoAssertions = protorequire.New(g)
+	s.HistoryRequire = historyrequire.New(g)
+}
+
+// T returns the *testing.T, panicking if the guard has been sealed.
+func (s *Suite[T]) T() *testing.T {
+	if s.guardT.hasSubtests.Load() {
+		panic("parallelsuite: do not call T() after Run(); use the subtest callback's parameter instead")
+	}
+	return s.guardT.T
 }
 
 // Run creates a parallel subtest. The callback receives a fresh copy of the
