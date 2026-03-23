@@ -299,8 +299,8 @@ func (e *testEnv) ExpectReadComponent(ctx chasm.Context, returnedComponent chasm
 		e.t.Fatal("ExpectReadComponent requires withMockEngine() option")
 	}
 	e.MockEngine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component, *chasm.Registry) error, _ ...chasm.TransitionOption) error {
-			return readFn(ctx, returnedComponent, e.Registry)
+		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, readFn func(chasm.Context, chasm.Component) error, _ ...chasm.TransitionOption) error {
+			return readFn(ctx, returnedComponent)
 		}).Times(1)
 }
 
@@ -310,8 +310,8 @@ func (e *testEnv) ExpectUpdateComponent(ctx chasm.MutableContext, componentToUpd
 		e.t.Fatal("ExpectUpdateComponent requires withMockEngine() option")
 	}
 	e.MockEngine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error, _ ...chasm.TransitionOption) ([]byte, error) {
-			err := updateFn(ctx, componentToUpdate, e.Registry)
+		DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, updateFn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+			err := updateFn(ctx, componentToUpdate)
 			return nil, err
 		}).Times(1)
 }
