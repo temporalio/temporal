@@ -53,13 +53,13 @@
 /service/history/deletemanager/ @temporalio/oss-foundations
 /service/history/queues/ @temporalio/oss-foundations
 /service/history/shard/ @temporalio/oss-foundations
-/service/history/tasks/ @temporalio/oss-foundations
 /service/history/*queue* @temporalio/oss-foundations
 /service/history/*statemachine* @temporalio/oss-foundations
 
 /service/history/ndc/ @temporalio/cgs
 /service/history/replication/ @temporalio/cgs
 
+/service/history/tasks/ @temporalio/oss-foundations @temporalio/cgs
 /service/history/*task* @temporalio/oss-foundations @temporalio/cgs
 
 # Matching Service
@@ -76,7 +76,12 @@
 /service/worker/addsearchattributes/ @temporalio/oss-foundations
 /service/worker/deletenamespace/ @temporalio/oss-foundations
 /service/worker/dlq/ @temporalio/oss-foundations
-/service/worker/scanner/ @temporalio/oss-foundations
+
+/service/worker/scanner/ @temporalio/oss-foundations @temporalio/oss-matching
+/service/worker/scanner/executions/ @temporalio/oss-foundations 
+/service/worker/scanner/history/ @temporalio/oss-foundations
+/service/worker/scanner/build_ids/ @temporalio/oss-matching
+/service/worker/scanner/taskqueue/ @temporalio/oss-matching
 
 /service/worker/migration/ @temporalio/cgs
 /service/worker/replicator/ @temporalio/cgs
