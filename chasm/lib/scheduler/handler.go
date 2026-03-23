@@ -219,6 +219,23 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 	return resp, err
 }
 
+func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.ScheduleId,
+			},
+		),
+		(*Scheduler).MigrateToWorkflow,
+		req,
+	)
+	return resp, err
+}
+
 func (h *handler) DescribeSchedule(ctx context.Context, req *schedulerpb.DescribeScheduleRequest) (resp *schedulerpb.DescribeScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 

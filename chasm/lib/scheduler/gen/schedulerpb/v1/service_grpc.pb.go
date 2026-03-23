@@ -28,6 +28,7 @@ const (
 	SchedulerService_ListScheduleMatchingTimes_FullMethodName = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/ListScheduleMatchingTimes"
 	SchedulerService_CreateFromMigrationState_FullMethodName  = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/CreateFromMigrationState"
 	SchedulerService_CreateSentinel_FullMethodName            = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/CreateSentinel"
+	SchedulerService_MigrateToWorkflow_FullMethodName         = "/temporal.server.chasm.lib.scheduler.proto.v1.SchedulerService/MigrateToWorkflow"
 )
 
 // SchedulerServiceClient is the client API for SchedulerService service.
@@ -42,6 +43,7 @@ type SchedulerServiceClient interface {
 	ListScheduleMatchingTimes(ctx context.Context, in *ListScheduleMatchingTimesRequest, opts ...grpc.CallOption) (*ListScheduleMatchingTimesResponse, error)
 	CreateFromMigrationState(ctx context.Context, in *CreateFromMigrationStateRequest, opts ...grpc.CallOption) (*CreateFromMigrationStateResponse, error)
 	CreateSentinel(ctx context.Context, in *CreateSentinelRequest, opts ...grpc.CallOption) (*CreateSentinelResponse, error)
+	MigrateToWorkflow(ctx context.Context, in *MigrateToWorkflowRequest, opts ...grpc.CallOption) (*MigrateToWorkflowResponse, error)
 }
 
 type schedulerServiceClient struct {
@@ -124,6 +126,15 @@ func (c *schedulerServiceClient) CreateSentinel(ctx context.Context, in *CreateS
 	return out, nil
 }
 
+func (c *schedulerServiceClient) MigrateToWorkflow(ctx context.Context, in *MigrateToWorkflowRequest, opts ...grpc.CallOption) (*MigrateToWorkflowResponse, error) {
+	out := new(MigrateToWorkflowResponse)
+	err := c.cc.Invoke(ctx, SchedulerService_MigrateToWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchedulerServiceServer is the server API for SchedulerService service.
 // All implementations must embed UnimplementedSchedulerServiceServer
 // for forward compatibility
@@ -136,6 +147,7 @@ type SchedulerServiceServer interface {
 	ListScheduleMatchingTimes(context.Context, *ListScheduleMatchingTimesRequest) (*ListScheduleMatchingTimesResponse, error)
 	CreateFromMigrationState(context.Context, *CreateFromMigrationStateRequest) (*CreateFromMigrationStateResponse, error)
 	CreateSentinel(context.Context, *CreateSentinelRequest) (*CreateSentinelResponse, error)
+	MigrateToWorkflow(context.Context, *MigrateToWorkflowRequest) (*MigrateToWorkflowResponse, error)
 	mustEmbedUnimplementedSchedulerServiceServer()
 }
 
@@ -166,6 +178,9 @@ func (UnimplementedSchedulerServiceServer) CreateFromMigrationState(context.Cont
 }
 func (UnimplementedSchedulerServiceServer) CreateSentinel(context.Context, *CreateSentinelRequest) (*CreateSentinelResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreateSentinel not implemented")
+}
+func (UnimplementedSchedulerServiceServer) MigrateToWorkflow(context.Context, *MigrateToWorkflowRequest) (*MigrateToWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method MigrateToWorkflow not implemented")
 }
 func (UnimplementedSchedulerServiceServer) mustEmbedUnimplementedSchedulerServiceServer() {}
 
@@ -324,6 +339,24 @@ func _SchedulerService_CreateSentinel_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SchedulerService_MigrateToWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(MigrateToWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchedulerServiceServer).MigrateToWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SchedulerService_MigrateToWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchedulerServiceServer).MigrateToWorkflow(ctx, req.(*MigrateToWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SchedulerService_ServiceDesc is the grpc.ServiceDesc for SchedulerService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -362,6 +395,10 @@ var SchedulerService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CreateSentinel",
 			Handler:    _SchedulerService_CreateSentinel_Handler,
+		},
+		{
+			MethodName: "MigrateToWorkflow",
+			Handler:    _SchedulerService_MigrateToWorkflow_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

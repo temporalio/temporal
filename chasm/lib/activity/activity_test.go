@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,7 +11,10 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -176,7 +180,7 @@ func TestActivityTerminate(t *testing.T) {
 		{
 			name:           "error on completed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			expectErr:      "cannot terminate activity in state Completed",
+			expectErr:      "invalid transition from Completed",
 		},
 		{
 			name:           "no-op on already terminated activity",
@@ -185,25 +189,36 @@ func TestActivityTerminate(t *testing.T) {
 		{
 			name:           "error on failed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-			expectErr:      "cannot terminate activity in state Failed",
+			expectErr:      "invalid transition from Failed",
 		},
 		{
 			name:           "error on timed out activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-			expectErr:      "cannot terminate activity in state TimedOut",
+			expectErr:      "invalid transition from TimedOut",
 		},
 		{
 			name:           "error on canceled activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-			expectErr:      "cannot terminate activity in state Canceled",
+			expectErr:      "invalid transition from Canceled",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+						namespaceRegistry: nsRegistry,
+					}),
 				},
 			}
 

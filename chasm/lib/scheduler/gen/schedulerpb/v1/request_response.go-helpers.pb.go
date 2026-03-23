@@ -596,3 +596,77 @@ func (this *CreateSentinelResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type MigrateToWorkflowRequest to the protobuf v3 wire format
+func (val *MigrateToWorkflowRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MigrateToWorkflowRequest from the protobuf v3 wire format
+func (val *MigrateToWorkflowRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MigrateToWorkflowRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MigrateToWorkflowRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MigrateToWorkflowRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MigrateToWorkflowRequest
+	switch t := that.(type) {
+	case *MigrateToWorkflowRequest:
+		that1 = t
+	case MigrateToWorkflowRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type MigrateToWorkflowResponse to the protobuf v3 wire format
+func (val *MigrateToWorkflowResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type MigrateToWorkflowResponse from the protobuf v3 wire format
+func (val *MigrateToWorkflowResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *MigrateToWorkflowResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two MigrateToWorkflowResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *MigrateToWorkflowResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *MigrateToWorkflowResponse
+	switch t := that.(type) {
+	case *MigrateToWorkflowResponse:
+		that1 = t
+	case MigrateToWorkflowResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

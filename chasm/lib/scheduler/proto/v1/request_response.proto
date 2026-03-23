@@ -92,3 +92,16 @@ message CreateSentinelRequest {
 }
 
 message CreateSentinelResponse {}
+
+message MigrateToWorkflowRequest {
+    // The namespace ID of the schedule to migrate.
+    string namespace_id = 1;
+    // The schedule ID to migrate from CHASM to workflow-backed.
+    string schedule_id = 2;
+    // The identity of the caller initiating the migration.
+    string identity = 3;
+    // A unique request ID for idempotency.
+    string request_id = 4;
+}
+
+message MigrateToWorkflowResponse {}

@@ -3615,6 +3615,12 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
 //   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
+//
+// TODO: should ErrClosed (FailedPrecondition) from a CHASM schedule that was
+// migrated to V1 also be routable? Currently closed schedules return
+// FailedPrecondition which does not fall back to V1. This means callers with
+// routing enabled must handle the closed schedule case themselves or wait for
+// the CHASM entity to be cleaned up.
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
 	return errors.As(err, &notFoundErr)
@@ -4777,11 +4783,10 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 	query string,
 ) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	resp, err := chasm.ListExecutions[*chasmscheduler.Scheduler, *schedulepb.ScheduleListInfo](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
+		NamespaceName: namespaceName.String(),
 		PageSize:      int(request.GetMaximumPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         query,
-		NamespaceName: namespaceName.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -4908,7 +4913,6 @@ func (wh *WorkflowHandler) countSchedulesChasm(
 	query string,
 ) (*workflowservice.CountSchedulesResponse, error) {
 	resp, err := chasm.CountExecutions[*chasmscheduler.Scheduler](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: namespaceName.String(),
 		Query:         query,
 	})

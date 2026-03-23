@@ -33,6 +33,20 @@ message SchedulerState {
     // When true, this scheduler is a sentinel that exists only to reserve the
     // schedule ID. All API operations return NotFound.
     bool sentinel = 10;
+
+    // Set when a migration to workflow-backed scheduler (V1) is pending.
+    // Unpause operations are blocked while this is set.
+    WorkflowMigrationState workflow_migration = 11;
+}
+
+// WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.
+message WorkflowMigrationState {
+    // The schedule's paused state before migration was initiated. Used to
+    // restore the correct paused state when passing state to the V1 workflow.
+    bool pre_migration_paused = 1;
+
+    // The schedule's notes before migration was initiated.
+    string pre_migration_notes = 2;
 }
 
 // CHASM scheduler's Generator internal state.

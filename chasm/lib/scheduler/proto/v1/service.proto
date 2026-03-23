@@ -45,4 +45,7 @@ service SchedulerService {
     rpc CreateSentinel(CreateSentinelRequest) returns (CreateSentinelResponse) {
         option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
     }
+    rpc MigrateToWorkflow(MigrateToWorkflowRequest) returns (MigrateToWorkflowResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
+    }
 }
