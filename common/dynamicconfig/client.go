@@ -89,6 +89,7 @@ type (
 		NamespaceID   string
 		TaskQueueName string
 		Destination   string
+		ChasmTaskType string
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
 		TaskType      enumsspb.TaskType

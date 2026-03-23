@@ -92,6 +92,44 @@ func (mr *MockPureTaskExecutorMockRecorder[C, T]) Execute(arg0, arg1, arg2, arg3
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPureTaskExecutor[C, T])(nil).Execute), arg0, arg1, arg2, arg3)
 }
 
+// MockSideEffectTaskDiscarder is a mock of SideEffectTaskDiscarder interface.
+type MockSideEffectTaskDiscarder[T any] struct {
+	ctrl     *gomock.Controller
+	recorder *MockSideEffectTaskDiscarderMockRecorder[T]
+	isgomock struct{}
+}
+
+// MockSideEffectTaskDiscarderMockRecorder is the mock recorder for MockSideEffectTaskDiscarder.
+type MockSideEffectTaskDiscarderMockRecorder[T any] struct {
+	mock *MockSideEffectTaskDiscarder[T]
+}
+
+// NewMockSideEffectTaskDiscarder creates a new mock instance.
+func NewMockSideEffectTaskDiscarder[T any](ctrl *gomock.Controller) *MockSideEffectTaskDiscarder[T] {
+	mock := &MockSideEffectTaskDiscarder[T]{ctrl: ctrl}
+	mock.recorder = &MockSideEffectTaskDiscarderMockRecorder[T]{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSideEffectTaskDiscarder[T]) EXPECT() *MockSideEffectTaskDiscarderMockRecorder[T] {
+	return m.recorder
+}
+
+// Discard mocks base method.
+func (m *MockSideEffectTaskDiscarder[T]) Discard(ctx context.Context, ref ComponentRef, attrs TaskAttributes, task T) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Discard", ctx, ref, attrs, task)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Discard indicates an expected call of Discard.
+func (mr *MockSideEffectTaskDiscarderMockRecorder[T]) Discard(ctx, ref, attrs, task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Discard", reflect.TypeOf((*MockSideEffectTaskDiscarder[T])(nil).Discard), ctx, ref, attrs, task)
+}
+
 // MockTaskValidator is a mock of TaskValidator interface.
 type MockTaskValidator[C any, T any] struct {
 	ctrl     *gomock.Controller

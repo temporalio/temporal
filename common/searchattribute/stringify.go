@@ -33,7 +33,7 @@ func Stringify(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap
 		if typeMap != nil {
 			saType, _ = typeMap.getType(saName, customCategory|predefinedCategory)
 		}
-		saValue, err := DecodeValue(saPayload, saType, true)
+		saValue, err := sadefs.DecodeValue(saPayload, saType, true)
 		if err != nil {
 			// If DecodeValue failed, save error and use raw JSON from Data field.
 			result[saName] = string(saPayload.GetData())
@@ -150,7 +150,7 @@ func parseValueTyped(valStr string, t enumspb.IndexedValueType) (any, error) {
 	case enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED:
 		val = parseValueUnspecified(valStr)
 	default:
-		err = fmt.Errorf("%w: %v", ErrInvalidType, t)
+		err = fmt.Errorf("%w: %v", sadefs.ErrInvalidType, t)
 	}
 
 	return val, err
@@ -212,6 +212,6 @@ func parseJSONArray(str string, t enumspb.IndexedValueType) (any, error) {
 		err := json.Unmarshal([]byte(str), &result)
 		return result, err
 	default:
-		return nil, fmt.Errorf("%w: %v", ErrInvalidType, t)
+		return nil, fmt.Errorf("%w: %v", sadefs.ErrInvalidType, t)
 	}
 }

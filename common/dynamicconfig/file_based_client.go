@@ -76,9 +76,6 @@ func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConf
 	if logger == nil {
 		return nil, errors.New("logger for dynamic config client is nil")
 	}
-	if doneCh == nil {
-		return nil, errors.New("done channel for dynamic config client is nil")
-	}
 	if metricsHandler == nil {
 		metricsHandler = metrics.NoopMetricsHandler
 		logger.Warn("metrics handler is nil, using noop metrics handler")

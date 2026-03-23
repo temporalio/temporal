@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -67,6 +68,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
+	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -113,6 +115,7 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
+		schedulerClient            schedulerpb.SchedulerServiceClient
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -149,6 +152,7 @@ type (
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
+		SchedulerClient                     schedulerpb.SchedulerServiceClient
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -221,6 +225,7 @@ func NewAdminHandler(
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
 		chasmRegistry:        args.ChasmRegistry,
+		schedulerClient:      args.SchedulerClient,
 	}
 }
 
@@ -2396,4 +2401,81 @@ func convertFailoverHistoryToReplicationProto(
 	}
 
 	return replicationProto
+}
+
+func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminservice.MigrateScheduleRequest) (_ *adminservice.MigrateScheduleResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetNamespace() == "" {
+		return nil, errNamespaceNotSet
+	}
+	if request.GetScheduleId() == "" {
+		return nil, errScheduleIDNotSet
+	}
+	if request.GetTarget() == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED {
+		return nil, errMigrationTargetNotSet
+	}
+	if request.GetIdentity() == "" {
+		return nil, errIdentityNotSet
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	switch request.GetTarget() {
+	case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM:
+		return adh.migrateScheduleToChasm(ctx, request, namespaceID.String())
+	case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW:
+		return adh.migrateScheduleToWorkflow(ctx, request, namespaceID.String())
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("unknown migration target: %v", request.GetTarget())
+	}
+}
+
+func (adh *AdminHandler) migrateScheduleToChasm(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	namespaceID string,
+) (*adminservice.MigrateScheduleResponse, error) {
+	workflowID := scheduler.WorkflowIDPrefix + request.GetScheduleId()
+
+	_, err := adh.historyClient.SignalWorkflowExecution(ctx,
+		&historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: namespaceID,
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace:         request.Namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				SignalName:        scheduler.SignalNameMigrateToChasm,
+				Identity:          request.Identity,
+				RequestId:         request.RequestId,
+			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.MigrateScheduleResponse{}, nil
+}
+
+func (adh *AdminHandler) migrateScheduleToWorkflow(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	namespaceID string,
+) (*adminservice.MigrateScheduleResponse, error) {
+	_, err := adh.schedulerClient.MigrateToWorkflow(ctx,
+		&schedulerpb.MigrateToWorkflowRequest{
+			NamespaceId: namespaceID,
+			ScheduleId:  request.GetScheduleId(),
+			Identity:    request.GetIdentity(),
+			RequestId:   request.GetRequestId(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.MigrateScheduleResponse{}, nil
 }

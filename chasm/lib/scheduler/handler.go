@@ -75,6 +75,57 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 	}, err
 }
 
+// CreateFromMigrationState creates a CHASM schedule from migrated V1 state.
+// Used during migration from workflow-backed schedules to CHASM schedules.
+//
+// TODO: attach completion callbacks to running workflows migrated from V1.
+// TODO: handle sentinel key that may exist if EnableCHASMSchedulerCreation was
+// enabled when the schedule was originally created. The existing CHASM component
+// must be replaced with the migrated state.
+func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (resp *schedulerpb.CreateFromMigrationStateResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	scheduleID := req.GetState().GetSchedulerState().GetScheduleId()
+	_, err = chasm.StartExecution(
+		ctx,
+		chasm.ExecutionKey{
+			NamespaceID: req.NamespaceId,
+			BusinessID:  scheduleID,
+		},
+		CreateSchedulerFromMigration,
+		req,
+	)
+
+	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
+	if errors.As(err, &alreadyStartedErr) {
+		// Check if the existing schedule is a sentinel.
+		// TODO: if sentinel, replace it with the migrated schedule from the request
+		// instead of returning ErrSentinel.
+		_, readErr := chasm.ReadComponent(
+			ctx,
+			chasm.NewComponentRef[*Scheduler](
+				chasm.ExecutionKey{
+					NamespaceID: req.NamespaceId,
+					BusinessID:  scheduleID,
+				},
+			),
+			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
+				if s.IsSentinel() {
+					return nil, ErrSentinel
+				}
+				return nil, nil
+			},
+			(*struct{})(nil),
+		)
+		if readErr != nil {
+			return nil, readErr // Returns ErrSentinel (404) if sentinel
+		}
+		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", scheduleID)
+	}
+
+	return &schedulerpb.CreateFromMigrationStateResponse{}, err
+}
+
 func (h *handler) UpdateSchedule(ctx context.Context, req *schedulerpb.UpdateScheduleRequest) (resp *schedulerpb.UpdateScheduleResponse, err error) {
 	defer log.CapturePanic(h.logger, &err)
 
@@ -121,6 +172,23 @@ func (h *handler) DeleteSchedule(ctx context.Context, req *schedulerpb.DeleteSch
 			},
 		),
 		(*Scheduler).Delete,
+		req,
+	)
+	return resp, err
+}
+
+func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.MigrateToWorkflowRequest) (resp *schedulerpb.MigrateToWorkflowResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	resp, _, err = chasm.UpdateComponent(
+		ctx,
+		chasm.NewComponentRef[*Scheduler](
+			chasm.ExecutionKey{
+				NamespaceID: req.NamespaceId,
+				BusinessID:  req.ScheduleId,
+			},
+		),
+		(*Scheduler).MigrateToWorkflow,
 		req,
 	)
 	return resp, err

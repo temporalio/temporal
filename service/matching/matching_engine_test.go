@@ -42,6 +42,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/cluster"
@@ -3571,16 +3572,6 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksD
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)
 }
 
-func (s *matchingEngineSuite) TestOldestBacklogAge() {
-	firstAge := durationpb.New(100 * time.Second)
-	secondAge := durationpb.New(1 * time.Millisecond)
-	s.Same(firstAge, oldestBacklogAge(firstAge, secondAge))
-
-	thirdAge := durationpb.New(5 * time.Minute)
-	s.Same(thirdAge, oldestBacklogAge(firstAge, thirdAge))
-	s.Same(thirdAge, oldestBacklogAge(secondAge, thirdAge))
-}
-
 func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 	isOwner, _, err := s.matchingEngine.checkNexusEndpointsOwnership()
 	s.NoError(err)
@@ -5700,6 +5691,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
@@ -5715,6 +5707,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		workerKey := "test-worker"
@@ -5741,6 +5734,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		worker2Cancelled := false
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		// Set up pollers for worker1 and worker2
@@ -5763,6 +5757,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		t.Parallel()
 		engine := &matchingEngineImpl{
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		}
 
 		workerKey := "test-worker"
@@ -5784,5 +5779,39 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.Equal(t, int32(2), resp.CancelledCount)
 		require.True(t, childCancelled, "child partition poll should be cancelled")
 		require.True(t, parentCancelled, "parent partition poll should be cancelled")
+	})
+
+	t.Run("adds worker to shutdown cache", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		workerKey := "test-worker"
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: workerKey,
+			})
+
+		require.NoError(t, err)
+		require.NotNil(t, engine.shutdownWorkers.Get(workerKey), "worker should be in shutdown cache")
+	})
+
+	t.Run("empty worker key does not populate shutdown cache", func(t *testing.T) {
+		t.Parallel()
+		engine := &matchingEngineImpl{
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+		}
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				WorkerInstanceKey: "",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, 0, engine.shutdownWorkers.Size())
 	})
 }

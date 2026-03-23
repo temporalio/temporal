@@ -721,10 +721,10 @@ func TestPluginMetricsExported(t *testing.T) {
 	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
 	assert.Len(t, pluginMetrics, 3, "plugin-a from both workers should be deduplicated")
 
-	// Helper function to find metric by namespace and plugin name
+	// Helper function to find metric by namespace name and plugin name
 	findMetric := func(namespaceName namespace.Name, pluginName string) *metricstest.CapturedRecording {
 		for _, metric := range pluginMetrics {
-			if metric.Tags["namespace_id"] == namespaceName.String() && metric.Tags[metrics.WorkerPluginNameTagName] == pluginName {
+			if metric.Tags["namespace"] == namespaceName.String() && metric.Tags[metrics.WorkerPluginNameTagName] == pluginName {
 				return metric
 			}
 		}

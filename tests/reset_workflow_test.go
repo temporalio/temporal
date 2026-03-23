@@ -83,7 +83,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow() {
 			// Schedule 3 activities on first workflow task
 			isFirstTaskProcessed = true
 			buf := new(bytes.Buffer)
-			s.Nil(binary.Write(buf, binary.LittleEndian, activityData))
+			s.NoError(binary.Write(buf, binary.LittleEndian, activityData))
 
 			var scheduleActivityCommands []*commandpb.Command
 			for i := 1; i <= activityCount; i++ {
@@ -950,7 +950,7 @@ func (s *ResetWorkflowTestSuite) TestResetWorkflow_ResetAfterContinueAsNew() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	s.Worker().RegisterWorkflow(CaNOnceWorkflow)
+	s.SdkWorker().RegisterWorkflow(CaNOnceWorkflow)
 	run, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: s.TaskQueue()}, CaNOnceWorkflow, "")
 	s.NoError(err)
 

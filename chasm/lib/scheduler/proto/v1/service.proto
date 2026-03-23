@@ -38,4 +38,10 @@ service SchedulerService {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.schedule_id";
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
+    rpc CreateFromMigrationState(CreateFromMigrationStateRequest) returns (CreateFromMigrationStateResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "state.scheduler_state.schedule_id";
+    }
+    rpc MigrateToWorkflow(MigrateToWorkflowRequest) returns (MigrateToWorkflowResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "schedule_id";
+    }
 }

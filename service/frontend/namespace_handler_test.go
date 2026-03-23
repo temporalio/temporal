@@ -387,6 +387,7 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowPause)
 	s.False(resp.NamespaceInfo.Capabilities.StandaloneActivities)
 	s.False(resp.NamespaceInfo.Capabilities.WorkerPollCompleteOnShutdown)
+	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 

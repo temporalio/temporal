@@ -20,6 +20,7 @@ import (
 )
 
 func TestActivityApiPauseClientTestSuite(t *testing.T) {
+	t.Parallel()
 	t.Run("TestActivityPauseApi_WhileRunning", func(t *testing.T) {
 		s := testcore.NewEnv(t, testcore.WithSdkWorker())
 

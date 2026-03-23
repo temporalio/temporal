@@ -75,7 +75,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentRunning() {
 	})
 	s.NoError(err)
 	s.Equal(currentMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId, newRunID)
-	s.Equal(currentMutableState.GetDatabaseMutableState().ExecutionState.Status, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, currentMutableState.GetDatabaseMutableState().ExecutionState.Status)
 }
 
 // No explicit base run provided. current run is closed.
@@ -104,7 +104,7 @@ func (s *WorkflowResetSuite) TestNoBaseCurrentClosed() {
 	})
 	s.NoError(err)
 	s.Equal(currentMutableState.GetDatabaseMutableState().ExecutionInfo.ResetRunId, newRunID)
-	s.Equal(currentMutableState.GetDatabaseMutableState().ExecutionState.Status, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, currentMutableState.GetDatabaseMutableState().ExecutionState.Status)
 }
 
 // Explicit base run is provided to be reset and its the same as currently running execution.
