@@ -97,36 +97,50 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	return nil
 }
 
-// StoreOrSelf returns the OperationStore that should be used to process this operation's state transitions and commands.
-// For a workflow-embedded Nexus operation, this will return the parent workflow as the store processor.
-// For a standalone Nexus operation, this will return the operation itself as the store processor.
-func (o *Operation) StoreOrSelf(ctx chasm.Context) OperationStore {
+// OnStarted applies the started transition or delegates to the store if one is present.
+func (o *Operation) OnStarted(ctx chasm.MutableContext, _ *Operation, operationToken string, links []*commonpb.Link) error {
 	store, ok := o.Store.TryGet(ctx)
 	if ok {
-		return store
+		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
 	}
-	return o
-}
-
-func (o *Operation) OnNexusOperationStarted(ctx chasm.MutableContext, _ *Operation, operationToken string, _ []*commonpb.Link) error {
 	return transitionStarted.Apply(o, ctx, EventStarted{
 		OperationToken: operationToken,
 		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	})
 }
 
-func (o *Operation) OnNexusOperationCompleted(ctx chasm.MutableContext, _ *Operation, _ *commonpb.Payload, _ []*commonpb.Link) error {
+// OnCompleted applies the succeeded transition or delegates to the store if one is present.
+func (o *Operation) OnCompleted(ctx chasm.MutableContext, _ *Operation, result *commonpb.Payload, links []*commonpb.Link) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationCompleted(ctx, o, result, links)
+	}
 	return transitionSucceeded.Apply(o, ctx, EventSucceeded{})
 }
 
-func (o *Operation) OnNexusOperationFailed(ctx chasm.MutableContext, _ *Operation, _ *failurepb.Failure) error {
+// OnFailed applies the failed transition or delegates to the store if one is present.
+func (o *Operation) OnFailed(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationFailed(ctx, o, cause)
+	}
 	return transitionFailed.Apply(o, ctx, EventFailed{})
 }
 
-func (o *Operation) OnNexusOperationCancelled(ctx chasm.MutableContext, _ *Operation, _ *failurepb.Failure) error {
+// OnCancelled applies the canceled transition or delegates to the store if one is present.
+func (o *Operation) OnCancelled(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationCancelled(ctx, o, cause)
+	}
 	return TransitionCanceled.Apply(o, ctx, EventCanceled{})
 }
 
-func (o *Operation) OnNexusOperationTimedOut(ctx chasm.MutableContext, _ *Operation, _ *failurepb.Failure) error {
+// OnTimedOut applies the timed out transition or delegates to the store if one is present.
+func (o *Operation) OnTimedOut(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationTimedOut(ctx, o, cause)
+	}
 	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }
