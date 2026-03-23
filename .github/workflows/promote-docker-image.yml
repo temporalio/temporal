@@ -82,32 +82,39 @@ jobs:
     needs: [validate-inputs]
     runs-on: ubuntu-latest
     steps:
-      - name: Copy image to production registry
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Install crane
+        run: |
+          curl -sL https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz | tar xz crane
+          sudo mv crane /usr/local/bin/
+
+      - name: Promote image
         uses: actions/github-script@v8
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
           TARGET_TAGS: ${{ needs.validate-inputs.outputs.target-tags-safe }}
           IMAGE_NAME: ${{ inputs.image-name }}
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           script: |
             const { execSync } = require('child_process');
             const sourceTag = process.env.SOURCE_TAG;
             const targetTags = JSON.parse(process.env.TARGET_TAGS);
             const imageName = process.env.IMAGE_NAME;
-            const source = `docker://temporaliotest/${imageName}:${sourceTag}`;
-            const destCreds = `--dest-creds=${process.env.DOCKERHUB_USERNAME}:${process.env.DOCKERHUB_TOKEN}`;
+            const source = `temporaliotest/${imageName}:${sourceTag}`;
 
             core.info(`Promoting ${imageName} image...`);
-            core.info(`  From: temporaliotest/${imageName}:${sourceTag}`);
+            core.info(`  From: ${source}`);
             core.info(`  To: ${targetTags.map(t => `temporalio/${imageName}:${t}`).join(', ')}`);
 
-            // Use skopeo copy --all to preserve the full manifest list (multi-arch) and all labels/annotations
-            for (const targetTag of targetTags) {
-              const target = `docker://temporalio/${imageName}:${targetTag}`;
+            for (const tag of targetTags) {
+              const target = `temporalio/${imageName}:${tag}`;
               core.info(`Copying ${source} -> ${target}`);
-              execSync(`docker run --rm -i quay.io/skopeo/stable copy ${destCreds} --all ${source} ${target}`, { stdio: 'inherit' });
+              execSync(`crane copy ${source} ${target}`, { stdio: 'inherit' });
             }
 
-            core.info(`✓ ${imageName} image promoted successfully to all tags`);
+            core.info(`${imageName} image promoted successfully to all tags`);
