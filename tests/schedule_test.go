@@ -1549,8 +1549,7 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// Verify a CHASM sentinel was created to reserve the schedule ID.
-	// A sentinel returns NotFound("schedule is a sentinel") on DescribeSchedule,
-	// which is distinct from a missing component (different error).
+	// DescribeSchedule should return NotFound, as well as CreateSentinel
 	nsID := s.NamespaceID().String()
 	s.Eventually(func() bool {
 		_, descErr := s.GetTestCluster().SchedulerClient().DescribeSchedule(
@@ -1560,11 +1559,26 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
 			},
 		)
-		if descErr == nil {
-			return false // sentinel should NOT succeed
-		}
 		var notFoundErr *serviceerror.NotFound
-		return errors.As(descErr, &notFoundErr) && strings.Contains(descErr.Error(), "sentinel")
+		if !errors.As(descErr, &notFoundErr) {
+			return false
+		}
+
+		// A CHASM CreateSchedule should also fail with NotFound because
+		// the sentinel blocks it.
+		_, createErr := s.GetTestCluster().SchedulerClient().CreateSchedule(
+			ctx,
+			&schedulerpb.CreateScheduleRequest{
+				NamespaceId: nsID,
+				FrontendRequest: &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: sid,
+					RequestId:  testcore.RandomizeStr("test-sentinel-check"),
+					Schedule:   schedule,
+				},
+			},
+		)
+		return errors.As(createErr, &notFoundErr)
 	}, 15*time.Second, 500*time.Millisecond, "CHASM sentinel should exist for V1 schedule")
 
 	// Verify visibility shows exactly one schedule (not the sentinel).
