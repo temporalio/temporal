@@ -82,38 +82,32 @@ jobs:
     needs: [validate-inputs]
     runs-on: ubuntu-latest
     steps:
-      - name: Install crane
-        uses: imjasonh/setup-crane@v0.4
-
-      - name: Log in to Docker Hub
-        env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: crane auth login index.docker.io -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
-
       - name: Copy image to production registry
         uses: actions/github-script@v8
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
           TARGET_TAGS: ${{ needs.validate-inputs.outputs.target-tags-safe }}
           IMAGE_NAME: ${{ inputs.image-name }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         with:
           script: |
             const { execSync } = require('child_process');
             const sourceTag = process.env.SOURCE_TAG;
             const targetTags = JSON.parse(process.env.TARGET_TAGS);
             const imageName = process.env.IMAGE_NAME;
-            const source = `temporaliotest/${imageName}:${sourceTag}`;
+            const source = `docker://temporaliotest/${imageName}:${sourceTag}`;
+            const destCreds = `--dest-creds=${process.env.DOCKERHUB_USERNAME}:${process.env.DOCKERHUB_TOKEN}`;
 
             core.info(`Promoting ${imageName} image...`);
-            core.info(`  From: ${source}`);
+            core.info(`  From: temporaliotest/${imageName}:${sourceTag}`);
             core.info(`  To: ${targetTags.map(t => `temporalio/${imageName}:${t}`).join(', ')}`);
 
-            // Use crane copy to preserve the full manifest list (multi-arch) and all labels/annotations
+            // Use skopeo copy --all to preserve the full manifest list (multi-arch) and all labels/annotations
             for (const targetTag of targetTags) {
-              const target = `temporalio/${imageName}:${targetTag}`;
+              const target = `docker://temporalio/${imageName}:${targetTag}`;
               core.info(`Copying ${source} -> ${target}`);
-              execSync(`crane copy ${source} ${target}`, { stdio: 'inherit' });
+              execSync(`docker run --rm -i quay.io/skopeo/stable copy ${destCreds} --all ${source} ${target}`, { stdio: 'inherit' });
             }
 
             core.info(`✓ ${imageName} image promoted successfully to all tags`);
