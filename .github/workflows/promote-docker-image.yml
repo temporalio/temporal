@@ -82,13 +82,16 @@ jobs:
     needs: [validate-inputs]
     runs-on: ubuntu-latest
     steps:
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
 
-      - name: Pull, tag, and push image
+      - name: Log in to Docker Hub
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: crane auth login index.docker.io -u "$DOCKERHUB_USERNAME" -p "$DOCKERHUB_TOKEN"
+
+      - name: Copy image to production registry
         uses: actions/github-script@v8
         env:
           SOURCE_TAG: ${{ needs.validate-inputs.outputs.source-tag-safe }}
@@ -100,23 +103,17 @@ jobs:
             const sourceTag = process.env.SOURCE_TAG;
             const targetTags = JSON.parse(process.env.TARGET_TAGS);
             const imageName = process.env.IMAGE_NAME;
+            const source = `temporaliotest/${imageName}:${sourceTag}`;
 
             core.info(`Promoting ${imageName} image...`);
-            core.info(`  From: temporaliotest/${imageName}:${sourceTag}`);
+            core.info(`  From: ${source}`);
             core.info(`  To: ${targetTags.map(t => `temporalio/${imageName}:${t}`).join(', ')}`);
 
-            // Pull from test registry
-            core.info('Pulling source image...');
-            execSync(`docker pull temporaliotest/${imageName}:${sourceTag}`, { stdio: 'inherit' });
-
-            // Tag for each target tag
+            // Use crane copy to preserve the full manifest list (multi-arch) and all labels/annotations
             for (const targetTag of targetTags) {
-              core.info(`Tagging as temporalio/${imageName}:${targetTag}`);
-              execSync(`docker tag temporaliotest/${imageName}:${sourceTag} temporalio/${imageName}:${targetTag}`, { stdio: 'inherit' });
+              const target = `temporalio/${imageName}:${targetTag}`;
+              core.info(`Copying ${source} -> ${target}`);
+              execSync(`crane copy ${source} ${target}`, { stdio: 'inherit' });
             }
-
-            // Push all tags at once
-            core.info('Pushing all tags to production registry...');
-            execSync(`docker push --all-tags temporalio/${imageName}`, { stdio: 'inherit' });
 
             core.info(`✓ ${imageName} image promoted successfully to all tags`);
