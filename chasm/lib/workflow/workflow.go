@@ -142,20 +142,11 @@ func (w *Workflow) AddAndApplyHistoryEvent(
 	setAttributes func(*historypb.HistoryEvent),
 ) (*historypb.HistoryEvent, error) {
 	event := w.MSPointer.AddHistoryEvent(t, setAttributes)
-	def, ok := eventRegistry(ctx).EventDefinition(t)
+	def, ok := workflowContextFromChasm(ctx).registry.EventDefinition(t)
 	if !ok {
 		return nil, fmt.Errorf("no event definition registered for %v", t)
 	}
 	return event, def.Apply(ctx, w, event)
-}
-
-// eventRegistry retrieves the EventRegistry from the CHASM context.
-func eventRegistry(ctx chasm.Context) *Registry {
-	reg, ok := ctx.Value(ctxKeyWorkflowContext).(*workflowContext)
-	if !ok {
-		return nil
-	}
-	return reg.registry
 }
 
 // HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.

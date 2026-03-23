@@ -28,10 +28,10 @@ type ctxKeyWorkflowContextType struct{}
 
 var ctxKeyWorkflowContext = ctxKeyWorkflowContextType{}
 
-func workflowContextFromChasm(ctx chasm.Context) workflowContext {
-	wc, ok := ctx.Value(ctxKeyWorkflowContext).(workflowContext)
+func workflowContextFromChasm(ctx chasm.Context) *workflowContext {
+	wc, ok := ctx.Value(ctxKeyWorkflowContext).(*workflowContext)
 	if !ok {
-		panic("Workflow CHASM component context uninitialized")
+		return nil
 	}
 	return wc
 }
@@ -39,7 +39,7 @@ func workflowContextFromChasm(ctx chasm.Context) workflowContext {
 func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
-			ctxKeyWorkflowContext: workflowContext{registry: l.registry},
+			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
 		})),
 	}
 }
