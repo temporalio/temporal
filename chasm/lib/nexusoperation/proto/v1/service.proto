@@ -18,4 +18,14 @@ service NexusOperationService {
         option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
+
+    rpc RequestCancelNexusOperation(RequestCancelNexusOperationRequest) returns (RequestCancelNexusOperationResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    rpc TerminateNexusOperation(TerminateNexusOperationRequest) returns (TerminateNexusOperationResponse) {
+        option (temporal.server.api.routing.v1.routing).business_id = "frontend_request.operation_id";
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
 }

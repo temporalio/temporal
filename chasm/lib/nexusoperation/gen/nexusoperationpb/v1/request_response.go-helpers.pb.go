@@ -152,3 +152,151 @@ func (this *DescribeNexusOperationResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type RequestCancelNexusOperationRequest to the protobuf v3 wire format
+func (val *RequestCancelNexusOperationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RequestCancelNexusOperationRequest from the protobuf v3 wire format
+func (val *RequestCancelNexusOperationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RequestCancelNexusOperationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RequestCancelNexusOperationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RequestCancelNexusOperationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RequestCancelNexusOperationRequest
+	switch t := that.(type) {
+	case *RequestCancelNexusOperationRequest:
+		that1 = t
+	case RequestCancelNexusOperationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RequestCancelNexusOperationResponse to the protobuf v3 wire format
+func (val *RequestCancelNexusOperationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RequestCancelNexusOperationResponse from the protobuf v3 wire format
+func (val *RequestCancelNexusOperationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RequestCancelNexusOperationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RequestCancelNexusOperationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RequestCancelNexusOperationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RequestCancelNexusOperationResponse
+	switch t := that.(type) {
+	case *RequestCancelNexusOperationResponse:
+		that1 = t
+	case RequestCancelNexusOperationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TerminateNexusOperationRequest to the protobuf v3 wire format
+func (val *TerminateNexusOperationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TerminateNexusOperationRequest from the protobuf v3 wire format
+func (val *TerminateNexusOperationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TerminateNexusOperationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TerminateNexusOperationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TerminateNexusOperationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TerminateNexusOperationRequest
+	switch t := that.(type) {
+	case *TerminateNexusOperationRequest:
+		that1 = t
+	case TerminateNexusOperationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TerminateNexusOperationResponse to the protobuf v3 wire format
+func (val *TerminateNexusOperationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TerminateNexusOperationResponse from the protobuf v3 wire format
+func (val *TerminateNexusOperationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TerminateNexusOperationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TerminateNexusOperationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TerminateNexusOperationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TerminateNexusOperationResponse
+	switch t := that.(type) {
+	case *TerminateNexusOperationResponse:
+		that1 = t
+	case TerminateNexusOperationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

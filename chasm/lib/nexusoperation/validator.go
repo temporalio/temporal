@@ -157,6 +157,44 @@ func validateDescribeNexusOperationExecutionRequest(req *workflowservice.Describ
 	return nil
 }
 
+func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config) error {
+	if req.GetOperationId() == "" {
+		return serviceerror.NewInvalidArgument("operation_id is required")
+	}
+	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetOperationId()), config.MaxIDLengthLimit())
+	}
+	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRunId()), config.MaxIDLengthLimit())
+	}
+	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), config.MaxIDLengthLimit())
+	}
+	return nil
+}
+
+func validateTerminateNexusOperationExecutionRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config) error {
+	if req.GetOperationId() == "" {
+		return serviceerror.NewInvalidArgument("operation_id is required")
+	}
+	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetOperationId()), config.MaxIDLengthLimit())
+	}
+	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRunId()), config.MaxIDLengthLimit())
+	}
+	if len(req.GetIdentity()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
+			len(req.GetIdentity()), config.MaxIDLengthLimit())
+	}
+	return nil
+}
+
 func validateAndNormalizeSearchAttributes(
 	req *workflowservice.StartNexusOperationExecutionRequest,
 	saMapperProvider searchattribute.MapperProvider,
