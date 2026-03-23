@@ -58,7 +58,7 @@ func NewRegistrableSideEffectTask[C any, T any](
 			registry *Registry,
 		) (bool, error) {
 			return validator.Validate(
-				AugmentContextForComponent(ctx, component, registry),
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -97,7 +97,7 @@ func NewRegistrablePureTask[C any, T any](
 			registry *Registry,
 		) (bool, error) {
 			return validator.Validate(
-				AugmentContextForComponent(ctx, component, registry),
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),
@@ -111,7 +111,7 @@ func NewRegistrablePureTask[C any, T any](
 			registry *Registry,
 		) error {
 			return executor.Execute(
-				AugmentContextForComponent(ctx, component, registry),
+				ctx,
 				component.(C),
 				taskAttrs,
 				taskData.(T),

@@ -327,12 +327,7 @@ func newTreeInitSearchAttributesAndMemo(
 	root *Node,
 	registry *Registry,
 ) error {
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.Background(), root),
-		root.ArchetypeID(),
-		registry,
-	)
-
+	immutableContext := NewContext(context.Background(), root)
 	rootComponent, err := root.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -496,7 +491,7 @@ func (n *Node) validateAccessHelper(ctx Context) error {
 	}
 	componentValue, _ := n.value.(Component) //nolint:revive // unchecked-type-assertion
 
-	if componentValue.LifecycleState(AugmentContextForComponent(ctx, componentValue, n.registry)).IsClosed() {
+	if componentValue.LifecycleState(ctx).IsClosed() {
 		return errAccessCheckFailed
 	}
 
@@ -1446,12 +1441,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.TODO(), n),
-		n.ArchetypeID(),
-		n.registry,
-	)
-
+	immutableContext := NewContext(context.TODO(), n)
 	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
 	if err != nil {
 		return NodesMutation{}, err
@@ -2233,11 +2223,7 @@ func (n *Node) ApplyMutation(
 	//
 	// TODO: combine this with the logic in CloseTransactionForceUpdateVisibility
 	// right that force update logic only applies to the active cluster.
-	immutableContext := augmentContextForArchetypeID(
-		NewContext(context.Background(), n),
-		n.ArchetypeID(),
-		n.registry,
-	)
+	immutableContext := NewContext(context.TODO(), n)
 	rootComponent, err := n.root().Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
@@ -2562,16 +2548,11 @@ func (n *Node) Terminate(
 		)
 	}
 
-	mutableContext := augmentContextForArchetypeID(
-		NewMutableContext(context.Background(), n.root()),
-		n.ArchetypeID(),
-		n.registry,
-	)
+	mutableContext := NewMutableContext(context.TODO(), n.root())
 	component, err := n.Component(mutableContext, ComponentRef{})
 	if err != nil {
 		return err
 	}
-
 	rootComponent, ok := component.(RootComponent)
 	if !ok {
 		return softassert.UnexpectedInternalErr(
