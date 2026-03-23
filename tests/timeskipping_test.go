@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -23,26 +23,14 @@ import (
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
-type TimeSkippingTestSuite struct {
-	testcore.FunctionalTestBase
-}
-
-func TestTimeSkippingTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(TimeSkippingTestSuite))
-}
-
-func (s *TimeSkippingTestSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest()
-}
-
-func (s *TimeSkippingTestSuite) updateTimeSkipping(
+func updateTimeSkipping(
+	env testcore.Env,
 	workflowExecution *commonpb.WorkflowExecution,
 	identity string,
 	enabled bool,
 ) *workflowservice.UpdateWorkflowExecutionOptionsResponse {
-	resp, err := s.FrontendClient().UpdateWorkflowExecutionOptions(testcore.NewContext(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-		Namespace:         s.Namespace().String(),
+	resp, err := env.FrontendClient().UpdateWorkflowExecutionOptions(env.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: workflowExecution,
 		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
 			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: enabled},
@@ -50,21 +38,21 @@ func (s *TimeSkippingTestSuite) updateTimeSkipping(
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 		Identity:   identity,
 	})
-	s.NoError(err)
+	require.NoError(env.T(), err)
 	return resp
 }
 
 // TestTimeSkipping_EnabledToDisabled starts a workflow with time skipping enabled,
 // then disables it via UpdateWorkflowExecutionOptions. Verifies a
 // WorkflowExecutionOptionsUpdated event is written with Enabled=false.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_EnabledToDisabled() {
-	s.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+func TestTimeSkipping_EnabledToDisabled(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
 
 	id := "functional-timeskipping-enabled-to-disabled"
 	tl := "functional-timeskipping-enabled-to-disabled-tq"
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv := testvars.New(t).WithTaskQueue(tl)
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -78,10 +66,10 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_EnabledToDisabled() {
 	workflowExecution := &commonpb.WorkflowExecution{WorkflowId: id, RunId: startResp.GetRunId()}
 
 	// Disable time skipping — a real change that must produce an options-updated event.
-	updateResp := s.updateTimeSkipping(workflowExecution, tv.WorkerIdentity(), false)
+	updateResp := updateTimeSkipping(s, workflowExecution, tv.WorkerIdentity(), false)
 	s.False(updateResp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled())
 
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	poller := taskpoller.New(t, s.FrontendClient(), s.Namespace().String())
 	_, err = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -110,14 +98,14 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_EnabledToDisabled() {
 // TestTimeSkipping_DisabledToEnabled starts a workflow without time skipping,
 // then enables it via UpdateWorkflowExecutionOptions. Verifies a
 // WorkflowExecutionOptionsUpdated event is written with Enabled=true.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_DisabledToEnabled() {
-	s.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+func TestTimeSkipping_DisabledToEnabled(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
 
 	id := "functional-timeskipping-disabled-to-enabled"
 	tl := "functional-timeskipping-disabled-to-enabled-tq"
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv := testvars.New(t).WithTaskQueue(tl)
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -130,10 +118,10 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_DisabledToEnabled() {
 	workflowExecution := &commonpb.WorkflowExecution{WorkflowId: id, RunId: startResp.GetRunId()}
 
 	// Enable time skipping — a real change that must produce an options-updated event.
-	updateResp := s.updateTimeSkipping(workflowExecution, tv.WorkerIdentity(), true)
+	updateResp := updateTimeSkipping(s, workflowExecution, tv.WorkerIdentity(), true)
 	s.True(updateResp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled())
 
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	poller := taskpoller.New(t, s.FrontendClient(), s.Namespace().String())
 	_, err = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -162,14 +150,14 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_DisabledToEnabled() {
 // TestTimeSkipping_DisabledToDisabled starts a workflow with time skipping enabled,
 // disables it, then attempts to disable it again. The second update is a no-op
 // and must not produce a second WorkflowExecutionOptionsUpdated event.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_DisabledToDisabled() {
-	s.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+func TestTimeSkipping_DisabledToDisabled(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
 
 	id := "functional-timeskipping-disabled-to-disabled"
 	tl := "functional-timeskipping-disabled-to-disabled-tq"
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv := testvars.New(t).WithTaskQueue(tl)
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -183,13 +171,13 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_DisabledToDisabled() {
 	workflowExecution := &commonpb.WorkflowExecution{WorkflowId: id, RunId: startResp.GetRunId()}
 
 	// First update: enabled → disabled. This is a real change that produces an event.
-	s.updateTimeSkipping(workflowExecution, tv.WorkerIdentity(), false)
+	updateTimeSkipping(s, workflowExecution, tv.WorkerIdentity(), false)
 
 	// Second update: disabled → disabled again. Must be a no-op with no additional event.
-	updateResp := s.updateTimeSkipping(workflowExecution, tv.WorkerIdentity(), false)
+	updateResp := updateTimeSkipping(s, workflowExecution, tv.WorkerIdentity(), false)
 	s.False(updateResp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled())
 
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	poller := taskpoller.New(t, s.FrontendClient(), s.Namespace().String())
 	_, err = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -211,12 +199,14 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_DisabledToDisabled() {
 
 // TestTimeSkipping_FeatureDisabled verifies that starting a workflow with time skipping
 // returns an error when the feature flag is off for the namespace.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
+func TestTimeSkipping_FeatureDisabled(t *testing.T) {
 	// TimeSkippingEnabled defaults to false; no override needed.
+	s := testcore.NewEnv(t)
+
 	id := "functional-timeskipping-feature-disabled"
 	tl := "functional-timeskipping-feature-disabled-tq"
 
-	_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -229,19 +219,19 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 	s.Error(err, "expected error when time skipping is disabled for namespace")
 }
 
-// TestTimeSkipping_TimerFiresAfterSkip starts a workflow with time skipping enabled
+// TestTimeSkipping_Automatic_Server starts a workflow with time skipping enabled
 // that mimics: sleep(1h) → check time → sleep(1h) → check time → complete.
 // Each sleep is a separate timer scheduled sequentially. The time-skipping mechanism
 // advances virtual time once per timer, completing the workflow in wall-clock seconds.
 // Virtual time is verified at each checkpoint via WorkflowTaskStarted event timestamps.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_Server() {
-	s.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+func TestTimeSkipping_Automatic_Server(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
 
 	id := "functional-timeskipping-timer-fires-after-skip"
 	tl := "functional-timeskipping-timer-fires-after-skip-tq"
-	tv := testvars.New(s.T()).WithTaskQueue(tl)
+	tv := testvars.New(t).WithTaskQueue(tl)
 
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           s.Namespace().String(),
 		WorkflowId:          id,
@@ -254,7 +244,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_Server() {
 	s.NoError(err)
 	workflowExecution := &commonpb.WorkflowExecution{WorkflowId: id, RunId: startResp.RunId}
 
-	poller := taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
+	poller := taskpoller.New(t, s.FrontendClient(), s.Namespace().String())
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	startTimer := func(id string, d time.Duration) *commandpb.Command {
@@ -290,12 +280,12 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_Server() {
 	_, err = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: taskQueue},
 	).HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		s.True(
-			virtualNow(task).Sub(startTime) >= time.Hour,
+		s.GreaterOrEqual(
+			virtualNow(task).Sub(startTime), time.Hour,
 			"expected virtual time ≥ start+1h after first skip, got %v", virtualNow(task).Sub(startTime),
 		)
-		s.True(
-			virtualNow(task).Sub(startTime) <= time.Hour+5*time.Second,
+		s.LessOrEqual(
+			virtualNow(task).Sub(startTime), time.Hour+5*time.Second,
 			"expected virtual time ≤ start+1h+5s after first skip, got %v", virtualNow(task).Sub(startTime),
 		)
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -308,12 +298,12 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_Server() {
 	_, err = poller.PollWorkflowTask(
 		&workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: taskQueue},
 	).HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-		s.True(
-			virtualNow(task).Sub(startTime) >= 2*time.Hour,
+		s.GreaterOrEqual(
+			virtualNow(task).Sub(startTime), 2*time.Hour,
 			"expected virtual time ≥ start+2h after second skip, got %v", virtualNow(task).Sub(startTime),
 		)
-		s.True(
-			virtualNow(task).Sub(startTime) <= 2*time.Hour+5*time.Second,
+		s.LessOrEqual(
+			virtualNow(task).Sub(startTime), 2*time.Hour+5*time.Second,
 			"expected virtual time ≤ start+2h+5s after second skip, got %v", virtualNow(task).Sub(startTime),
 		)
 		return taskpoller.CompleteWorkflowHandler(task)
@@ -344,8 +334,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_Server() {
 // TestTimeSkipping_EnableMidFlight starts a workflow without time skipping, waits for
 // it to reach a 1h timer, then enables time skipping via UpdateWorkflowExecutionOptions.
 // Verifies the workflow completes quickly and workflow.Now() reflects virtual time ≈ start+1h.
-func (s *TimeSkippingTestSuite) TestTimeSkipping_EnableMidFlight() {
-	s.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+func TestTimeSkipping_EnableMidFlight(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker(), testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
 
 	type result struct {
 		StartTime      time.Time
@@ -361,55 +351,152 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_EnableMidFlight() {
 	}
 
 	const wfType = "timeskipping-enable-mid-flight"
-	s.Worker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wfType})
 
 	const wfID = "functional-timeskipping-enable-mid-flight"
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         wfID,
 		WorkflowType:       &commonpb.WorkflowType{Name: wfType},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkflowRunTimeout: durationpb.New(3 * time.Hour),
 		// No TimeSkippingConfig — time skipping disabled at start.
 	})
 	s.NoError(err)
 
-	// Give the SDK worker time to execute the first WorkflowTask and schedule the timer.
-	time.Sleep(1 * time.Second)
+	// Wait for the SDK worker to execute the first WorkflowTask and schedule the timer.
+	wfExec := &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: startResp.RunId}
+	s.Eventually(func() bool {
+		history := s.GetHistory(s.Namespace().String(), wfExec)
+		for _, e := range history {
+			if e.GetEventType() == enumspb.EVENT_TYPE_TIMER_STARTED {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond, "expected timer to be scheduled before enabling time skipping")
+
 	// Enable time skipping mid-flight — the already-scheduled 1h timer should fire virtually.
-	s.updateTimeSkipping(&commonpb.WorkflowExecution{WorkflowId: wfID, RunId: startResp.RunId}, "test", true)
-	// The time-skip fires the 1h timer virtually; give the task executor and SDK worker
-	// a few seconds to complete the chain (two timer tasks + one workflow task).
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
+	updateTimeSkipping(s, wfExec, "test", true)
+
 	var res result
-	s.NoError(s.SdkClient().GetWorkflow(context.Background(), wfID, startResp.RunId).Get(ctx, &res))
+	s.NoError(s.SdkClient().GetWorkflow(s.Context(), wfID, startResp.RunId).Get(s.Context(), &res))
 
 	elapsed := res.TimeAfterSleep.Sub(res.StartTime)
-	s.True(elapsed >= time.Hour,
+	s.GreaterOrEqual(elapsed, time.Hour,
 		"expected virtual time ≥ start+1h after skip, got %v", elapsed)
 	fmt.Println("time elapsed: ", elapsed.Minutes())
-	s.True(elapsed <= time.Hour+10*time.Second,
+	s.LessOrEqual(elapsed, time.Hour+10*time.Second,
 		"expected virtual time ≤ start+1h+5s after skip, got %v", elapsed)
 }
 
-// TestTimeSkipping_SDK_UserTimers uses a real SDK worker to run a workflow that:
+// TestTimeSkipping_ParentChild tests that a parent workflow correctly receives results
+// from a child workflow that contains a time-skipped sleep.
+// The parent starts a child with a fixed WorkflowID. Once the child's timer is
+// scheduled, time skipping is enabled on the child mid-flight. The parent waits
+// for the child to complete and verifies virtual time advanced by ~1h.
+func TestTimeSkipping_ParentChild(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker(), testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
+
+	type childResult struct {
+		StartTime      time.Time
+		TimeAfterSleep time.Time
+	}
+
+	const childWfType = "timeskipping-parent-child-child"
+	const childWfID = "functional-timeskipping-parent-child-child"
+	wallClockStartTime := time.Now()
+
+	childWorkflowFn := func(ctx workflow.Context) (childResult, error) {
+		start := workflow.Now(ctx)
+		if err := workflow.Sleep(ctx, time.Hour); err != nil {
+			return childResult{}, err
+		}
+		return childResult{start, workflow.Now(ctx)}, nil
+	}
+
+	parentWorkflowFn := func(ctx workflow.Context) (childResult, error) {
+		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
+			WorkflowID:               childWfID,
+			WorkflowExecutionTimeout: 2 * time.Hour,
+		})
+		var res childResult
+		if err := workflow.ExecuteChildWorkflow(childCtx, childWfType).Get(ctx, &res); err != nil {
+			return childResult{}, err
+		}
+		return res, nil
+	}
+
+	const parentWfType = "timeskipping-parent-child-parent"
+	s.SdkWorker().RegisterWorkflowWithOptions(childWorkflowFn, workflow.RegisterOptions{Name: childWfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(parentWorkflowFn, workflow.RegisterOptions{Name: parentWfType})
+
+	const parentWfID = "functional-timeskipping-parent-child-parent"
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.NewString(),
+		Namespace:          s.Namespace().String(),
+		WorkflowId:         parentWfID,
+		WorkflowType:       &commonpb.WorkflowType{Name: parentWfType},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout: durationpb.New(3 * time.Hour),
+	})
+	s.NoError(err)
+
+	// Wait for the child workflow's timer to be scheduled.
+	childExec := &commonpb.WorkflowExecution{WorkflowId: childWfID}
+	s.Eventually(func() bool {
+		resp, err := s.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: s.Namespace().String(),
+			Execution: childExec,
+		})
+		if err != nil {
+			return false
+		}
+		for _, e := range resp.History.GetEvents() {
+			if e.GetEventType() == enumspb.EVENT_TYPE_TIMER_STARTED {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 100*time.Millisecond, "expected child timer to be scheduled before enabling time skipping")
+
+	// Enable time skipping on the child mid-flight so its 1h timer fires virtually.
+	// todo: @feiyang - this can be discussed as to be a default behavior,
+	// right now child doesn't inherit the time skipping config from the parent,
+	updateTimeSkipping(s, childExec, "test", true)
+
+	// Parent should complete once the child's timer fires and the child returns its result.
+	var res childResult
+	s.NoError(s.SdkClient().GetWorkflow(s.Context(), parentWfID, startResp.RunId).Get(s.Context(), &res))
+
+	elapsed := res.TimeAfterSleep.Sub(res.StartTime)
+	s.GreaterOrEqual(elapsed, time.Hour,
+		"expected child virtual time >= start+1h after skip, got %v", elapsed)
+	s.LessOrEqual(elapsed, time.Hour+5*time.Second,
+		"expected child virtual time <= start+1h+5s after skip, got %v", elapsed)
+	// check this testing finishes in 1 minute
+	s.LessOrEqual(time.Since(wallClockStartTime), 1*time.Minute,
+		"expected child virtual time <= 1 minute after skip, got %v", time.Since(wallClockStartTime))
+
+}
+
+// TestTimeSkipping_Automatic_SDKIntegration uses a real SDK worker to run a workflow that:
 //  1. sleep(1h)  — skipped virtually
 //  2. run a dummy activity — must complete without timeout
 //  3. sleep(1h)  — skipped virtually
 //
 // Verifies that workflow.Now() reflects virtual time at each checkpoint, and that
 // the activity completes successfully (time skipping does not cause spurious timeouts).
-func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_SDKIntegration() {
-	s.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+func TestTimeSkipping_Automatic_SDKIntegration(t *testing.T) {
+	s := testcore.NewEnv(t, testcore.WithSdkWorker(), testcore.WithDynamicConfig(dynamicconfig.TimeSkippingEnabled, true))
 
 	// Dummy activity — returns immediately with the real wall-clock time it ran at,
 	// so the test can confirm it executed well within its timeout window.
 	activityFn := func(ctx context.Context) (time.Time, error) {
 		return time.Now(), nil
 	}
-	s.Worker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterActivity(activityFn)
 
 	type result struct {
 		StartTime            time.Time
@@ -446,43 +533,43 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_Automatic_SDKIntegration() {
 
 	// Register with an explicit name so we can pass it to the gRPC start request.
 	const wfType = "timeskipping-sdk-sleep-workflow"
-	s.Worker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wfType})
+	s.SdkWorker().RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wfType})
 
 	// The SDK's StartWorkflowOptions does not expose TimeSkippingConfig yet, so start
 	// via the gRPC frontend directly, then obtain the run handle from SdkClient.
 	const wfID = "functional-timeskipping-sdk-user-timers"
-	startResp, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := s.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:          uuid.NewString(),
 		Namespace:          s.Namespace().String(),
 		WorkflowId:         wfID,
 		WorkflowType:       &commonpb.WorkflowType{Name: wfType},
-		TaskQueue:          &taskqueuepb.TaskQueue{Name: s.TaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkflowRunTimeout: durationpb.New(3 * time.Hour),
 		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
 	})
 	s.NoError(err)
 
-	run := s.SdkClient().GetWorkflow(context.Background(), wfID, startResp.RunId)
+	run := s.SdkClient().GetWorkflow(s.Context(), wfID, startResp.RunId)
 
 	var res result
-	s.NoError(run.Get(context.Background(), &res))
+	s.NoError(run.Get(s.Context(), &res))
 
 	// workflow.Now() after first sleep should be ~1h after start
-	s.True(res.TimeAfterFirstSleep.Sub(res.StartTime) >= time.Hour,
+	s.GreaterOrEqual(res.TimeAfterFirstSleep.Sub(res.StartTime), time.Hour,
 		"expected virtual time ≥ start+1h after first sleep, got %v", res.TimeAfterFirstSleep.Sub(res.StartTime))
-	s.True(res.TimeAfterFirstSleep.Sub(res.StartTime) <= time.Hour+3*time.Second,
+	s.LessOrEqual(res.TimeAfterFirstSleep.Sub(res.StartTime), time.Hour+3*time.Second,
 		"expected virtual time ≤ start+1h+3s after first sleep, got %v", res.TimeAfterFirstSleep.Sub(res.StartTime))
 
 	// The activity ran at a real wall-clock time after the first skip, so its real
 	// execution time must be within the 10-second start-to-close timeout window.
 	s.True(res.ActivityRealTime.After(res.StartTime),
 		"activity should have run after workflow start")
-	s.True(time.Since(res.ActivityRealTime) < 30*time.Second,
+	s.Less(time.Since(res.ActivityRealTime), 30*time.Second,
 		"activity real execution time should be recent (within test wall-clock), got %v ago", time.Since(res.ActivityRealTime))
 
 	// workflow.Now() after second sleep should be ~2h after start
-	s.True(res.TimeAfterSecondSleep.Sub(res.StartTime) >= 2*time.Hour,
+	s.GreaterOrEqual(res.TimeAfterSecondSleep.Sub(res.StartTime), 2*time.Hour,
 		"expected virtual time ≥ start+2h after second sleep, got %v", res.TimeAfterSecondSleep.Sub(res.StartTime))
-	s.True(res.TimeAfterSecondSleep.Sub(res.StartTime) <= 2*time.Hour+3*time.Second,
+	s.LessOrEqual(res.TimeAfterSecondSleep.Sub(res.StartTime), 2*time.Hour+3*time.Second,
 		"expected virtual time ≤ start+2h+3s after second sleep, got %v", res.TimeAfterSecondSleep.Sub(res.StartTime))
 }

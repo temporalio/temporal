@@ -234,14 +234,6 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
-// @feiyang this is a place for triggering time skipping changes so that it is inside the transaction
-// but a workflow task is always scheduled for
-// (1) standalone workflow execution -> pending workflowTask, cannot auto-skipping
-// (2) workflow continue-as-new -> pending workflowTask, cannot auto-skipping
-// cases workflow task is not immediately started,
-// (3) child workflow - parent worklfow 2 phase commit -> won't time-skipping until the 2 phase commit is completed
-// (4) delayed start -> only trigger time-skipping for this type
-// so the last step shall be still triggering the time-skipping but only for (4)
 func (c *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -527,10 +519,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNewAsPassive(
 	)
 }
 
-// todo @feiyang this is a place for triggering time skipping changes so that it is inside the transaction
-// another candidate than closeTransactionAsMutation/Snapshot
-// - 544/568: covers both in mutation and snapshot
-// - in all universal mutable state changes
 func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	ctx context.Context,
 	shardContext historyi.ShardContext,

@@ -709,7 +709,7 @@ func (r *TaskRefresherImpl) applyTimeSkippingOffsetToUserTimerTasks(mutableState
 	}
 
 	latestDetail := details[len(details)-1]
-	latestTargetVirtualTime := latestDetail.GetTargetVirtualTimePoint().AsTime()
+	latestTargetVirtualTime := latestDetail.GetTargetVirtualTime().AsTime()
 	skippedDuration := latestTargetVirtualTime.Sub(r.shard.GetTimeSource().Now())
 	if skippedDuration <= 0 {
 		return

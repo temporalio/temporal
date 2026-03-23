@@ -172,7 +172,6 @@ func getOptionsFromMutableState(ms historyi.MutableState) *workflowpb.WorkflowEx
 			opts.Priority = cloned
 		}
 	}
-	// todo: right now we only assume enabled is the only field we care in options
 	if timeSkippingInfo := ms.GetExecutionInfo().GetTimeSkippingInfo(); timeSkippingInfo != nil {
 		opts.TimeSkippingConfig = &workflowpb.TimeSkippingConfig{
 			Enabled: timeSkippingInfo.GetEnabled(),

@@ -6585,8 +6585,6 @@ func getBatchOperationState(workflowState enumspb.WorkflowExecutionStatus) enums
 	return operationState
 }
 
-// todo: to be removed
-// another entrypoint for time skipping config validation
 func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	ctx context.Context,
 	request *workflowservice.UpdateWorkflowExecutionOptionsRequest,

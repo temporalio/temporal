@@ -258,7 +258,7 @@ type (
 		clusterMetadata        cluster.Metadata
 		eventsCache            events.Cache
 		config                 *configs.Config
-		timeSource clock.TimeSource
+		timeSource             clock.TimeSource
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
 		stateMachineNode       *hsm.Node
@@ -3945,8 +3945,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippedEvent(
 		return nil, err
 	}
 
-	durationToAdvance := advanceToTimePoint.Sub(ms.timeSource.Now())
-	event := ms.hBuilder.AddWorkflowExecutionTimeSkippedEvent(advanceToTimePoint, durationToAdvance)
+	event := ms.hBuilder.AddWorkflowExecutionTimeSkippedEvent(advanceToTimePoint)
 	if err := ms.ApplyWorkflowExecutionTimeSkippedEvent(ctx, event); err != nil {
 		return nil, err
 	}
@@ -3966,31 +3965,36 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.C
 	return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
 }
 
-// buildTimeSkippedDetails constructs a TimeSkippedDetails entry for a single skip event,
-// accumulating previously skipped durations to compute the correct virtual time at the moment of this skip.
+// buildTimeSkippedDetails constructs a TimeSkippedDetails entry for a single skip event.
 //
-// VirtualTimeWhenSkipped = RealTime + sum(all previous DurationToSkip)
-// TargetVirtualTimePoint = VirtualTimeWhenSkipped + DurationToSkip
+// For the first skip the event time equals real time (the time-skipping offset is 0 when the
+// event is created). For subsequent skips the virtual time at the moment of the skip equals the
+// TargetVirtualTime of the most recent preceding entry; the event time is already the
+// virtual time and must NOT be used to derive virtualTimeWhenSkipped in that case.
+//
+// TargetVirtualTime = VirtualTimeWhenSkipped + DurationToSkip
 func buildTimeSkippedDetails(
 	existingDetails []*persistencespb.TimeSkippedDetails,
 	event *historypb.HistoryEvent,
 ) *persistencespb.TimeSkippedDetails {
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
 
-	var totalPreviouslySkipped time.Duration
-	for _, d := range existingDetails {
-		totalPreviouslySkipped += timeSkippedDurationFromTimestamp(d.GetDurationToSkip())
+	// Derive the virtual time at which this skip starts.
+	// First skip: event time == real time (offset is 0 when the event is written).
+	// Subsequent skips: virtual time == previous skip's target virtual time.
+	var virtualTimeWhenSkipped time.Time
+	if len(existingDetails) == 0 {
+		virtualTimeWhenSkipped = event.GetEventTime().AsTime()
+	} else {
+		virtualTimeWhenSkipped = existingDetails[len(existingDetails)-1].GetTargetVirtualTime().AsTime()
 	}
-
-	realTime := event.GetEventTime().AsTime()
-	virtualTimeWhenSkipped := realTime.Add(totalPreviouslySkipped)
-	skipDuration := attrs.GetSkippedDuration().AsDuration()
+	skipDuration := attrs.GetToTime().AsTime().Sub(virtualTimeWhenSkipped)
 
 	return &persistencespb.TimeSkippedDetails{
-		RealTimePointWhenSkipped:    event.GetEventTime(),
-		VirtualTimePointWhenSkipped: timestamppb.New(virtualTimeWhenSkipped),
-		DurationToSkip:              timeSkippedDurationToTimestamp(skipDuration),
-		TargetVirtualTimePoint:      attrs.GetSkipToTimePoint(),
+		RealTimeWhenSkipped:    event.GetEventTime(),
+		VirtualTimeWhenSkipped: timestamppb.New(virtualTimeWhenSkipped),
+		DurationToSkip:         timeSkippedDurationToTimestamp(skipDuration),
+		TargetVirtualTime:      attrs.GetToTime(),
 	}
 }
 
@@ -7053,8 +7057,6 @@ func (ms *MutableStateImpl) StartTransaction(
 	return flushBeforeReady, nil
 }
 
-// todo @feiyang this is a place for triggering time skipping changes so that it is inside the transaction
-// won't get lost, the whole process is a transaction
 func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
@@ -7102,6 +7104,7 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 }
 
 // todo @feiyang this is a place for triggering time skipping changes so that it is inside the transaction
+
 func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,

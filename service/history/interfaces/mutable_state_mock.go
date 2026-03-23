@@ -1514,17 +1514,17 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTerminatedEvent(ar
 }
 
 // ApplyWorkflowExecutionTimeSkippedEvent mocks base method.
-func (m *MockMutableState) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, arg0 *history.HistoryEvent) error {
+func (m *MockMutableState) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, event *history.HistoryEvent) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionTimeSkippedEvent", ctx, arg0)
+	ret := m.ctrl.Call(m, "ApplyWorkflowExecutionTimeSkippedEvent", ctx, event)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ApplyWorkflowExecutionTimeSkippedEvent indicates an expected call of ApplyWorkflowExecutionTimeSkippedEvent.
-func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimeSkippedEvent(ctx, arg0 any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ApplyWorkflowExecutionTimeSkippedEvent(ctx, event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimeSkippedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimeSkippedEvent), ctx, arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowExecutionTimeSkippedEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowExecutionTimeSkippedEvent), ctx, event)
 }
 
 // ApplyWorkflowExecutionTimedoutEvent mocks base method.
@@ -3052,20 +3052,6 @@ func (mr *MockMutableStateMockRecorder) IsAutoTimeSkippable() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsAutoTimeSkippable", reflect.TypeOf((*MockMutableState)(nil).IsAutoTimeSkippable))
 }
 
-// VirtualTimeNow mocks base method.
-func (m *MockMutableState) VirtualTimeNow() time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "VirtualTimeNow")
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// VirtualTimeNow indicates an expected call of VirtualTimeNow.
-func (mr *MockMutableStateMockRecorder) VirtualTimeNow() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VirtualTimeNow", reflect.TypeOf((*MockMutableState)(nil).VirtualTimeNow))
-}
-
 // IsCancelRequested mocks base method.
 func (m *MockMutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()
@@ -3782,6 +3768,20 @@ func (m *MockMutableState) UpdateWorkflowStateStatus(state enums0.WorkflowExecut
 func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateWorkflowStateStatus), state, status)
+}
+
+// VirtualTimeNow mocks base method.
+func (m *MockMutableState) VirtualTimeNow() time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VirtualTimeNow")
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// VirtualTimeNow indicates an expected call of VirtualTimeNow.
+func (mr *MockMutableStateMockRecorder) VirtualTimeNow() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VirtualTimeNow", reflect.TypeOf((*MockMutableState)(nil).VirtualTimeNow))
 }
 
 // VisitUpdates mocks base method.

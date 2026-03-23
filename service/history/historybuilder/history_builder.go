@@ -304,16 +304,14 @@ func (b *HistoryBuilder) AddWorkflowExecutionUnpausedEvent(
 	return event
 }
 
-// todo: @feiyang - try to align naming between TimeSkippingEvent
 func (b *HistoryBuilder) AddWorkflowExecutionTimeSkippedEvent(
 	advanceToTimePoint time.Time,
-	durationToAdvance time.Duration,
 ) *historypb.HistoryEvent {
-	event := b.EventFactory.CreateWorkflowExecutionTimePointAdvancedEvent(advanceToTimePoint, durationToAdvance)
+	event := b.CreateWorkflowExecutionTimePointAdvancedEvent(advanceToTimePoint)
 	// Mark the event as 'worker may ignore' so that older SDKs can safely ignore it.
 	event.WorkerMayIgnore = true
-	event, _ = b.EventStore.add(event)
-	b.metricsHandler.Counter(metrics.ExecutionTimeSkippingEventCounter.Name()).Record(1)
+	event, _ = b.add(event)
+	b.metricsHandler.Counter(metrics.ExecutionTimeSkippingDurationSkippedEventCount.Name()).Record(1)
 	return event
 }
 

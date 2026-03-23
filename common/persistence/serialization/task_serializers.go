@@ -1499,9 +1499,9 @@ func deserializeOutboundTask(
 
 func timerTimeSkippingTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:    task.WorkflowKey.NamespaceID,
-		WorkflowId:     task.WorkflowKey.WorkflowID,
-		RunId:          task.WorkflowKey.RunID,
+		NamespaceId:    task.NamespaceID,
+		WorkflowId:     task.WorkflowID,
+		RunId:          task.RunID,
 		TaskType:       enumsspb.TASK_TYPE_TIME_SKIPPING,
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),

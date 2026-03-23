@@ -6163,8 +6163,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_FirstSkip() {
 		EventTime: timestamppb.New(realTime),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				SkippedDuration: durationpb.New(skipDuration),
-				SkipToTimePoint: timestamppb.New(targetVirtualTime),
+				ToTime: timestamppb.New(targetVirtualTime),
 			},
 		},
 	}
@@ -6172,92 +6171,89 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_FirstSkip() {
 	details := buildTimeSkippedDetails(nil, event)
 
 	// Real time is the event time.
-	s.Equal(realTime, details.GetRealTimePointWhenSkipped().AsTime())
-	// No previous skips: virtual time when skipped == real time.
-	s.Equal(realTime, details.GetVirtualTimePointWhenSkipped().AsTime())
+	s.Equal(realTime, details.GetRealTimeWhenSkipped().AsTime())
+	// No previous skips: virtual time when skipped == event time (offset is 0 for first skip).
+	s.Equal(realTime, details.GetVirtualTimeWhenSkipped().AsTime())
 	// Duration encodes correctly.
 	s.Equal(skipDuration, timeSkippedDurationFromTimestamp(details.GetDurationToSkip()))
 	// Target = realTime + 2h.
-	s.Equal(targetVirtualTime, details.GetTargetVirtualTimePoint().AsTime())
+	s.Equal(targetVirtualTime, details.GetTargetVirtualTime().AsTime())
 }
 
-func (s *mutableStateSuite) TestBuildTimeSkippedDetails_SecondSkip_AccumulatesPreviousDuration() {
-	// First skip: real 12:00, skip 2h → virtual advances to 14:00.
+func (s *mutableStateSuite) TestBuildTimeSkippedDetails_SecondSkip_UsesTargetOfPreviousSkip() {
+	// First skip: real/virtual 12:00, skip 2h → virtual target 14:00.
 	realTime1 := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	skipDuration1 := 2 * time.Hour
-	targetVirtual1 := realTime1.Add(skipDuration1) // 14:00 virtual
+	targetVirtual1 := realTime1.Add(skipDuration1) // 14:00
 
 	event1 := &historypb.HistoryEvent{
 		EventTime: timestamppb.New(realTime1),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				SkippedDuration: durationpb.New(skipDuration1),
-				SkipToTimePoint: timestamppb.New(targetVirtual1),
+				ToTime: timestamppb.New(targetVirtual1),
 			},
 		},
 	}
 	details1 := buildTimeSkippedDetails(nil, event1)
 
-	// Second skip: real clock advanced 1h to 13:00, skip 3h more.
-	// Virtual time at this moment = 13:00 real + 2h (prev skip) = 15:00 virtual.
-	realTime2 := time.Date(2024, 1, 1, 13, 0, 0, 0, time.UTC)
+	// Second skip: virtual time is now targetVirtual1 = 14:00 (event time is the virtual clock
+	// reading, which equals targetVirtual1 after the first advance).
+	// Skip 3h more → target = 17:00.
 	skipDuration2 := 3 * time.Hour
-	expectedVirtualAtSkip2 := realTime2.Add(skipDuration1)         // 15:00 virtual
-	targetVirtual2 := expectedVirtualAtSkip2.Add(skipDuration2)    // 18:00 virtual
+	targetVirtual2 := targetVirtual1.Add(skipDuration2) // 17:00
 
+	// event.EventTime reflects the virtual clock at the moment of the second skip (~= targetVirtual1).
+	event2EventTime := targetVirtual1
 	event2 := &historypb.HistoryEvent{
-		EventTime: timestamppb.New(realTime2),
+		EventTime: timestamppb.New(event2EventTime),
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-				SkippedDuration: durationpb.New(skipDuration2),
-				SkipToTimePoint: timestamppb.New(targetVirtual2),
+				ToTime: timestamppb.New(targetVirtual2),
 			},
 		},
 	}
 	details2 := buildTimeSkippedDetails([]*persistencespb.TimeSkippedDetails{details1}, event2)
 
-	s.Equal(realTime2, details2.GetRealTimePointWhenSkipped().AsTime())
-	// Virtual time when skipped = real2 + sum of previous durations = 13:00 + 2h = 15:00.
-	s.Equal(expectedVirtualAtSkip2, details2.GetVirtualTimePointWhenSkipped().AsTime())
+	s.Equal(event2EventTime, details2.GetRealTimeWhenSkipped().AsTime())
+	// VirtualTimeWhenSkipped = previous skip's TargetVirtualTime = 14:00.
+	s.Equal(targetVirtual1, details2.GetVirtualTimeWhenSkipped().AsTime())
 	s.Equal(skipDuration2, timeSkippedDurationFromTimestamp(details2.GetDurationToSkip()))
-	s.Equal(targetVirtual2, details2.GetTargetVirtualTimePoint().AsTime())
+	s.Equal(targetVirtual2, details2.GetTargetVirtualTime().AsTime())
 }
 
 func (s *mutableStateSuite) TestBuildTimeSkippedDetails_ThreeSkips_VirtualTimeAccumulates() {
 	base := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
 
-	type skipInput struct {
-		realTime     time.Time
-		skipDuration time.Duration
-	}
-	skips := []skipInput{
-		{base, 1 * time.Hour},              // skip1: real=10:00, +1h
-		{base.Add(30 * time.Minute), 2 * time.Hour}, // skip2: real=10:30, +2h
-		{base.Add(45 * time.Minute), 3 * time.Hour}, // skip3: real=10:45, +3h
-	}
+	// Each skip advances virtual time by its duration from the previous target.
+	// Skip N's virtualTimeWhenSkipped = accumulated[N-1].TargetVirtualTime.
+	skipDurations := []time.Duration{1 * time.Hour, 2 * time.Hour, 3 * time.Hour}
 
 	var accumulated []*persistencespb.TimeSkippedDetails
-	var prevTotalSkipped time.Duration
-	for i, sk := range skips {
-		targetVirtual := sk.realTime.Add(prevTotalSkipped + sk.skipDuration)
+	prevTarget := base // for the first skip, virtualTimeWhenSkipped = event.EventTime = base
+	for i, dur := range skipDurations {
+		target := prevTarget.Add(dur)
+		eventTime := base.Add(time.Duration(i) * 15 * time.Minute) // arbitrary real clock advance
+		if i == 0 {
+			eventTime = base // first skip: event time == real time == virtual time (offset=0)
+		}
 		event := &historypb.HistoryEvent{
-			EventTime: timestamppb.New(sk.realTime),
+			EventTime: timestamppb.New(eventTime),
 			Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
 				WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
-					SkippedDuration: durationpb.New(sk.skipDuration),
-					SkipToTimePoint: timestamppb.New(targetVirtual),
+					ToTime: timestamppb.New(target),
 				},
 			},
 		}
 		d := buildTimeSkippedDetails(accumulated, event)
 
-		s.Equal(sk.realTime, d.GetRealTimePointWhenSkipped().AsTime(), "skip %d: real time", i)
-		s.Equal(sk.realTime.Add(prevTotalSkipped), d.GetVirtualTimePointWhenSkipped().AsTime(), "skip %d: virtual time when skipped", i)
-		s.Equal(sk.skipDuration, timeSkippedDurationFromTimestamp(d.GetDurationToSkip()), "skip %d: duration", i)
-		s.Equal(targetVirtual, d.GetTargetVirtualTimePoint().AsTime(), "skip %d: target virtual time", i)
+		s.Equal(eventTime, d.GetRealTimeWhenSkipped().AsTime(), "skip %d: real time", i)
+		// VirtualTimeWhenSkipped = previous target (base for first skip).
+		s.Equal(prevTarget, d.GetVirtualTimeWhenSkipped().AsTime(), "skip %d: virtual time when skipped", i)
+		s.Equal(dur, timeSkippedDurationFromTimestamp(d.GetDurationToSkip()), "skip %d: duration", i)
+		s.Equal(target, d.GetTargetVirtualTime().AsTime(), "skip %d: target virtual time", i)
 
 		accumulated = append(accumulated, d)
-		prevTotalSkipped += sk.skipDuration
+		prevTarget = target
 	}
 }
 

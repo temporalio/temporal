@@ -79,7 +79,6 @@ func (this *WorkflowExecutionInfo) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
-<<<<<<< HEAD
 // Marshal an object of type LastNotifiedTargetVersion to the protobuf v3 wire format
 func (val *LastNotifiedTargetVersion) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -87,20 +86,10 @@ func (val *LastNotifiedTargetVersion) Marshal() ([]byte, error) {
 
 // Unmarshal an object of type LastNotifiedTargetVersion from the protobuf v3 wire format
 func (val *LastNotifiedTargetVersion) Unmarshal(buf []byte) error {
-=======
-// Marshal an object of type TimeSkippingInfo to the protobuf v3 wire format
-func (val *TimeSkippingInfo) Marshal() ([]byte, error) {
-	return proto.Marshal(val)
-}
-
-// Unmarshal an object of type TimeSkippingInfo from the protobuf v3 wire format
-func (val *TimeSkippingInfo) Unmarshal(buf []byte) error {
->>>>>>> 286ac49dc (timeskipping-poc: control plane)
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-<<<<<<< HEAD
 func (val *LastNotifiedTargetVersion) Size() int {
 	return proto.Size(val)
 }
@@ -110,7 +99,34 @@ func (val *LastNotifiedTargetVersion) Size() int {
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
 func (this *LastNotifiedTargetVersion) Equal(that interface{}) bool {
-=======
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *LastNotifiedTargetVersion
+	switch t := that.(type) {
+	case *LastNotifiedTargetVersion:
+		that1 = t
+	case LastNotifiedTargetVersion:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type TimeSkippingInfo to the protobuf v3 wire format
+func (val *TimeSkippingInfo) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TimeSkippingInfo from the protobuf v3 wire format
+func (val *TimeSkippingInfo) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
 func (val *TimeSkippingInfo) Size() int {
 	return proto.Size(val)
 }
@@ -120,24 +136,15 @@ func (val *TimeSkippingInfo) Size() int {
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
 func (this *TimeSkippingInfo) Equal(that interface{}) bool {
->>>>>>> 286ac49dc (timeskipping-poc: control plane)
 	if that == nil {
 		return this == nil
 	}
 
-<<<<<<< HEAD
-	var that1 *LastNotifiedTargetVersion
-	switch t := that.(type) {
-	case *LastNotifiedTargetVersion:
-		that1 = t
-	case LastNotifiedTargetVersion:
-=======
 	var that1 *TimeSkippingInfo
 	switch t := that.(type) {
 	case *TimeSkippingInfo:
 		that1 = t
 	case TimeSkippingInfo:
->>>>>>> 286ac49dc (timeskipping-poc: control plane)
 		that1 = &t
 	default:
 		return false

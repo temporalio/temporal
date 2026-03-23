@@ -335,10 +335,17 @@ message TimeSkippingInfo {
 } 
 
 message TimeSkippedDetails {
-    google.protobuf.Timestamp real_time_point_when_skipped = 1;
-    google.protobuf.Timestamp virtual_time_point_when_skipped = 2;
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     aip.dev/not-precedent: Ignoring lint rules. --)
+    google.protobuf.Timestamp real_time_when_skipped = 1;
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     aip.dev/not-precedent: Ignoring lint rules. --)
+    google.protobuf.Timestamp virtual_time_when_skipped = 2;
+    // (-- api-linter: core::0142::time-field-names=disabled
+    //     api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: Ignoring lint rules. --)
     google.protobuf.Timestamp duration_to_skip = 3;
-    google.protobuf.Timestamp target_virtual_time_point = 4;
+    google.protobuf.Timestamp target_virtual_time = 4;
 }
 
 message ExecutionStats {

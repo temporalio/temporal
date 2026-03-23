@@ -1108,9 +1108,8 @@ var (
 	ExecutionQueueSchedulerTaskLatency    = NewTimerDef("execution_queue_scheduler_task_latency")
 	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
 
-	PausedActivitiesCounter           = NewCounterDef("paused_activities")
-	ExternalPayloadUploadSize         = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
-	ExecutionTimeSkippingEventCounter = NewCounterDef("execution_time_skipping_event")
+	PausedActivitiesCounter   = NewCounterDef("paused_activities")
+	ExternalPayloadUploadSize = NewBytesHistogramDef("external_payload_upload_size", WithDescription("The histogram of sizes in bytes of uploaded external payloads."))
 
 	// Deadlock detector metrics
 	DDSuspectedDeadlocks                 = NewCounterDef("dd_suspected_deadlocks")
@@ -1128,6 +1127,10 @@ var (
 	NamespaceRegistrySlowCallbacks      = NewCounterDef("namespace_registry_slow_callbacks")
 	NamespaceRegistryRefreshFailures    = NewCounterDef("namespace_registry_refresh_failures")
 	NamespaceRegistryRefreshLatency     = NewTimerDef("namespace_registry_refresh_latency")
+
+	ExecutionTimeSkippingDurationSkippedEventCount = NewCounterDef("execution_time_skipping_duration_skipped_event_count")
+	ExecutionTimeSkippingEnabledCount              = NewCounterDef("execution_time_skipping_enabled_count")
+	ExecutionTimeSkippingDisabledCount             = NewCounterDef("execution_time_skipping_disabled_count")
 
 	// Matching
 	MatchingClientForwardedCounter                    = NewCounterDef("forwarded")
