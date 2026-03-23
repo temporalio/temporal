@@ -263,6 +263,100 @@ func (s *defaultClaimMapperSuite) TestTokenWithAdminPermissionsRegex() {
 	s.Equal(RoleReader, defaultRole)
 }
 
+func (s *defaultClaimMapperSuite) TestTokenWithNestedPermissionsBadClaims() {
+	tokenString, err := s.tokenGenerator.generateTokenWithClaims(RSA, jwt.MapClaims{
+		headerSubject: testSubject,
+		"traits": map[string]any{
+			"temporal": "not-an-array",
+		},
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "test",
+		"aud": []string{"test-audience"},
+	}, errorTestOptionNoError)
+	s.NoError(err)
+
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	claimMapper := NewDefaultJWTClaimMapper(
+		s.tokenGenerator,
+		&config.Authorization{PermissionsClaimName: "traits.temporal"},
+		s.logger,
+	)
+	claims, err := claimMapper.GetClaims(authInfo)
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System)
+	s.Equal(0, len(claims.Namespaces))
+	s.Equal(RoleUndefined, claims.Namespaces[defaultNamespace])
+}
+
+func (s *defaultClaimMapperSuite) TestTokenWithNestedPermissionsClaim() {
+	tokenString, err := s.tokenGenerator.generateTokenWithClaims(RSA, jwt.MapClaims{
+		headerSubject: testSubject,
+		"traits": map[string]any{
+			"temporal": []string{"default:read", "default:write", "default:worker"},
+		},
+		"exp": time.Now().Add(time.Hour).Unix(),
+		"iss": "test",
+		"aud": []string{"test-audience"},
+	}, errorTestOptionNoError)
+	s.NoError(err)
+
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	claimMapper := NewDefaultJWTClaimMapper(
+		s.tokenGenerator,
+		&config.Authorization{PermissionsClaimName: "traits.temporal"},
+		s.logger,
+	)
+	claims, err := claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System)
+	s.Equal(1, len(claims.Namespaces))
+	s.Equal(RoleReader|RoleWriter|RoleWorker, claims.Namespaces[defaultNamespace])
+}
+
+func (s *defaultClaimMapperSuite) TestTokenWithLiteralDottedPermissionsClaimName() {
+	tokenString, err := s.tokenGenerator.generateTokenWithClaims(RSA, jwt.MapClaims{
+		headerSubject:     testSubject,
+		"traits.temporal": []string{"default:read"},
+		"traits":          map[string]any{"temporal": []string{"default:write"}},
+		"exp":             time.Now().Add(time.Hour).Unix(),
+		"iss":             "test",
+		"aud":             []string{"test-audience"},
+	}, errorTestOptionNoError)
+	s.NoError(err)
+
+	authInfo := &AuthInfo{
+		AddBearer(tokenString),
+		nil,
+		nil,
+		"",
+		"test-audience",
+	}
+	claimMapper := NewDefaultJWTClaimMapper(
+		s.tokenGenerator,
+		&config.Authorization{PermissionsClaimName: "traits.temporal"},
+		s.logger,
+	)
+	claims, err := claimMapper.GetClaims(authInfo)
+	s.NoError(err)
+	s.Equal(testSubject, claims.Subject)
+	s.Equal(RoleUndefined, claims.System)
+	s.Equal(1, len(claims.Namespaces))
+	s.Equal(RoleReader, claims.Namespaces[defaultNamespace])
+}
+
 func (s *defaultClaimMapperSuite) TestWrongAudience() {
 	tokenString, err := s.tokenGenerator.generateRSAToken(testSubject, permissionsAdmin, errorTestOptionNoError)
 	s.NoError(err)
@@ -382,6 +476,11 @@ func (tg *tokenGenerator) generateToken(alg keyAlgorithm, subject string, permis
 	if options&errorTestOptionNoSubject == 0 {
 		claims.Subject = subject
 	}
+
+	return tg.generateTokenWithClaims(alg, claims, options)
+}
+
+func (tg *tokenGenerator) generateTokenWithClaims(alg keyAlgorithm, claims jwt.Claims, options errorTestOptions) (string, error) {
 
 	var token *jwt.Token
 	switch alg {

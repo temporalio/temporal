@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/golang-jwt/jwt/v4"
+	"github.com/jmespath/go-jmespath"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -26,18 +27,24 @@ const (
 
 // Default claim mapper that gives system level admin permission to everybody
 type defaultJWTClaimMapper struct {
-	keyProvider          TokenKeyProvider
-	logger               log.Logger
-	permissionsClaimName string
-	permissionsRegex     *regexp.Regexp
-	matchNamespaceIndex  int
-	matchRoleIndex       int
+	keyProvider           TokenKeyProvider
+	logger                log.Logger
+	permissionsClaimName  string
+	permissionsClaimQuery *jmespath.JMESPath
+	permissionsRegex      *regexp.Regexp
+	matchNamespaceIndex   int
+	matchRoleIndex        int
 }
 
 func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorization, logger log.Logger) ClaimMapper {
 	claimName := cfg.PermissionsClaimName
 	if claimName == "" {
 		claimName = defaultPermissionsClaimName
+	}
+	var permissionsClaimQuery *jmespath.JMESPath
+	query, err := jmespath.Compile(claimName)
+	if err == nil {
+		permissionsClaimQuery = query
 	}
 	var permissionsRegex *regexp.Regexp
 	var namespaceIndex, roleIndex int
@@ -62,12 +69,13 @@ func NewDefaultJWTClaimMapper(provider TokenKeyProvider, cfg *config.Authorizati
 		}
 	}
 	return &defaultJWTClaimMapper{
-		keyProvider:          provider,
-		logger:               logger,
-		permissionsClaimName: claimName,
-		permissionsRegex:     permissionsRegex,
-		matchNamespaceIndex:  namespaceIndex,
-		matchRoleIndex:       roleIndex,
+		keyProvider:           provider,
+		logger:                logger,
+		permissionsClaimName:  claimName,
+		permissionsClaimQuery: permissionsClaimQuery,
+		permissionsRegex:      permissionsRegex,
+		matchNamespaceIndex:   namespaceIndex,
+		matchRoleIndex:        roleIndex,
 	}
 }
 
@@ -99,7 +107,10 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 		return nil, serviceerror.NewPermissionDenied("unexpected value type of \"sub\" claim", "")
 	}
 	claims.Subject = subject
-	permissions, ok := jwtClaims[a.permissionsClaimName].([]any)
+	permissions, ok, err := a.extractPermissionsClaim(jwtClaims)
+	if err != nil {
+		return nil, err
+	}
 	if ok {
 		err := a.extractPermissions(permissions, &claims)
 		if err != nil {
@@ -107,6 +118,29 @@ func (a *defaultJWTClaimMapper) GetClaims(authInfo *AuthInfo) (*Claims, error) {
 		}
 	}
 	return &claims, nil
+}
+
+func (a *defaultJWTClaimMapper) extractPermissionsClaim(jwtClaims jwt.MapClaims) ([]any, bool, error) {
+	if permissions, ok := jwtClaims[a.permissionsClaimName].([]any); ok {
+		return permissions, true, nil
+	}
+
+	if a.permissionsClaimQuery == nil {
+		return nil, false, nil
+	}
+
+	value, err := a.permissionsClaimQuery.Search(map[string]any(jwtClaims))
+	if err != nil {
+		return nil, false, serviceerror.NewPermissionDenied(
+			fmt.Sprintf("invalid permissions claim query: %s", a.permissionsClaimName), "")
+	}
+
+	permissions, ok := value.([]any)
+	if !ok {
+		a.logger.Warn(fmt.Sprintf("permissions claim query did not return an array: %s", a.permissionsClaimName))
+		return nil, false, nil
+	}
+	return permissions, true, nil
 }
 
 func (a *defaultJWTClaimMapper) extractPermissions(permissions []any, claims *Claims) error {
