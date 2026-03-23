@@ -166,6 +166,8 @@ type Config struct {
 
 	// Enable creation of new schedules on CHASM (V2) engine
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
+	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -341,6 +343,7 @@ func NewConfig(
 
 		EnableSchedules:              dynamicconfig.FrontendEnableSchedules.Get(dc),
 		EnableCHASMSchedulerCreation: dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		EnableCHASMSchedulerRouting:  dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),

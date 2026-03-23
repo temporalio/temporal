@@ -595,12 +595,10 @@ func TestTransitionTerminated(t *testing.T) {
 	counterTerminate.EXPECT().Record(int64(1)).Times(1)
 	metricsHandler.EXPECT().Counter(metrics.ActivityTerminate.Name()).Return(counterTerminate)
 
-	req := &activitypb.TerminateActivityExecutionRequest{
-		FrontendRequest: &workflowservice.TerminateActivityExecutionRequest{
-			Reason:    "Test Termination",
-			Identity:  "terminator",
-			RequestId: "test-request-id",
-		},
+	req := chasm.TerminateComponentRequest{
+		Reason:    "Test Termination",
+		Identity:  "terminator",
+		RequestID: "test-request-id",
 	}
 
 	err := TransitionTerminated.Apply(activity, ctx, terminateEvent{
