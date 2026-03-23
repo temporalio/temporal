@@ -38,6 +38,7 @@
 
 /proto/internal/temporal/server/api/deployment/ @temporalio/oss-matching
 /proto/internal/temporal/server/api/matchingservice/ @temporalio/oss-matching
+/proto/internal/temporal/server/api/taskqueue/ @temporalio/oss-matching
 
 /proto/internal/temporal/server/api/archiver/ @temporalio/oss-foundations
 
