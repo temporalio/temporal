@@ -163,7 +163,6 @@ func (o *Operation) handleCancellation(
 	ctx chasm.MutableContext,
 	cancellation *Cancellation,
 ) error {
-	cancellation.RequestedTime = timestamppb.New(ctx.Now(o))
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
 
 	// Once started, the handler returns a token that can be used in the cancelation request.
