@@ -41,7 +41,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxServiceNameLength:               func(string) int { return 10 },
 		MaxOperationNameLength:             func(string) int { return 10 },
 		PayloadSizeLimit:                   func(string) int { return 20 },
-		PayloadSizeLimitWarn:                func(string) int { return 10 },
+		PayloadSizeLimitWarn:               func(string) int { return 10 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
