@@ -1329,6 +1329,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
 	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry)
 	args.VersionState.ComputeConfig = computeConfig
+	args.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED
 	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err

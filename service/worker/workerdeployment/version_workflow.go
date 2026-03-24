@@ -606,6 +606,12 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 
 	d.VersionState.TaskQueueFamilies[args.TaskQueueName].TaskQueues[int32(args.TaskQueueType)] = &deploymentspb.TaskQueueVersionData{}
 
+	// Transition from CREATED to INACTIVE once a poller registers a task queue.
+	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
+		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+		// deployment workflow updates the status in version summary to INACTIVE
+	}
+
 	if withRevisionNumbers && args.GetRoutingConfig() != nil {
 		// Still need to check RoutingConfig not being nil because of edge cases during enabling dynamic config.
 		// i.e. the deployment workflow might run old version and not send the routing config.

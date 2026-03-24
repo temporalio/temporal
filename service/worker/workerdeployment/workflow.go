@@ -572,7 +572,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	d.State.Versions[args.GetVersion()] = &deploymentspb.WorkerDeploymentVersionSummary{
 		Version:         args.GetVersion(),
 		CreateTime:      timestamppb.New(workflow.Now(ctx)),
-		Status:          enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		Status:          enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED,
 		CreateRequestId: args.GetRequestId(),
 	}
 	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
@@ -632,9 +632,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		d.lock.Unlock()
 	}()
 
+	version := worker_versioning.WorkerDeploymentVersionToStringV31(args.Version)
+
 	// Add version to local state of the workflow, if not already present.
 	err = d.addVersionToWorkerDeployment(ctx, &deploymentspb.AddVersionUpdateArgs{
-		Version:    worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
+		Version:    version,
 		CreateTime: timestamppb.New(workflow.Now(ctx)),
 	})
 	if err != nil {
@@ -651,7 +653,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		TaskQueueName: args.TaskQueueName,
 		TaskQueueType: args.TaskQueueType,
 		MaxTaskQueues: args.MaxTaskQueues,
-		Version:       worker_versioning.WorkerDeploymentVersionToStringV31(args.Version),
+		Version:       version,
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
@@ -665,6 +667,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 			}
 		}
 		return err
+	}
+
+	if d.State.Versions[version].Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
+		// now that a poller is seen, we should update the status to INACTIVE
+		d.State.Versions[version].Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	}
 
 	// update memo

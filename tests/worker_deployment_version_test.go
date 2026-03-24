@@ -3386,9 +3386,10 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		a.Equal(tv.DeploymentVersionString(), descResp.GetWorkerDeploymentVersionInfo().GetVersion())
 		a.NotNil(descResp.GetWorkerDeploymentVersionInfo().GetCreateTime())
 		a.True(proto.Equal(computeConfig, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Verify the version shows up in deployment's version summaries
+	// Verify the version shows up in deployment's version summaries with CREATED status
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
@@ -3398,6 +3399,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		a.NoError(err)
 		a.Equal(1, len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()))
 		a.Equal(tv.DeploymentVersionString(), descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
@@ -3429,10 +3431,21 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 	})
 	s.NoError(err)
 
+	// Verify the version starts with CREATED status
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+			Namespace: s.Namespace().String(),
+			Version:   tv.DeploymentVersionString(),
+		})
+		a.NoError(err)
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
+	}, 10*time.Second, 500*time.Millisecond)
+
 	// Poll from the version to register a task queue
 	go s.pollFromDeployment(ctx, tv)
 
-	// Verify the task queue shows up in the version info
+	// Verify the task queue shows up and status transitions to INACTIVE
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
 		descResp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
@@ -3451,7 +3464,21 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_ThenPoll_Task
 			}
 		}
 		a.True(found, "expected task queue %q in version info, got %v", tv.TaskQueue().GetName(), tqInfos)
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descResp.GetWorkerDeploymentVersionInfo().GetStatus())
 	}, 30*time.Second, 500*time.Millisecond)
+
+	// Verify the version shows up in deployment's version summaries with INACTIVE status
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descDeployResp, err := s.FrontendClient().DescribeWorkerDeployment(ctx, &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      s.Namespace().String(),
+			DeploymentName: deploymentName,
+		})
+		a.NoError(err)
+		a.Equal(1, len(descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()))
+		a.Equal(tv.DeploymentVersionString(), descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetVersion())
+		a.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, descDeployResp.GetWorkerDeploymentInfo().GetVersionSummaries()[0].GetStatus())
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Idempotent() {
