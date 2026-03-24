@@ -563,7 +563,7 @@ func (s *TaskQueueStatsSuite) validateDescribeWorkerDeploymentVersion(
 
 		req.ReportTaskQueueStats = true
 		resp, err := s.FrontendClient().DescribeWorkerDeploymentVersion(ctx, req)
-		s.NoError(err)
+		a.NoError(err)
 		a.Len(resp.VersionTaskQueues, 2, "should be 1 task queue for Workflows and 1 for Activities")
 
 		for _, info := range resp.VersionTaskQueues {

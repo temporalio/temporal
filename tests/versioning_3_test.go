@@ -1251,7 +1251,7 @@ func (s *Versioning3Suite) testDoubleTransition(unversionedSrc bool, signal bool
 				},
 			},
 		)
-		s.NoError(err)
+		require.NoError(t, err)
 		a := assert.New(t)
 		a.Equal(tv2.DeploymentVersionTransition(), dwf.WorkflowExecutionInfo.GetVersioningInfo().GetVersionTransition())
 	}, 10*time.Second, 100*time.Millisecond)
@@ -2930,6 +2930,7 @@ func (s *Versioning3Suite) validateBacklogCount(
 	var err error
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
 		resp, err = s.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
 			Namespace:              s.Namespace().String(),
 			TaskQueue:              tv.TaskQueue(),
@@ -2940,13 +2941,12 @@ func (s *Versioning3Suite) validateBacklogCount(
 			ReportTaskReachability: false,
 			ReportStats:            true,
 		})
-		s.NoError(err)
-		s.NotNil(resp)
-		s.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
+		a.NoError(err)
+		a.NotNil(resp)
+		a.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
 		versionInfo := resp.GetVersionsInfo()[""]
 		typeInfo, ok := versionInfo.GetTypesInfo()[int32(tqType)]
-		s.True(ok)
-		a := require.New(t)
+		a.True(ok)
 		a.Equal(expectedCount, typeInfo.Stats.GetApproximateBacklogCount())
 	}, 6*time.Second, 100*time.Millisecond)
 }
