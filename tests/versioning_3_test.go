@@ -2943,8 +2943,8 @@ func (s *Versioning3Suite) validateBacklogCount(
 		})
 		a.NoError(err)
 		a.NotNil(resp)
-		a.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue")
-		versionInfo := resp.GetVersionsInfo()[""]
+		a.Equal(1, len(resp.GetVersionsInfo()), "should be 1 because only default/unversioned queue") //nolint:staticcheck // SA1019: old worker versioning
+		versionInfo := resp.GetVersionsInfo()[""]                                                     //nolint:staticcheck // SA1019: old worker versioning
 		typeInfo, ok := versionInfo.GetTypesInfo()[int32(tqType)]
 		a.True(ok)
 		a.Equal(expectedCount, typeInfo.Stats.GetApproximateBacklogCount())
