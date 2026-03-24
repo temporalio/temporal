@@ -3954,7 +3954,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippedEvent(
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
 	executionInfo := ms.GetExecutionInfo()
-	newDetails := buildTimeSkippedDetails(executionInfo.TimeSkippingInfo.TimeSkippedDetails, event)
+	newDetails := buildTimeSkippedDetails(event)
 	executionInfo.TimeSkippingInfo.TimeSkippedDetails = append(
 		executionInfo.TimeSkippingInfo.TimeSkippedDetails,
 		newDetails,
@@ -3965,39 +3965,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.C
 	return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
 }
 
-// buildTimeSkippedDetails constructs a TimeSkippedDetails entry for a single skip event.
-//
-// For the first skip the event time equals real time (the time-skipping offset is 0 when the
-// event is created). For subsequent skips the virtual time at the moment of the skip equals the
-// TargetVirtualTime of the most recent preceding entry; the event time is already the
-// virtual time and must NOT be used to derive virtualTimeWhenSkipped in that case.
-//
-// TargetVirtualTime = VirtualTimeWhenSkipped + DurationToSkip
 func buildTimeSkippedDetails(
-	existingDetails []*persistencespb.TimeSkippedDetails,
 	event *historypb.HistoryEvent,
 ) *persistencespb.TimeSkippedDetails {
 	attrs := event.GetWorkflowExecutionTimeSkippedEventAttributes()
-
-	// Derive the virtual time at which this skip starts.
-	// First skip: event time == real time (offset is 0 when the event is written).
-	// Subsequent skips: virtual time == previous skip's target virtual time.
-	var virtualTimeWhenSkipped time.Time
-	if len(existingDetails) == 0 {
-		virtualTimeWhenSkipped = event.GetEventTime().AsTime()
-	} else {
-		virtualTimeWhenSkipped = existingDetails[len(existingDetails)-1].GetTargetVirtualTime().AsTime()
-	}
-	skipDuration := attrs.GetToTime().AsTime().Sub(virtualTimeWhenSkipped)
-
+	skipDuration := attrs.GetToTime().AsTime().Sub(event.GetEventTime().AsTime())
 	return &persistencespb.TimeSkippedDetails{
-		RealTimeWhenSkipped:    event.GetEventTime(),
-		VirtualTimeWhenSkipped: timestamppb.New(virtualTimeWhenSkipped),
-		DurationToSkip:         clock.TimeSkippedDurationToTimestamp(skipDuration),
-		TargetVirtualTime:      attrs.GetToTime(),
+		SkippingTime:   event.GetEventTime(),
+		DurationToSkip: clock.TimeSkippedDurationToTimestamp(skipDuration),
+		ToTime:         attrs.GetToTime(),
 	}
 }
-
 
 // VirtualTimeNow returns the current effective time for this workflow.
 // For workflows with time skipping enabled, this returns the virtual (advanced) time.

@@ -7,10 +7,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TimeSkippingTimeSource wraps a real TimeSource and adds a virtual time offset.
-// When time skipping is enabled for a workflow, the workflow's "now" is real time + offset.
-// The offset accumulates across skip events and is reconstructed from persisted
-// TimeSkippedDetails on workflow reload — no separate field needs to be persisted.
+// TimeSkippingTimeSource is a TimeSource decorator for workflows with time skipping enabled.
+//
+// Virtual time = real time + offset, where offset is the total duration skipped so far.
+// The offset starts at zero and grows each time a WorkflowExecutionTimeSkipped event is applied
+// (via Advance). It is never stored as its own field — on workflow reload it is re-derived from
+// the persisted TimeSkippedDetails by summing all DurationToSkip values.
+//
+// Timer methods (AfterFunc, NewTimer) are intentionally not virtualized: OS-level timers always
+// fire on real wall clock time. Only Now and Since reflect virtual time.
 type TimeSkippingTimeSource struct {
 	base   TimeSource
 	offset time.Duration
@@ -18,8 +23,8 @@ type TimeSkippingTimeSource struct {
 
 var _ TimeSource = (*TimeSkippingTimeSource)(nil)
 
-// newTimeSkippingTimeSource creates a TimeSkippingTimeSource whose offset is the sum of all
-// previously skipped durations. Pass nil or empty details when starting a new workflow.
+// NewTimeSkippingTimeSource creates a TimeSkippingTimeSource whose initial offset is the sum of
+// all previously skipped durations. Pass nil or empty details for a brand-new workflow (offset 0).
 func NewTimeSkippingTimeSource(base TimeSource, details []*persistencespb.TimeSkippedDetails) *TimeSkippingTimeSource {
 	return &TimeSkippingTimeSource{
 		base:   base,
@@ -37,22 +42,29 @@ func (ts *TimeSkippingTimeSource) Since(t time.Time) time.Duration {
 	return ts.Now().Sub(t)
 }
 
-// AfterFunc delegates to the base time source. OS-level timers run on real wall clock.
+// AfterFunc schedules f to run after duration d on the real wall clock.
+// TODO(@feiyang): explore if this method needs to respect virtual time — currently it delegates
+// to the base clock so f fires after d of wall time, not virtual time.
 func (ts *TimeSkippingTimeSource) AfterFunc(d time.Duration, f func()) Timer {
 	return ts.base.AfterFunc(d, f)
 }
 
-// NewTimer delegates to the base time source. OS-level timers run on real wall clock.
+// NewTimer creates a timer that fires after duration d on the real wall clock.
+// TODO(@feiyang): explore if this method needs to respect virtual time — currently it delegates
+// to the base clock so the timer fires after d of wall time, not virtual time.
 func (ts *TimeSkippingTimeSource) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
 	return ts.base.NewTimer(d)
 }
 
-// advance increases the virtual time offset by d.
+// Advance increases the virtual time offset by d.
+// Called each time a WorkflowExecutionTimeSkipped event is applied to keep the
+// in-memory clock in sync without rebuilding it from the full persisted history.
 func (ts *TimeSkippingTimeSource) Advance(d time.Duration) {
 	ts.offset += d
 }
 
-// ComputeTotalSkippedOffset sums all DurationToSkip values from persisted TimeSkippedDetails.
+// ComputeTotalSkippedOffset sums the DurationToSkip of each persisted TimeSkippedDetails entry.
+// This reconstructs the total virtual time offset after a workflow is loaded from the database.
 func ComputeTotalSkippedOffset(details []*persistencespb.TimeSkippedDetails) time.Duration {
 	var total time.Duration
 	for _, d := range details {
@@ -61,9 +73,10 @@ func ComputeTotalSkippedOffset(details []*persistencespb.TimeSkippedDetails) tim
 	return total
 }
 
-// TimeSkippedDurationToTimestamp encodes a time.Duration into a *timestamppb.Timestamp
-// by storing seconds and nanoseconds directly in the Timestamp fields.
-// This is a convention for the DurationToSkip field in TimeSkippedDetails.
+// TimeSkippedDurationToTimestamp encodes a time.Duration into a *timestamppb.Timestamp by storing
+// seconds and nanoseconds in the timestamp's integer fields. This is not a real point in time —
+// it is a convention for the DurationToSkip field in TimeSkippedDetails that lets a duration be
+// stored in a proto message that has no native duration type.
 func TimeSkippedDurationToTimestamp(d time.Duration) *timestamppb.Timestamp {
 	return &timestamppb.Timestamp{
 		Seconds: int64(d / time.Second),

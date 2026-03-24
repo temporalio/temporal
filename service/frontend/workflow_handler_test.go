@@ -3422,6 +3422,279 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 	s.NoError(err)
 }
 
+// TestExecuteMultiOperation_TimeSkipping_DCEnabled verifies that when the DC gate is on,
+// a Start-with-time-skipping inside ExecuteMultiOperation is accepted and the config is
+// forwarded to the history client inside the StartWorkflow request.
+func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockHistoryClient.EXPECT().ExecuteMultiOperation(gomock.Any(), mock.MatchedBy(func(req *historyservice.ExecuteMultiOperationRequest) bool {
+		startOp := req.GetOperations()[0].GetStartWorkflow()
+		return startOp.GetStartRequest().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.ExecuteMultiOperationResponse{
+		Responses: []*historyservice.ExecuteMultiOperationResponse_Response{
+			{
+				Response: &historyservice.ExecuteMultiOperationResponse_Response_StartWorkflow{
+					StartWorkflow: &historyservice.StartWorkflowExecutionResponse{},
+				},
+			},
+			{
+				Response: &historyservice.ExecuteMultiOperationResponse_Response_UpdateWorkflow{
+					UpdateWorkflow: &historyservice.UpdateWorkflowExecutionResponse{},
+				},
+			},
+		},
+	}, nil)
+
+	_, err := wh.ExecuteMultiOperation(context.Background(), &workflowservice.ExecuteMultiOperationRequest{
+		Namespace: s.testNamespace.String(),
+		Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+			{
+				Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+					StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+						Namespace:          s.testNamespace.String(),
+						WorkflowId:         "WORKFLOW_ID",
+						WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+						TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+					},
+				},
+			},
+			{
+				Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+						Namespace:         s.testNamespace.String(),
+						WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
+						Request: &updatepb.Request{
+							Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
+							Input: &updatepb.Input{Name: "NAME"},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+// TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled verifies that
+// a batch UpdateWorkflowOptions operation with time-skipping enabled is rejected when the DC gate is off.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	// CountWorkflowExecutions and the direct namespace lookup both call GetNamespaceID.
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	_, err := wh.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.testNamespace.String(),
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+		VisibilityQuery: "WorkflowType='test'",
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+				Identity: "test-identity",
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+					TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			},
+		},
+	})
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+}
+
+// TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCEnabled verifies that
+// when the gate is on, the batch operation proceeds and the config is forwarded to history.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.StartWorkflowExecutionRequest) bool {
+		var input batchspb.BatchOperationInput
+		_ = payloads.Decode(req.GetStartRequest().GetInput(), &input)
+		op := input.GetRequest().GetOperation().(*workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation)
+		return op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.StartWorkflowExecutionResponse{}, nil)
+
+	_, err := wh.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.testNamespace.String(),
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+		VisibilityQuery: "WorkflowType='test'",
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+			UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+				Identity: "test-identity",
+				WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+					TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+// TestStartBatchOperation_ResetOperation_PostReset_TimeSkipping_DCDisabled verifies that a batch
+// reset with a post-reset UpdateWorkflowOptions that enables time-skipping is rejected when the DC
+// gate is off.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_PostReset_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+	_, err := wh.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.testNamespace.String(),
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+		VisibilityQuery: "WorkflowType='test'",
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Identity: "test-identity",
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{WorkflowTaskId: 10},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{
+					{
+						Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+							UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+								WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+									TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+								},
+								UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+}
+
+// TestStartBatchOperation_ResetOperation_PostReset_TimeSkipping_DCEnabled verifies that when the
+// gate is on, a batch reset with a time-skipping post-reset operation proceeds and the config is
+// forwarded to history inside the encoded batch input.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_PostReset_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.StartWorkflowExecutionRequest) bool {
+		var input batchspb.BatchOperationInput
+		_ = payloads.Decode(req.GetStartRequest().GetInput(), &input)
+		postOps := input.GetRequest().GetOperation().(*workflowservice.StartBatchOperationRequest_ResetOperation).ResetOperation.GetPostResetOperations()
+		return len(postOps) == 1 &&
+			postOps[0].GetUpdateWorkflowOptions().GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.StartWorkflowExecutionResponse{}, nil)
+
+	_, err := wh.StartBatchOperation(context.Background(), &workflowservice.StartBatchOperationRequest{
+		Namespace:       s.testNamespace.String(),
+		JobId:           uuid.NewString(),
+		Reason:          "test",
+		VisibilityQuery: "WorkflowType='test'",
+		Operation: &workflowservice.StartBatchOperationRequest_ResetOperation{
+			ResetOperation: &batchpb.BatchOperationReset{
+				Identity: "test-identity",
+				Options: &commonpb.ResetOptions{
+					Target: &commonpb.ResetOptions_WorkflowTaskId{WorkflowTaskId: 10},
+				},
+				PostResetOperations: []*workflowpb.PostResetOperation{
+					{
+						Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+							UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+								WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+									TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+								},
+								UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
+// TestResetWorkflowExecution_PostReset_TimeSkipping_DCDisabled verifies that a reset request with a
+// post-reset UpdateWorkflowOptions that enables time-skipping is rejected when the DC gate is off.
+// The validation fires before the namespace lookup.
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostReset_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+
+	_, err := wh.ResetWorkflowExecution(context.Background(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.testNamespace.String(),
+		RequestId:                 uuid.NewString(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: uuid.NewString()},
+		WorkflowTaskFinishEventId: 5,
+		PostResetOperations: []*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+							TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+					},
+				},
+			},
+		},
+	})
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+}
+
+// TestResetWorkflowExecution_PostReset_TimeSkipping_DCEnabled verifies that when the gate is on,
+// a reset with a time-skipping post-reset operation proceeds and the config reaches history.
+func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_PostReset_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	s.mockHistoryClient.EXPECT().ResetWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.ResetWorkflowExecutionRequest) bool {
+		postOps := req.GetResetRequest().GetPostResetOperations()
+		return len(postOps) == 1 &&
+			postOps[0].GetUpdateWorkflowOptions().GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.ResetWorkflowExecutionResponse{RunId: uuid.NewString()}, nil)
+
+	_, err := wh.ResetWorkflowExecution(context.Background(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.testNamespace.String(),
+		RequestId:                 uuid.NewString(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: uuid.NewString()},
+		WorkflowTaskFinishEventId: 5,
+		PostResetOperations: []*workflowpb.PostResetOperation{
+			{
+				Variant: &workflowpb.PostResetOperation_UpdateWorkflowOptions_{
+					UpdateWorkflowOptions: &workflowpb.PostResetOperation_UpdateWorkflowOptions{
+						WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+							TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+						},
+						UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+					},
+				},
+			},
+		},
+	})
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }

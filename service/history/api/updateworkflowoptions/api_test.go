@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -161,6 +162,34 @@ func TestMergeOptions_FooMask(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestMergeOptions_TimeSkippingConfigMask(t *testing.T) {
+	mask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
+
+	t.Run("enable time skipping", func(t *testing.T) {
+		current := &workflowpb.WorkflowExecutionOptions{}
+		update := &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true}}
+		merged, err := mergeWorkflowExecutionOptions(current, update, mask)
+		require.NoError(t, err)
+		assert.True(t, merged.GetTimeSkippingConfig().GetEnabled())
+	})
+
+	t.Run("disable time skipping", func(t *testing.T) {
+		current := &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true}}
+		update := &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: false}}
+		merged, err := mergeWorkflowExecutionOptions(current, update, mask)
+		require.NoError(t, err)
+		assert.False(t, merged.GetTimeSkippingConfig().GetEnabled())
+	})
+
+	t.Run("nil update leaves current unchanged", func(t *testing.T) {
+		current := &workflowpb.WorkflowExecutionOptions{}
+		update := &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: nil}
+		merged, err := mergeWorkflowExecutionOptions(current, update, mask)
+		require.NoError(t, err)
+		assert.Nil(t, merged.GetTimeSkippingConfig())
+	})
+}
+
 type (
 	// updateWorkflowOptionsSuite contains tests for the UpdateWorkflowOptions API.
 	updateWorkflowOptionsSuite struct {
@@ -229,6 +258,55 @@ func (s *updateWorkflowOptionsSuite) SetupTest() {
 
 func (s *updateWorkflowOptionsSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *updateWorkflowOptionsSuite) TestInvoke_TimeSkipping() {
+	expectedOptions := &workflowpb.WorkflowExecutionOptions{
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+	}
+	s.currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
+	// AddWorkflowExecutionOptionsUpdatedEvent is called with the time-skipping config;
+	// use gomock.Any() for unrelated args (versioning override is preserved from mutable state).
+	s.currentMutableState.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(
+		gomock.Any(), // versioning override — preserved from mutable state, not under test
+		gomock.Any(), // unsetOverride
+		gomock.Any(), // deployment
+		gomock.Any(), // deployment version
+		gomock.Any(), // deployment series
+		"test-identity",
+		gomock.Any(), // priority — not in mask
+		&workflowpb.TimeSkippingConfig{Enabled: true},
+	).Return(&historypb.HistoryEvent{}, nil)
+	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.shardContext).Return(nil)
+
+	updateReq := &historyservice.UpdateWorkflowExecutionOptionsRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		UpdateRequest: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace: tests.Namespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			},
+			WorkflowExecutionOptions: expectedOptions,
+			UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			Identity:                 "test-identity",
+		},
+	}
+
+	resp, err := Invoke(
+		context.Background(),
+		updateReq,
+		s.shardContext,
+		s.workflowConsistencyChecker,
+		s.mockMatchingClient,
+		noopVersionMembershipCache{},
+		noopReactivationSignalCache{},
+		noopReactivationSignaler,
+	)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.True(resp.GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled())
 }
 
 func (s *updateWorkflowOptionsSuite) TestInvoke_Success() {
