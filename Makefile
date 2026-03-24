@@ -697,6 +697,10 @@ start-xdc-cluster-b: temporal-server
 start-xdc-cluster-c: temporal-server
 	./temporal-server --config-file config/development-cluster-c.yaml --allow-no-auth start
 
+start-jwt: temporal-server
+	@./config/jwt/setup-keys.sh
+	./temporal-server --config-file config/development-jwt.yaml start --service frontend --service internal-frontend --service history --service matching --service worker
+
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
