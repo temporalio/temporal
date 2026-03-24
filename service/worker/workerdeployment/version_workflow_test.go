@@ -1079,9 +1079,9 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 				// Capture state after revive
 				queryResp := &deploymentspb.QueryDescribeVersionResponse{}
 				val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-				s.NoError(err)
+				s.Require().NoError(err)
 				err = val.Get(queryResp)
-				s.NoError(err)
+				s.Require().NoError(err)
 				stateAfterRevive := queryResp.VersionState
 
 				// Verify that status is reset to INACTIVE
