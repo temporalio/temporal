@@ -124,16 +124,19 @@ func setImageTags() error {
 		return fmt.Errorf("failed to generate valid Docker tag from branch name")
 	}
 
-	// Generate short SHA tag (first 7 characters with "sha-" prefix)
+	// Generate SHA tags. Keep the short tag for compatibility and add the full
+	// SHA tag to avoid collisions for automation.
 	shortSha := sha
 	if len(shortSha) > 7 {
 		shortSha = shortSha[:7]
 	}
 	shaTag := fmt.Sprintf("sha-%s", shortSha)
+	fullShaTag := fmt.Sprintf("sha-%s", sha)
 
 	fmt.Printf("Original: %s\n", ref)
 	fmt.Printf("Sanitized: %s\n", safeTag)
-	fmt.Printf("SHA tag: %s\n", shaTag)
+	fmt.Printf("Short SHA tag: %s\n", shaTag)
+	fmt.Printf("Full SHA tag: %s\n", fullShaTag)
 
 	// Set outputs for GitHub Actions
 	if err := setOutput("tag", safeTag); err != nil {
@@ -141,6 +144,9 @@ func setImageTags() error {
 	}
 	if err := setOutput("sha", shaTag); err != nil {
 		return fmt.Errorf("failed to set sha output: %w", err)
+	}
+	if err := setOutput("sha-full", fullShaTag); err != nil {
+		return fmt.Errorf("failed to set sha-full output: %w", err)
 	}
 	if err := setOutput("git-sha", sha); err != nil {
 		return fmt.Errorf("failed to set git-sha output: %w", err)
