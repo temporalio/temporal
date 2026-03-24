@@ -416,6 +416,9 @@ func (s *cachingRedirectorSuite) TestStaleTTL() {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		cli, err = r.clientForShardID(shardID)
 		assert.NoError(t, err)
-		assert.Equal(t, mockClient2, cli)
+		// Use == for pointer identity (not reflect.DeepEqual) since mock types have
+		// cyclic recorder references that make DeepEqual incorrectly return true for
+		// distinct mock instances.
+		assert.True(t, cli == mockClient2, "expected mockClient2, got %v", cli)
 	}, 4*staleTTL, 10*time.Millisecond)
 }
