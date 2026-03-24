@@ -14,7 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -143,7 +143,7 @@ type (
 		tracer                     trace.Tracer
 		taskCategoryRegistry       tasks.TaskCategoryRegistry
 		commandHandlerRegistry     *workflow.CommandHandlerRegistry
-		chasmWorkflowRegistry      *workflowregistry.Registry
+		chasmWorkflowRegistry      *chasmworkflow.Registry
 		workflowCache              wcache.Cache
 		replicationProgressCache   replication.ProgressCache
 		syncStateRetriever         replication.SyncStateRetriever
@@ -178,7 +178,7 @@ func NewEngineWithShardContext(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	dlqWriter replication.DLQWriter,
 	commandHandlerRegistry *workflow.CommandHandlerRegistry,
-	chasmWorkflowRegistry *workflowregistry.Registry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
