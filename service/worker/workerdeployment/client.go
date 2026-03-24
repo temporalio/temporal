@@ -1679,6 +1679,6 @@ func (d *ClientImpl) makeVersionWorkflowArgs(
 	return &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: namespaceEntry.Name().String(),
 		NamespaceId:   namespaceEntry.ID().String(),
-		VersionState:  makeNewVersionState(deploymentName, buildID, d.getSyncBatchSize()),
+		VersionState:  makeNewVersionState(deploymentName, buildID, time.Now(), d.getSyncBatchSize()),
 	}
 }

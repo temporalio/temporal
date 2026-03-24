@@ -428,13 +428,13 @@ func buildSearchAttributes() *commonpb.SearchAttributes {
 	return sa
 }
 
-func makeNewVersionState(deploymentName, buildID string, syncBatchSize int32) *deploymentspb.VersionLocalState {
+func makeNewVersionState(deploymentName, buildID string, createTime time.Time, syncBatchSize int32) *deploymentspb.VersionLocalState {
 	return &deploymentspb.VersionLocalState{
 		Version: &deploymentspb.WorkerDeploymentVersion{
 			DeploymentName: deploymentName,
 			BuildId:        buildID,
 		},
-		CreateTime:        timestamppb.Now(),
+		CreateTime:        timestamppb.New(createTime),
 		RoutingUpdateTime: nil,
 		CurrentSinceTime:  nil,                                 // not current
 		RampingSinceTime:  nil,                                 // not ramping

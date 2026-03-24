@@ -273,8 +273,8 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
 			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0)))
+				// And there is a force CaN or a propagated state change or history got too large
+				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
 	})
 	if err != nil {
 		return err
@@ -587,7 +587,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 			}
 		} else {
 			// In case it was marked as deleted we make it undeleted
-			d.reviveDeleted(withRevisionNumbers)
+			d.reviveDeleted(ctx, withRevisionNumbers)
 		}
 	}
 
@@ -619,9 +619,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	return err
 }
 
-func (d *VersionWorkflowRunner) reviveDeleted(withRevisionNumbers bool) {
+func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context, withRevisionNumbers bool) {
 	// Resetting state to get rid of the info from the past life.
-	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, d.VersionState.SyncBatchSize)
+	state := makeNewVersionState(d.VersionState.Version.DeploymentName, d.VersionState.Version.BuildId, workflow.Now(ctx), d.VersionState.SyncBatchSize)
 
 	state.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 	if withRevisionNumbers {
