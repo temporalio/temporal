@@ -3,6 +3,8 @@ package nexusoperation
 import (
 	"context"
 
+	"github.com/google/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -10,6 +12,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -233,6 +236,12 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		return nil, err
 	}
 
+	if req.GetRequestId() == "" {
+		// Since this mutates the request, we clone it first so that any retries use the original request.
+		req = common.CloneProto(req)
+		req.RequestId = uuid.NewString()
+	}
+
 	if err := validateRequestCancelNexusOperationExecutionRequest(req, h.config); err != nil {
 		return nil, err
 	}
@@ -259,6 +268,12 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
+	}
+
+	if req.GetRequestId() == "" {
+		// Since this mutates the request, we clone it first so that any retries use the original request.
+		req = common.CloneProto(req)
+		req.RequestId = uuid.NewString()
 	}
 
 	if err := validateTerminateNexusOperationExecutionRequest(req, h.config); err != nil {
