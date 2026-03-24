@@ -9,6 +9,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/payload"
 	"google.golang.org/protobuf/proto"
 )
@@ -18,13 +19,13 @@ type VisibilityManager interface {
 		context.Context,
 		reflect.Type,
 		*ListExecutionsRequest,
-	) (*ListExecutionsResponse[*commonpb.Payload], error)
+	) (*visibilityservice.ListChasmExecutionsResponse, error)
 
 	CountExecutions(
 		context.Context,
 		reflect.Type,
 		*CountExecutionsRequest,
-	) (*CountExecutionsResponse, error)
+	) (*visibilityservice.CountChasmExecutionsResponse, error)
 }
 
 type ExecutionInfo[M proto.Message] struct {
@@ -89,28 +90,32 @@ func ListExecutions[C Component, M proto.Message](
 		return nil, err
 	}
 
-	// Convert response, unmarshaling ChasmMemo to type M
+	// Convert response: decode ChasmSearchAttributes and ChasmMemo to type M
 	executions := make([]*ExecutionInfo[M], len(response.Executions))
 	for i, execution := range response.Executions {
+		chasmSAs, err := NewSearchAttributesMapFromProto(execution.ChasmSearchAttributes)
+		if err != nil {
+			return nil, err
+		}
+
 		chasmMemoInterface := reflect.New(reflect.TypeFor[M]().Elem()).Interface()
 		chasmMemo, ok := chasmMemoInterface.(M)
 		if !ok {
 			return nil, serviceerror.NewInternalf("failed to cast chasm memo to type %s", reflect.TypeFor[M]().String())
 		}
-		err := payload.Decode(execution.ChasmMemo, chasmMemo)
-		if err != nil {
+		if err := payload.Decode(execution.ChasmMemo, chasmMemo); err != nil {
 			return nil, serviceerror.NewInternalf("failed to decode chasm memo: %v", err)
 		}
 		executions[i] = &ExecutionInfo[M]{
-			BusinessID:             execution.BusinessID,
-			RunID:                  execution.RunID,
-			StartTime:              execution.StartTime,
-			CloseTime:              execution.CloseTime,
+			BusinessID:             execution.BusinessId,
+			RunID:                  execution.RunId,
+			StartTime:              execution.StartTime.AsTime(),
+			CloseTime:              execution.CloseTime.AsTime(),
 			HistoryLength:          execution.HistoryLength,
 			HistorySizeBytes:       execution.HistorySizeBytes,
 			StateTransitionCount:   execution.StateTransitionCount,
-			ChasmSearchAttributes:  execution.ChasmSearchAttributes,
-			CustomSearchAttributes: execution.CustomSearchAttributes,
+			ChasmSearchAttributes:  chasmSAs,
+			CustomSearchAttributes: execution.CustomSearchAttributes.GetIndexedFields(),
 			Memo:                   execution.Memo,
 			ChasmMemo:              chasmMemo,
 		}
@@ -135,7 +140,22 @@ func CountExecutions[C Component](
 	request *CountExecutionsRequest,
 ) (*CountExecutionsResponse, error) {
 	archetypeType := reflect.TypeFor[C]()
-	return visibilityManagerFromContext(ctx).CountExecutions(ctx, archetypeType, request)
+	visResponse, err := visibilityManagerFromContext(ctx).CountExecutions(ctx, archetypeType, request)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CountExecutionsResponse{
+		Count:  visResponse.Count,
+		Groups: make([]Group, len(visResponse.Groups)),
+	}
+	for k, group := range visResponse.Groups {
+		response.Groups[k] = Group{
+			Values: group.GroupValues,
+			Count:  group.Count,
+		}
+	}
+	return response, nil
 }
 
 type visibilityManagerCtxKeyType string

@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -34,10 +35,17 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *ListWorkflowExecutionsRequestV2) (*ListWorkflowExecutionsResponse, error)
-		ListChasmExecutions(ctx context.Context, request *ListChasmExecutionsRequest) (*chasm.ListExecutionsResponse[*commonpb.Payload], error)
 		CountWorkflowExecutions(ctx context.Context, request *CountWorkflowExecutionsRequest) (*CountWorkflowExecutionsResponse, error)
-		CountChasmExecutions(ctx context.Context, request *CountChasmExecutionsRequest) (*chasm.CountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
+
+		ListChasmExecutions(
+			ctx context.Context,
+			request *visibilityservice.ListChasmExecutionsRequest,
+		) (*visibilityservice.ListChasmExecutionsResponse, error)
+		CountChasmExecutions(
+			ctx context.Context,
+			request *visibilityservice.CountChasmExecutionsRequest,
+		) (*visibilityservice.CountChasmExecutionsResponse, error)
 
 		// Admin APIs
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error

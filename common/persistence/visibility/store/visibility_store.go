@@ -33,8 +33,8 @@ type (
 
 		// Read APIs.
 		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error)
-		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*InternalCountExecutionsResponse, error)
+		ListChasmExecutions(ctx context.Context, request *manager.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountChasmExecutions(ctx context.Context, request *manager.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error)
 		GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
 
