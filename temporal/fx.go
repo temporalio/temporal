@@ -356,7 +356,7 @@ type (
 		DynamicConfigClient             dynamicconfig.Client
 		MetricsHandler                  metrics.Handler
 		EsClient                        esclient.Client
-		TlsConfigProvider               encryption.TLSConfigProvider
+		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
 		PersistenceConfig               config.Persistence
 		ClusterMetadata                 *cluster.Config
 		ClientFactoryProvider           client.FactoryProvider

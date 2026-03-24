@@ -48,7 +48,7 @@ type (
 		claimMapper                     authorization.ClaimMapper
 		audienceGetter                  authorization.JWTAudienceMapper
 		persistenceServiceResolver      resolver.ServiceResolver
-		elasticsearchHttpClient         *http.Client
+		elasticsearchHttpClient         *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
 		dynamicConfigClient             dynamicconfig.Client
 		customDataStoreFactory          persistenceClient.AbstractDataStoreFactory
 		customVisibilityStoreFactory    visibility.VisibilityStoreFactory

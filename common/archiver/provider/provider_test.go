@@ -7,8 +7,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.uber.org/mock/gomock"
-
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/gcloud"
@@ -17,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -287,21 +286,19 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConcurrentAccess() {
 	var wg sync.WaitGroup
 	numGoroutines := 10
 	results := make([]archiver.HistoryArchiver, numGoroutines)
-	errors := make([]error, numGoroutines)
+	archiverErrors := make([]error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			results[index], errors[index] = provider.GetHistoryArchiver(scheme)
-		}(i)
+	for i := range numGoroutines {
+		wg.Go(func() {
+			results[i], archiverErrors[i] = provider.GetHistoryArchiver(scheme)
+		})
 	}
 
 	wg.Wait()
 
 	// All should succeed and return a valid archiver
 	for i := 0; i < numGoroutines; i++ {
-		s.NoError(errors[i])
+		s.NoError(archiverErrors[i])
 		s.NotNil(results[i])
 	}
 
@@ -554,21 +551,19 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConcurrentAccess() {
 	var wg sync.WaitGroup
 	numGoroutines := 10
 	results := make([]archiver.VisibilityArchiver, numGoroutines)
-	errors := make([]error, numGoroutines)
+	archiverErrors := make([]error, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func(index int) {
-			defer wg.Done()
-			results[index], errors[index] = provider.GetVisibilityArchiver(scheme)
-		}(i)
+	for i := range numGoroutines {
+		wg.Go(func() {
+			results[i], archiverErrors[i] = provider.GetVisibilityArchiver(scheme)
+		})
 	}
 
 	wg.Wait()
 
 	// All should succeed and return a valid archiver
 	for i := 0; i < numGoroutines; i++ {
-		s.NoError(errors[i])
+		s.NoError(archiverErrors[i])
 		s.NotNil(results[i])
 	}
 
