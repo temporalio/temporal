@@ -430,6 +430,12 @@ service HistoryService {
     rpc UpdateActivityOptions (UpdateActivityOptionsRequest) returns (UpdateActivityOptionsResponse) {
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
+    // UpdateActivityExecutionOptions is called by the client to update the execution options of an activity
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc UpdateActivityExecutionOptions (UpdateActivityExecutionOptionsRequest) returns (UpdateActivityExecutionOptionsResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
 
     // PauseActivity pauses the execution of an activity specified by its ID.
     // Returns a `NotFound` error if there is no pending activity with the provided ID.
@@ -454,6 +460,27 @@ service HistoryService {
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
+    // PauseActivityExecution pauses the execution of an activity specified by its ID.
+    // Accepts either a workflow_id (workflow activity) or an activity_id alone (standalone activity).
+    // Returns a `NotFound` error if there is no pending activity with the provided ID.
+    //
+    // Pausing an activity means:
+    // - If the activity is currently waiting for a retry or is running and subsequently fails,
+    //   it will not be rescheduled until it is unpause.
+    // - If the activity is already paused, calling this method will have no effect.
+    // - If the activity is running and finishes successfully, the activity will be completed.
+    // - If the activity is running and finishes with failure:
+    //   * if there is no retry left - the activity will be completed.
+    //   * if there are more retries left - the activity will be paused.
+    // For long-running activities:
+    // - activities in paused state will send a cancellation with "activity_paused" set to 'true' in response to 'RecordActivityTaskHeartbeat'.
+    // - The activity should respond to the cancellation accordingly.
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc PauseActivityExecution (PauseActivityExecutionRequest) returns (PauseActivityExecutionResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
     // UnpauseActivity unpauses the execution of an activity specified by its ID.
     //
     // If activity is not paused, this call will have no effect.
@@ -469,6 +496,24 @@ service HistoryService {
     // (-- api-linter: core::0134::method-signature=disabled
     // (-- api-linter: core::0134::response-message-name=disabled
     rpc UnpauseActivity (UnpauseActivityRequest) returns (UnpauseActivityResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // UnpauseActivityExecution unpauses the execution of an activity specified by its ID.
+    // Accepts either a workflow_id (workflow activity) or an activity_id alone (standalone activity).
+    //
+    // If activity is not paused, this call will have no effect.
+    // If the activity is waiting for retry, it will be scheduled immediately.
+    // Once the activity is unpaused, all timeout timers will be regenerated.
+    //
+    // Flags:
+    // 'reset_attempts': the number of attempts will be reset.
+    // 'reset_heartbeat': the activity heartbeat timer and heartbeats will be reset.
+    //
+    // Returns a `NotFound` error if there is no pending activity with the provided ID.
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc UnpauseActivityExecution (UnpauseActivityExecutionRequest) returns (UnpauseActivityExecutionResponse) {
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 
@@ -491,6 +536,28 @@ service HistoryService {
     // (-- api-linter: core::0134::method-signature=disabled
     // (-- api-linter: core::0134::response-message-name=disabled
     rpc ResetActivity (ResetActivityRequest) returns (ResetActivityResponse) {
+        option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+    }
+
+    // ResetActivityExecution resets the execution of an activity specified by its ID.
+    //
+    // Resetting an activity means:
+    // * number of attempts will be reset to 0.
+    // * activity timeouts will be reset.
+    // * if the activity is waiting for retry, and it is not paused or 'keep_paused' is not provided:
+    //    it will be scheduled immediately (* see 'jitter' flag),
+    //
+    // Flags:
+    //
+    // 'jitter': the activity will be scheduled at a random time within the jitter duration.
+    // If the activity currently paused it will be unpause, unless 'keep_paused' flag is provided.
+    // 'reset_heartbeats': the activity heartbeat timer and heartbeats will be reset.
+    // 'keep_paused': if the activity is paused, it will remain paused.
+    //
+    // Returns a `NotFound` error if there is no pending activity with the provided ID.
+    // (-- api-linter: core::0134::method-signature=disabled
+    // (-- api-linter: core::0134::response-message-name=disabled
+    rpc ResetActivityExecution (ResetActivityExecutionRequest) returns (ResetActivityExecutionResponse) {
         option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
     }
 

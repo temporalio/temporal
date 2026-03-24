@@ -619,6 +619,26 @@ func (c *clientImpl) PauseActivity(
 	return response, nil
 }
 
+func (c *clientImpl) PauseActivityExecution(
+	ctx context.Context,
+	request *historyservice.PauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.PauseActivityExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
+	var response *historyservice.PauseActivityExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.PauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) PauseWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.PauseWorkflowExecutionRequest,
@@ -969,6 +989,26 @@ func (c *clientImpl) ResetActivity(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.ResetActivity(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) ResetActivityExecution(
+	ctx context.Context,
+	request *historyservice.ResetActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.ResetActivityExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
+	var response *historyservice.ResetActivityExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.ResetActivityExecution(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
@@ -1407,6 +1447,26 @@ func (c *clientImpl) UnpauseActivity(
 	return response, nil
 }
 
+func (c *clientImpl) UnpauseActivityExecution(
+	ctx context.Context,
+	request *historyservice.UnpauseActivityExecutionRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UnpauseActivityExecutionResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetFrontendRequest().GetWorkflowId())
+	var response *historyservice.UnpauseActivityExecutionResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UnpauseActivityExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) UnpauseWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.UnpauseWorkflowExecutionRequest,
@@ -1419,6 +1479,26 @@ func (c *clientImpl) UnpauseWorkflowExecution(
 		ctx, cancel := c.createContext(ctx)
 		defer cancel()
 		response, err = client.UnpauseWorkflowExecution(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
+func (c *clientImpl) UpdateActivityExecutionOptions(
+	ctx context.Context,
+	request *historyservice.UpdateActivityExecutionOptionsRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.UpdateActivityExecutionOptionsResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetUpdateRequest().GetWorkflowId())
+	var response *historyservice.UpdateActivityExecutionOptionsResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.UpdateActivityExecutionOptions(ctx, request, opts...)
 		return err
 	}
 	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
