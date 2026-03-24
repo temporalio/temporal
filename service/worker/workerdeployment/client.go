@@ -69,6 +69,15 @@ type Client interface {
 		requestID string,
 	) ([]byte, error)
 
+	CreateWorkerDeploymentVersion(
+		ctx context.Context,
+		namespaceEntry *namespace.Namespace,
+		deploymentName string,
+		buildID string,
+		identity string,
+		requestID string,
+	) error
+
 	SetCurrentVersion(
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
@@ -1178,6 +1187,80 @@ func (d *ClientImpl) ensureWorkerDeploymentDoesNotExist(
 	}
 
 	return nil, serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentAlreadyExists, deploymentName))
+}
+
+func (d *ClientImpl) CreateWorkerDeploymentVersion(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+	deploymentName string,
+	buildID string,
+	identity string,
+	requestID string,
+) (retErr error) {
+	//revive:disable-next-line:defer
+	defer d.convertAndRecordError("CreateWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
+
+	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+	err = validateVersionWfParams(worker_versioning.WorkerDeploymentBuildIDFieldName, buildID, d.maxIDLengthLimit())
+	if err != nil {
+		return err
+	}
+
+	// Ensure the deployment exists.
+	_, err = d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) {
+			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentNotFound, deploymentName))
+		}
+		return err
+	}
+
+	version := worker_versioning.WorkerDeploymentVersionToStringV31(&deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	})
+
+	workflowID := GenerateDeploymentWorkflowID(deploymentName)
+
+	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentVersionArgs{
+		Identity:  identity,
+		RequestId: requestID,
+		Version:   version,
+	})
+	if err != nil {
+		return err
+	}
+
+	updateRequest := &updatepb.Request{
+		Input: &updatepb.Input{Name: CreateWorkerDeploymentVersion, Args: updateArgs},
+		Meta:  &updatepb.Meta{UpdateId: "_create_version_" + requestID, Identity: identity},
+	}
+
+	outcome, err := updateWorkflow(
+		ctx,
+		d.historyClient,
+		namespaceEntry,
+		workflowID,
+		updateRequest,
+	)
+	if err != nil {
+		return err
+	}
+	if failure := outcome.GetFailure(); failure != nil {
+		if failure.GetApplicationFailureInfo().GetType() == errVersionAlreadyExists {
+			return serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentVersionAlreadyExists, version))
+		}
+		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+			return newResourceExhaustedError(failure.GetMessage())
+		}
+		return serviceerror.NewInternalf("create deployment version failed: %s", failure.Message)
+	}
+
+	return nil
 }
 
 func (d *ClientImpl) StartWorkerDeployment(

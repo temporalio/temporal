@@ -46,6 +46,7 @@ const (
 	UpdateVersionMetadata             = "update-version-metadata"       // for Worker Deployment Version wfs
 	RegisterWorkerInWorkerDeployment  = "register-worker-in-deployment" // for Worker Deployment wfs
 	CreateWorkerDeployment            = "create-deployment"             // for Worker Deployment wfs
+	CreateWorkerDeploymentVersion     = "create-deployment-version"     // for Worker Deployment wfs
 	SetCurrentVersion                 = "set-current-version"           // for Worker Deployment wfs
 	SetRampingVersion                 = "set-ramping-version"           // for Worker Deployment wfs
 	DeleteVersion                     = "delete-version"                // for WorkerDeployment wfs
@@ -79,6 +80,7 @@ const (
 	errVersionNotFound            = "Version not found in deployment"
 	errDeploymentDeleted          = "worker deployment deleted"         // returned in the race condition that the deployment is deleted but the workflow is not yet closed.
 	errDeploymentAlreadyExists    = "worker deployment already exists"  // returned in the race condition that the deployment exists with a different request ID.
+	errVersionAlreadyExists       = "worker deployment version already exists"
 	errVersionDeleted             = "worker deployment version deleted" // returned in the race condition that the deployment version is deleted but the workflow is not yet closed.
 	errLongHistory                = "errLongHistory"                    // update is not accepted until CaN happens. client should retry
 	errVersionIsDraining          = "errVersionIsDraining"
@@ -97,6 +99,7 @@ const (
 	ErrWorkerDeploymentVersionNotFound        = "build ID '%s' not found in Worker Deployment '%s'"
 	ErrTooManyRequests                        = "too many requests issued to Worker Deployment '%s'. Please try again later"
 	ErrWorkerDeploymentAlreadyExists          = "Worker Deployment with name %q already exists"
+	ErrWorkerDeploymentVersionAlreadyExists   = "Worker Deployment Version %q already exists"
 
 	AutoCreateRequestIDPrefix = "_auto_create_"
 )

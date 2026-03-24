@@ -140,6 +140,11 @@ message VersionLocalState {
     // Incremented everytime version data synced to TQ changes. Updates with lower revision number
     // than what is already in the TQ will be ignored to avoid stale writes during async operations.
     int64 revision_number = 15;
+
+    // (-- api-linter: core::0203::optional=disabled
+    //     aip.dev/not-precedent: compute_config is optional for versions. --)
+    // Worker compute configuration for this version. May not be present.
+    temporal.api.compute.v1.ComputeConfig compute_config = 17;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -218,6 +223,10 @@ message WorkerDeploymentVersionSummary {
 
     // Status of the Worker Deployment Version.
     temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 10;
+
+    // Request ID used to create this version. Used for idempotency.
+    // Not synced from the version workflow; only set by the deployment workflow.
+    string create_request_id = 12;
 }
 
 // used as Worker Deployment Version workflow update input:
@@ -411,6 +420,22 @@ message CreateWorkerDeploymentArgs {
 // used as Worker Deployment update response:
 message CreateWorkerDeploymentResponse {
     bytes conflict_token = 1;
+}
+
+// used as Worker Deployment workflow update input:
+message CreateWorkerDeploymentVersionArgs {
+    string identity = 1;
+
+    // Retrying with same request id is a successful no-op.
+    // Retrying with different request id (including auto-created) is an error.
+    string request_id = 2;
+
+    // Version string (<deployment_name>.<build_id>)
+    string version = 3;
+}
+
+// used as Worker Deployment update response:
+message CreateWorkerDeploymentVersionResponse {
 }
 
 // used as Worker Deployment workflow update input:

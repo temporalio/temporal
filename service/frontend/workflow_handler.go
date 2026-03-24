@@ -154,9 +154,52 @@ type (
 func (wh *WorkflowHandler) CreateWorkerDeploymentVersion(
 	ctx context.Context,
 	request *workflowservice.CreateWorkerDeploymentVersionRequest,
-) (*workflowservice.CreateWorkerDeploymentVersionResponse, error) {
-	//TODO implement me
-	panic("implement me")
+) (_ *workflowservice.CreateWorkerDeploymentVersionResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+
+	if request.GetDeploymentVersion().GetDeploymentName() == "" {
+		return nil, serviceerror.NewInvalidArgument("deployment name cannot be empty")
+	}
+
+	if request.GetDeploymentVersion().GetBuildId() == "" {
+		return nil, serviceerror.NewInvalidArgument("build ID cannot be empty")
+	}
+
+	if !wh.config.EnableDeploymentVersions(request.Namespace) {
+		return nil, errDeploymentVersionsNotAllowed
+	}
+
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := request.RequestId
+	if requestID == "" {
+		requestID = uuid.NewString()
+	}
+
+	err = wh.workerDeploymentClient.CreateWorkerDeploymentVersion(
+		ctx,
+		namespaceEntry,
+		request.GetDeploymentVersion().GetDeploymentName(),
+		request.GetDeploymentVersion().GetBuildId(),
+		request.Identity,
+		requestID,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.CreateWorkerDeploymentVersionResponse{}, nil
 }
 
 func (wh *WorkflowHandler) UpdateWorkerDeploymentVersionComputeConfig(

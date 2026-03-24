@@ -139,11 +139,14 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 // syncVersionSummary ensures the version summary in the deployment workflow stays consistent
 // with the version workflow. This helps prevent discrepancies if they ever fall out of sync.
 func (d *WorkflowRunner) syncVersionSummaryFromVersionWorkflow(summary *deploymentspb.WorkerDeploymentVersionSummary) {
-	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+	existing, ok := d.State.Versions[summary.GetVersion()]
+	if !ok {
 		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		return
 	}
 
+	// Preserve create_request_id since the version workflow doesn't know about it.
+	summary.CreateRequestId = existing.GetCreateRequestId()
 	d.State.Versions[summary.GetVersion()] = summary
 }
 
@@ -292,6 +295,17 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		d.handleCreateWorkerDeployment,
 		workflow.UpdateHandlerOptions{
 			Validator: d.validateCreateWorkerDeployment,
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := workflow.SetUpdateHandlerWithOptions(
+		ctx,
+		CreateWorkerDeploymentVersion,
+		d.handleCreateWorkerDeploymentVersion,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateCreateWorkerDeploymentVersion,
 		},
 	); err != nil {
 		return err
@@ -484,6 +498,82 @@ func (d *WorkflowRunner) handleCreateWorkerDeployment(ctx workflow.Context, args
 	return &deploymentspb.CreateWorkerDeploymentResponse{
 		ConflictToken: d.State.ConflictToken,
 	}, nil
+}
+
+func (d *WorkflowRunner) validateCreateWorkerDeploymentVersion(args *deploymentspb.CreateWorkerDeploymentVersionArgs) error {
+	if d.deleteDeployment {
+		return temporal.NewNonRetryableApplicationError(errDeploymentDeleted, errDeploymentDeleted, nil)
+	}
+	if existing, ok := d.State.Versions[args.GetVersion()]; ok {
+		if existing.GetCreateRequestId() == args.GetRequestId() {
+			return nil
+		}
+		return temporal.NewNonRetryableApplicationError(errVersionAlreadyExists, errVersionAlreadyExists, nil)
+	}
+	return nil
+}
+
+func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Context, args *deploymentspb.CreateWorkerDeploymentVersionArgs) (*deploymentspb.CreateWorkerDeploymentVersionResponse, error) {
+	err := d.lock.Lock(ctx)
+	if err != nil {
+		d.logger.Error("Could not acquire workflow lock")
+		return nil, serviceerror.NewDeadlineExceeded("Could not acquire workflow lock")
+	}
+	defer func() {
+		d.setStateChanged()
+		d.lock.Unlock()
+	}()
+
+	// Re-validate after acquiring lock.
+	err = d.validateCreateWorkerDeploymentVersion(args)
+	if err != nil {
+		return nil, err
+	}
+
+	// Idempotent: version exists with the same request ID.
+	if existing, ok := d.State.Versions[args.GetVersion()]; ok && existing.GetCreateRequestId() == args.GetRequestId() {
+		return &deploymentspb.CreateWorkerDeploymentVersionResponse{}, nil
+	}
+
+	// Check max versions limit.
+	maxVersions := d.getMaxVersions(ctx)
+	if len(d.State.Versions) >= maxVersions {
+		err := d.tryDeleteVersion(ctx)
+		if err != nil {
+			return nil, temporal.NewApplicationError(
+				fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.GetVersion(), maxVersions),
+				errTooManyVersions,
+			)
+		}
+	}
+
+	// Parse version string to get deployment name and build ID.
+	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(args.GetVersion())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument("invalid version string: " + err.Error())
+	}
+
+	// Start the version workflow via activity.
+	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	err = workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentVersionWorkflow, &deploymentspb.StartWorkerDeploymentVersionRequest{
+		DeploymentName: versionObj.DeploymentName,
+		BuildId:        versionObj.BuildId,
+		RequestId:      args.GetRequestId(),
+	}).Get(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add version to local state.
+	d.State.Versions[args.GetVersion()] = &deploymentspb.WorkerDeploymentVersionSummary{
+		Version:         args.GetVersion(),
+		CreateTime:      timestamppb.New(workflow.Now(ctx)),
+		Status:          enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		CreateRequestId: args.GetRequestId(),
+	}
+	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
+
+	return &deploymentspb.CreateWorkerDeploymentVersionResponse{}, nil
 }
 
 func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args *deploymentspb.AddVersionUpdateArgs) error {
