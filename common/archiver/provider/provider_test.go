@@ -297,7 +297,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConcurrentAccess() {
 	wg.Wait()
 
 	// All should succeed and return a valid archiver
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		s.NoError(archiverErrors[i])
 		s.NotNil(results[i])
 	}
@@ -562,7 +562,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConcurrentAccess() {
 	wg.Wait()
 
 	// All should succeed and return a valid archiver
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		s.NoError(archiverErrors[i])
 		s.NotNil(results[i])
 	}
