@@ -141,7 +141,7 @@ func (w *Workflow) AddAndApplyHistoryEvent(
 	t enumspb.EventType,
 	setAttributes func(*historypb.HistoryEvent),
 ) (*historypb.HistoryEvent, error) {
-	event := w.MSPointer.AddHistoryEvent(t, setAttributes)
+	event := w.AddHistoryEvent(t, setAttributes)
 	def, ok := workflowContextFromChasm(ctx).registry.EventDefinition(t)
 	if !ok {
 		return nil, fmt.Errorf("no event definition registered for %v", t)
