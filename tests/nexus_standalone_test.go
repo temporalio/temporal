@@ -200,10 +200,7 @@ func TestStandaloneNexusOperation(t *testing.T) {
 func TestRequestCancelNexusOperationExecution(t *testing.T) {
 	t.Parallel()
 
-	// TODO: Enable once cancel is fully implemented for standalone Nexus operations.
 	t.Run("RequestCancel", func(t *testing.T) {
-		t.Skip("Cancel not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -233,8 +230,6 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 
 	// TODO: Enable once cancel and terminate are fully implemented.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
-		t.Skip("Cancel/terminate not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -244,14 +239,12 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 		})
 		s.NoError(err)
 
-		requestID := "cancel-request-id"
-
 		// Cancel the operation.
 		_, err = s.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
-			RequestId:   requestID,
+			RequestId:   "cancel-request-id",
 		})
 		s.NoError(err)
 
@@ -260,7 +253,7 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
-			RequestId:   requestID,
+			RequestId:   "cancel-request-id",
 		})
 		s.NoError(err)
 
@@ -293,6 +286,7 @@ func TestRequestCancelNexusOperationExecution(t *testing.T) {
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
 			Reason:      "test termination",
 		})
 		s.NoError(err)
@@ -356,6 +350,7 @@ func TestTerminateNexusOperationExecution(t *testing.T) {
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
 			Reason:      "test termination",
 		})
 		s.NoError(err)
@@ -388,24 +383,34 @@ func TestTerminateNexusOperationExecution(t *testing.T) {
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
 			Reason:      "test termination",
 		})
 		s.NoError(err)
 
-		// Terminate again — should not error.
+		// Terminate again with same request ID — should be idempotent.
 		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
 			Reason:      "test termination again",
 		})
 		s.NoError(err)
+
+		// Terminate with a different request ID — should error.
+		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "different-request-id",
+			Reason:      "test termination different",
+		})
+		s.Error(err)
+		s.Contains(err.Error(), "already terminated")
 	})
 
-	// TODO: Enable once cancel and terminate are fully implemented.
 	t.Run("AlreadyCanceled", func(t *testing.T) {
-		t.Skip("Cancel/terminate not yet fully implemented for standalone Nexus operations")
-
 		s := testcore.NewEnv(t, nexusStandaloneOpts...)
 		endpointName := createNexusEndpoint(s)
 
@@ -423,11 +428,12 @@ func TestTerminateNexusOperationExecution(t *testing.T) {
 		})
 		s.NoError(err)
 
-		// Terminate a canceled operation — should not error.
+		// Terminate a canceled operation — should succeed.
 		_, err = s.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
 			Namespace:   s.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
 			Reason:      "test termination",
 		})
 		s.NoError(err)
