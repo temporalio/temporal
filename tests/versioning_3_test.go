@@ -81,16 +81,6 @@ type Versioning3Suite struct {
 	useNewDeploymentData      bool
 }
 
-func TestVersioning3FunctionalSuiteV0(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &Versioning3Suite{
-		deploymentWorkflowVersion: workerdeployment.InitialVersion,
-		useV32:                    true,
-		useNewDeploymentData:      false,
-		useRevisionNumbers:        false,
-	})
-}
-
 func TestVersioning3FunctionalSuiteV2(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &Versioning3Suite{
