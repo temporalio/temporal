@@ -168,6 +168,7 @@ type Config struct {
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	PayloadSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
 	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
@@ -191,6 +192,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
+		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),

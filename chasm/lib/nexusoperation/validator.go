@@ -12,6 +12,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -76,6 +79,7 @@ func ValidatePayloadSize(input *commonpb.Payload, limit int) error {
 func validateAndNormalizeStartRequest(
 	req *workflowservice.StartNexusOperationExecutionRequest,
 	config *Config,
+	logger log.Logger,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
@@ -120,9 +124,18 @@ func validateAndNormalizeStartRequest(
 	); err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
 	}
-	if err := ValidatePayloadSize(req.GetInput(), config.PayloadSizeLimit(ns)); err != nil {
-		return serviceerror.NewInvalidArgument(err.Error())
+
+	if err := validateBlobSize(
+		req.GetOperationId(),
+		"StartNexusOperationExecution",
+		config.PayloadSizeLimit(ns),
+		config.PayloadSizeLimitWarn(ns),
+		req.GetInput().Size(),
+		logger,
+		ns); err != nil {
+		return serviceerror.NewInvalidArgument("input exceeds size limit")
 	}
+
 	loweredHeaders, err := ValidateAndLowercaseNexusHeaders(req.GetNexusHeader(), config.DisallowedOperationHeaders(), config.MaxOperationHeaderSize(ns))
 	if err != nil {
 		return serviceerror.NewInvalidArgument(err.Error())
@@ -157,7 +170,7 @@ func validateDescribeNexusOperationExecutionRequest(req *workflowservice.Describ
 	return nil
 }
 
-func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config) error {
+func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.RequestCancelNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
@@ -177,10 +190,23 @@ func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.Re
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
+
+	err := validateBlobSize(
+		req.GetOperationId(),
+		"RequestCancelNexusOperationExecution",
+		config.PayloadSizeLimit(req.GetNamespace()),
+		config.PayloadSizeLimitWarn(req.GetNamespace()),
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
 	return nil
 }
 
-func validateTerminateNexusOperationExecutionRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config) error {
+func validateTerminateNexusOperationExecutionRequest(req *workflowservice.TerminateNexusOperationExecutionRequest, config *Config, logger log.Logger) error {
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")
 	}
@@ -200,6 +226,19 @@ func validateTerminateNexusOperationExecutionRequest(req *workflowservice.Termin
 		return serviceerror.NewInvalidArgumentf("identity exceeds length limit. Length=%d Limit=%d",
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
+
+	err := validateBlobSize(
+		req.GetOperationId(),
+		"TerminateNexusOperationExecution",
+		config.PayloadSizeLimit(req.GetNamespace()),
+		config.PayloadSizeLimitWarn(req.GetNamespace()),
+		len(req.GetReason()),
+		logger,
+		req.GetNamespace())
+	if err != nil {
+		return serviceerror.NewInvalidArgument("reason exceeds length limit")
+	}
+
 	return nil
 }
 
@@ -225,4 +264,28 @@ func validateAndNormalizeSearchAttributes(
 	}
 
 	return saValidator.ValidateSize(saToValidate, namespaceName)
+}
+
+func validateBlobSize(
+	operationID string,
+	blobSizeViolationTagValue string,
+	blobSizeLimitError int,
+	blobSizeLimitWarn int,
+	blobSize int,
+	logger log.Logger,
+	namespaceName string,
+) error {
+	if blobSize > blobSizeLimitWarn {
+		logger.Warn("Nexus Operation blob size exceeds the warning limit.",
+			tag.WorkflowNamespace(namespaceName),
+			tag.OperationID(operationID),
+			tag.OperationSize(int64(blobSize)),
+			tag.BlobSizeViolationOperation(blobSizeViolationTagValue))
+	}
+
+	if blobSize > blobSizeLimitError {
+		return common.ErrBlobSizeExceedsLimit
+	}
+
+	return nil
 }

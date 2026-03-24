@@ -84,7 +84,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeStartRequest(req, h.config, h.saMapperProvider, h.saValidator); err != nil {
+	if err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator); err != nil {
 		return nil, err
 	}
 
@@ -242,7 +242,7 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		req.RequestId = uuid.NewString()
 	}
 
-	if err := validateRequestCancelNexusOperationExecutionRequest(req, h.config); err != nil {
+	if err := validateRequestCancelNexusOperationExecutionRequest(req, h.config, h.logger); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +276,7 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		req.RequestId = uuid.NewString()
 	}
 
-	if err := validateTerminateNexusOperationExecutionRequest(req, h.config); err != nil {
+	if err := validateTerminateNexusOperationExecutionRequest(req, h.config, h.logger); err != nil {
 		return nil, err
 	}
 

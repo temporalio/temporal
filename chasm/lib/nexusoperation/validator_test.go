@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
@@ -39,7 +40,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxIDLengthLimit:                   func() int { return 50 },
 		MaxServiceNameLength:               func(string) int { return 10 },
 		MaxOperationNameLength:             func(string) int { return 10 },
-		PayloadSizeLimit:                   func(string) int { return 10 },
+		PayloadSizeLimit:                   func(string) int { return 20 },
+		PayloadSizeLimitWarn:                func(string) int { return 10 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
@@ -152,9 +154,15 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "input - exceeds warning limit but within hard limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Input = &commonpb.Payload{Data: []byte("exceed-warn-limit")}
+			},
+		},
+		{
 			name: "input - exceeds size limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.Input = &commonpb.Payload{Data: []byte("too-long-input")}
+				r.Input = &commonpb.Payload{Data: []byte("this-input-is-longer-than-twenty-characters")}
 			},
 			errMsg: "input exceeds size limit",
 		},
@@ -232,7 +240,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := validateAndNormalizeStartRequest(req, config, nil, saValidator)
+			err := validateAndNormalizeStartRequest(req, config, log.NewNoopLogger(), nil, saValidator)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -304,8 +312,11 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 
 func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
+		MaxIDLengthLimit:     func() int { return 20 },
+		PayloadSizeLimit:     func(string) int { return 20 },
+		PayloadSizeLimitWarn: func(string) int { return 10 },
 	}
+	logger := log.NewNoopLogger()
 
 	for _, tc := range []struct {
 		name   string
@@ -350,6 +361,19 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			},
 			errMsg: "identity exceeds length limit",
 		},
+		{
+			name: "reason - exceeds warning limit but within hard limit",
+			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
+				r.Reason = "exceed-warn-limit"
+			},
+		},
+		{
+			name: "reason - exceeds size limit",
+			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
+				r.Reason = "this-reason-is-longer-than-twenty-characters"
+			},
+			errMsg: "reason exceeds length limit",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			validReq := &workflowservice.RequestCancelNexusOperationExecutionRequest{
@@ -359,7 +383,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateRequestCancelNexusOperationExecutionRequest(validReq, config)
+			err := validateRequestCancelNexusOperationExecutionRequest(validReq, config, logger)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -373,8 +397,11 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 
 func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
+		MaxIDLengthLimit:     func() int { return 20 },
+		PayloadSizeLimit:     func(string) int { return 20 },
+		PayloadSizeLimitWarn: func(string) int { return 10 },
 	}
+	logger := log.NewNoopLogger()
 
 	for _, tc := range []struct {
 		name   string
@@ -419,6 +446,19 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			},
 			errMsg: "identity exceeds length limit",
 		},
+		{
+			name: "reason - exceeds warning limit but within hard limit",
+			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
+				r.Reason = "exceed-warn-limit"
+			},
+		},
+		{
+			name: "reason - exceeds size limit",
+			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
+				r.Reason = "this-reason-is-longer-than-twenty-characters"
+			},
+			errMsg: "reason exceeds length limit",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			validReq := &workflowservice.TerminateNexusOperationExecutionRequest{
@@ -428,7 +468,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateTerminateNexusOperationExecutionRequest(validReq, config)
+			err := validateTerminateNexusOperationExecutionRequest(validReq, config, logger)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
