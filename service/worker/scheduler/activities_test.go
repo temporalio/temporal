@@ -54,6 +54,17 @@ func TestMigrateScheduleToChasm_AlreadyExists(t *testing.T) {
 	require.NoError(t, err, "already-exists should be treated as success")
 }
 
+func TestMigrateScheduleToChasm_SentinelBlocked(t *testing.T) {
+	client := &mockSchedulerClient{
+		migrateErr: serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires"),
+	}
+	a := newTestActivities(client)
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "blocked by sentinel")
+}
+
 func TestMigrateScheduleToChasm_OtherError(t *testing.T) {
 	client := &mockSchedulerClient{
 		migrateErr: errors.New("some transient error"),
