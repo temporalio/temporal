@@ -3374,9 +3374,14 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	// fleet, so it is stable for usage here.
 	if wh.config.EnableChasm(namespaceName.String()) {
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
-			// CreateSentinel succeeds idempotently if a sentinel already exists.
-			// An AlreadyExists error means a real CHASM scheduler owns this ID.
-			return nil, err
+			// Ignore unimplemented to avoid issues with mixed brain testing.
+			//
+			// We wouldn't hit this condition in prod, as we wouldn't migrate with the fleet
+			// halfway deployed to the target version.
+			var unimplErr *serviceerror.Unimplemented
+			if !errors.As(err, &unimplErr) {
+				return nil, err
+			}
 		}
 	}
 
