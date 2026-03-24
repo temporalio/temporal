@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 )
@@ -40,6 +41,10 @@ func Invoke(
 
 	request := resetRequest.ResetRequest
 	workflowID := request.WorkflowExecution.GetWorkflowId()
+
+	if rl := shardContext.GetWorkflowIDReuseRL(namespaceID, workflowID); rl != nil && !rl.Allow() {
+		return nil, consts.ErrWorkflowIDRateLimitExceeded
+	}
 	baseRunID := request.WorkflowExecution.GetRunId()
 
 	baseWorkflowLease, err := workflowConsistencyChecker.GetWorkflowLease(

@@ -72,17 +72,17 @@ func (mr *MockWorkflowContextMockRecorder) ConflictResolveWorkflowExecution(ctx,
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockWorkflowContext) CreateWorkflowExecution(ctx context.Context, shardContext ShardContext, createMode persistence0.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64, newMutableState MutableState, newWorkflow *persistence0.WorkflowSnapshot, newWorkflowEvents []*persistence0.WorkflowEvents) error {
+func (m *MockWorkflowContext) CreateWorkflowExecution(ctx context.Context, shardContext ShardContext, createMode persistence0.CreateWorkflowMode, prevRunID string, prevLastWriteVersion int64, newMutableState MutableState, newWorkflow *persistence0.WorkflowSnapshot, newWorkflowEvents []*persistence0.WorkflowEvents, transactionPolicy TransactionPolicy) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
+	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockWorkflowContextMockRecorder) CreateWorkflowExecution(ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents any) *gomock.Call {
+func (mr *MockWorkflowContextMockRecorder) CreateWorkflowExecution(ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockWorkflowContext)(nil).CreateWorkflowExecution), ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockWorkflowContext)(nil).CreateWorkflowExecution), ctx, shardContext, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents, transactionPolicy)
 }
 
 // GetWorkflowKey mocks base method.

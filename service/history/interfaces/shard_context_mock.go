@@ -31,6 +31,7 @@ import (
 	namespace "go.temporal.io/server/common/namespace"
 	persistence0 "go.temporal.io/server/common/persistence"
 	serialization "go.temporal.io/server/common/persistence/serialization"
+	quotas "go.temporal.io/server/common/quotas"
 	pingable "go.temporal.io/server/common/pingable"
 	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
@@ -736,6 +737,20 @@ func (m *MockShardContext) StateMachineRegistry() *hsm.Registry {
 func (mr *MockShardContextMockRecorder) StateMachineRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateMachineRegistry", reflect.TypeOf((*MockShardContext)(nil).StateMachineRegistry))
+}
+
+// GetWorkflowIDReuseRL mocks base method.
+func (m *MockShardContext) GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowIDReuseRL", namespaceID, workflowID)
+	ret0, _ := ret[0].(quotas.RateLimiter)
+	return ret0
+}
+
+// GetWorkflowIDReuseRL indicates an expected call of GetWorkflowIDReuseRL.
+func (mr *MockShardContextMockRecorder) GetWorkflowIDReuseRL(namespaceID, workflowID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowIDReuseRL", reflect.TypeOf((*MockShardContext)(nil).GetWorkflowIDReuseRL), namespaceID, workflowID)
 }
 
 // UnloadForOwnershipLost mocks base method.
@@ -1579,6 +1594,20 @@ func (m *MockControllableContext) UnloadForOwnershipLost() {
 func (mr *MockControllableContextMockRecorder) UnloadForOwnershipLost() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnloadForOwnershipLost", reflect.TypeOf((*MockControllableContext)(nil).UnloadForOwnershipLost))
+}
+
+// GetWorkflowIDReuseRL mocks base method.
+func (m *MockControllableContext) GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowIDReuseRL", namespaceID, workflowID)
+	ret0, _ := ret[0].(quotas.RateLimiter)
+	return ret0
+}
+
+// GetWorkflowIDReuseRL indicates an expected call of GetWorkflowIDReuseRL.
+func (mr *MockControllableContextMockRecorder) GetWorkflowIDReuseRL(namespaceID, workflowID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowIDReuseRL", reflect.TypeOf((*MockControllableContext)(nil).GetWorkflowIDReuseRL), namespaceID, workflowID)
 }
 
 // UpdateHandoverNamespace mocks base method.

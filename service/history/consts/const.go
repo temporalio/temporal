@@ -137,6 +137,12 @@ var (
 
 	// ErrResetRedirectLimitReached indicates a possible long chain (or a loop) of resets that cannot be handled.
 	ErrResetRedirectLimitReached = serviceerror.NewInternal("The chain of resets is too long to iterate.")
+	// ErrWorkflowIDRateLimitExceeded is returned when the per-(namespace, workflowID) start rate limit is exceeded.
+	ErrWorkflowIDRateLimitExceeded = &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "workflow ID start rate limit exceeded",
+	}
 )
 
 // StaleStateError is an indicator that after loading the state for a task it was detected as stale. It's possible that

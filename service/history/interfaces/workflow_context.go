@@ -54,6 +54,7 @@ type (
 			newMutableState MutableState,
 			newWorkflow *persistence.WorkflowSnapshot,
 			newWorkflowEvents []*persistence.WorkflowEvents,
+			transactionPolicy TransactionPolicy,
 		) error
 		ConflictResolveWorkflowExecution(
 			ctx context.Context,

@@ -2792,6 +2792,12 @@ that task will be sent to DLQ.`,
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
+	WorkflowIDStartRPSPerInstance = NewNamespaceIntSetting(
+		"history.workflowIDStartRPS",
+		0,
+		`WorkflowIDStartRPSPerInstance limits the rate of new workflow execution creation per
+(namespace, workflowID) pair on a single history host. 0 = disabled (default).`,
+	)
 	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
 		"history.healthPersistenceLatencyFailure",
 		500,

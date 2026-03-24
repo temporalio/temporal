@@ -243,7 +243,17 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	newMutableState historyi.MutableState,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEvents []*persistence.WorkflowEvents,
+	transactionPolicy historyi.TransactionPolicy,
 ) (retError error) {
+
+	if transactionPolicy == historyi.TransactionPolicyActive {
+		if rl := shardContext.GetWorkflowIDReuseRL(
+			namespace.ID(c.workflowKey.NamespaceID),
+			c.workflowKey.WorkflowID,
+		); rl != nil && !rl.Allow() {
+			return consts.ErrWorkflowIDRateLimitExceeded
+		}
+	}
 
 	defer func() {
 		if retError != nil {
@@ -536,6 +546,15 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	}()
 
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
+			execInfo := newMutableState.GetExecutionInfo()
+			if rl := shardContext.GetWorkflowIDReuseRL(
+				namespace.ID(execInfo.NamespaceId),
+				execInfo.WorkflowId,
+			); rl != nil && !rl.Allow() {
+				return consts.ErrWorkflowIDRateLimitExceeded
+			}
+		}
 		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
 	}
 

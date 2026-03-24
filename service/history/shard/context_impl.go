@@ -24,6 +24,8 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/quotas"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -150,6 +152,8 @@ type (
 
 		chasmRegistry    *chasm.Registry
 		endpointRegistry chasm.EndpointRegistry
+
+		workflowIDRateLimiters cache.StoppableCache
 	}
 
 	remoteClusterInfo struct {
@@ -2148,6 +2152,7 @@ func newContext(
 		stateMachineRegistry:    stateMachineRegistry,
 		chasmRegistry:           chasmRegistry,
 		endpointRegistry:        endpointRegistry,
+		workflowIDRateLimiters:  cache.New(10000, &cache.Options{TTL: 60 * time.Second}),
 	}
 	shardContext.taskKeyManager = newTaskKeyManager(
 		shardContext.taskCategoryRegistry,
@@ -2256,6 +2261,24 @@ func (s *ContextImpl) ChasmRegistry() *chasm.Registry {
 
 func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return s.endpointRegistry
+}
+
+func (s *ContextImpl) GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID string) quotas.RateLimiter {
+	rps := s.config.WorkflowIDStartRPSPerInstance(namespaceID.String())
+	if rps <= 0 {
+		return nil
+	}
+	key := namespaceID.String() + "/" + workflowID
+	existing := s.workflowIDRateLimiters.Get(key)
+	if existing == nil {
+		rl := quotas.NewRateLimiter(float64(rps), rps)
+		existing, _ = s.workflowIDRateLimiters.PutIfNotExist(key, rl)
+	}
+	rl := existing.(*quotas.RateLimiterImpl)
+	if float64(rps) != rl.Rate() {
+		rl.SetRPS(float64(rps))
+	}
+	return rl
 }
 
 func (s *ContextImpl) GetCachedWorkflowContext(
