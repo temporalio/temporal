@@ -61,6 +61,20 @@ message OperationState {
 
   // Operation token - only set for asynchronous operations after a successful StartOperation call.
   string operation_token = 16;
+
+  // Set if the operation was terminated.
+  NexusOperationTerminateState terminate_state = 17;
+}
+
+message NexusOperationTerminateState {
+  // Request ID of the terminate request, used to deduplicate terminate requests.
+  string request_id = 1;
+
+  // The identity of the client who requested termination.
+  string identity = 2;
+
+  // The reason for requesting termination.
+  string reason = 3;
 }
 
 enum OperationStatus {
@@ -108,6 +122,15 @@ message CancellationState {
   // Opaque data injected by the parent (e.g. workflow) for its own bookkeeping.
   // The cancellation component itself does not interpret this field.
   google.protobuf.Any parent_data = 7;
+
+  // Request ID used to deduplicate cancel requests.
+  string request_id = 8;
+
+  // The identity of the client who requested cancellation.
+  string identity = 9;
+
+  // The reason for requesting cancellation.
+  string reason = 10;
 }
 
 enum CancellationStatus {
