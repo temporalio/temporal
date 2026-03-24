@@ -6242,3 +6242,26 @@ func (s *mutableStateSuite) TestTimeSkippedDurationRoundtrip() {
 		s.Equal(d, clock.TimeSkippedDurationFromTimestamp(clock.TimeSkippedDurationToTimestamp(d)), "duration: %v", d)
 	}
 }
+
+func (s *mutableStateSuite) TestNewMutableStateFromDB_TimeSkippingDisabled_VirtualTimeUsed() {
+	// Verify that when TimeSkippingInfo exists but Enabled=false, the mutable state still uses
+	// a TimeSkippingTimeSource so that virtual time (real time + skipped offset) is returned.
+	skipDuration := 2 * time.Hour
+	dbState := s.buildWorkflowMutableState()
+	dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Enabled: false,
+		TimeSkippedDetails: []*persistencespb.TimeSkippedDetails{
+			{
+				DurationToSkip: clock.TimeSkippedDurationToTimestamp(skipDuration),
+			},
+		},
+	}
+
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// VirtualTimeNow should be ahead of real time by the accumulated skipped duration.
+	realNow := s.mockShard.GetTimeSource().Now()
+	virtualNow := ms.VirtualTimeNow()
+	s.WithinDuration(realNow.Add(skipDuration), virtualNow, time.Second)
+}

@@ -672,6 +672,10 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := b.mutableState.ApplyWorkflowExecutionUnpausedEvent(event); err != nil {
 				return nil, err
 			}
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPED:
+			if err := b.mutableState.ApplyWorkflowExecutionTimeSkippedEvent(ctx, event); err != nil {
+				return nil, err
+			}
 
 		default:
 			def, ok := b.shard.StateMachineRegistry().EventDefinition(event.GetEventType())

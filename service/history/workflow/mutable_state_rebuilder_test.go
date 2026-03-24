@@ -2159,6 +2159,37 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	s.Equal(enumsspb.NEXUS_OPERATION_STATE_SCHEDULED, sm.State())
 }
 
+func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimeSkipped() {
+	version := int64(1)
+	requestID := uuid.NewString()
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      tests.RunID,
+	}
+
+	now := time.Now().UTC()
+	event := &historypb.HistoryEvent{
+		TaskId:    rand.Int63(),
+		Version:   version,
+		EventId:   130,
+		EventTime: timestamppb.New(now),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionTimeSkippedEventAttributes{
+			WorkflowExecutionTimeSkippedEventAttributes: &historypb.WorkflowExecutionTimeSkippedEventAttributes{
+				ToTime: timestamppb.New(now.Add(time.Hour)),
+			},
+		},
+	}
+
+	s.mockMutableState.EXPECT().ApplyWorkflowExecutionTimeSkippedEvent(gomock.Any(), protomock.Eq(event)).Return(nil)
+	s.mockUpdateVersion(event)
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
+
+	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
+	s.NoError(err)
+	s.Equal(event.TaskId, s.executionInfo.LastRunningClock)
+}
+
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,

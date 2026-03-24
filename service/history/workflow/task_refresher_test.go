@@ -14,6 +14,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -1432,6 +1433,151 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	refreshedTasks = s.mutableState.PopTasks()
 	s.Empty(refreshedTasks)
 	s.False(hsmRoot.Dirty())
+}
+
+// buildMutableStateWithTimeSkipping creates a MutableStateImpl with TimeSkippingInfo having
+// the given total skipped duration in a single entry.
+func (s *taskRefresherSuite) buildMutableStateWithTimeSkipping(totalSkip time.Duration, enabled bool) *MutableStateImpl {
+	dbRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Enabled: enabled,
+				TimeSkippedDetails: []*persistencespb.TimeSkippedDetails{
+					{DurationToSkip: clock.TimeSkippedDurationToTimestamp(totalSkip)},
+				},
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 1,
+	}
+	ms, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		dbRecord,
+		1,
+	)
+	s.NoError(err)
+	return ms
+}
+
+func (s *taskRefresherSuite) TestApplyTimeSkippingOffset_AdjustsAllTimerTaskTypes() {
+	skipDuration := 2 * time.Hour
+	ms := s.buildMutableStateWithTimeSkipping(skipDuration, true)
+
+	now := s.mockShard.GetTimeSource().Now()
+	fireTime := now.Add(3 * time.Hour)
+	wfKey := ms.GetWorkflowKey()
+
+	ms.InsertTasks[tasks.CategoryTimer] = []tasks.Task{
+		&tasks.UserTimerTask{WorkflowKey: wfKey, VisibilityTimestamp: fireTime},
+		&tasks.ActivityTimeoutTask{WorkflowKey: wfKey, VisibilityTimestamp: fireTime},
+		&tasks.WorkflowRunTimeoutTask{WorkflowKey: wfKey, VisibilityTimestamp: fireTime},
+		&tasks.WorkflowExecutionTimeoutTask{NamespaceID: wfKey.NamespaceID, WorkflowID: wfKey.WorkflowID, VisibilityTimestamp: fireTime},
+	}
+
+	s.taskRefresher.applyTimeSkippingOffsetToTimerTasks(ms)
+
+	expected := fireTime.Add(-skipDuration) // now + 1h
+	for _, task := range ms.InsertTasks[tasks.CategoryTimer] {
+		s.Equal(expected, task.GetVisibilityTime(), "task type %v should be adjusted", task.GetType())
+	}
+}
+
+func (s *taskRefresherSuite) TestApplyTimeSkippingOffset_ExcludesDeleteAndTimeSkippingTasks() {
+	skipDuration := 2 * time.Hour
+	ms := s.buildMutableStateWithTimeSkipping(skipDuration, true)
+
+	now := s.mockShard.GetTimeSource().Now()
+	fireTime := now.Add(3 * time.Hour)
+	wfKey := ms.GetWorkflowKey()
+
+	ms.InsertTasks[tasks.CategoryTimer] = []tasks.Task{
+		&tasks.DeleteHistoryEventTask{WorkflowKey: wfKey, VisibilityTimestamp: fireTime},
+		&tasks.TimeSkippingTimerTask{WorkflowKey: wfKey, VisibilityTimestamp: fireTime},
+	}
+
+	s.taskRefresher.applyTimeSkippingOffsetToTimerTasks(ms)
+
+	for _, task := range ms.InsertTasks[tasks.CategoryTimer] {
+		s.Equal(fireTime, task.GetVisibilityTime(), "task type %v should not be adjusted", task.GetType())
+	}
+}
+
+func (s *taskRefresherSuite) TestApplyTimeSkippingOffset_MultipleSkipEntries_UsesTotalOffset() {
+	// Two separate skip entries: 1h + 1h = 2h total. The old bug used
+	// latestTargetVirtualTime - realNow instead of summing DurationToSkip.
+	dbRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Enabled: true,
+				TimeSkippedDetails: []*persistencespb.TimeSkippedDetails{
+					{DurationToSkip: clock.TimeSkippedDurationToTimestamp(time.Hour)},
+					{DurationToSkip: clock.TimeSkippedDurationToTimestamp(time.Hour)},
+				},
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: 1,
+	}
+	ms, err := NewMutableStateFromDB(s.mockShard, s.mockShard.GetEventsCache(), log.NewTestLogger(), tests.LocalNamespaceEntry, dbRecord, 1)
+	s.NoError(err)
+
+	now := s.mockShard.GetTimeSource().Now()
+	fireTime := now.Add(3 * time.Hour)
+	ms.InsertTasks[tasks.CategoryTimer] = []tasks.Task{
+		&tasks.UserTimerTask{WorkflowKey: ms.GetWorkflowKey(), VisibilityTimestamp: fireTime},
+	}
+
+	s.taskRefresher.applyTimeSkippingOffsetToTimerTasks(ms)
+
+	// Total offset = 2h, so adjusted = now + 3h - 2h = now + 1h
+	s.Equal(now.Add(time.Hour), ms.InsertTasks[tasks.CategoryTimer][0].GetVisibilityTime())
+}
+
+func (s *taskRefresherSuite) TestApplyTimeSkippingOffset_ClampsToNow() {
+	skipDuration := 5 * time.Hour
+	ms := s.buildMutableStateWithTimeSkipping(skipDuration, true)
+
+	now := s.mockShard.GetTimeSource().Now()
+	fireTime := now.Add(3 * time.Hour) // adjusted = now + 3h - 5h = 2h in the past
+	ms.InsertTasks[tasks.CategoryTimer] = []tasks.Task{
+		&tasks.UserTimerTask{WorkflowKey: ms.GetWorkflowKey(), VisibilityTimestamp: fireTime},
+	}
+
+	s.taskRefresher.applyTimeSkippingOffsetToTimerTasks(ms)
+
+	s.WithinDuration(now, ms.InsertTasks[tasks.CategoryTimer][0].GetVisibilityTime(), time.Second)
+}
+
+func (s *taskRefresherSuite) TestApplyTimeSkippingOffset_DisabledButHasSkips_StillAdjusts() {
+	// Even when Enabled=false, accumulated skips must be applied because virtual time
+	// has deviated from wall clock time and tasks must fire at the correct real time.
+	skipDuration := 2 * time.Hour
+	ms := s.buildMutableStateWithTimeSkipping(skipDuration, false)
+
+	now := s.mockShard.GetTimeSource().Now()
+	fireTime := now.Add(3 * time.Hour)
+	ms.InsertTasks[tasks.CategoryTimer] = []tasks.Task{
+		&tasks.UserTimerTask{WorkflowKey: ms.GetWorkflowKey(), VisibilityTimestamp: fireTime},
+	}
+
+	s.taskRefresher.applyTimeSkippingOffsetToTimerTasks(ms)
+
+	s.Equal(fireTime.Add(-skipDuration), ms.InsertTasks[tasks.CategoryTimer][0].GetVisibilityTime())
 }
 
 type mockTaskGeneratorProvider struct {

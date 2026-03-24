@@ -502,7 +502,7 @@ func NewMutableStateFromDB(
 	mutableState.approximateSize += dbRecord.ExecutionInfo.Size() - mutableState.executionInfo.Size()
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	if mutableState.executionInfo.GetTimeSkippingInfo().GetEnabled() {
+	if mutableState.executionInfo.GetTimeSkippingInfo() != nil {
 		mutableState.timeSource = clock.NewTimeSkippingTimeSource(
 			mutableState.timeSource,
 			mutableState.executionInfo.TimeSkippingInfo.TimeSkippedDetails,

@@ -1284,9 +1284,12 @@ type TimeSkippedDetails struct {
 	//	api-linter: core::0140::prepositions=disabled
 	//	aip.dev/not-precedent: Ignoring lint rules. --)
 	DurationToSkip *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=duration_to_skip,json=durationToSkip,proto3" json:"duration_to_skip,omitempty"`
-	ToTime         *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to_time,json=toTime,proto3" json:"to_time,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// (-- api-linter: core::0140::prepositions=disabled
+	//
+	//	aip.dev/not-precedent: Ignoring lint rules. --)
+	ToTime        *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to_time,json=toTime,proto3" json:"to_time,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TimeSkippedDetails) Reset() {
