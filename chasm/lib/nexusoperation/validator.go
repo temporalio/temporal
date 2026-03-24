@@ -191,6 +191,7 @@ func validateRequestCancelNexusOperationExecutionRequest(req *workflowservice.Re
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
 
+	// TODO: use different config for limit
 	err := validateBlobSize(
 		req.GetOperationId(),
 		"RequestCancelNexusOperationExecution",
@@ -227,6 +228,7 @@ func validateTerminateNexusOperationExecutionRequest(req *workflowservice.Termin
 			len(req.GetIdentity()), config.MaxIDLengthLimit())
 	}
 
+	// TODO: use different config for limit
 	err := validateBlobSize(
 		req.GetOperationId(),
 		"TerminateNexusOperationExecution",
