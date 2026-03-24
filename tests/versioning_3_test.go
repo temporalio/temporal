@@ -894,7 +894,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		// wait for first run to continue-as-new
 		s.Eventually(func() bool {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, run0.GetRunID())
-			s.NoError(err)
 			if err != nil {
 				return false
 			}
@@ -905,7 +904,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	// wait for workflow to progress on v1 (activity completed and waiting for signal)
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
 		if err != nil {
 			return false
 		}
@@ -919,7 +917,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		// Wait for child workflow to be created
 		s.Eventually(func() bool {
 			desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-			s.NoError(err)
 			if err != nil {
 				return false
 			}
@@ -930,7 +927,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 		// get the next run in the continue-as-new chain
 		s.Eventually(func() bool {
 			continuedAsNewRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-			s.NoError(err)
 			if err != nil {
 				return false
 			}
@@ -954,7 +950,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	// wait for run that will retry to fail
 	s.Eventually(func() bool {
 		desc, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, runIDBeforeRetry)
-		s.NoError(err)
 		if err != nil {
 			return false
 		}
@@ -965,7 +960,6 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	var secondRunID string
 	s.Eventually(func() bool {
 		secondRunResp, err := s.SdkClient().DescribeWorkflow(ctx, wfIDOfRetryingWF, "")
-		s.NoError(err)
 		if err != nil {
 			return false
 		}
@@ -980,7 +974,9 @@ func (s *Versioning3Suite) testWorkflowRetry(behavior workflow.VersioningBehavio
 	// confirm that the second run eventually gets auto-upgrade behavior and runs on version 2 (no inherit)
 	s.Eventually(func() bool {
 		secondRunResp, err := s.SdkClient().DescribeWorkflowExecution(ctx, wfIDOfRetryingWF, secondRunID)
-		s.NoError(err)
+		if err != nil {
+			return false
+		}
 		switch behavior {
 		case workflow.VersioningBehaviorPinned:
 			if secondRunResp.GetWorkflowExecutionInfo().GetVersioningInfo().GetBehavior() != enumspb.VERSIONING_BEHAVIOR_PINNED {
@@ -1489,8 +1485,12 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			s.pollActivityAndHandle(tv2, nil,
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					// Activity should not start until the transition is completed
-					s.True(transitionCompleted.Load())
-					s.NotNil(task)
+					if !transitionCompleted.Load() {
+						return nil, errors.New("activity started before transition completed")
+					}
+					if task == nil {
+						return nil, errors.New("task is nil")
+					}
 					s.Logger.Info(fmt.Sprintf("Remaining activity completed ID: %s", task.ActivityId))
 					return respondActivity(), nil
 				})
@@ -2166,7 +2166,6 @@ func (s *Versioning3Suite) setCurrentDeployment(tv *testvars.TestVars) {
 		if errors.As(err, &notFound) || (err != nil && strings.Contains(err.Error(), workerdeployment.ErrCurrentVersionDoesNotHaveAllTaskQueues)) {
 			return false
 		}
-		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
 }
@@ -2184,7 +2183,6 @@ func (s *Versioning3Suite) unsetCurrentDeployment(tv *testvars.TestVars) {
 		if errors.As(err, &notFound) {
 			return false
 		}
-		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
 }
@@ -2219,7 +2217,6 @@ func (s *Versioning3Suite) setRampingDeployment(
 		if errors.As(err, &notFound) || errors.Is(err, serviceerror.NewFailedPrecondition(workerdeployment.ErrRampingVersionDoesNotHaveAllTaskQueues)) {
 			return false
 		}
-		s.NoError(err)
 		return err == nil
 	}, 60*time.Second, 500*time.Millisecond)
 }
@@ -2849,9 +2846,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 		}
 	}
 	f, err := tqid.NewTaskQueueFamily(s.NamespaceID().String(), tv.TaskQueue().GetName())
+	s.NoError(err)
 	s.Eventually(func() bool {
 		for pt := range remaining {
-			s.NoError(err)
 			partition := f.TaskQueue(pt.tp).NormalPartition(pt.part)
 			// Use lower-level GetTaskQueueUserData instead of GetWorkerBuildIdCompatibility
 			// here so that we can target activity queues.
@@ -2862,7 +2859,9 @@ func (s *Versioning3Suite) waitForDeploymentDataPropagation(
 					TaskQueue:     partition.RpcName(),
 					TaskQueueType: partition.TaskType(),
 				})
-			s.NoError(err)
+			if err != nil {
+				return false
+			}
 			perTypes := res.GetUserData().GetData().GetPerType()
 			if perTypes != nil {
 				deps := perTypes[int32(pt.tp)].GetDeploymentData().GetDeployments()
