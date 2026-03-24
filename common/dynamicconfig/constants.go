@@ -2798,6 +2798,12 @@ that task will be sent to DLQ.`,
 		`WorkflowIDStartRPSPerInstance limits the rate of new workflow execution creation per
 (namespace, workflowID) pair on a single history host. 0 = disabled (default).`,
 	)
+	WorkflowIDStartBurstRatio = NewNamespaceFloatSetting(
+		"history.workflowIDStartBurstRatio",
+		1.0,
+		`WorkflowIDStartBurstRatio is the burst-to-rate ratio for the per-(namespace, workflowID)
+start rate limiter. Burst = max(1, int(rps * ratio)). Default 1.0 (no burst above rate).`,
+	)
 	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
 		"history.healthPersistenceLatencyFailure",
 		500,

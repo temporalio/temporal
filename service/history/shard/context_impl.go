@@ -2268,15 +2268,20 @@ func (s *ContextImpl) GetWorkflowIDReuseRL(namespaceID namespace.ID, workflowID 
 	if rps <= 0 {
 		return nil
 	}
+	burst := max(1, int(float64(rps)*s.config.WorkflowIDStartBurstRatio(namespaceID.String())))
 	key := namespaceID.String() + "/" + workflowID
 	existing := s.workflowIDRateLimiters.Get(key)
 	if existing == nil {
-		rl := quotas.NewRateLimiter(float64(rps), rps)
+		rl := quotas.NewRateLimiter(float64(rps), burst)
 		existing, _ = s.workflowIDRateLimiters.PutIfNotExist(key, rl)
 	}
-	rl := existing.(*quotas.RateLimiterImpl)
-	if float64(rps) != rl.Rate() {
-		rl.SetRPS(float64(rps))
+	rl, ok := existing.(*quotas.RateLimiterImpl)
+	if !ok {
+		// Should never happen; cache only stores *RateLimiterImpl.
+		return nil
+	}
+	if float64(rps) != rl.Rate() || burst != rl.Burst() {
+		rl.SetRateBurst(float64(rps), burst)
 	}
 	return rl
 }

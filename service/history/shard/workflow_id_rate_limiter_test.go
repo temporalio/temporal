@@ -6,6 +6,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/mock/gomock"
 
@@ -87,4 +88,29 @@ func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_IndependentNamespa
 	s.True(rl1.Allow())
 	// rl1 is exhausted, but rl2 should still allow
 	s.True(rl2.Allow())
+}
+
+func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_BurstRatio() {
+	// rps=2, ratio=3 → burst=6; first 6 Allow() calls should succeed
+	s.shard.config.WorkflowIDStartRPSPerInstance = func(_ string) int { return 2 }
+	s.shard.config.WorkflowIDStartBurstRatio = func(_ string) float64 { return 3.0 }
+	nsID := namespace.ID("test-ns-id")
+	rl := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id")
+	s.NotNil(rl)
+	for i := 0; i < 6; i++ {
+		s.True(rl.Allow(), "expected Allow() on call %d", i+1)
+	}
+	s.False(rl.Allow(), "expected Allow() to be false after burst exhausted")
+}
+
+func (s *workflowIDRateLimiterSuite) TestGetWorkflowIDReuseRL_BurstUpdatesOnConfigChange() {
+	// Start with rps=2, ratio=1 (burst=2), then change ratio to 3 (burst=6).
+	s.shard.config.WorkflowIDStartRPSPerInstance = func(_ string) int { return 2 }
+	s.shard.config.WorkflowIDStartBurstRatio = func(_ string) float64 { return 1.0 }
+	nsID := namespace.ID("test-ns-id")
+	s.shard.GetWorkflowIDReuseRL(nsID, "wf-id") // populate cache
+
+	s.shard.config.WorkflowIDStartBurstRatio = func(_ string) float64 { return 3.0 }
+	rl := s.shard.GetWorkflowIDReuseRL(nsID, "wf-id") // should update burst to 6
+	s.Equal(6, rl.(*quotas.RateLimiterImpl).Burst())
 }
