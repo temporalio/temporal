@@ -8,7 +8,6 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
-	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
@@ -69,11 +68,6 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_Success() {
 
 	requestID := tv.Any().String()
 	identity := tv.ClientIdentity()
-	computeConfig := &computepb.ComputeConfig{
-		Provider: &computepb.ComputeProvider{
-			Type: "test-provider",
-		},
-	}
 
 	s.env.RegisterDelayedCallback(func() {
 		s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
@@ -90,9 +84,8 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_Success() {
 				s.NotNil(resp.ConflictToken)
 			},
 		}, &deploymentspb.CreateWorkerDeploymentArgs{
-			Identity:      identity,
-			RequestId:     requestID,
-			ComputeConfig: computeConfig,
+			Identity:  identity,
+			RequestId: requestID,
 		})
 	}, 1*time.Millisecond)
 
@@ -200,11 +193,6 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_ReviveDeletedDeploym
 
 	newRequestID := tv.Any().String()
 	identity := tv.ClientIdentity()
-	computeConfig := &computepb.ComputeConfig{
-		Provider: &computepb.ComputeProvider{
-			Type: "new-provider",
-		},
-	}
 	syncBatchSize := int32(10)
 
 	// First delete the deployment
@@ -244,13 +232,11 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_ReviveDeletedDeploym
 				s.NotNil(queryResp.State)
 				s.Equal(newRequestID, queryResp.State.CreateRequestId, "should have new request ID")
 				s.Equal(identity, queryResp.State.LastModifierIdentity, "should have new identity")
-				s.Equal(computeConfig, queryResp.State.ComputeConfig, "should have new compute config")
 				s.Equal(syncBatchSize, queryResp.State.SyncBatchSize, "should keep the original sync batch size")
 			},
 		}, &deploymentspb.CreateWorkerDeploymentArgs{
-			Identity:      identity,
-			RequestId:     newRequestID,
-			ComputeConfig: computeConfig,
+			Identity:  identity,
+			RequestId: newRequestID,
 		})
 	}, 5*time.Millisecond)
 
@@ -274,11 +260,6 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_UpdateComputeConfig(
 
 	requestID := tv.Any().String()
 	identity := tv.ClientIdentity()
-	newComputeConfig := &computepb.ComputeConfig{
-		Provider: &computepb.ComputeProvider{
-			Type: "updated-provider",
-		},
-	}
 
 	s.env.RegisterDelayedCallback(func() {
 		s.env.UpdateWorkflow(CreateWorkerDeployment, "", &testsuite.TestUpdateCallback{
@@ -300,9 +281,8 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeployment_UpdateComputeConfig(
 				s.Nil(queryResp.State.ComputeConfig, "compute config should remain nil for idempotent request")
 			},
 		}, &deploymentspb.CreateWorkerDeploymentArgs{
-			Identity:      identity,
-			RequestId:     requestID,
-			ComputeConfig: newComputeConfig,
+			Identity:  identity,
+			RequestId: requestID,
 		})
 	}, 1*time.Millisecond)
 

@@ -338,6 +338,7 @@ message StartWorkerDeploymentVersionRequest {
     string deployment_name = 1;
     string build_id = 2;
     string request_id = 3;
+    temporal.api.compute.v1.ComputeConfig compute_config = 4;
 }
 
 // used as Worker Deployment Version workflow activity input:
@@ -432,6 +433,8 @@ message CreateWorkerDeploymentVersionArgs {
 
     // Version string (<deployment_name>.<build_id>)
     string version = 3;
+
+    temporal.api.compute.v1.ComputeConfig compute_config = 4;
 }
 
 // used as Worker Deployment update response:

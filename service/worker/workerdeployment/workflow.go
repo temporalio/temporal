@@ -510,6 +510,9 @@ func (d *WorkflowRunner) validateCreateWorkerDeploymentVersion(args *deployments
 		}
 		return temporal.NewNonRetryableApplicationError(errVersionAlreadyExists, errVersionAlreadyExists, nil)
 	}
+	if err := ValidateWorkerDeploymentVersionComputeConfig(args.GetComputeConfig()); err != nil {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+	}
 	return nil
 }
 
@@ -559,6 +562,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 		DeploymentName: versionObj.DeploymentName,
 		BuildId:        versionObj.BuildId,
 		RequestId:      args.GetRequestId(),
+		ComputeConfig:  args.GetComputeConfig(),
 	}).Get(ctx, nil)
 	if err != nil {
 		return nil, err

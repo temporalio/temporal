@@ -11,6 +11,7 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -76,6 +77,7 @@ type Client interface {
 		buildID string,
 		identity string,
 		requestID string,
+		computeConfig *computepb.ComputeConfig,
 	) error
 
 	SetCurrentVersion(
@@ -155,6 +157,7 @@ type Client interface {
 		deploymentName, buildID string,
 		identity string,
 		requestID string,
+		computeConfig *computepb.ComputeConfig,
 	) error
 
 	// Used internally by the Worker Deployment workflow in its SyncWorkerDeploymentVersion Activity
@@ -1196,6 +1199,7 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 	buildID string,
 	identity string,
 	requestID string,
+	computeConfig *computepb.ComputeConfig,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("CreateWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1227,9 +1231,10 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentVersionArgs{
-		Identity:  identity,
-		RequestId: requestID,
-		Version:   version,
+		Identity:      identity,
+		RequestId:     requestID,
+		Version:       version,
+		ComputeConfig: computeConfig,
 	})
 	if err != nil {
 		return err
@@ -1256,6 +1261,9 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
 			return newResourceExhaustedError(failure.GetMessage())
+		}
+		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
+			return serviceerror.NewInvalidArgument(failure.GetMessage())
 		}
 		return serviceerror.NewInternalf("create deployment version failed: %s", failure.Message)
 	}
@@ -1304,6 +1312,7 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	deploymentName, buildID string,
 	identity string,
 	requestID string,
+	computeConfig *computepb.ComputeConfig,
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("StartWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
@@ -1318,7 +1327,9 @@ func (d *ClientImpl) StartWorkerDeploymentVersion(
 	}
 
 	workflowID := GenerateVersionWorkflowID(deploymentName, buildID)
-	input, err := sdk.PreferProtoDataConverter.ToPayloads(d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry))
+	args := d.makeVersionWorkflowArgs(deploymentName, buildID, namespaceEntry)
+	args.VersionState.ComputeConfig = computeConfig
+	input, err := sdk.PreferProtoDataConverter.ToPayloads(args)
 	if err != nil {
 		return err
 	}
@@ -1613,6 +1624,7 @@ func versionStateToVersionInfo(
 		TaskQueueInfos:     infos,
 		DrainageInfo:       drainageInfo,
 		Metadata:           state.Metadata,
+		ComputeConfig:      state.ComputeConfig,
 	}
 }
 
