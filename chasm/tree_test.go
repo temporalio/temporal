@@ -3515,6 +3515,39 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	s.True(childChasmTask.DeserializedTask.IsValid())
 }
 
+func (s *nodeSuite) TestAndAllChildren_PathIndependence() {
+	// Build a tree deep enough to trigger Go's slice capacity doubling.
+	// append grows cap: 0→1→2→4. At depth 3, the path slice has len=3, cap=4,
+	// so a 4th append reuses the backing array. If node P at depth 3 has siblings
+	// S1 and S2 at depth 4, the second sibling's append overwrites S1's path.
+	//
+	// Tree: root → A → B → C → {S1, S2}
+	root := &Node{
+		nodeName: "",
+		children: map[string]*Node{
+			"A": {nodeName: "A", children: map[string]*Node{
+				"B": {nodeName: "B", children: map[string]*Node{
+					"C": {nodeName: "C", children: map[string]*Node{
+						"S1": {nodeName: "S1", children: map[string]*Node{}},
+						"S2": {nodeName: "S2", children: map[string]*Node{}},
+					}},
+				}},
+			}},
+		},
+	}
+
+	// Store raw path slices (not copies!) so we can detect mutation.
+	collected := make(map[string][]string)
+	for path, node := range root.andAllChildren() {
+		collected[node.nodeName] = path
+	}
+
+	// Verify S1/S2 do not have a corrupted path
+	// because append reused the backing array at depth 3→4.
+	s.Equal([]string{"A", "B", "C", "S1"}, collected["S1"])
+	s.Equal([]string{"A", "B", "C", "S2"}, collected["S2"])
+}
+
 func (s *nodeSuite) newTestTree(
 	serializedNodes map[string]*persistencespb.ChasmNode,
 ) (*Node, error) {

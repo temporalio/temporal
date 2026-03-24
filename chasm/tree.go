@@ -2104,7 +2104,7 @@ func (n *Node) andAllChildren() iter.Seq2[[]string, *Node] {
 				return false
 			}
 			for _, child := range node.children {
-				if !walk(append(path, child.nodeName), child) {
+				if !walk(append(slices.Clone(path), child.nodeName), child) {
 					return false
 				}
 			}
