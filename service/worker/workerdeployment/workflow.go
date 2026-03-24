@@ -479,7 +479,6 @@ func (d *WorkflowRunner) handleCreateWorkerDeployment(ctx workflow.Context, args
 	// At this point this a brand-new workflow.
 	d.State.LastModifierIdentity = args.GetIdentity()
 	d.State.CreateRequestId = args.GetRequestId()
-	d.State.ComputeConfig = args.GetComputeConfig()
 	d.State.ConflictToken, _ = workflow.Now(ctx).MarshalBinary()
 
 	return &deploymentspb.CreateWorkerDeploymentResponse{

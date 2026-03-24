@@ -11,7 +11,6 @@ import (
 	"github.com/dgryski/go-farm"
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -66,7 +65,6 @@ type Client interface {
 		ctx context.Context,
 		namespaceEntry *namespace.Namespace,
 		deploymentName string,
-		computeConfig *computepb.ComputeConfig,
 		identity string,
 		requestID string,
 	) ([]byte, error)
@@ -1050,7 +1048,6 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	ctx context.Context,
 	namespaceEntry *namespace.Namespace,
 	deploymentName string,
-	computeConfig *computepb.ComputeConfig,
 	identity string,
 	requestID string,
 ) (_ []byte, retErr error) {
@@ -1094,7 +1091,6 @@ func (d *ClientImpl) CreateWorkerDeployment(
 			SyncBatchSize:        d.getSyncBatchSize(),
 			CreateRequestId:      requestID,
 			LastModifierIdentity: identity,
-			ComputeConfig:        computeConfig,
 		},
 	})
 	if err != nil {
@@ -1102,9 +1098,8 @@ func (d *ClientImpl) CreateWorkerDeployment(
 	}
 
 	updateArgs, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.CreateWorkerDeploymentArgs{
-		Identity:      identity,
-		RequestId:     requestID,
-		ComputeConfig: computeConfig,
+		Identity:  identity,
+		RequestId: requestID,
 	})
 	if err != nil {
 		return nil, err
@@ -1625,7 +1620,6 @@ func (d *ClientImpl) deploymentStateToDeploymentInfo(deploymentName string, stat
 	workerDeploymentInfo.Name = deploymentName
 	workerDeploymentInfo.CreateTime = state.CreateTime
 	workerDeploymentInfo.RoutingConfig = state.RoutingConfig
-	workerDeploymentInfo.ComputeConfig = state.ComputeConfig
 	workerDeploymentInfo.LastModifierIdentity = state.LastModifierIdentity
 	workerDeploymentInfo.ManagerIdentity = state.ManagerIdentity
 	if len(state.PropagatingRevisions) > 0 {

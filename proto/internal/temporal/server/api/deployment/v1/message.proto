@@ -406,7 +406,6 @@ message CreateWorkerDeploymentArgs {
     // Retrying with different request id is an error.
     // One deployment is deleted, same or different request id will re-create it.
     string request_id = 2;
-    temporal.api.compute.v1.ComputeConfig compute_config = 3;
 }
 
 // used as Worker Deployment update response:
