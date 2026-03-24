@@ -180,6 +180,8 @@ func TestTerminalStatesDeletion(t *testing.T) {
 						ScheduledEventId: scheduledEventID,
 					},
 				}
+			default:
+				t.Fatalf("unexpected event type: %v", tc.eventType)
 			}
 
 			// Look up the event definition from the registry.
