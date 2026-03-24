@@ -137,9 +137,33 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 		return ErrCancellationAlreadyRequested
 	}
 
-	cancellation := newCancellation(&nexusoperationpb.CancellationState{
+	return o.handleCancellation(ctx, newCancellation(&nexusoperationpb.CancellationState{
 		ParentData: parentData,
-	})
+	}))
+}
+
+func (o *Operation) handleCancellationRequested(
+	ctx chasm.MutableContext,
+	req *nexusoperationpb.CancellationState,
+) error {
+	if existingCancellation, ok := o.Cancellation.TryGet(ctx); ok {
+		existingReqID := existingCancellation.GetRequestId()
+		newReqID := req.GetRequestId()
+
+		if existingReqID != newReqID {
+			return serviceerror.NewFailedPreconditionf("cancellation already requested with request ID %s", existingReqID)
+		}
+		return nil
+	}
+
+	return o.handleCancellation(ctx, newCancellation(req))
+}
+
+func (o *Operation) handleCancellation(
+	ctx chasm.MutableContext,
+	cancellation *Cancellation,
+) error {
+	cancellation.RequestedTime = timestamppb.New(ctx.Now(o))
 	o.Cancellation = chasm.NewComponentField(ctx, cancellation)
 
 	// Once started, the handler returns a token that can be used in the cancelation request.
@@ -151,8 +175,36 @@ func (o *Operation) Cancel(ctx chasm.MutableContext, parentData *anypb.Any) erro
 	return nil
 }
 
-func (o *Operation) Terminate(_ chasm.MutableContext, _ chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
+func (o *Operation) Terminate(
+	ctx chasm.MutableContext,
+	req chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// If already in terminated state, fail if request ID is different, else no-op
+	if o.GetTerminateState() != nil {
+		newReqID := req.RequestID
+		existingReqID := o.TerminateState.GetRequestId()
+
+		if existingReqID != newReqID {
+			return chasm.TerminateComponentResponse{},
+				serviceerror.NewFailedPreconditionf("already terminated with request ID %s", existingReqID)
+		}
+
+		return chasm.TerminateComponentResponse{}, nil
+	}
+
 	return chasm.TerminateComponentResponse{}, serviceerror.NewUnimplemented("not implemented")
+}
+
+func (o *Operation) handleTerminateRequested(
+	ctx chasm.MutableContext,
+	req *nexusoperationpb.NexusOperationTerminateState,
+) error {
+	_, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
+		RequestID: req.GetRequestId(),
+		Identity:  req.GetIdentity(),
+		Reason:    req.GetReason(),
+	})
+	return err
 }
 
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.

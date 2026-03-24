@@ -88,12 +88,19 @@ func (h *handler) RequestCancelNexusOperation(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
-	resp, _, err := chasm.UpdateComponent(ctx, ref, func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
-		if err := o.Cancel(ctx, nil); err != nil {
-			return nil, err
-		}
-		return &nexusoperationpb.RequestCancelNexusOperationResponse{}, nil
-	}, req)
+	resp, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
+			if err := o.handleCancellationRequested(ctx, &nexusoperationpb.CancellationState{
+				RequestId: req.GetFrontendRequest().GetRequestId(),
+				Identity:  req.GetFrontendRequest().GetIdentity(),
+				Reason:    req.GetFrontendRequest().GetReason(),
+			}); err != nil {
+				return nil, err
+			}
+			return &nexusoperationpb.RequestCancelNexusOperationResponse{}, nil
+		}, req)
 
 	return resp, err
 }
@@ -111,16 +118,19 @@ func (h *handler) TerminateNexusOperation(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
-	resp, _, err := chasm.UpdateComponent(ctx, ref, func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.TerminateNexusOperationRequest) (*nexusoperationpb.TerminateNexusOperationResponse, error) {
-		_, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
-			Identity: req.GetFrontendRequest().GetIdentity(),
-			Reason:   req.GetFrontendRequest().GetReason(),
-		})
-		if err != nil {
-			return nil, err
-		}
-		return &nexusoperationpb.TerminateNexusOperationResponse{}, nil
-	}, req)
+	resp, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.TerminateNexusOperationRequest) (*nexusoperationpb.TerminateNexusOperationResponse, error) {
+			if err := o.handleTerminateRequested(ctx, &nexusoperationpb.NexusOperationTerminateState{
+				RequestId: req.GetFrontendRequest().GetRequestId(),
+				Identity:  req.GetFrontendRequest().GetIdentity(),
+				Reason:    req.GetFrontendRequest().GetReason(),
+			}); err != nil {
+				return nil, err
+			}
+			return &nexusoperationpb.TerminateNexusOperationResponse{}, nil
+		}, req)
 
 	return resp, err
 }
