@@ -10,6 +10,7 @@ import (
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 )
 
@@ -20,6 +21,21 @@ const (
 	testDefaultMaxEntries       = 1_000_000
 	testDefaultEvictionInterval = 10 * time.Minute
 )
+
+func testDefaultRegistryParams(handler metrics.Handler) RegistryParams {
+	return RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
+		TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
+		MetricsHandler:   handler,
+		MetricsConfig: WorkerMetricsConfig{
+			EnablePluginMetrics:     dynamicconfig.GetBoolPropertyFn(true),
+			ExternalPayloadsEnabled: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		},
+	}
+}
 
 func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 	tests := []struct {
@@ -78,17 +94,7 @@ func TestRegistryImpl_RecordWorkerHeartbeat(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(RegistryParams{
-				NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-				TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				MetricsHandler:   metrics.NoopMetricsHandler,
-				MetricsConfig: WorkerMetricsConfig{
-					EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-				},
-			})
+			r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 			tt.setup(r)
 
 			r.RecordWorkerHeartbeats(tt.nsID, namespace.Name(tt.nsID+"_name"), []*workerpb.WorkerHeartbeat{tt.workerHeartbeat})
@@ -184,17 +190,7 @@ func TestRegistryImpl_ListWorkers(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(RegistryParams{
-				NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-				TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				MetricsHandler:   metrics.NoopMetricsHandler,
-				MetricsConfig: WorkerMetricsConfig{
-					EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-				},
-			})
+			r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 			tt.setup(r)
 
 			resp, err := r.ListWorkers(tt.nsID, ListWorkersParams{})
@@ -316,17 +312,7 @@ func TestRegistryImpl_ListWorkersWithQuery(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(RegistryParams{
-				NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-				TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				MetricsHandler:   metrics.NoopMetricsHandler,
-				MetricsConfig: WorkerMetricsConfig{
-					EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-				},
-			})
+			r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 			tt.setup(r)
 
 			resp, err := r.ListWorkers(tt.nsID, ListWorkersParams{Query: tt.query})
@@ -428,17 +414,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := newRegistryImpl(RegistryParams{
-				NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-				TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-				MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-				MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-				EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-				MetricsHandler:   metrics.NoopMetricsHandler,
-				MetricsConfig: WorkerMetricsConfig{
-					EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-				},
-			})
+			r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 			tt.setup(r)
 
 			result, err := r.DescribeWorker(tt.nsID, tt.workerInstanceKey)
@@ -455,17 +431,7 @@ func TestRegistryImpl_DescribeWorker(t *testing.T) {
 }
 
 func TestRegistryImpl_ListWorkersPagination(t *testing.T) {
-	r := newRegistryImpl(RegistryParams{
-		NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-		TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-		MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-		EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-		MetricsHandler:   metrics.NoopMetricsHandler,
-		MetricsConfig: WorkerMetricsConfig{
-			EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-		},
-	})
+	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	// Add 5 workers in non-sorted order to verify sorting works
 	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
@@ -561,17 +527,7 @@ func TestRegistryImpl_ListWorkersPaginationWithDeletedCursor(t *testing.T) {
 }
 
 func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
-	r := newRegistryImpl(RegistryParams{
-		NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-		TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-		MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-		EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-		MetricsHandler:   metrics.NoopMetricsHandler,
-		MetricsConfig: WorkerMetricsConfig{
-			EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-		},
-	})
+	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-a"},
@@ -587,17 +543,7 @@ func TestRegistryImpl_ListWorkersNoPagination(t *testing.T) {
 }
 
 func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
-	r := newRegistryImpl(RegistryParams{
-		NumBuckets:       dynamicconfig.GetIntPropertyFn(10),
-		TTL:              dynamicconfig.GetDurationPropertyFn(testDefaultEntryTTL),
-		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(testDefaultMinEvictAge),
-		MaxItems:         dynamicconfig.GetIntPropertyFn(testDefaultMaxEntries),
-		EvictionInterval: dynamicconfig.GetDurationPropertyFn(testDefaultEvictionInterval),
-		MetricsHandler:   metrics.NoopMetricsHandler,
-		MetricsConfig: WorkerMetricsConfig{
-			EnablePluginMetrics: dynamicconfig.GetBoolPropertyFn(true),
-		},
-	})
+	r := newRegistryImpl(testDefaultRegistryParams(metrics.NoopMetricsHandler))
 
 	r.upsertHeartbeats("ns1", []*workerpb.WorkerHeartbeat{
 		{WorkerInstanceKey: "worker-a"},
@@ -606,4 +552,74 @@ func TestRegistryImpl_ListWorkersInvalidPageToken(t *testing.T) {
 	_, err := r.ListWorkers("ns1", ListWorkersParams{PageSize: 2, NextPageToken: []byte("invalid-json")})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid next_page_token")
+}
+
+func TestRegistryImpl_RecordStorageDriverMetric(t *testing.T) {
+	t.Run("disabled when ExternalPayloadsEnabled is false", func(t *testing.T) {
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+
+		params := testDefaultRegistryParams(captureHandler)
+		r := newRegistryImpl(params)
+
+		r.metricsEmitter.emit(namespace.ID("test-ns-id"), namespace.Name("test-ns"), []*workerpb.WorkerHeartbeat{
+			{
+				WorkerInstanceKey: "worker1",
+				Drivers:           []*workerpb.StorageDriverInfo{{Type: "s3"}},
+			},
+		})
+
+		snap := capture.Snapshot()
+		assert.Empty(t, snap["worker_storage_driver_type"], "no metrics should be emitted when external payloads is disabled")
+	})
+
+	t.Run("emits storage driver type when enabled", func(t *testing.T) {
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+
+		params := testDefaultRegistryParams(captureHandler)
+		params.MetricsConfig.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		r := newRegistryImpl(params)
+
+		r.metricsEmitter.emit(namespace.ID("test-ns-id"), namespace.Name("test-ns"), []*workerpb.WorkerHeartbeat{
+			{
+				WorkerInstanceKey: "worker1",
+				Drivers:           []*workerpb.StorageDriverInfo{{Type: "s3"}},
+			},
+		})
+
+		snap := capture.Snapshot()
+		recordings := snap["worker_storage_driver_type"]
+		require.Len(t, recordings, 1)
+		assert.Equal(t, "s3", recordings[0].Tags["worker_storage_driver_type"])
+		assert.Equal(t, "test-ns", recordings[0].Tags["namespace"])
+	})
+
+	t.Run("deduplication across heartbeats", func(t *testing.T) {
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		defer captureHandler.StopCapture(capture)
+
+		params := testDefaultRegistryParams(captureHandler)
+		params.MetricsConfig.ExternalPayloadsEnabled = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		r := newRegistryImpl(params)
+
+		r.metricsEmitter.emit(namespace.ID("test-ns-id"), namespace.Name("test-ns"), []*workerpb.WorkerHeartbeat{
+			{
+				WorkerInstanceKey: "worker1",
+				Drivers:           []*workerpb.StorageDriverInfo{{Type: "s3"}},
+			},
+			{
+				WorkerInstanceKey: "worker2",
+				Drivers:           []*workerpb.StorageDriverInfo{{Type: "s3"}},
+			},
+		})
+
+		snap := capture.Snapshot()
+		recordings := snap["worker_storage_driver_type"]
+		require.Len(t, recordings, 1, "same driver type from multiple heartbeats should produce a single metric")
+		assert.Equal(t, "s3", recordings[0].Tags["worker_storage_driver_type"])
+	})
 }

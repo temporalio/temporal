@@ -174,8 +174,8 @@ type (
 	}
 )
 
-var (
-	defaultLocalActivityOptions = workflow.LocalActivityOptions{
+func defaultLocalActivityOptions() workflow.LocalActivityOptions {
+	return workflow.LocalActivityOptions{
 		// This applies to watch, cancel, and terminate. Start workflow overrides this.
 		ScheduleToCloseTimeout: 1 * time.Hour,
 		// Each local activity is one or a few local RPCs.
@@ -186,7 +186,9 @@ var (
 			MaximumInterval: 60 * time.Second,
 		},
 	}
+}
 
+var (
 	// CurrentTweakablePolicies is  a handful of options in a static value and use it as a MutableSideEffect within
 	// the workflow so that we can change them without breaking existing executions or having
 	// to use versioning.
@@ -1422,7 +1424,7 @@ func (s *scheduler) startWorkflow(
 	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
 	// acceptable to start this workflow. For manual starts (trigger immediately or backfill),
 	// catch up window doesn't apply, so just use 60s.
-	options := defaultLocalActivityOptions
+	options := defaultLocalActivityOptions()
 	if start.Manual {
 		options.ScheduleToCloseTimeout = 60 * time.Second
 	} else {
@@ -1538,7 +1540,7 @@ func (s *scheduler) addSearchAttributes(
 }
 
 func (s *scheduler) refreshWorkflows(executions []*commonpb.WorkflowExecution) {
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions())
 	futures := make([]workflow.Future, len(executions))
 	for i, ex := range executions {
 		req := &schedulespb.WatchWorkflowRequest{
@@ -1579,7 +1581,7 @@ func (s *scheduler) startLongPollWatcher(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions())
 	areq := &schedulespb.CancelWorkflowRequest{
 		RequestId: s.newUUIDString(),
 		Identity:  s.identity(),
@@ -1597,7 +1599,7 @@ func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 }
 
 func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions())
 	areq := &schedulespb.TerminateWorkflowRequest{
 		RequestId: s.newUUIDString(),
 		Identity:  s.identity(),

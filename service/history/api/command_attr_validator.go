@@ -108,7 +108,7 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		RetryPolicy:            attributes.RetryPolicy,
 	}
 
-	err := activity.ValidateAndNormalizeActivityAttributes(
+	err := activity.ValidateAndNormalizeEmbeddedActivity(
 		activityID,
 		activityType,
 		v.getDefaultActivityRetrySettings,

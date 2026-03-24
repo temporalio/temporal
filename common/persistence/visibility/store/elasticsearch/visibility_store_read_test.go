@@ -86,7 +86,7 @@ var (
 )
 
 func mustEncodeValue(val any, valueType enumspb.IndexedValueType) *commonpb.Payload {
-	p, err := searchattribute.EncodeValue(val, valueType)
+	p, err := sadefs.EncodeValue(val, valueType)
 	if err != nil {
 		panic(fmt.Sprintf("failed to encode value %v: %v", val, err))
 	}

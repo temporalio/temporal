@@ -2,6 +2,8 @@ package history
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,10 +18,12 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
@@ -122,6 +126,9 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.registry,
 		s.config,
 		NewChasmNotifier(),
+		s.mockShard.GetLogger(),
+		s.mockShard.Resource.HistoryServiceResolver,
+		s.mockShard.Resource.HostInfoProvider,
 	)
 	s.engine.SetShardController(s.mockShardController)
 }
@@ -486,8 +493,8 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
 
 func (s *chasmEngineSuite) newTestExecutionFn(
 	activityID string,
-) func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error) {
-	return func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+) func(chasm.MutableContext) (chasm.RootComponent, error) {
+	return func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 		return &testComponent{
 			ActivityInfo: &persistencespb.ActivityInfo{
 				ActivityId: activityID,
@@ -708,7 +715,6 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 		func(
 			ctx chasm.MutableContext,
 			component chasm.Component,
-			_ *chasm.Registry,
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -745,7 +751,6 @@ func (s *chasmEngineSuite) TestReadComponent_Success() {
 		func(
 			ctx chasm.Context,
 			component chasm.Component,
-			_ *chasm.Registry,
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -784,7 +789,7 @@ func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
 	newSerializedRef, err := s.engine.PollComponent(
 		context.Background(),
 		ref,
-		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) (bool, error) {
+		func(ctx chasm.Context, component chasm.Component) (bool, error) {
 			return true, nil
 		},
 	)
@@ -882,7 +887,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		newSerializedRef, err := s.engine.PollComponent(
 			ctx,
 			pollRef,
-			func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) (bool, error) {
+			func(ctx chasm.Context, component chasm.Component) (bool, error) {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
 				satisfied := tc.ActivityInfo.ActivityId == activityID
@@ -896,7 +901,7 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		_, err := s.engine.UpdateComponent(
 			context.Background(),
 			updateRef,
-			func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+			func(ctx chasm.MutableContext, component chasm.Component) error {
 				tc, ok := component.(*testComponent)
 				s.True(ok)
 				if satisfyPredicate {
@@ -943,7 +948,6 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 		func(
 			ctx chasm.Context,
 			component chasm.Component,
-			_ *chasm.Registry,
 		) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -999,7 +1003,7 @@ func (s *chasmEngineSuite) TestPollComponent_StaleState() {
 	_, err = s.engine.PollComponent(
 		context.Background(),
 		staleRef,
-		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) (bool, error) {
+		func(ctx chasm.Context, component chasm.Component) (bool, error) {
 			s.Fail("predicate should not be called with stale ref")
 			return false, nil
 		},
@@ -1043,7 +1047,6 @@ func (s *chasmEngineSuite) TestCloseTime_ReturnsNonZeroWhenCompleted() {
 		func(
 			ctx chasm.Context,
 			component chasm.Component,
-			_ *chasm.Registry,
 		) error {
 			// Verify CloseTime returns non-zero time when component is completed
 			closeTime := ctx.ExecutionCloseTime()
@@ -1086,7 +1089,7 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 	_, err := s.engine.UpdateComponent(
 		context.Background(),
 		ref,
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
 			tc.ActivityInfo.ActivityId = tv.ActivityID()
@@ -1098,7 +1101,7 @@ func (s *chasmEngineSuite) TestStateTransitionCount() {
 	err = s.engine.ReadComponent(
 		context.Background(),
 		ref,
-		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.Context, component chasm.Component) error {
 			s.Equal(initialCount+1, ctx.StateTransitionCount())
 			return nil
 		},
@@ -1167,11 +1170,11 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			s.Fail("newFn should not be called when execution exists and is running")
 			return nil, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			tc, ok := component.(*testComponent)
 			s.True(ok)
 			tc.ActivityInfo.ActivityId = "updated-" + tc.ActivityInfo.ActivityId
@@ -1234,7 +1237,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			newFnCalled = true
 			return &testComponent{
 				ActivityInfo: &persistencespb.ActivityInfo{
@@ -1242,7 +1245,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 				},
 			}, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			updateFnCalled = true
 			tc, ok := component.(*testComponent)
 			s.True(ok)
@@ -1324,7 +1327,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	result, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			newFnCalled = true
 			return &testComponent{
 				ActivityInfo: &persistencespb.ActivityInfo{
@@ -1332,7 +1335,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 				},
 			}, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			updateFnCalled = true
 			// Apply the "update" to the newly created component
 			tc, ok := component.(*testComponent)
@@ -1392,11 +1395,11 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			s.Fail("newFn should not be called")
 			return nil, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			return expectedErr
 		},
 	)
@@ -1419,10 +1422,10 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NewFnError() {
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			return nil, expectedErr
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			s.Fail("updateFn should not be called when newFn fails")
 			return nil
 		},
@@ -1447,7 +1450,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnErrorOnCreate() 
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			newFnCalled = true
 			return &testComponent{
 				ActivityInfo: &persistencespb.ActivityInfo{
@@ -1455,7 +1458,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnErrorOnCreate() 
 				},
 			}, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			return expectedErr
 		},
 	)
@@ -1513,11 +1516,11 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdatePathVersionConflic
 	_, err := s.engine.UpdateWithStartExecution(
 		context.Background(),
 		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext, _ chasm.ArchetypeID, _ *chasm.Registry) (chasm.RootComponent, error) {
+		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
 			s.Fail("newFn should not be called when execution exists")
 			return nil, nil
 		},
-		func(ctx chasm.MutableContext, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.MutableContext, component chasm.Component) error {
 			// updateFn is called before the version conflict is detected during persist.
 			updateFnCalled = true
 			tc, ok := component.(*testComponent)
@@ -1546,7 +1549,7 @@ func (s *chasmEngineSuite) TestReadComponent_NotFound() {
 				RunID:       "11111111-2222-3333-4444-555555555555",
 			},
 		),
-		func(ctx chasm.Context, component chasm.Component, _ *chasm.Registry) error {
+		func(ctx chasm.Context, component chasm.Component) error {
 			s.Fail("readFn should not be called")
 			return nil
 		},
@@ -1685,4 +1688,272 @@ func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*testComponent]("test_component",
 			chasm.WithSearchAttributes(testComponentPausedSearchAttribute)),
 	}
+}
+
+func (s *chasmEngineSuite) TestConvertError() {
+	t := s.T()
+	tv := testvars.New(t)
+	tv = tv.WithRunID(tv.Any().RunID())
+	businessID := tv.WorkflowID()
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  businessID,
+			RunID:       tv.RunID(),
+		},
+	)
+
+	t.Run("NotFound", func(t *testing.T) {
+		err := serviceerror.NewNotFound("original not found")
+		convertedErr := s.engine.convertError(err, ref, tv.RequestID())
+		require.Error(t, convertedErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, convertedErr, &notFoundErr)
+		require.Equal(t, fmt.Sprintf("%s not found for ID: %s", "test_component", businessID), convertedErr.Error())
+	})
+
+	t.Run("NotFound_WithoutBusinessID", func(t *testing.T) {
+		refWithoutBusinessID := chasm.NewComponentRef[*testComponent](
+			chasm.ExecutionKey{
+				NamespaceID: string(tests.NamespaceID),
+				BusinessID:  "",
+				RunID:       tv.RunID(),
+			},
+		)
+		err := serviceerror.NewNotFound("original not found")
+		convertedErr := s.engine.convertError(err, refWithoutBusinessID, tv.RequestID())
+		require.Error(t, convertedErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, convertedErr, &notFoundErr)
+		require.Equal(t, err, convertedErr)
+	})
+
+	t.Run("UnconvertedServiceErrors", func(t *testing.T) {
+		testErrors := []error{
+			chasm.NewExecutionAlreadyStartedErr("already started", "request-123", "run-456"),
+			serviceerror.NewInvalidArgument("invalid argument"),
+			serviceerror.NewAlreadyExists("already exists"),
+			serviceerror.NewFailedPrecondition("failed precondition"),
+			serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "resource exhausted"),
+			serviceerror.NewCanceled("canceled"),
+			serviceerror.NewDeadlineExceeded("deadline exceeded"),
+			serviceerror.NewInternal("internal error"),
+			serviceerror.NewUnavailable("unavailable"),
+			serviceerror.NewDataLoss("data loss"),
+			serviceerror.NewPermissionDenied("permission denied", ""),
+			serviceerror.NewUnimplemented("unimplemented"),
+			serviceerror.NewNamespaceNotActive("test-namespace", "cluster1", "cluster2"),
+		}
+
+		for _, err := range testErrors {
+			convertedErr := s.engine.convertError(err, ref, tv.RequestID())
+			require.Equal(t, err, convertedErr)
+		}
+	})
+
+	t.Run("PersistenceErrors", func(t *testing.T) {
+		persistenceErrorCases := []struct {
+			name           string
+			err            error
+			setupMocks     func()
+			assertErrType  func(t *testing.T, err error)
+			expectedErrMsg []string
+		}{
+			{
+				name: "ShardOwnershipLostError",
+				err: &persistence.ShardOwnershipLostError{
+					ShardID: 123,
+					Msg:     "shard ownership lost",
+				},
+				setupMocks: func() {
+					ownerHost := membership.NewHostInfoFromAddress("owner-host:1234")
+					currentHost := membership.NewHostInfoFromAddress("current-host:5678")
+					s.mockShard.Resource.HistoryServiceResolver.EXPECT().
+						Lookup("123").
+						Return(ownerHost, nil).
+						Times(1)
+					s.mockShard.Resource.HostInfoProvider.EXPECT().
+						HostInfo().
+						Return(currentHost).
+						Times(1)
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var solErr *serviceerrors.ShardOwnershipLost
+					require.ErrorAs(t, err, &solErr)
+					require.Equal(t, "owner-host:1234", solErr.OwnerHost)
+					require.Equal(t, "current-host:5678", solErr.CurrentHost)
+				},
+				expectedErrMsg: []string{"Shard is owned by:owner-host:1234 but not by current-host:5678"},
+			},
+			{
+				name: "ShardOwnershipLostError_LookupFails",
+				err: &persistence.ShardOwnershipLostError{
+					ShardID: 456,
+					Msg:     "shard ownership lost",
+				},
+				setupMocks: func() {
+					currentHost := membership.NewHostInfoFromAddress("current-host:5678")
+					s.mockShard.Resource.HistoryServiceResolver.EXPECT().
+						Lookup("456").
+						Return(nil, errors.New("lookup failed")).
+						Times(1)
+					s.mockShard.Resource.HostInfoProvider.EXPECT().
+						HostInfo().
+						Return(currentHost).
+						Times(1)
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var solErr *serviceerrors.ShardOwnershipLost
+					require.ErrorAs(t, err, &solErr)
+					require.Empty(t, solErr.OwnerHost)
+					require.Equal(t, "current-host:5678", solErr.CurrentHost)
+				},
+				expectedErrMsg: []string{"Shard is owned by: but not by current-host:5678"},
+			},
+			{
+				name: "AppendHistoryTimeoutError",
+				err: &persistence.AppendHistoryTimeoutError{
+					Msg: "append history timeout",
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var unavailable *serviceerror.Unavailable
+					require.ErrorAs(t, err, &unavailable)
+				},
+				expectedErrMsg: []string{"append history timed out"},
+			},
+			{
+				name: "WorkflowConditionFailedError",
+				err: &persistence.WorkflowConditionFailedError{
+					Msg:             "workflow condition failed",
+					DBRecordVersion: 10,
+					NextEventID:     20,
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var unavailable *serviceerror.Unavailable
+					require.ErrorAs(t, err, &unavailable)
+				},
+				expectedErrMsg: []string{"workflow condition failed"},
+			},
+			{
+				name: "CurrentWorkflowConditionFailedError",
+				err: &persistence.CurrentWorkflowConditionFailedError{
+					Msg:    "current workflow condition failed",
+					RunID:  tv.RunID(),
+					Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var unavailable *serviceerror.Unavailable
+					require.ErrorAs(t, err, &unavailable)
+				},
+				expectedErrMsg: []string{"current workflow condition failed", tv.RunID()},
+			},
+			{
+				name: "ConditionFailedError",
+				err: &persistence.ConditionFailedError{
+					Msg: "condition failed",
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var unavailable *serviceerror.Unavailable
+					require.ErrorAs(t, err, &unavailable)
+				},
+				expectedErrMsg: []string{"condition failed"},
+			},
+			{
+				name: "TransactionSizeLimitError",
+				err: &persistence.TransactionSizeLimitError{
+					Msg: "transaction too large",
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var invalidArgument *serviceerror.InvalidArgument
+					require.ErrorAs(t, err, &invalidArgument)
+				},
+				expectedErrMsg: []string{"transaction size limit exceeded"},
+			},
+			{
+				name: "TimeoutError",
+				err: &persistence.TimeoutError{
+					Msg: "persistence timeout",
+				},
+				assertErrType: func(t *testing.T, err error) {
+					var deadlineExceeded *serviceerror.DeadlineExceeded
+					require.ErrorAs(t, err, &deadlineExceeded)
+				},
+				expectedErrMsg: []string{"persistence operation timed out"},
+			},
+		}
+
+		for _, tc := range persistenceErrorCases {
+			t.Run(tc.name, func(t *testing.T) {
+				if tc.setupMocks != nil {
+					tc.setupMocks()
+				}
+				convertedErr := s.engine.convertError(tc.err, ref, tv.RequestID())
+				require.Error(t, convertedErr)
+				tc.assertErrType(t, convertedErr)
+				for _, msg := range tc.expectedErrMsg {
+					require.Contains(t, convertedErr.Error(), msg)
+				}
+			})
+		}
+	})
+
+	t.Run("UncategorizedError", func(t *testing.T) {
+		err := errors.New("some unknown error")
+		convertedErr := s.engine.convertError(err, ref, tv.RequestID())
+		require.Error(t, convertedErr)
+		// Should pass through
+		require.Equal(t, err, convertedErr)
+	})
+
+	t.Run("WrappedErrors", func(t *testing.T) {
+		// Test that wrapped errors are properly detected using errors.AsType()
+		t.Run("WrappedServiceError", func(t *testing.T) {
+			baseErr := serviceerror.NewInvalidArgument("invalid input")
+			wrappedErr := fmt.Errorf("context: %w", baseErr)
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
+			require.ErrorAs(t, convertedErr, new(*serviceerror.InvalidArgument))
+		})
+
+		t.Run("WrappedPersistenceError", func(t *testing.T) {
+			baseErr := &persistence.TimeoutError{Msg: "timeout"}
+			wrappedErr := fmt.Errorf("operation failed: %w", baseErr)
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
+			require.ErrorAs(t, convertedErr, new(*serviceerror.DeadlineExceeded))
+			require.Contains(t, convertedErr.Error(), "persistence operation timed out")
+		})
+
+		t.Run("WrappedChasmError", func(t *testing.T) {
+			baseErr := chasm.NewExecutionAlreadyStartedErr("already started", tv.RequestID(), tv.RunID())
+			wrappedErr := fmt.Errorf("wrapped: %w", baseErr)
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
+			var chasmErr *chasm.ExecutionAlreadyStartedError
+			require.ErrorAs(t, convertedErr, &chasmErr)
+		})
+	})
+
+	t.Run("ContextErrors", func(t *testing.T) {
+		t.Run("ContextCanceled", func(t *testing.T) {
+			convertedErr := s.engine.convertError(context.Canceled, ref, tv.RequestID())
+			require.ErrorIs(t, convertedErr, context.Canceled)
+		})
+
+		t.Run("ContextDeadlineExceeded", func(t *testing.T) {
+			convertedErr := s.engine.convertError(context.DeadlineExceeded, ref, tv.RequestID())
+			require.ErrorIs(t, convertedErr, context.DeadlineExceeded)
+		})
+
+		t.Run("WrappedContextCanceled", func(t *testing.T) {
+			wrappedErr := fmt.Errorf("operation canceled: %w", context.Canceled)
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
+			require.ErrorIs(t, convertedErr, context.Canceled)
+		})
+
+		t.Run("WrappedContextDeadlineExceeded", func(t *testing.T) {
+			wrappedErr := fmt.Errorf("operation timed out: %w", context.DeadlineExceeded)
+			convertedErr := s.engine.convertError(wrappedErr, ref, tv.RequestID())
+			require.ErrorIs(t, convertedErr, context.DeadlineExceeded)
+		})
+	})
 }

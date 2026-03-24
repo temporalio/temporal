@@ -47,8 +47,26 @@ type Library struct {
 	CancellationBackoffTaskExecutor *CancellationBackoffTaskExecutor
 }
 
-func newLibrary(handler *handler) *Library {
-	return &Library{handler: handler}
+func newLibrary(
+	handler *handler,
+	invocationTaskExecutor *OperationInvocationTaskExecutor,
+	backoffTaskExecutor *OperationBackoffTaskExecutor,
+	scheduleToStartTimeoutTaskExecutor *OperationScheduleToStartTimeoutTaskExecutor,
+	startToCloseTimeoutTaskExecutor *OperationStartToCloseTimeoutTaskExecutor,
+	scheduleToCloseTimeoutTaskExecutor *OperationScheduleToCloseTimeoutTaskExecutor,
+	cancellationTaskExecutor *CancellationTaskExecutor,
+	cancellationBackoffTaskExecutor *CancellationBackoffTaskExecutor,
+) *Library {
+	return &Library{
+		handler:                                     handler,
+		OperationInvocationTaskExecutor:             invocationTaskExecutor,
+		OperationBackoffTaskExecutor:                backoffTaskExecutor,
+		OperationScheduleToStartTimeoutTaskExecutor: scheduleToStartTimeoutTaskExecutor,
+		OperationStartToCloseTimeoutTaskExecutor:    startToCloseTimeoutTaskExecutor,
+		OperationScheduleToCloseTimeoutTaskExecutor: scheduleToCloseTimeoutTaskExecutor,
+		CancellationTaskExecutor:                    cancellationTaskExecutor,
+		CancellationBackoffTaskExecutor:             cancellationBackoffTaskExecutor,
+	}
 }
 
 func (l *Library) Tasks() []*chasm.RegistrableTask {

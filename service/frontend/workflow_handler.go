@@ -79,6 +79,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/worker/batcher"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"google.golang.org/grpc/codes"
@@ -3325,12 +3326,40 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 		return nil, serviceerror.NewInvalidArgument("Only StartWorkflow action is supported for schedules")
 	}
 
+	// Phase 1: Write sentinel to V1 key space (dummy workflow) to prevent a
+	// concurrent V1 CreateSchedule from succeeding for the same schedule ID.
+	if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
+		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
+		if !errors.As(err, &alreadyStartedErr) {
+			return nil, err
+		}
+		// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
+		isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
+		if checkErr != nil {
+			return nil, checkErr
+		}
+		if isReal {
+			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+		}
+	}
+
+	// Phase 2: Write real CHASM scheduler.
 	res, err := wh.schedulerClient.CreateSchedule(ctx, &schedulerpb.CreateScheduleRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: request,
 	})
-	return res.GetFrontendResponse(), err
-
+	if err != nil {
+		// The CHASM handler returns NotFound when the key is occupied by a
+		// sentinel (written by a V1-path node that raced us). Translate to
+		// AlreadyExists so the caller gets a sensible error.
+		if isSchedulerErrorLegacyRoutable(err) {
+			wh.logger.Warn("CreateSchedule race detected: sentinel found at CHASM key",
+				tag.ScheduleID(request.ScheduleId))
+			return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+		}
+		return nil, err
+	}
+	return res.GetFrontendResponse(), nil
 }
 
 func (wh *WorkflowHandler) createScheduleWorkflow(
@@ -3344,6 +3373,23 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	if err != nil {
 		return nil, err
 	}
+
+	// Phase 1: Write sentinel to CHASM key space to prevent a concurrent CHASM
+	// CreateSchedule from succeeding for the same schedule ID.
+	//
+	// We gate on EnableCHASM because the point of the sentinel is to account for a
+	// case where the fleet has an inconsistent view of dynamic config. EnableCHASM
+	// will be true well in advance of us enabling scheduler creation across the entire
+	// fleet, so it is stable for usage here.
+	if wh.config.EnableChasm(namespaceName.String()) {
+		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
+			// CreateSentinel succeeds idempotently if a sentinel already exists.
+			// An AlreadyExists error means a real CHASM scheduler owns this ID.
+			return nil, err
+		}
+	}
+
+	// Phase 2: Write real V1 scheduler workflow.
 
 	// Add namespace division before unaliasing search attributes.
 	searchattribute.AddSearchAttribute(&request.SearchAttributes, sadefs.TemporalNamespaceDivision, payload.EncodeString(scheduler.NamespaceDivision))
@@ -3406,6 +3452,21 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	)
 
 	if err != nil {
+		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
+		if errors.As(err, &alreadyStartedErr) {
+			// V1 key is occupied. Check if it's a sentinel (race) or real scheduler.
+			isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
+			if checkErr != nil {
+				return nil, checkErr
+			}
+			if !isReal {
+				// A dummy workflow exists — a CHASM-path node raced us.
+				wh.logger.Warn("CreateSchedule race detected: sentinel found at V1 key",
+					tag.ScheduleID(request.ScheduleId))
+				return nil, serviceerror.NewAlreadyExistsf("schedule %q: concurrent creation detected", request.ScheduleId)
+			}
+			return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", request.ScheduleId)
+		}
 		return nil, err
 	}
 	token := make([]byte, 8)
@@ -3413,6 +3474,83 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	return &workflowservice.CreateScheduleResponse{
 		ConflictToken: token,
 	}, nil
+}
+
+// writeSchedulerWorkflowSentinel starts a dummy workflow to reserve the V1
+// workflow ID space for the given schedule ID. The dummy workflow sleeps for a
+// fixed duration and then completes, releasing the reservation.
+func (wh *WorkflowHandler) writeSchedulerWorkflowSentinel(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.CreateScheduleRequest,
+) error {
+	startReq := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                request.Namespace,
+		WorkflowId:               scheduler.WorkflowIDPrefix + request.ScheduleId,
+		WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Identity:                 request.Identity,
+		RequestId:                request.RequestId,
+		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		// Set TemporalNamespaceDivision so the dummy is hidden from
+		// ListWorkflowExecutions. Use a distinct value so it doesn't match the
+		// ListSchedules query (which filters on scheduler.NamespaceDivision).
+		SearchAttributes: &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				sadefs.TemporalNamespaceDivision: payload.EncodeString("TemporalSchedulerSentinel"),
+			},
+		},
+	}
+	_, err := wh.historyClient.StartWorkflowExecution(
+		ctx,
+		common.CreateHistoryStartWorkflowRequest(namespaceID, startReq, nil, nil, time.Now().UTC()),
+	)
+	return err
+}
+
+// writeSchedulerCHASMSentinel creates a CHASM sentinel to reserve the CHASM key
+// space for the given schedule ID. The sentinel auto-closes after a fixed
+// duration via the idle task mechanism.
+func (wh *WorkflowHandler) writeSchedulerCHASMSentinel(
+	ctx context.Context,
+	namespaceID, namespaceName, scheduleID string,
+) error {
+	_, err := wh.schedulerClient.CreateSentinel(ctx, &schedulerpb.CreateSentinelRequest{
+		NamespaceId: namespaceID,
+		Namespace:   namespaceName,
+		ScheduleId:  scheduleID,
+	})
+	return err
+}
+
+// isRealSchedulerInV1KeySpace checks if a running V1 scheduler workflow (not a
+// dummy sentinel) exists for the given schedule ID.
+func (wh *WorkflowHandler) isRealSchedulerInV1KeySpace(
+	ctx context.Context,
+	namespaceID, namespaceName, scheduleID string,
+) (bool, error) {
+	workflowID := scheduler.WorkflowIDPrefix + scheduleID
+	descResp, err := wh.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: namespaceName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		},
+	})
+	if err != nil {
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	info := descResp.GetWorkflowExecutionInfo()
+	if info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return false, nil
+	}
+	return info.GetType().GetName() != dummy.DummyWFTypeName, nil
 }
 
 func (wh *WorkflowHandler) CreateSchedule(
@@ -3447,7 +3585,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 
 	namespaceName := namespace.Name(request.Namespace)
 
-	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
+	useChasmScheduler := wh.chasmSchedulerCreationEnabled(ctx, namespaceName.String())
 	wh.logger.Debug("Received CreateSchedule",
 		tag.ScheduleID(request.ScheduleId),
 		tag.WorkflowNamespace(namespaceName.String()),
@@ -3471,13 +3609,20 @@ func (wh *WorkflowHandler) CreateSchedule(
 	return wh.createScheduleWorkflow(ctx, request)
 }
 
-// chasmSchedulerEnabled returns true when CHASM codepaths should be enabled for
-// the request. All handlers must be capable of falling back to V1 codepaths for
-// schedules that haven't been migrated to CHASM.
-func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+// chasmSchedulerCreationEnabled returns true when CreateSchedule should create on
+// the CHASM scheduler.
+func (wh *WorkflowHandler) chasmSchedulerCreationEnabled(ctx context.Context, namespaceName string) bool {
 	return (headers.IsExperimentRequested(ctx, ChasmSchedulerExperiment) &&
 		wh.config.IsExperimentAllowed(ChasmSchedulerExperiment, namespaceName)) ||
 		wh.config.EnableCHASMSchedulerCreation(namespaceName)
+}
+
+// chasmSchedulerEnabled returns true when schedule RPCs should route to CHASM
+// first. Handlers must be capable of falling back to V1 codepaths for schedules
+// that haven't been migrated to CHASM.
+func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceName string) bool {
+	return wh.chasmSchedulerCreationEnabled(ctx, namespaceName) ||
+		wh.config.EnableCHASMSchedulerRouting(namespaceName)
 }
 
 // isSchedulerErrorLegacyRoutable returns true if the error from the CHASM scheduler
@@ -3486,6 +3631,12 @@ func (wh *WorkflowHandler) chasmSchedulerEnabled(ctx context.Context, namespaceN
 //   - NotFound: the CHASM stack doesn't have a schedule for that ID
 //   - NotFound (sentinel): the key at that ID is a sentinel value (reserving the ID
 //     for the V1 stack)
+//
+// TODO: should ErrClosed (FailedPrecondition) from a CHASM schedule that was
+// migrated to V1 also be routable? Currently closed schedules return
+// FailedPrecondition which does not fall back to V1. This means callers with
+// routing enabled must handle the closed schedule case themselves or wait for
+// the CHASM entity to be cleaned up.
 func isSchedulerErrorLegacyRoutable(err error) bool {
 	var notFoundErr *serviceerror.NotFound
 	return errors.As(err, &notFoundErr)
@@ -4648,11 +4799,10 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 	query string,
 ) (_ *workflowservice.ListSchedulesResponse, retError error) {
 	resp, err := chasm.ListExecutions[*chasmscheduler.Scheduler, *schedulepb.ScheduleListInfo](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
+		NamespaceName: namespaceName.String(),
 		PageSize:      int(request.GetMaximumPageSize()),
 		NextPageToken: request.NextPageToken,
 		Query:         query,
-		NamespaceName: namespaceName.String(),
 	})
 	if err != nil {
 		return nil, err
@@ -4779,7 +4929,6 @@ func (wh *WorkflowHandler) countSchedulesChasm(
 	query string,
 ) (*workflowservice.CountSchedulesResponse, error) {
 	resp, err := chasm.CountExecutions[*chasmscheduler.Scheduler](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: namespaceName.String(),
 		Query:         query,
 	})
@@ -6741,9 +6890,6 @@ func (wh *WorkflowHandler) RecordWorkerHeartbeat(
 func (wh *WorkflowHandler) ListWorkers(
 	ctx context.Context, request *workflowservice.ListWorkersRequest,
 ) (*workflowservice.ListWorkersResponse, error) {
-	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
-		return &workflowservice.ListWorkersResponse{}, nil
-	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
@@ -6850,9 +6996,6 @@ func (wh *WorkflowHandler) UpdateWorkerConfig(_ context.Context, request *workfl
 
 func (wh *WorkflowHandler) DescribeWorker(ctx context.Context, request *workflowservice.DescribeWorkerRequest,
 ) (*workflowservice.DescribeWorkerResponse, error) {
-	if !wh.config.ListWorkersEnabled(request.GetNamespace()) {
-		return &workflowservice.DescribeWorkerResponse{}, nil
-	}
 	namespaceName := namespace.Name(request.GetNamespace())
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {

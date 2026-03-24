@@ -904,7 +904,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 	s.Error(err, "Expected error when continuing as new on internal task queue")
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
-	s.Contains(err.Error(), "internal per namespace task queue")
+	s.Contains(err.Error(), "internal per-namespace task queue")
 
 	// Wait a bit for the workflow task failed event to be written to history
 	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
@@ -921,7 +921,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewWithInternalTaskQueue_Blocked(
 			foundTaskFailed = true
 			attrs := event.GetWorkflowTaskFailedEventAttributes()
 			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CONTINUE_AS_NEW_ATTRIBUTES, attrs.GetCause())
-			s.Contains(attrs.GetFailure().GetMessage(), "internal per namespace task queue")
+			s.Contains(attrs.GetFailure().GetMessage(), "internal per-namespace task queue")
 			break
 		}
 	}

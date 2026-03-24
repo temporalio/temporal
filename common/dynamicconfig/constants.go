@@ -2811,6 +2811,13 @@ that task will be sent to DLQ.`,
 instead of the existing (V1) implementation.`,
 	)
 
+	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerRouting",
+		false,
+		`EnableCHASMSchedulerRouting controls whether schedule RPCs are routed to the CHASM (V2) implementation
+first (with fallback to V1), excluding CreateSchedule.`,
+	)
+
 	EnableCHASMSchedulerMigration = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerMigration",
 		false,
@@ -3163,10 +3170,12 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
+	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
+	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(
 		"frontend.ListWorkersEnabled",
 		true,
-		`ListWorkersEnabled is a "feature enable" flag. It allows clients to get workers heartbeat information.`,
+		`Deprecated: no longer honored. ListWorkers and DescribeWorker are always enabled.`,
 	)
 
 	WorkerCommandsEnabled = NewNamespaceBoolSetting(

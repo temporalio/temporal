@@ -26,6 +26,7 @@ type (
 		controller *gomock.Controller
 
 		registry          *chasm.Registry
+		nsRegistry        *namespace.MockRegistry
 		visibilityManager *manager.MockVisibilityManager
 		visibilityMgr     *ChasmVisibilityManager
 	}
@@ -94,8 +95,12 @@ func (s *ChasmVisibilityManagerSuite) SetupTest() {
 
 	s.visibilityManager = manager.NewMockVisibilityManager(s.controller)
 
+	s.nsRegistry = namespace.NewMockRegistry(s.controller)
+	s.nsRegistry.EXPECT().GetNamespaceID(testChasmNamespace).Return(testChasmNamespaceID, nil).AnyTimes()
+
 	s.visibilityMgr = NewChasmVisibilityManager(
 		s.registry,
+		s.nsRegistry,
 		s.visibilityManager,
 	)
 }
@@ -140,7 +145,7 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	// Create chasm search attributes map
 	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
 		testChasmSA1Name: chasm.VisibilityValueInt64(123),
-		testChasmSA2Name: chasm.VisibilityValueString("test-value"),
+		testChasmSA2Name: chasm.VisibilityValueKeyword("test-value"),
 	})
 
 	// Create custom search attributes map
@@ -191,7 +196,6 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 
 	// Call ListExecutions
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 		PageSize:      pageSize,
@@ -269,7 +273,6 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_Success() {
 
 	// Call CountExecutions
 	request := &chasm.CountExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 	}
@@ -293,7 +296,6 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_InvalidArchetypeType() 
 	invalidType := reflect.TypeFor[struct{ Field string }]()
 
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         "StartTime > '2024-01-01T00:00:00Z'",
 	}
@@ -315,7 +317,6 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_InvalidArchetypeType()
 	invalidType := reflect.TypeFor[struct{ Field string }]()
 
 	request := &chasm.CountExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         "StartTime > '2024-01-01T00:00:00Z'",
 	}
@@ -348,7 +349,6 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_VisibilityManagerError(
 		})
 
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 	}
@@ -382,7 +382,6 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_VisibilityManagerError
 		})
 
 	request := &chasm.CountExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 	}
@@ -431,7 +430,9 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 	s.NoError(err)
 
 	visibilityMgr := manager.NewMockVisibilityManager(ctrl)
-	chasmVisMgr := NewChasmVisibilityManager(registry, visibilityMgr)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceID(testChasmNamespace).Return(testChasmNamespaceID, nil).AnyTimes()
+	chasmVisMgr := NewChasmVisibilityManager(registry, nsRegistry, visibilityMgr)
 
 	ctx := context.Background()
 	query := "TaskQueue = 'my-task-queue'"
@@ -442,7 +443,7 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 
 	expectedTaskQueue := "my-task-queue"
 	chasmSearchAttributes := chasm.NewSearchAttributesMap(map[string]chasm.VisibilityValue{
-		"TaskQueue": chasm.VisibilityValueString(expectedTaskQueue),
+		"TaskQueue": chasm.VisibilityValueKeyword(expectedTaskQueue),
 	})
 
 	expectedResponse := &chasm.ListExecutionsResponse[*commonpb.Payload]{
@@ -467,7 +468,6 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 
 	// Call ListExecutions
 	request := &chasm.ListExecutionsRequest{
-		NamespaceID:   string(testChasmNamespaceID),
 		NamespaceName: string(testChasmNamespace),
 		Query:         query,
 		PageSize:      pageSize,

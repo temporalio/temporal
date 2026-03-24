@@ -692,6 +692,7 @@ func AdminHandlerProvider(
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	schedulerClient schedulerpb.SchedulerServiceClient,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
@@ -723,6 +724,7 @@ func AdminHandlerProvider(
 		timeSource,
 		chasmRegistry,
 		namespaceDataMerger,
+		schedulerClient,
 		taskCategoryRegistry,
 		matchingClient,
 	}

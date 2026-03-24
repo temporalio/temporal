@@ -142,13 +142,7 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 		pageSize = maxPageSize
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.ListExecutions[*Operation, *emptypb.Empty](ctx, &chasm.ListExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		PageSize:      int(pageSize),
 		NextPageToken: req.GetNextPageToken(),
@@ -204,13 +198,7 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
-	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	resp, err := chasm.CountExecutions[*Operation](ctx, &chasm.CountExecutionsRequest{
-		NamespaceID:   namespaceID.String(),
 		NamespaceName: req.GetNamespace(),
 		Query:         req.GetQuery(),
 	})

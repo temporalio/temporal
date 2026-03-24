@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -32,7 +33,15 @@ var ErrCancellationAlreadyRequested = serviceerror.NewFailedPrecondition("cancel
 // ErrOperationAlreadyCompleted is returned when trying to cancel an operation that has already completed.
 var ErrOperationAlreadyCompleted = serviceerror.NewFailedPrecondition("operation already completed")
 
-type OperationStore any
+// OperationStore defines the interface that must be implemented by any parent component that wants to manage Nexus operations.
+// It's the responsibility of the parrent component to apply the appropriate state transitions to the operation.
+type OperationStore interface {
+	OnNexusOperationStarted(ctx chasm.MutableContext, operation *Operation, operationToken string, links []*commonpb.Link) error
+	OnNexusOperationCancelled(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationFailed(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationTimedOut(ctx chasm.MutableContext, operation *Operation, cause *failurepb.Failure) error
+	OnNexusOperationCompleted(ctx chasm.MutableContext, operation *Operation, result *commonpb.Payload, links []*commonpb.Link) error
+}
 
 // Operation is a CHASM component that represents a Nexus operation.
 type Operation struct {
@@ -264,4 +273,52 @@ func pendingOperationState(status nexusoperationpb.OperationStatus) enumspb.Pend
 	default:
 		return enumspb.PENDING_NEXUS_OPERATION_STATE_UNSPECIFIED
 	}
+}
+
+// OnStarted applies the started transition or delegates to the store if one is present.
+func (o *Operation) OnStarted(ctx chasm.MutableContext, _ *Operation, operationToken string, links []*commonpb.Link) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationStarted(ctx, o, operationToken, links)
+	}
+	return transitionStarted.Apply(o, ctx, EventStarted{
+		OperationToken: operationToken,
+		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
+	})
+}
+
+// OnCompleted applies the succeeded transition or delegates to the store if one is present.
+func (o *Operation) OnCompleted(ctx chasm.MutableContext, _ *Operation, result *commonpb.Payload, links []*commonpb.Link) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationCompleted(ctx, o, result, links)
+	}
+	return transitionSucceeded.Apply(o, ctx, EventSucceeded{})
+}
+
+// OnFailed applies the failed transition or delegates to the store if one is present.
+func (o *Operation) OnFailed(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationFailed(ctx, o, cause)
+	}
+	return transitionFailed.Apply(o, ctx, EventFailed{})
+}
+
+// OnCancelled applies the canceled transition or delegates to the store if one is present.
+func (o *Operation) OnCancelled(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationCancelled(ctx, o, cause)
+	}
+	return TransitionCanceled.Apply(o, ctx, EventCanceled{})
+}
+
+// OnTimedOut applies the timed out transition or delegates to the store if one is present.
+func (o *Operation) OnTimedOut(ctx chasm.MutableContext, _ *Operation, cause *failurepb.Failure) error {
+	store, ok := o.Store.TryGet(ctx)
+	if ok {
+		return store.OnNexusOperationTimedOut(ctx, o, cause)
+	}
+	return transitionTimedOut.Apply(o, ctx, EventTimedOut{})
 }

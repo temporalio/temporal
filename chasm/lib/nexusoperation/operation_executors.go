@@ -144,8 +144,7 @@ func (e *OperationStartToCloseTimeoutTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.StartToCloseTimeoutTask,
 ) (bool, error) {
-	// TODO: implement
-	return false, nil
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *OperationStartToCloseTimeoutTaskExecutor) Execute(
@@ -178,8 +177,7 @@ func (e *OperationScheduleToCloseTimeoutTaskExecutor) Validate(
 	attrs chasm.TaskAttributes,
 	task *nexusoperationpb.ScheduleToCloseTimeoutTask,
 ) (bool, error) {
-	// TODO: implement
-	return false, nil
+	return false, serviceerror.NewUnimplemented("unimplemented")
 }
 
 func (e *OperationScheduleToCloseTimeoutTaskExecutor) Execute(

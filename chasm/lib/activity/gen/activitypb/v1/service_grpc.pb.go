@@ -25,6 +25,7 @@ const (
 	ActivityService_PollActivityExecution_FullMethodName          = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/PollActivityExecution"
 	ActivityService_TerminateActivityExecution_FullMethodName     = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/TerminateActivityExecution"
 	ActivityService_RequestCancelActivityExecution_FullMethodName = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/RequestCancelActivityExecution"
+	ActivityService_DeleteActivityExecution_FullMethodName        = "/temporal.server.chasm.lib.activity.proto.v1.ActivityService/DeleteActivityExecution"
 )
 
 // ActivityServiceClient is the client API for ActivityService service.
@@ -36,6 +37,7 @@ type ActivityServiceClient interface {
 	PollActivityExecution(ctx context.Context, in *PollActivityExecutionRequest, opts ...grpc.CallOption) (*PollActivityExecutionResponse, error)
 	TerminateActivityExecution(ctx context.Context, in *TerminateActivityExecutionRequest, opts ...grpc.CallOption) (*TerminateActivityExecutionResponse, error)
 	RequestCancelActivityExecution(ctx context.Context, in *RequestCancelActivityExecutionRequest, opts ...grpc.CallOption) (*RequestCancelActivityExecutionResponse, error)
+	DeleteActivityExecution(ctx context.Context, in *DeleteActivityExecutionRequest, opts ...grpc.CallOption) (*DeleteActivityExecutionResponse, error)
 }
 
 type activityServiceClient struct {
@@ -91,6 +93,15 @@ func (c *activityServiceClient) RequestCancelActivityExecution(ctx context.Conte
 	return out, nil
 }
 
+func (c *activityServiceClient) DeleteActivityExecution(ctx context.Context, in *DeleteActivityExecutionRequest, opts ...grpc.CallOption) (*DeleteActivityExecutionResponse, error) {
+	out := new(DeleteActivityExecutionResponse)
+	err := c.cc.Invoke(ctx, ActivityService_DeleteActivityExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ActivityServiceServer is the server API for ActivityService service.
 // All implementations must embed UnimplementedActivityServiceServer
 // for forward compatibility
@@ -100,6 +111,7 @@ type ActivityServiceServer interface {
 	PollActivityExecution(context.Context, *PollActivityExecutionRequest) (*PollActivityExecutionResponse, error)
 	TerminateActivityExecution(context.Context, *TerminateActivityExecutionRequest) (*TerminateActivityExecutionResponse, error)
 	RequestCancelActivityExecution(context.Context, *RequestCancelActivityExecutionRequest) (*RequestCancelActivityExecutionResponse, error)
+	DeleteActivityExecution(context.Context, *DeleteActivityExecutionRequest) (*DeleteActivityExecutionResponse, error)
 	mustEmbedUnimplementedActivityServiceServer()
 }
 
@@ -121,6 +133,9 @@ func (UnimplementedActivityServiceServer) TerminateActivityExecution(context.Con
 }
 func (UnimplementedActivityServiceServer) RequestCancelActivityExecution(context.Context, *RequestCancelActivityExecutionRequest) (*RequestCancelActivityExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RequestCancelActivityExecution not implemented")
+}
+func (UnimplementedActivityServiceServer) DeleteActivityExecution(context.Context, *DeleteActivityExecutionRequest) (*DeleteActivityExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteActivityExecution not implemented")
 }
 func (UnimplementedActivityServiceServer) mustEmbedUnimplementedActivityServiceServer() {}
 
@@ -225,6 +240,24 @@ func _ActivityService_RequestCancelActivityExecution_Handler(srv interface{}, ct
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ActivityService_DeleteActivityExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteActivityExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActivityServiceServer).DeleteActivityExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ActivityService_DeleteActivityExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActivityServiceServer).DeleteActivityExecution(ctx, req.(*DeleteActivityExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ActivityService_ServiceDesc is the grpc.ServiceDesc for ActivityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -251,6 +284,10 @@ var ActivityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RequestCancelActivityExecution",
 			Handler:    _ActivityService_RequestCancelActivityExecution_Handler,
+		},
+		{
+			MethodName: "DeleteActivityExecution",
+			Handler:    _ActivityService_DeleteActivityExecution_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
