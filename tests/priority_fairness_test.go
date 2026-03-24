@@ -450,7 +450,6 @@ func (s *FairnessSuite) SetupSuite() {
 	}
 	if s.doAutoEnable {
 		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
-		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
 	} else {
@@ -635,7 +634,6 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableMigration, true)
 	// Speed up periodic sync so drain completion is detected faster
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 100*time.Millisecond)
 
