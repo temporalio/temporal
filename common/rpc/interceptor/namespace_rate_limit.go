@@ -118,6 +118,9 @@ func (ni *NamespaceRateLimitInterceptorImpl) Wait(ctx context.Context, namespace
 	waitCtx := ctx
 	var cancel context.CancelFunc = func() {}
 	if deadline, ok := ctx.Deadline(); ok {
+		if time.Until(deadline) <= common.CriticalLongPollTimeout {
+			return ErrNamespaceRateLimitServerBusy
+		}
 		waitCtx, cancel = context.WithDeadline(ctx, deadline.Add(-common.CriticalLongPollTimeout))
 	}
 	defer cancel()

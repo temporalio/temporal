@@ -62,10 +62,10 @@ var (
 		DispatchNexusTaskByEndpointAPIName:              1,
 	}
 
-	// PollAPISet is the set of API methods for which NamespaceRateLimitInterceptor will
+	// PollTaskAPISet is the set of API methods for which NamespaceRateLimitInterceptor will
 	// block waiting for a token (rather than rejecting immediately) when
 	// FrontendPollWaitForNamespaceRateLimitToken is enabled.
-	PollAPISet = map[string]struct{}{
+	PollTaskAPISet = map[string]struct{}{
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue": {},
 		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":    {},

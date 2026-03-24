@@ -86,8 +86,8 @@ func (s *namespaceRateLimitInterceptorSuite) TestWait_NoDeadlineOnCtx() {
 }
 
 func (s *namespaceRateLimitInterceptorSuite) TestWait_ShortenedDeadlineExpires_OriginalCtxValid() {
-	// Outer ctx has deadline = now + CriticalLongPollTimeout + 50ms.
-	// Shortened waitCtx deadline = now + 50ms → expires quickly.
+	// Outer ctx has deadline = now + CriticalLongPollTimeout + 2s.
+	// Shortened waitCtx deadline = now + 2s → expires quickly.
 	// Original ctx is still alive → expect ErrNamespaceRateLimitServerBusy.
 	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(false)
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).
@@ -96,7 +96,22 @@ func (s *namespaceRateLimitInterceptorSuite) TestWait_ShortenedDeadlineExpires_O
 			return ctx.Err()
 		})
 
-	outerDeadline := time.Now().Add(common.CriticalLongPollTimeout + 50*time.Millisecond)
+	outerDeadline := time.Now().Add(common.CriticalLongPollTimeout + 2*time.Second)
+	ctx, cancel := context.WithDeadline(context.Background(), outerDeadline)
+	defer cancel()
+
+	ni := s.newImpl(true)
+	err := ni.Wait(ctx, testNamespace, pollWorkflowTaskQueueMethod, noopHeaderGetter{})
+	s.ErrorIs(err, ErrNamespaceRateLimitServerBusy)
+}
+
+func (s *namespaceRateLimitInterceptorSuite) TestWait_DeadlineTooShortToWait() {
+	// Outer ctx has deadline <= now + CriticalLongPollTimeout → no time to wait.
+	// Expect immediate ErrNamespaceRateLimitServerBusy without calling rateLimiter.Wait().
+	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(false)
+	s.mockRateLimiter.EXPECT().Wait(gomock.Any(), gomock.Any()).Times(0)
+
+	outerDeadline := time.Now().Add(common.CriticalLongPollTimeout - time.Millisecond)
 	ctx, cancel := context.WithDeadline(context.Background(), outerDeadline)
 	defer cancel()
 
@@ -206,7 +221,7 @@ func (s *namespaceRateLimitInterceptorSuite) TestIntercept_PollMethod_WaitEnable
 			return ctx.Err()
 		})
 
-	outerDeadline := time.Now().Add(common.CriticalLongPollTimeout + 50*time.Millisecond)
+	outerDeadline := time.Now().Add(common.CriticalLongPollTimeout + 2*time.Second)
 	ctx, cancel := context.WithDeadline(context.Background(), outerDeadline)
 	defer cancel()
 
