@@ -20,7 +20,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -48,7 +47,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		ms                    *historyi.MockMutableState
 		updates               update.Registry
 		handler               *workflowTaskCompletedHandler
-		chasmWorkflowRegistry *workflowregistry.Registry
+		chasmWorkflowRegistry *chasmworkflow.Registry
 	}
 
 	const defaultBlobSizeLimit = 1 * 1024 * 1024
@@ -81,7 +80,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 
 		dcClient := dynamicconfig.StaticClient(nil)
 		if opts.chasmEnabled {
-			out.chasmWorkflowRegistry = workflowregistry.NewRegistry()
+			out.chasmWorkflowRegistry = chasmworkflow.NewRegistry()
 			mockCtx := &chasm.MockMutableContext{}
 			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
@@ -403,7 +402,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 		sentinelErr := errors.New("sentinel: CHASM handler invoked")
 		err := tc.chasmWorkflowRegistry.RegisterCommandHandler(
 			enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-			func(chasm.MutableContext, *chasmworkflow.Workflow, workflowregistry.Validator, *commandpb.Command, workflowregistry.CommandHandlerOptions) error {
+			func(chasm.MutableContext, *chasmworkflow.Workflow, chasmworkflow.Validator, *commandpb.Command, chasmworkflow.CommandHandlerOptions) error {
 				return sentinelErr
 			},
 		)
