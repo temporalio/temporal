@@ -72,7 +72,7 @@ func (h *handler) DescribeNexusOperation(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
-	return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req, nil)
+	return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req)
 }
 
 func idReusePolicyFromProto(p enumspb.NexusOperationIdReusePolicy) chasm.BusinessIDReusePolicy {
