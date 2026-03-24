@@ -330,6 +330,13 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "operation_id exceeds length limit",
 		},
 		{
+			name: "request_id - exceeds length limit",
+			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
+				r.RequestId = "this-request-id-is-too-long"
+			},
+			errMsg: "request_id exceeds length limit",
+		},
+		{
 			name: "run_id - exceeds length limit",
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
 				r.RunId = "this-run-id-is-too-long!!"
@@ -390,6 +397,13 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 				r.OperationId = "this-operation-id-is-too-long"
 			},
 			errMsg: "operation_id exceeds length limit",
+		},
+		{
+			name: "request_id - exceeds length limit",
+			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
+				r.RequestId = "this-request-id-is-too-long"
+			},
+			errMsg: "request_id exceeds length limit",
 		},
 		{
 			name: "run_id - exceeds length limit",
