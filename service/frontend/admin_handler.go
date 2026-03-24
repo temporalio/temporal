@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -114,6 +115,7 @@ type (
 		healthServer               *health.Server
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
+		schedulerClient            schedulerpb.SchedulerServiceClient
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -150,6 +152,7 @@ type (
 		TimeSource                          clock.TimeSource
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
+		SchedulerClient                     schedulerpb.SchedulerServiceClient
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -222,6 +225,7 @@ func NewAdminHandler(
 		taskCategoryRegistry: args.CategoryRegistry,
 		matchingClient:       args.matchingClient,
 		chasmRegistry:        args.ChasmRegistry,
+		schedulerClient:      args.SchedulerClient,
 	}
 }
 
@@ -779,7 +783,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -1556,7 +1560,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -1844,7 +1848,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -2309,7 +2313,7 @@ func (adh *AdminHandler) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	archetypeID, err := adh.archetypeNameToID(request.GetArchetype())
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
 	if err != nil {
 		return nil, err
 	}
@@ -2345,7 +2349,35 @@ func (adh *AdminHandler) getDLQWorkflowID(
 	)
 }
 
-func (adh *AdminHandler) archetypeNameToID(archetype chasm.Archetype) (chasm.ArchetypeID, error) {
+// validateAndResolveArchetypeID validates the archetype and archetypeID fields and returns the resolved archetype ID.
+// It performs the following checks:
+// 1. If archetypeID is specified (non-zero), validates it's registered in the chasm registry
+// 2. If both archetypeID and archetype are specified, validates they match each other
+// 3. If only archetype is specified, converts it to an ID
+func (adh *AdminHandler) validateAndResolveArchetypeID(
+	archetype chasm.Archetype,
+	archetypeID uint32,
+) (chasm.ArchetypeID, error) {
+	// If archetypeID is specified, use it
+	if archetypeID != chasm.UnspecifiedArchetypeID {
+		// Validate that the archetypeID is registered in the chasm registry
+		archetypeFqn, ok := adh.chasmRegistry.ComponentFqnByID(archetypeID)
+		if !ok {
+			return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf(
+				"unknown archetype ID: %d", archetypeID)
+		}
+
+		// If both archetype and archetypeID are specified, validate they match
+		if len(archetype) > 0 && archetype != archetypeFqn {
+			return chasm.UnspecifiedArchetypeID, serviceerror.NewInvalidArgumentf(
+				"archetype mismatch: archetypeID (%d) does not match archetype name (%s), registered name %s",
+				archetypeID, archetype, archetypeFqn)
+		}
+
+		return chasm.ArchetypeID(archetypeID), nil
+	}
+
+	// If only archetype is specified, convert it to an ID
 	if len(archetype) == 0 {
 		// For backwards compatibility, default to Workflow
 		return chasm.WorkflowArchetypeID, nil
@@ -2413,10 +2445,6 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 	if request.GetTarget() == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED {
 		return nil, errMigrationTargetNotSet
 	}
-	// TODO: support SCHEDULER_TARGET_WORKFLOW for CHASM-to-V1 migration.
-	if request.GetTarget() != adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
-		return nil, serviceerror.NewUnimplemented("Only migration to CHASM is currently supported.")
-	}
 	if request.GetIdentity() == "" {
 		return nil, errIdentityNotSet
 	}
@@ -2426,11 +2454,26 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 		return nil, err
 	}
 
+	switch request.GetTarget() {
+	case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM:
+		return adh.migrateScheduleToChasm(ctx, request, namespaceID.String())
+	case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW:
+		return adh.migrateScheduleToWorkflow(ctx, request, namespaceID.String())
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("unknown migration target: %v", request.GetTarget())
+	}
+}
+
+func (adh *AdminHandler) migrateScheduleToChasm(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	namespaceID string,
+) (*adminservice.MigrateScheduleResponse, error) {
 	workflowID := scheduler.WorkflowIDPrefix + request.GetScheduleId()
 
-	_, err = adh.historyClient.SignalWorkflowExecution(ctx,
+	_, err := adh.historyClient.SignalWorkflowExecution(ctx,
 		&historyservice.SignalWorkflowExecutionRequest{
-			NamespaceId: namespaceID.String(),
+			NamespaceId: namespaceID,
 			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         request.Namespace,
 				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
@@ -2438,6 +2481,25 @@ func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminserv
 				Identity:          request.Identity,
 				RequestId:         request.RequestId,
 			},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.MigrateScheduleResponse{}, nil
+}
+
+func (adh *AdminHandler) migrateScheduleToWorkflow(
+	ctx context.Context,
+	request *adminservice.MigrateScheduleRequest,
+	namespaceID string,
+) (*adminservice.MigrateScheduleResponse, error) {
+	_, err := adh.schedulerClient.MigrateToWorkflow(ctx,
+		&schedulerpb.MigrateToWorkflowRequest{
+			NamespaceId: namespaceID,
+			ScheduleId:  request.GetScheduleId(),
+			Identity:    request.GetIdentity(),
+			RequestId:   request.GetRequestId(),
 		},
 	)
 	if err != nil {

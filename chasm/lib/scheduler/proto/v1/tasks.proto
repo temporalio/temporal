@@ -14,6 +14,11 @@ message SchedulerIdleTask {
   google.protobuf.Duration idle_time_total = 1;
 }
 
+// Ensures that callbacks for all running buffered starts are attached. Used only
+// during migration from V1, as workflows started by CHASM scheduler are started
+// with callbacks attached.
+message SchedulerCallbacksTask {}
+
 // Buffers actions based on the schedule's specification.
 message GeneratorTask {}
 
@@ -26,3 +31,6 @@ message InvokerExecuteTask {}
 
 // Buffers actions based on a manually-requested backfill.
 message BackfillerTask {}
+
+// Triggers migration from CHASM (V2) to workflow-backed (V1) scheduler.
+message SchedulerMigrateToWorkflowTask {}

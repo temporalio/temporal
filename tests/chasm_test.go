@@ -236,7 +236,6 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,
@@ -290,7 +289,6 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery + " AND PayloadTotalCount > 0",
@@ -321,7 +319,6 @@ func (s *ChasmTestSuite) TestListExecutions() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery + " AND ExecutionStatus = 'Completed' AND PayloadTotalCount > 0",
@@ -402,7 +399,6 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 			countResp, err = chasm.CountExecutions[*tests.PayloadStore](
 				ctx,
 				&chasm.CountExecutionsRequest{
-					NamespaceID:   string(s.NamespaceID()),
 					NamespaceName: s.Namespace().String(),
 					Query:         "GROUP BY `ExecutionStatus`",
 				},
@@ -432,7 +428,6 @@ func (s *ChasmTestSuite) TestCountExecutions_GroupBy() {
 	_, err = chasm.CountExecutions[*tests.PayloadStore](
 		ctx,
 		&chasm.CountExecutionsRequest{
-			NamespaceID:   string(s.NamespaceID()),
 			NamespaceName: s.Namespace().String(),
 			Query:         "GROUP BY `PayloadTotalCount`",
 		},
@@ -578,7 +573,6 @@ func (s *ChasmTestSuite) TestPayloadStoreForceDelete() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
@@ -614,7 +608,6 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
@@ -641,7 +634,6 @@ func (s *ChasmTestSuite) TestDeletePayloadStore_RunningExecution() {
 	s.EventuallyWithT(
 		func(t *assert.CollectT) {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   s.NamespaceID().String(),
 				NamespaceName: s.Namespace().String(),
 				PageSize:      10,
 				Query:         visQuery,
@@ -680,7 +672,6 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,
@@ -716,7 +707,6 @@ func (s *ChasmTestSuite) TestListExecutions_ExecutionStatusAsAlias() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQueryCanceled,
@@ -756,7 +746,6 @@ func (s *ChasmTestSuite) TestTaskQueuePreallocatedSearchAttribute() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,
@@ -807,7 +796,6 @@ func (s *ChasmTestSuite) TestMutableStateRebuilder() {
 	s.Eventually(
 		func() bool {
 			resp, err := chasm.ListExecutions[*tests.PayloadStore, *testspb.TestPayloadStore](ctx, &chasm.ListExecutionsRequest{
-				NamespaceID:   string(s.NamespaceID()),
 				NamespaceName: string(s.Namespace()),
 				PageSize:      10,
 				Query:         visQuery,

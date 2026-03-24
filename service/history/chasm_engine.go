@@ -111,7 +111,7 @@ func (e *ChasmEngine) NotifyExecution(key chasm.ExecutionKey) {
 func (e *ChasmEngine) StartExecution(
 	ctx context.Context,
 	executionRef chasm.ComponentRef,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	opts ...chasm.TransitionOption,
 ) (chasm.StartExecutionResult, error) {
 	options := e.constructTransitionOptions(opts...)
@@ -122,7 +122,7 @@ func (e *ChasmEngine) StartExecution(
 func (e *ChasmEngine) startExecution(
 	ctx context.Context,
 	executionRef chasm.ComponentRef,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	options chasm.TransitionOptions,
 ) (result chasm.StartExecutionResult, retErr error) {
 	shardContext, err := e.getShardContext(executionRef)
@@ -204,8 +204,8 @@ func (e *ChasmEngine) startExecution(
 func (e *ChasmEngine) UpdateWithStartExecution(
 	ctx context.Context,
 	executionRef chasm.ComponentRef,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 	opts ...chasm.TransitionOption,
 ) (chasm.EngineUpdateWithStartExecutionResult, error) {
 	options := e.constructTransitionOptions(opts...)
@@ -216,8 +216,8 @@ func (e *ChasmEngine) UpdateWithStartExecution(
 func (e *ChasmEngine) updateWithStartExecution(
 	ctx context.Context,
 	executionRef chasm.ComponentRef,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
 	shardContext, err := e.getShardContext(executionRef)
@@ -299,7 +299,7 @@ func (e *ChasmEngine) updateExecution(
 	shardContext historyi.ShardContext,
 	executionLease api.WorkflowLease,
 	executionRef chasm.ComponentRef,
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) (chasm.ExecutionKey, []byte, error) {
 	workflowKey := executionLease.GetContext().GetWorkflowKey()
 	actualRef := executionRef
@@ -321,8 +321,8 @@ func (e *ChasmEngine) startNewForClosedExecution(
 	executionLease api.WorkflowLease,
 	executionRef chasm.ComponentRef,
 	archetypeID chasm.ArchetypeID,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (chasm.ExecutionKey, []byte, bool, error) {
 	newExecutionParams, err := e.createNewExecutionWithUpdate(
@@ -351,7 +351,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	shardContext historyi.ShardContext,
 	executionLease api.WorkflowLease,
 	ref chasm.ComponentRef,
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, ok := mutableState.ChasmTree().(*chasm.Node)
@@ -369,7 +369,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		return nil, err
 	}
 
-	if err := updateFn(mutableContext, component, e.registry); err != nil {
+	if err := updateFn(mutableContext, component); err != nil {
 		return nil, err
 	}
 
@@ -395,8 +395,8 @@ func (e *ChasmEngine) startAndUpdateExecution(
 	shardContext historyi.ShardContext,
 	executionRef chasm.ComponentRef,
 	archetypeID chasm.ArchetypeID,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (retKey chasm.ExecutionKey, retRef []byte, created bool, retErr error) {
 	currentExecutionReleaseFn, err := e.lockCurrentExecution(
@@ -450,7 +450,7 @@ func (e *ChasmEngine) startAndUpdateExecution(
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	options := e.constructTransitionOptions(opts...)
@@ -461,7 +461,7 @@ func (e *ChasmEngine) UpdateComponent(
 func (e *ChasmEngine) updateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 ) (updatedRef []byte, retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
@@ -479,6 +479,14 @@ func (e *ChasmEngine) updateComponent(
 // cluster, it is terminated first. A DeleteExecutionTask is then queued to remove all execution
 // data from persistence. On standby clusters, the execution is deleted regardless of state.
 func (e *ChasmEngine) DeleteExecution(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	request chasm.DeleteExecutionRequest,
+) error {
+	return e.convertError(e.deleteExecution(ctx, ref, request), ref, request.RequestID)
+}
+
+func (e *ChasmEngine) deleteExecution(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	request chasm.DeleteExecutionRequest,
@@ -550,7 +558,7 @@ func (e *ChasmEngine) DeleteExecution(
 func (e *ChasmEngine) ReadComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
-	readFn func(chasm.Context, chasm.Component, *chasm.Registry) error,
+	readFn func(chasm.Context, chasm.Component) error,
 	opts ...chasm.TransitionOption,
 ) error {
 	options := e.constructTransitionOptions(opts...)
@@ -560,7 +568,7 @@ func (e *ChasmEngine) ReadComponent(
 func (e *ChasmEngine) readComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
-	readFn func(chasm.Context, chasm.Component, *chasm.Registry) error,
+	readFn func(chasm.Context, chasm.Component) error,
 ) error {
 	_, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
@@ -587,7 +595,7 @@ func (e *ChasmEngine) readComponent(
 		return err
 	}
 
-	return readFn(chasmContext, component, e.registry)
+	return readFn(chasmContext, component)
 }
 
 // PollComponent waits until the supplied predicate is satisfied when evaluated against the
@@ -606,7 +614,7 @@ func (e *ChasmEngine) readComponent(
 func (e *ChasmEngine) PollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
-	monotonicPredicate func(chasm.Context, chasm.Component, *chasm.Registry) (bool, error),
+	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 	opts ...chasm.TransitionOption,
 ) ([]byte, error) {
 	options := e.constructTransitionOptions(opts...)
@@ -617,7 +625,7 @@ func (e *ChasmEngine) PollComponent(
 func (e *ChasmEngine) pollComponent(
 	ctx context.Context,
 	requestRef chasm.ComponentRef,
-	monotonicPredicate func(chasm.Context, chasm.Component, *chasm.Registry) (bool, error),
+	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 
 	var ch <-chan struct{}
@@ -674,7 +682,7 @@ func (e *ChasmEngine) pollComponent(
 // iff there's no error and predicate evaluates to true.
 func (e *ChasmEngine) predicateSatisfied(
 	ctx context.Context,
-	predicate func(chasm.Context, chasm.Component, *chasm.Registry) (bool, error),
+	predicate func(chasm.Context, chasm.Component) (bool, error),
 	ref chasm.ComponentRef,
 	executionLease api.WorkflowLease,
 ) ([]byte, error) {
@@ -692,7 +700,7 @@ func (e *ChasmEngine) predicateSatisfied(
 	if err != nil {
 		return nil, err
 	}
-	satisfied, err := predicate(chasmContext, component, e.registry)
+	satisfied, err := predicate(chasmContext, component)
 	if err != nil {
 		return nil, err
 	}
@@ -742,7 +750,7 @@ func (e *ChasmEngine) createNewExecution(
 	shardContext historyi.ShardContext,
 	executionRef chasm.ComponentRef,
 	archetypeID chasm.ArchetypeID,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	options chasm.TransitionOptions,
 ) (newExecutionParams, error) {
 	return e.createNewExecutionWithUpdate(
@@ -761,8 +769,8 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 	shardContext historyi.ShardContext,
 	executionRef chasm.ComponentRef,
 	archetypeID chasm.ArchetypeID,
-	startFn func(chasm.MutableContext, chasm.ArchetypeID, *chasm.Registry) (chasm.RootComponent, error),
-	updateFn func(chasm.MutableContext, chasm.Component, *chasm.Registry) error,
+	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
+	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (newExecutionParams, error) {
 	executionRef.RunID = primitives.NewUUID().String()
@@ -796,7 +804,7 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 
 	chasmContext := chasm.NewMutableContext(ctx, chasmTree)
 
-	rootComponent, err := startFn(chasmContext, archetypeID, e.registry)
+	rootComponent, err := startFn(chasmContext)
 	if err != nil {
 		return newExecutionParams{}, err
 	}
@@ -805,7 +813,7 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 	}
 
 	if updateFn != nil {
-		if err = updateFn(chasmContext, rootComponent, e.registry); err != nil {
+		if err = updateFn(chasmContext, rootComponent); err != nil {
 			return newExecutionParams{}, err
 		}
 	}
