@@ -6,12 +6,11 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/chasm/lib/workflow/workflowregistry"
 )
 
 // registerEvents registers all event definitions (handlers) for nexus operations.
 func registerEvents(
-	registry *workflowregistry.Registry,
+	registry *chasmworkflow.Registry,
 	config *nexusoperation.Config,
 	nexusProcessor *chasm.NexusEndpointProcessor,
 ) error {
@@ -80,7 +79,7 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 
 func (d ScheduledEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return workflowregistry.ErrEventNotCherryPickable
+	return chasmworkflow.ErrEventNotCherryPickable
 }
 
 type CancelRequestedEventDefinition struct {
@@ -114,7 +113,7 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *chas
 
 func (d CancelRequestedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return workflowregistry.ErrEventNotCherryPickable
+	return chasmworkflow.ErrEventNotCherryPickable
 }
 
 type CancelRequestCompletedEventDefinition struct {
@@ -160,7 +159,7 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 
 func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -209,7 +208,7 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 
 func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -249,7 +248,7 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 
 func (d StartedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -291,7 +290,7 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 
 func (d CompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -334,7 +333,7 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 
 func (d FailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -376,7 +375,7 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 
 func (d CanceledEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -417,7 +416,7 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 
 func (d TimedOutEventDefinition) CherryPick(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return workflowregistry.ErrEventNotCherryPickable
+		return chasmworkflow.ErrEventNotCherryPickable
 	}
 	return d.Apply(ctx, wf, event)
 }
