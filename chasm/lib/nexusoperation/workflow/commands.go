@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -267,8 +266,7 @@ func (ch *commandHandler) handleCancelCommand(
 		}
 	}
 
-	key := strconv.FormatInt(attrs.ScheduledEventId, 10)
-	_, operationFound := wf.Operations[key]
+	_, operationFound := wf.Operations[attrs.ScheduledEventId]
 	hasBufferedEvent := func() bool {
 		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	}

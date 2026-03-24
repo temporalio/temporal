@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -17,8 +16,8 @@ import (
 )
 
 // scheduleOperation is a helper that schedules a nexus operation via the command handler
-// and returns the scheduled event and operation key.
-func scheduleOperation(t *testing.T, tcx testContext) (*historypb.HistoryEvent, string) {
+// and returns the scheduled event and its scheduled event ID (used as the operation key).
+func scheduleOperation(t *testing.T, tcx testContext) (*historypb.HistoryEvent, int64) {
 	t.Helper()
 	err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, &commandpb.Command{
 		Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -33,8 +32,7 @@ func scheduleOperation(t *testing.T, tcx testContext) (*historypb.HistoryEvent, 
 	require.NoError(t, err)
 	require.NotEmpty(t, tcx.history.Events)
 	event := tcx.history.Events[len(tcx.history.Events)-1]
-	key := operationKey(event.EventId)
-	return event, key
+	return event, event.EventId
 }
 
 func TestCherryPick(t *testing.T) {
@@ -224,8 +222,7 @@ func TestScheduledEventDefinitionApply(t *testing.T) {
 		err := def.Apply(tcx.chasmCtx, tcx.wf, event)
 		require.NoError(t, err)
 
-		key := strconv.FormatInt(event.EventId, 10)
-		field, ok := tcx.wf.Operations[key]
+		field, ok := tcx.wf.Operations[event.EventId]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
 		require.Equal(t, "endpoint", op.GetEndpoint())

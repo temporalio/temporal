@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"fmt"
-	"strconv"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -59,13 +58,12 @@ func getOperation(
 	ctx chasm.MutableContext,
 	wf *chasmworkflow.Workflow,
 	scheduledEventID int64,
-) (*nexusoperation.Operation, string, error) {
-	key := strconv.FormatInt(scheduledEventID, 10)
-	field, ok := wf.Operations[key]
+) (*nexusoperation.Operation, error) {
+	field, ok := wf.Operations[scheduledEventID]
 	if !ok {
-		return nil, "", serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", scheduledEventID))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", scheduledEventID))
 	}
-	return field.Get(ctx), key, nil
+	return field.Get(ctx), nil
 }
 
 // ScheduledEventDefinition
@@ -125,8 +123,7 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 		return err
 	}
 
-	key := strconv.FormatInt(event.GetEventId(), 10)
-	wf.AddNexusOperation(ctx, key, op)
+	wf.AddNexusOperation(ctx, event.GetEventId(), op)
 
 	return nil
 }
@@ -161,8 +158,7 @@ func (d CancelRequestedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCancelRequestedEventAttributes()
-	key := strconv.FormatInt(attrs.GetScheduledEventId(), 10)
-	field, ok := wf.Operations[key]
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
 		// Operation may have already completed (buffered terminal event). Ignore.
 		return nil
@@ -209,7 +205,7 @@ func (d CancelRequestCompletedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCancelRequestCompletedEventAttributes()
-	op, _, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -254,7 +250,7 @@ func (d CancelRequestFailedEventDefinition) Type() enumspb.EventType {
 
 func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCancelRequestFailedEventAttributes()
-	op, _, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -299,7 +295,7 @@ func (d StartedEventDefinition) Type() enumspb.EventType {
 
 func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationStartedEventAttributes()
-	op, _, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -353,7 +349,7 @@ func (d CompletedEventDefinition) Type() enumspb.EventType {
 
 func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCompletedEventAttributes()
-	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -361,7 +357,7 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{}); err != nil {
 		return err
 	}
-	wf.RemoveNexusOperation(key)
+	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
 	return nil
 }
 
@@ -397,7 +393,7 @@ func (d FailedEventDefinition) Type() enumspb.EventType {
 
 func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationFailedEventAttributes()
-	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -405,7 +401,7 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow
 	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{}); err != nil {
 		return err
 	}
-	wf.RemoveNexusOperation(key)
+	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
 	return nil
 }
 
@@ -441,7 +437,7 @@ func (d CanceledEventDefinition) Type() enumspb.EventType {
 
 func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationCanceledEventAttributes()
-	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -449,7 +445,7 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{}); err != nil {
 		return err
 	}
-	wf.RemoveNexusOperation(key)
+	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
 	return nil
 }
 
@@ -485,7 +481,7 @@ func (d TimedOutEventDefinition) Type() enumspb.EventType {
 
 func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflow.Workflow, event *historypb.HistoryEvent) error {
 	attrs := event.GetNexusOperationTimedOutEventAttributes()
-	op, key, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
+	op, err := getOperation(ctx, wf, attrs.GetScheduledEventId())
 	if err != nil {
 		return err
 	}
@@ -493,7 +489,7 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkfl
 	if err := nexusoperation.TransitionTimedOut.Apply(op, ctx, nexusoperation.EventTimedOut{}); err != nil {
 		return err
 	}
-	wf.RemoveNexusOperation(key)
+	wf.RemoveNexusOperation(attrs.GetScheduledEventId())
 	return nil
 }
 
