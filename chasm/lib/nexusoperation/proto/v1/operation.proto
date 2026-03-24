@@ -67,14 +67,7 @@ message OperationState {
 }
 
 message NexusOperationTerminateState {
-  // Request ID of the terminate request, used to deduplicate terminate requests.
   string request_id = 1;
-
-  // The identity of the client who requested termination.
-  string identity = 2;
-
-  // The reason for requesting termination.
-  string reason = 3;
 }
 
 enum OperationStatus {

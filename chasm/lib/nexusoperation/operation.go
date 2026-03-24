@@ -195,18 +195,6 @@ func (o *Operation) Terminate(
 	return chasm.TerminateComponentResponse{}, serviceerror.NewUnimplemented("not implemented")
 }
 
-func (o *Operation) handleTerminateRequested(
-	ctx chasm.MutableContext,
-	req *nexusoperationpb.NexusOperationTerminateState,
-) error {
-	_, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
-		RequestID: req.GetRequestId(),
-		Identity:  req.GetIdentity(),
-		Reason:    req.GetReason(),
-	})
-	return err
-}
-
 // SearchAttributes implements chasm.VisibilitySearchAttributesProvider interface.
 // Returns the current search attribute values for this operation.
 func (o *Operation) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {

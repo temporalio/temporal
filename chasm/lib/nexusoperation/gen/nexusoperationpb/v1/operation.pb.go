@@ -402,13 +402,8 @@ func (x *OperationState) GetTerminateState() *NexusOperationTerminateState {
 }
 
 type NexusOperationTerminateState struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Request ID of the terminate request, used to deduplicate terminate requests.
-	RequestId string `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// The identity of the client who requested termination.
-	Identity string `protobuf:"bytes,2,opt,name=identity,proto3" json:"identity,omitempty"`
-	// The reason for requesting termination.
-	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -446,20 +441,6 @@ func (*NexusOperationTerminateState) Descriptor() ([]byte, []int) {
 func (x *NexusOperationTerminateState) GetRequestId() string {
 	if x != nil {
 		return x.RequestId
-	}
-	return ""
-}
-
-func (x *NexusOperationTerminateState) GetIdentity() string {
-	if x != nil {
-		return x.Identity
-	}
-	return ""
-}
-
-func (x *NexusOperationTerminateState) GetReason() string {
-	if x != nil {
-		return x.Reason
 	}
 	return ""
 }
@@ -693,12 +674,10 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x14last_attempt_failure\x18\x0e \x01(\v2 .temporal.api.failure.v1.FailureR\x12lastAttemptFailure\x12W\n" +
 	"\x1anext_attempt_schedule_time\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12'\n" +
 	"\x0foperation_token\x18\x10 \x01(\tR\x0eoperationToken\x12x\n" +
-	"\x0fterminate_state\x18\x11 \x01(\v2O.temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationTerminateStateR\x0eterminateState\"q\n" +
+	"\x0fterminate_state\x18\x11 \x01(\v2O.temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationTerminateStateR\x0eterminateState\"=\n" +
 	"\x1cNexusOperationTerminateState\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1a\n" +
-	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xdf\x04\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\xdf\x04\n" +
 	"\x11CancellationState\x12]\n" +
 	"\x06status\x18\x01 \x01(\x0e2E.temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatusR\x06status\x12A\n" +
 	"\x0erequested_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\rrequestedTime\x12\x18\n" +

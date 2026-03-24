@@ -72,7 +72,7 @@ func (h *handler) DescribeNexusOperation(
 		RunID:       req.GetFrontendRequest().GetRunId(),
 	})
 
-	return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req, nil)
+	return chasm.ReadComponent(ctx, ref, (*Operation).buildDescribeResponse, req)
 }
 
 // RequestCancelNexusOperation requests cancellation of a standalone Nexus operation via CHASM.
@@ -122,10 +122,10 @@ func (h *handler) TerminateNexusOperation(
 		ctx,
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.TerminateNexusOperationRequest) (*nexusoperationpb.TerminateNexusOperationResponse, error) {
-			if err := o.handleTerminateRequested(ctx, &nexusoperationpb.NexusOperationTerminateState{
-				RequestId: req.GetFrontendRequest().GetRequestId(),
-				Identity:  req.GetFrontendRequest().GetIdentity(),
+			if _, err := o.Terminate(ctx, chasm.TerminateComponentRequest{
 				Reason:    req.GetFrontendRequest().GetReason(),
+				Identity:  req.GetFrontendRequest().GetIdentity(),
+				RequestID: req.GetFrontendRequest().GetRequestId(),
 			}); err != nil {
 				return nil, err
 			}
