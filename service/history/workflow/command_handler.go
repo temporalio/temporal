@@ -7,7 +7,7 @@ import (
 
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	chasmcommand "go.temporal.io/server/chasm/lib/workflow/workflowregistry"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -19,7 +19,7 @@ var ErrDuplicateRegistration = errors.New("duplicate registration")
 type CommandHandler func(
 	context.Context,
 	historyi.MutableState,
-	chasmcommand.Validator,
+	chasmworkflow.Validator,
 	int64,
 	*commandpb.Command,
 ) error

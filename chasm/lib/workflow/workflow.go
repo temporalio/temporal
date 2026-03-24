@@ -5,12 +5,14 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -138,14 +140,167 @@ func (w *Workflow) AddNexusOperation(
 	w.Operations[key] = chasm.NewComponentField(ctx, op)
 }
 
-// AddHistoryEvent adds a history event to the workflow.
-func (w *Workflow) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
-	return w.MSPointer.AddHistoryEvent(t, setAttributes)
+// AddAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition.
+func (w *Workflow) AddAndApplyHistoryEvent(
+	ctx chasm.MutableContext,
+	t enumspb.EventType,
+	setAttributes func(*historypb.HistoryEvent),
+) (*historypb.HistoryEvent, error) {
+	event := w.AddHistoryEvent(t, setAttributes)
+	def, ok := workflowContextFromChasm(ctx).registry.EventDefinition(t)
+	if !ok {
+		return nil, fmt.Errorf("no event definition registered for %v", t)
+	}
+	return event, def.Apply(ctx, w, event)
 }
 
 // HasAnyBufferedEvent returns true if the workflow has any buffered event matching the given filter.
 func (w *Workflow) HasAnyBufferedEvent(filter historybuilder.BufferedEventFilter) bool {
 	return w.MSPointer.HasAnyBufferedEvent(filter)
+}
+
+// OnNexusOperationStarted adds a NexusOperationStarted history event to the workflow and applies
+// the corresponding event definition.
+func (w *Workflow) OnNexusOperationStarted(
+	ctx chasm.MutableContext,
+	op *nexusoperation.Operation,
+	operationToken string,
+	links []*commonpb.Link,
+) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+				ScheduledEventId: parentData.GetScheduledEventId(),
+				OperationToken:   operationToken,
+				RequestId:        op.GetRequestId(),
+			},
+		}
+		e.Links = links
+	})
+	return err
+}
+
+// OnNexusOperationCancelled adds a NexusOperationCanceled history event to the workflow and applies
+// the corresponding event definition.
+func (w *Workflow) OnNexusOperationCancelled(
+	ctx chasm.MutableContext,
+	op *nexusoperation.Operation,
+	cause *failurepb.Failure,
+) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	scheduledEventID := parentData.GetScheduledEventId()
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+			NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
+				ScheduledEventId: scheduledEventID,
+				RequestId:        op.GetRequestId(),
+				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
+			},
+		}
+	})
+	return err
+}
+
+// OnNexusOperationFailed adds a NexusOperationFailed history event to the workflow and applies
+// the corresponding event definition.
+func (w *Workflow) OnNexusOperationFailed(
+	ctx chasm.MutableContext,
+	op *nexusoperation.Operation,
+	cause *failurepb.Failure,
+) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	scheduledEventID := parentData.GetScheduledEventId()
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+			NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
+				ScheduledEventId: scheduledEventID,
+				RequestId:        op.GetRequestId(),
+				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
+			},
+		}
+	})
+	return err
+}
+
+// OnNexusOperationCompleted adds a NexusOperationCompleted history event to the workflow and applies
+// the corresponding event definition.
+func (w *Workflow) OnNexusOperationCompleted(
+	ctx chasm.MutableContext,
+	op *nexusoperation.Operation,
+	result *commonpb.Payload,
+	links []*commonpb.Link,
+) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
+				ScheduledEventId: parentData.GetScheduledEventId(),
+				RequestId:        op.GetRequestId(),
+				Result:           result,
+			},
+		}
+		e.Links = links
+	})
+	return err
+}
+
+// OnNexusOperationTimedOut adds a NexusOperationTimedOut history event to the workflow and applies
+// the corresponding event definition.
+func (w *Workflow) OnNexusOperationTimedOut(
+	ctx chasm.MutableContext,
+	op *nexusoperation.Operation,
+	cause *failurepb.Failure,
+) error {
+	parentData := &workflowpb.NexusOperationParentData{}
+	if err := op.GetParentData().UnmarshalTo(parentData); err != nil {
+		return serviceerror.NewFailedPreconditionf("failed to unmarshal nexus operation parent data: %v", err)
+	}
+
+	scheduledEventID := parentData.GetScheduledEventId()
+	_, err := w.AddAndApplyHistoryEvent(ctx, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
+		e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+			NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+				ScheduledEventId: scheduledEventID,
+				RequestId:        op.GetRequestId(),
+				Failure:          createNexusOperationFailure(op, scheduledEventID, cause),
+			},
+		}
+	})
+	return err
+}
+
+// createNexusOperationFailure creates a NexusOperationExecutionFailure wrapping the given cause.
+func createNexusOperationFailure(op *nexusoperation.Operation, scheduledEventID int64, cause *failurepb.Failure) *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: "nexus operation completed unsuccessfully",
+		FailureInfo: &failurepb.Failure_NexusOperationExecutionFailureInfo{
+			NexusOperationExecutionFailureInfo: &failurepb.NexusOperationFailureInfo{
+				Endpoint:         op.GetEndpoint(),
+				Service:          op.GetService(),
+				Operation:        op.GetOperation(),
+				OperationToken:   op.GetOperationToken(),
+				ScheduledEventId: scheduledEventID,
+			},
+		},
+		Cause: cause,
+	}
 }
 
 // RemoveNexusOperation removes a Nexus operation from the workflow.
