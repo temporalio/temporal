@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
@@ -84,12 +85,21 @@ func Invoke(
 				return nil, err
 			}
 
+			oldTimeSkippingConfig := getOptionsFromMutableState(mutableState).GetTimeSkippingConfig()
 			mergedOpts, hasChanges, err := MergeAndApply(mutableState, requestedOptions, req.GetUpdateMask(), req.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
 			// Set options for gRPC response
 			ret.WorkflowExecutionOptions = mergedOpts
+
+			if hasChanges && !proto.Equal(mergedOpts.GetTimeSkippingConfig(), oldTimeSkippingConfig) {
+				if mergedOpts.GetTimeSkippingConfig().GetEnabled() {
+					metrics.ExecutionTimeSkippingEnabledCount.With(shardCtx.GetMetricsHandler()).Record(1)
+				} else {
+					metrics.ExecutionTimeSkippingDisabledCount.With(shardCtx.GetMetricsHandler()).Record(1)
+				}
+			}
 
 			// If there is no mutable state change at all, return with no new history event and Noop=true
 			if !hasChanges {

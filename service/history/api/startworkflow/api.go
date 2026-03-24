@@ -162,6 +162,11 @@ func (s *Starter) prepare(ctx context.Context) error {
 			request.RequestEagerExecution = false
 		}
 	}
+
+	if tsc := request.GetTimeSkippingConfig(); tsc != nil && tsc.GetEnabled() {
+		metrics.ExecutionTimeSkippingEnabledCount.With(s.getMetricsHandler()).Record(1)
+	}
+
 	return nil
 }
 

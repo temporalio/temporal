@@ -33,6 +33,7 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/definition"
@@ -6175,7 +6176,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_FirstSkip() {
 	// No previous skips: virtual time when skipped == event time (offset is 0 for first skip).
 	s.Equal(realTime, details.GetVirtualTimeWhenSkipped().AsTime())
 	// Duration encodes correctly.
-	s.Equal(skipDuration, timeSkippedDurationFromTimestamp(details.GetDurationToSkip()))
+	s.Equal(skipDuration, clock.TimeSkippedDurationFromTimestamp(details.GetDurationToSkip()))
 	// Target = realTime + 2h.
 	s.Equal(targetVirtualTime, details.GetTargetVirtualTime().AsTime())
 }
@@ -6217,7 +6218,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_SecondSkip_UsesTargetOfP
 	s.Equal(event2EventTime, details2.GetRealTimeWhenSkipped().AsTime())
 	// VirtualTimeWhenSkipped = previous skip's TargetVirtualTime = 14:00.
 	s.Equal(targetVirtual1, details2.GetVirtualTimeWhenSkipped().AsTime())
-	s.Equal(skipDuration2, timeSkippedDurationFromTimestamp(details2.GetDurationToSkip()))
+	s.Equal(skipDuration2, clock.TimeSkippedDurationFromTimestamp(details2.GetDurationToSkip()))
 	s.Equal(targetVirtual2, details2.GetTargetVirtualTime().AsTime())
 }
 
@@ -6249,7 +6250,7 @@ func (s *mutableStateSuite) TestBuildTimeSkippedDetails_ThreeSkips_VirtualTimeAc
 		s.Equal(eventTime, d.GetRealTimeWhenSkipped().AsTime(), "skip %d: real time", i)
 		// VirtualTimeWhenSkipped = previous target (base for first skip).
 		s.Equal(prevTarget, d.GetVirtualTimeWhenSkipped().AsTime(), "skip %d: virtual time when skipped", i)
-		s.Equal(dur, timeSkippedDurationFromTimestamp(d.GetDurationToSkip()), "skip %d: duration", i)
+		s.Equal(dur, clock.TimeSkippedDurationFromTimestamp(d.GetDurationToSkip()), "skip %d: duration", i)
 		s.Equal(target, d.GetTargetVirtualTime().AsTime(), "skip %d: target virtual time", i)
 
 		accumulated = append(accumulated, d)
@@ -6267,6 +6268,6 @@ func (s *mutableStateSuite) TestTimeSkippedDurationRoundtrip() {
 		24 * time.Hour,
 	}
 	for _, d := range durations {
-		s.Equal(d, timeSkippedDurationFromTimestamp(timeSkippedDurationToTimestamp(d)), "duration: %v", d)
+		s.Equal(d, clock.TimeSkippedDurationFromTimestamp(clock.TimeSkippedDurationToTimestamp(d)), "duration: %v", d)
 	}
 }

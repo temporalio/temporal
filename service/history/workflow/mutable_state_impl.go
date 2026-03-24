@@ -503,7 +503,7 @@ func NewMutableStateFromDB(
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
 	if mutableState.executionInfo.GetTimeSkippingInfo().GetEnabled() {
-		mutableState.timeSource = newTimeSkippingTimeSource(
+		mutableState.timeSource = clock.NewTimeSkippingTimeSource(
 			mutableState.timeSource,
 			mutableState.executionInfo.TimeSkippingInfo.TimeSkippedDetails,
 		)
@@ -2763,7 +2763,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Enabled: true,
 		}
-		ms.timeSource = newTimeSkippingTimeSource(ms.timeSource, nil)
+		ms.timeSource = clock.NewTimeSkippingTimeSource(ms.timeSource, nil)
 	}
 
 	// Versioning Override set on StartWorkflowExecutionRequest
@@ -3959,8 +3959,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippedEvent(ctx context.C
 		executionInfo.TimeSkippingInfo.TimeSkippedDetails,
 		newDetails,
 	)
-	if ts, ok := ms.timeSource.(*TimeSkippingTimeSource); ok {
-		ts.advance(timeSkippedDurationFromTimestamp(newDetails.GetDurationToSkip()))
+	if ts, ok := ms.timeSource.(*clock.TimeSkippingTimeSource); ok {
+		ts.Advance(clock.TimeSkippedDurationFromTimestamp(newDetails.GetDurationToSkip()))
 	}
 	return NewTaskRefresher(ms.shard).Refresh(ctx, ms, false)
 }
@@ -3993,28 +3993,11 @@ func buildTimeSkippedDetails(
 	return &persistencespb.TimeSkippedDetails{
 		RealTimeWhenSkipped:    event.GetEventTime(),
 		VirtualTimeWhenSkipped: timestamppb.New(virtualTimeWhenSkipped),
-		DurationToSkip:         timeSkippedDurationToTimestamp(skipDuration),
+		DurationToSkip:         clock.TimeSkippedDurationToTimestamp(skipDuration),
 		TargetVirtualTime:      attrs.GetToTime(),
 	}
 }
 
-// timeSkippedDurationToTimestamp encodes a time.Duration into a *timestamppb.Timestamp
-// by storing seconds and nanoseconds directly in the Timestamp fields.
-// This is a convention for the DurationToSkip field in TimeSkippedDetails.
-func timeSkippedDurationToTimestamp(d time.Duration) *timestamppb.Timestamp {
-	return &timestamppb.Timestamp{
-		Seconds: int64(d / time.Second),
-		Nanos:   int32(d % time.Second),
-	}
-}
-
-// timeSkippedDurationFromTimestamp reverses timeSkippedDurationToTimestamp.
-func timeSkippedDurationFromTimestamp(ts *timestamppb.Timestamp) time.Duration {
-	if ts == nil {
-		return 0
-	}
-	return time.Duration(ts.GetSeconds())*time.Second + time.Duration(ts.GetNanos())
-}
 
 // VirtualTimeNow returns the current effective time for this workflow.
 // For workflows with time skipping enabled, this returns the virtual (advanced) time.
@@ -5607,8 +5590,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		ms.executionInfo.TimeSkippingInfo.Enabled = tsc.GetEnabled()
 
 		if tsc.GetEnabled() {
-			if _, alreadySkipping := ms.timeSource.(*TimeSkippingTimeSource); !alreadySkipping {
-				ms.timeSource = newTimeSkippingTimeSource(
+			if _, alreadySkipping := ms.timeSource.(*clock.TimeSkippingTimeSource); !alreadySkipping {
+				ms.timeSource = clock.NewTimeSkippingTimeSource(
 					ms.timeSource,
 					ms.executionInfo.TimeSkippingInfo.GetTimeSkippedDetails(),
 				)

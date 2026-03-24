@@ -3239,6 +3239,189 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	s.NoError(wh.validateTimeSkippingConfig(&workflowpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 }
 
+// TestStartWorkflowExecution_TimeSkipping_DCDisabled verifies that requesting time skipping when the
+// dynamic-config gate is off returns an InvalidArgument error before the history client is called.
+// Note: validateTimeSkippingConfig fires after unaliasedSearchAttributesFrom inside
+// prepareStartWorkflowRequest, so the SA-mapper mock must be set up even for the error path.
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+
+	_, err := wh.StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:          s.testNamespace.String(),
+		WorkflowId:         "workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+}
+
+// TestStartWorkflowExecution_TimeSkipping_DCEnabled verifies that when the gate is on, the
+// time-skipping config is forwarded to the history client.
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.StartWorkflowExecutionRequest) bool {
+		return req.GetStartRequest().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.StartWorkflowExecutionResponse{}, nil)
+
+	_, err := wh.StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:          s.testNamespace.String(),
+		WorkflowId:         "workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+}
+
+// TestSignalWithStartWorkflowExecution_TimeSkipping_DCDisabled verifies the DC gate for
+// SignalWithStart. validateTimeSkippingConfig fires before unaliasedSearchAttributesFrom in this
+// handler, so no mapper mock is needed on the error path.
+func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+
+	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:          s.testNamespace.String(),
+		WorkflowId:         "workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+		SignalName:         "my-signal",
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+}
+
+// TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled verifies that when the gate is on,
+// the time-skipping config reaches the history client.
+func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.SignalWithStartWorkflowExecutionRequest) bool {
+		return req.GetSignalWithStartRequest().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.SignalWithStartWorkflowExecutionResponse{Started: true}, nil)
+
+	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), &workflowservice.SignalWithStartWorkflowExecutionRequest{
+		Namespace:          s.testNamespace.String(),
+		WorkflowId:         "workflow-id",
+		WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+		SignalName:         "my-signal",
+		TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+}
+
+// TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
+// a Start-with-time-skipping inside ExecuteMultiOperation is rejected. The error is wrapped
+// as a MultiOperationExecution error with the per-operation InvalidArgument at index 0.
+func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	// Namespace lookup happens before operation validation.
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
+	// The SA mapper is called inside prepareStartWorkflowRequest before validateTimeSkippingConfig.
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+
+	_, err := wh.ExecuteMultiOperation(context.Background(), &workflowservice.ExecuteMultiOperationRequest{
+		Namespace: s.testNamespace.String(),
+		Operations: []*workflowservice.ExecuteMultiOperationRequest_Operation{
+			{
+				Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_StartWorkflow{
+					StartWorkflow: &workflowservice.StartWorkflowExecutionRequest{
+						Namespace:          s.testNamespace.String(),
+						WorkflowId:         "WORKFLOW_ID",
+						WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+						TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+					},
+				},
+			},
+			{
+				Operation: &workflowservice.ExecuteMultiOperationRequest_Operation_UpdateWorkflow{
+					UpdateWorkflow: &workflowservice.UpdateWorkflowExecutionRequest{
+						Namespace:         s.testNamespace.String(),
+						WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
+						Request: &updatepb.Request{
+							Meta:  &updatepb.Meta{UpdateId: "UPDATE_ID"},
+							Input: &updatepb.Input{Name: "NAME"},
+						},
+					},
+				},
+			},
+		},
+	})
+	s.Equal("Update-with-Start could not be executed.", err.Error())
+	var multiOpErr *serviceerror.MultiOperationExecution
+	s.ErrorAs(err, &multiOpErr)
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(multiOpErr.OperationErrors()[0], &invalidArg)
+	s.ErrorContains(multiOpErr.OperationErrors()[0], "Time skipping is not enabled")
+}
+
+// TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled verifies the DC gate for
+// UpdateWorkflowExecutionOptions. The validation fires before the namespace lookup, so
+// no namespace or history-client mock is needed.
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+
+	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+		},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	var invalidArg *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArg)
+	s.ErrorContains(err, "Time skipping is not enabled")
+}
+
+// TestUpdateWorkflowExecutionOptions_TimeSkipping_DCEnabled verifies that when the gate is on,
+// the time-skipping config is forwarded to the history client.
+func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCEnabled() {
+	config := s.newConfig()
+	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+	s.mockHistoryClient.EXPECT().UpdateWorkflowExecutionOptions(gomock.Any(), mock.MatchedBy(func(req *historyservice.UpdateWorkflowExecutionOptionsRequest) bool {
+		return req.GetUpdateRequest().GetWorkflowExecutionOptions().GetTimeSkippingConfig().GetEnabled()
+	})).Return(&historyservice.UpdateWorkflowExecutionOptionsResponse{}, nil)
+
+	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace: s.testNamespace.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "workflow-id",
+		},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &workflowpb.TimeSkippingConfig{Enabled: true},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewNoopCollection(), numHistoryShards)
 }
