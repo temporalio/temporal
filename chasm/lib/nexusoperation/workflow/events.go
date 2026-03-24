@@ -6,6 +6,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
@@ -62,7 +63,7 @@ func getOperation(
 	key := strconv.FormatInt(scheduledEventID, 10)
 	field, ok := wf.Operations[key]
 	if !ok {
-		return nil, "", fmt.Errorf("nexus operation not found for scheduled event ID %d", scheduledEventID)
+		return nil, "", serviceerror.NewNotFound(fmt.Sprintf("nexus operation not found for scheduled event ID %d", scheduledEventID))
 	}
 	return field.Get(ctx), key, nil
 }
@@ -103,7 +104,7 @@ func (d ScheduledEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkf
 		ScheduledEventBatchId: attrs.GetWorkflowTaskCompletedEventId(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal parent data: %w", err)
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("failed to marshal parent data: %v", err))
 	}
 
 	op := nexusoperation.NewOperation(&nexusoperationpb.OperationState{
@@ -172,7 +173,7 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *chas
 		RequestedEventId: event.GetEventId(),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal cancellation parent data: %w", err)
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("failed to marshal cancellation parent data: %v", err))
 	}
 
 	return op.Cancel(ctx, cancelParentData)
