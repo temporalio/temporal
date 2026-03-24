@@ -3047,7 +3047,7 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions
 				break
 			}
 		}
-		s.True(found)
+		a.True(found)
 	}
 }
 

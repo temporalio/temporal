@@ -185,7 +185,7 @@ func (s *PrioritySuite) TestSubqueue_Migration() {
 				tv,
 				func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 					nothing, err := payloads.Encode()
-					s.NoError(err)
+					assert.NoError(c, err)
 					return &workflowservice.RespondActivityTaskCompletedRequest{Result: nothing}, nil
 				},
 				taskpoller.WithContext(ctx),
