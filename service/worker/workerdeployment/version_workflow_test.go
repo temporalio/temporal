@@ -1096,7 +1096,7 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_IncrementsRevisionNumber_When
 				s.Nil(stateAfterRevive.LastDeactivationTime, "LastDeactivationTime should be reset")
 
 				// Verify that ramp percentage is reset
-				s.Equal(float32(0), stateAfterRevive.RampPercentage)
+				s.InDelta(float32(0), stateAfterRevive.RampPercentage, 0)
 
 				// Verify that drainage info is reset (drainage info is set to an empty struct and not nil)
 				s.Equal((&deploymentpb.VersionDrainageInfo{}).String(), stateAfterRevive.DrainageInfo.String(), "DrainageInfo should be reset")
@@ -2299,9 +2299,9 @@ func (s *VersionWorkflowSuite) Test_ReactivateVersion_FromDrained() {
 		s.env.RegisterDelayedCallback(func() {
 			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
 			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-			s.NoError(err)
+			s.Require().NoError(err)
 			err = val.Get(queryResp)
-			s.NoError(err)
+			s.Require().NoError(err)
 
 			// Verify that status is DRAINING after reactivation
 			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
@@ -2362,9 +2362,9 @@ func (s *VersionWorkflowSuite) Test_ReactivateVersion_FromInactive() {
 		s.env.RegisterDelayedCallback(func() {
 			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
 			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-			s.NoError(err)
+			s.Require().NoError(err)
 			err = val.Get(queryResp)
-			s.NoError(err)
+			s.Require().NoError(err)
 
 			// Verify that status is DRAINING after reactivation
 			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING, queryResp.VersionState.Status)
@@ -2414,9 +2414,9 @@ func (s *VersionWorkflowSuite) Test_ReactivateVersion_IgnoredWhenNotDrainedOrIna
 		s.env.RegisterDelayedCallback(func() {
 			queryResp := &deploymentspb.QueryDescribeVersionResponse{}
 			val, err := s.env.QueryWorkflow(QueryDescribeVersion)
-			s.NoError(err)
+			s.Require().NoError(err)
 			err = val.Get(queryResp)
-			s.NoError(err)
+			s.Require().NoError(err)
 
 			// Verify that status remains CURRENT
 			s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, queryResp.VersionState.Status)
