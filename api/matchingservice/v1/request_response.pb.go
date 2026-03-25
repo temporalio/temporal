@@ -2648,7 +2648,10 @@ type GetTaskQueueUserDataRequest struct {
 	// If the requester has no data, it should set this to 0.
 	// This value must not be set to a negative number (note that our linter suggests avoiding uint64).
 	LastKnownUserDataVersion int64 `protobuf:"varint,3,opt,name=last_known_user_data_version,json=lastKnownUserDataVersion,proto3" json:"last_known_user_data_version,omitempty"`
-	// Same for ephemeral data.
+	// The value of the last known ephemeral data version.
+	// If the requester has no data yet, it should use 0.
+	// If the requester doesn't want ephemeral data (i.e. it's root of an activity/nexus
+	// queue which have separate ephemeral data), it should use -1 (noEphemeralDataVersion).
 	LastKnownEphemeralDataVersion int64 `protobuf:"varint,7,opt,name=last_known_ephemeral_data_version,json=lastKnownEphemeralDataVersion,proto3" json:"last_known_ephemeral_data_version,omitempty"`
 	// If set and last_known_{user_data,ephemeral_data}_version is the current version,
 	// block until new data is available (or timeout).
