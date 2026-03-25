@@ -2,6 +2,7 @@ package tests
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -851,6 +852,99 @@ func TestStandaloneNexusOperationCount(t *testing.T) {
 	})
 }
 
+func TestStandaloneNexusOperationDelete(t *testing.T) {
+	t.Parallel()
+
+	t.Run("DeleteScheduled", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+
+		eventuallyNexusOperationDeleted(s, t, "test-op", startResp.RunId)
+	})
+
+	t.Run("DeleteNoRunID", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+			// RunId not set
+		})
+		s.NoError(err)
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+		})
+		s.NoError(err)
+
+		eventuallyNexusOperationDeleted(s, t, "test-op", startResp.RunId)
+	})
+
+	t.Run("DeleteNonExistent", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "does-not-exist",
+		})
+		s.ErrorAs(err, new(*serviceerror.NotFound))
+	})
+
+	t.Run("DeleteAlreadyDeleted", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+		endpointName := createNexusEndpoint(s)
+
+		startResp, err := startNexusOperation(s, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+
+		eventuallyNexusOperationDeleted(s, t, "test-op", startResp.RunId)
+
+		_, err = s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.ErrorAs(err, new(*serviceerror.NotFound))
+	})
+
+	// Validates that request validation is wired up in the frontend.
+	// Exhaustive validation cases are covered in unit tests.
+	t.Run("DeleteValidation", func(t *testing.T) {
+		s := testcore.NewEnv(t, nexusStandaloneOpts...)
+
+		_, err := s.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
+			Namespace: s.Namespace().String(),
+		})
+		s.Error(err)
+		s.ErrorContains(err, "operation_id is required")
+	})
+}
+
 func startNexusOperation(
 	s *testcore.TestEnv,
 	req *workflowservice.StartNexusOperationExecutionRequest,
@@ -863,4 +957,17 @@ func startNexusOperation(
 		req.ScheduleToCloseTimeout = durationpb.New(10 * time.Minute)
 	}
 	return s.FrontendClient().StartNexusOperationExecution(s.Context(), req)
+}
+
+func eventuallyNexusOperationDeleted(s *testcore.TestEnv, t *testing.T, operationID, runID string) {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		_, err := s.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   s.Namespace().String(),
+			OperationId: operationID,
+			RunId:       runID,
+		})
+		var notFoundErr *serviceerror.NotFound
+		return errors.As(err, &notFoundErr)
+	}, 5*time.Second, 100*time.Millisecond)
 }

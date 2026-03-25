@@ -276,9 +276,30 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 	return &workflowservice.TerminateNexusOperationExecutionResponse{}, nil
 }
 
-func (h *frontendHandler) DeleteNexusOperationExecution(_ context.Context, req *workflowservice.DeleteNexusOperationExecutionRequest) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
+func (h *frontendHandler) DeleteNexusOperationExecution(
+	ctx context.Context,
+	req *workflowservice.DeleteNexusOperationExecutionRequest,
+) (*workflowservice.DeleteNexusOperationExecutionResponse, error) {
 	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
-	return nil, serviceerror.NewUnimplemented("DeleteNexusOperationExecution not implemented")
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := validateAndNormalizeDeleteRequest(req, h.config); err != nil {
+		return nil, err
+	}
+
+	_, err = h.client.DeleteNexusOperation(ctx, &nexusoperationpb.DeleteNexusOperationRequest{
+		NamespaceId:     namespaceID.String(),
+		FrontendRequest: req,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.DeleteNexusOperationExecutionResponse{}, nil
 }

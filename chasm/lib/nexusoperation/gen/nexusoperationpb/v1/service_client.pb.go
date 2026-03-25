@@ -230,3 +230,46 @@ func (c *NexusOperationServiceLayeredClient) TerminateNexusOperation(
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
+func (c *NexusOperationServiceLayeredClient) callDeleteNexusOperationNoRetry(
+	ctx context.Context,
+	request *DeleteNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*DeleteNexusOperationResponse, error) {
+	var response *DeleteNexusOperationResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("NexusOperationService.DeleteNexusOperation"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	op := func(ctx context.Context, client NexusOperationServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.DeleteNexusOperation(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *NexusOperationServiceLayeredClient) DeleteNexusOperation(
+	ctx context.Context,
+	request *DeleteNexusOperationRequest,
+	opts ...grpc.CallOption,
+) (*DeleteNexusOperationResponse, error) {
+	call := func(ctx context.Context) (*DeleteNexusOperationResponse, error) {
+		return c.callDeleteNexusOperationNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}

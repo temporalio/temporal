@@ -153,6 +153,21 @@ func validateAndNormalizeStartRequest(
 	return nil
 }
 
+func validateAndNormalizeDeleteRequest(req *workflowservice.DeleteNexusOperationExecutionRequest, config *Config) error {
+	if req.GetOperationId() == "" {
+		return serviceerror.NewInvalidArgument("operation_id is required")
+	}
+	if len(req.GetOperationId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("operation_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetOperationId()), config.MaxIDLengthLimit())
+	}
+	if len(req.GetRunId()) > config.MaxIDLengthLimit() {
+		return serviceerror.NewInvalidArgumentf("run_id exceeds length limit. Length=%d Limit=%d",
+			len(req.GetRunId()), config.MaxIDLengthLimit())
+	}
+	return nil
+}
+
 func validateAndNormalizeDescribeRequest(req *workflowservice.DescribeNexusOperationExecutionRequest, config *Config) error {
 	if req.GetOperationId() == "" {
 		return serviceerror.NewInvalidArgument("operation_id is required")

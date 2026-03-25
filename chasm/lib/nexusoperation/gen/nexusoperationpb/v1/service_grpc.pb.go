@@ -24,6 +24,7 @@ const (
 	NexusOperationService_DescribeNexusOperation_FullMethodName      = "/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/DescribeNexusOperation"
 	NexusOperationService_RequestCancelNexusOperation_FullMethodName = "/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/RequestCancelNexusOperation"
 	NexusOperationService_TerminateNexusOperation_FullMethodName     = "/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/TerminateNexusOperation"
+	NexusOperationService_DeleteNexusOperation_FullMethodName        = "/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/DeleteNexusOperation"
 )
 
 // NexusOperationServiceClient is the client API for NexusOperationService service.
@@ -34,6 +35,7 @@ type NexusOperationServiceClient interface {
 	DescribeNexusOperation(ctx context.Context, in *DescribeNexusOperationRequest, opts ...grpc.CallOption) (*DescribeNexusOperationResponse, error)
 	RequestCancelNexusOperation(ctx context.Context, in *RequestCancelNexusOperationRequest, opts ...grpc.CallOption) (*RequestCancelNexusOperationResponse, error)
 	TerminateNexusOperation(ctx context.Context, in *TerminateNexusOperationRequest, opts ...grpc.CallOption) (*TerminateNexusOperationResponse, error)
+	DeleteNexusOperation(ctx context.Context, in *DeleteNexusOperationRequest, opts ...grpc.CallOption) (*DeleteNexusOperationResponse, error)
 }
 
 type nexusOperationServiceClient struct {
@@ -80,6 +82,15 @@ func (c *nexusOperationServiceClient) TerminateNexusOperation(ctx context.Contex
 	return out, nil
 }
 
+func (c *nexusOperationServiceClient) DeleteNexusOperation(ctx context.Context, in *DeleteNexusOperationRequest, opts ...grpc.CallOption) (*DeleteNexusOperationResponse, error) {
+	out := new(DeleteNexusOperationResponse)
+	err := c.cc.Invoke(ctx, NexusOperationService_DeleteNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NexusOperationServiceServer is the server API for NexusOperationService service.
 // All implementations must embed UnimplementedNexusOperationServiceServer
 // for forward compatibility
@@ -88,6 +99,7 @@ type NexusOperationServiceServer interface {
 	DescribeNexusOperation(context.Context, *DescribeNexusOperationRequest) (*DescribeNexusOperationResponse, error)
 	RequestCancelNexusOperation(context.Context, *RequestCancelNexusOperationRequest) (*RequestCancelNexusOperationResponse, error)
 	TerminateNexusOperation(context.Context, *TerminateNexusOperationRequest) (*TerminateNexusOperationResponse, error)
+	DeleteNexusOperation(context.Context, *DeleteNexusOperationRequest) (*DeleteNexusOperationResponse, error)
 	mustEmbedUnimplementedNexusOperationServiceServer()
 }
 
@@ -106,6 +118,9 @@ func (UnimplementedNexusOperationServiceServer) RequestCancelNexusOperation(cont
 }
 func (UnimplementedNexusOperationServiceServer) TerminateNexusOperation(context.Context, *TerminateNexusOperationRequest) (*TerminateNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TerminateNexusOperation not implemented")
+}
+func (UnimplementedNexusOperationServiceServer) DeleteNexusOperation(context.Context, *DeleteNexusOperationRequest) (*DeleteNexusOperationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteNexusOperation not implemented")
 }
 func (UnimplementedNexusOperationServiceServer) mustEmbedUnimplementedNexusOperationServiceServer() {}
 
@@ -192,6 +207,24 @@ func _NexusOperationService_TerminateNexusOperation_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _NexusOperationService_DeleteNexusOperation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteNexusOperationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NexusOperationServiceServer).DeleteNexusOperation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: NexusOperationService_DeleteNexusOperation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NexusOperationServiceServer).DeleteNexusOperation(ctx, req.(*DeleteNexusOperationRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // NexusOperationService_ServiceDesc is the grpc.ServiceDesc for NexusOperationService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -214,6 +247,10 @@ var NexusOperationService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "TerminateNexusOperation",
 			Handler:    _NexusOperationService_TerminateNexusOperation_Handler,
+		},
+		{
+			MethodName: "DeleteNexusOperation",
+			Handler:    _NexusOperationService_DeleteNexusOperation_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
