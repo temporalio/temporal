@@ -148,7 +148,9 @@ func newTaskQueuePartitionManager(
 }
 
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
+	defer pm.initCancel()
 	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
+
 	unload := func(bool) {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
@@ -202,6 +204,15 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	defaultQ.Start()
 	pm.goroGroup.Go(pm.updateEphemeralData)
 	pm.goroGroup.Go(pm.emitLogicalBacklogMetrics)
+
+	// Whenever a root partition is loaded, we need to force all child partitions to load.
+	// If there is a backlog of tasks on any child partitions, force loading will ensure
+	// that they can forward their tasks the poller which caused the root partition to be
+	// loaded. We're in a separate goroutine in initialize() so we can do it here.
+	if defaultQ.WaitUntilInitialized(pm.initCtx) == nil {
+		pm.ForceLoadAllChildPartitions()
+	}
+
 	return nil
 }
 
@@ -1197,7 +1208,7 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(interval):
+		case <-time.After(backoff.Jitter(interval, 0.05)):
 			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 		}
 	}
@@ -1492,38 +1503,33 @@ func (pm *taskQueuePartitionManagerImpl) callerInfoContext(ctx context.Context) 
 	return headers.SetCallerInfo(ctx, headers.NewBackgroundHighCallerInfo(pm.ns.Name().String()))
 }
 
-// ForceLoadAllChildPartitions spins off go routines which make RPC calls to all the
+// ForceLoadAllChildPartitions force-loads known child (read) partitions in new goroutines.
 func (pm *taskQueuePartitionManagerImpl) ForceLoadAllChildPartitions() {
 	if !pm.partition.IsRoot() {
 		return
 	}
 
-	partition := pm.partition
-	taskQueue := partition.TaskQueue()
+	partitions := int32(pm.config.NumReadPartitions())
+	if partitions <= 1 {
+		return
+	}
 
-	namespaceId := partition.NamespaceId()
-	taskQueueName := taskQueue.Name()
-	taskQueueType := taskQueue.TaskType()
-	partitionTotal := pm.config.NumReadPartitions()
+	// record total-1 as we won't try to load the root partition.
+	pm.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitions.Name()).Record(int64(partitions) - 1)
 
-	// record total - 1 as we won't try to forceLoad the Root partition.
-	pm.metricsHandler.Counter(metrics.ForceLoadedTaskQueuePartitions.Name()).Record(int64(partitionTotal) - 1)
-
-	for partitionId := 1; partitionId < partitionTotal; partitionId++ {
-
+	for id := int32(1); id < partitions; id++ {
 		go func() {
 			ctx := pm.callerInfoContext(context.Background())
 			resp, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
-				NamespaceId: namespaceId,
+				NamespaceId: pm.partition.NamespaceId(),
 				TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-					TaskQueue:     taskQueueName,
-					TaskQueueType: taskQueueType,
-					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partitionId)},
+					TaskQueue:     pm.partition.TaskQueue().Name(),
+					TaskQueueType: pm.partition.TaskQueue().TaskType(),
+					PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: id},
 				},
 			})
 			if err != nil {
-				pm.logger.Error("Failed to force load non-root partition after root partition was loaded",
-					tag.Error(err))
+				pm.logger.Error("failed to load child partition after root partition was loaded", tag.Error(err))
 				return
 			}
 
