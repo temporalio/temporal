@@ -8,8 +8,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
-	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -94,4 +95,64 @@ func TestSentinelHandler_DeleteSchedule(t *testing.T) {
 		})
 		return err
 	})
+}
+
+func TestSentinelHandler_MigrateToWorkflow(t *testing.T) {
+	runSentinelHandlerTestCase(t, func(sentinel *scheduler.Scheduler, ctx chasm.MutableContext, _ *legacyscheduler.SpecBuilder) error {
+		_, err := sentinel.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+			NamespaceId: namespaceID,
+			ScheduleId:  scheduleID,
+		})
+		return err
+	})
+}
+
+func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
+	env := newTestEnv(t, withMockEngine())
+	sentinel, ctx, _ := setupSentinelForTest(t)
+
+	h := scheduler.NewTestHandler(env.Logger)
+
+	// StartExecution returns already-started because the sentinel occupies the key.
+	env.MockEngine.EXPECT().StartExecution(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(chasm.StartExecutionResult{}, chasm.NewExecutionAlreadyStartedErr("already exists", "", ""))
+
+	// ReadComponent invokes the read function with the sentinel.
+	env.ExpectReadComponent(ctx, sentinel)
+
+	engineCtx := env.EngineContext()
+	_, err := h.TestCreateFromMigrationState(engineCtx, &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: namespaceID,
+		State: &schedulerpb.SchedulerMigrationState{
+			SchedulerState: &schedulerpb.SchedulerState{
+				ScheduleId: scheduleID,
+			},
+		},
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, scheduler.ErrSentinelBlocked)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
+}
+
+func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
+	env := newTestEnv(t, withMockEngine())
+	sentinel, ctx, _ := setupSentinelForTest(t)
+
+	h := scheduler.NewTestHandler(env.Logger)
+
+	// UpdateComponent invokes the update function with the sentinel.
+	env.ExpectUpdateComponent(ctx, sentinel)
+
+	engineCtx := env.EngineContext()
+	_, err := h.TestMigrateToWorkflow(engineCtx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+
+	require.Error(t, err)
+	require.ErrorIs(t, err, scheduler.ErrSentinelBlocked)
+	var unavailableErr *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailableErr)
 }
