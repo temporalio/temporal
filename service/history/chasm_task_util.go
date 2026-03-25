@@ -2,8 +2,8 @@ package history
 
 import (
 	"context"
+	"errors"
 
-	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client"
@@ -83,9 +83,9 @@ func executeChasmSideEffectTask(
 }
 
 // discardChasmSideEffectTask handles discard of a CHASM side effect task on standby. It first checks if the execution
-// still exists on the source (active) cluster — if gone, it silently drops the task by return nil. If the execution
-// still exists and the task's executor implements SideEffectTaskDiscarder, it calls the discard handler. Otherwise, it
-// returns ErrTaskDiscarded with a warning log.
+// still exists on the source (active) cluster — if gone, it silently drops the task by returning nil. If the execution
+// still exists, it calls the handler's Discard method. If Discard returns ErrTaskDiscarded (the default from
+// SideEffectTaskHandlerBase), it logs a warning and returns consts.ErrTaskDiscarded.
 func discardChasmSideEffectTask(
 	ctx context.Context,
 	engine chasm.Engine,
@@ -110,15 +110,6 @@ func discardChasmSideEffectTask(
 		return nil
 	}
 
-	rt, ok := registry.TaskByID(task.Info.TypeId)
-	if !ok {
-		return serviceerror.NewInternal("unknown task type id")
-	}
-	if !rt.HasDiscardHandler() {
-		logger.Warn("Discarding standby CHASM task due to task being pending for too long.", tag.Task(task))
-		return consts.ErrTaskDiscarded
-	}
-
 	executionKey := chasm.ExecutionKey{
 		NamespaceID: task.NamespaceID,
 		BusinessID:  task.WorkflowID,
@@ -140,10 +131,15 @@ func discardChasmSideEffectTask(
 	}
 
 	engineCtx := chasm.NewEngineContext(ctx, engine)
-	return tree.ExecuteSideEffectDiscardTask(
+	err := tree.ExecuteSideEffectDiscardTask(
 		engineCtx,
 		executionKey,
 		task,
 		validate,
 	)
+	if errors.Is(err, chasm.ErrTaskDiscarded) {
+		logger.Warn("Discarding standby CHASM task due to task being pending for too long.", tag.Task(task))
+		return consts.ErrTaskDiscarded
+	}
+	return err
 }

@@ -23,7 +23,7 @@ import (
 // invokerExecuteTestEnv extends testEnv with mock clients for invoker execute tests.
 type invokerExecuteTestEnv struct {
 	*testEnv
-	executor           *scheduler.InvokerExecuteTaskExecutor
+	handler           *scheduler.InvokerExecuteTaskHandler
 	mockFrontendClient *workflowservicemock.MockWorkflowServiceClient
 	mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 }
@@ -34,7 +34,7 @@ func newInvokerExecuteTestEnv(t *testing.T) *invokerExecuteTestEnv {
 	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(env.Ctrl)
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
 
-	executor := scheduler.NewInvokerExecuteTaskExecutor(scheduler.InvokerTaskExecutorOptions{
+	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
@@ -45,7 +45,7 @@ func newInvokerExecuteTestEnv(t *testing.T) *invokerExecuteTestEnv {
 
 	return &invokerExecuteTestEnv{
 		testEnv:            env,
-		executor:           executor,
+		handler:           handler,
 		mockFrontendClient: mockFrontendClient,
 		mockHistoryClient:  mockHistoryClient,
 	}
@@ -98,7 +98,7 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 
 	// Create engine context for side effect task execution.
 	engineCtx := env.EngineContext()
-	err := env.executor.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	err := env.handler.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.NoError(t, env.CloseTransaction())
 
