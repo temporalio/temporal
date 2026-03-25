@@ -9,5 +9,5 @@ func NewSystemProvider() *SystemProvider {
 }
 
 func (s *SystemProvider) GetSearchAttributes(_ string, _ bool) (NameTypeMap, error) {
-	return NameTypeMap{}, nil
+	return NewNameTypeMap(nil), nil
 }
