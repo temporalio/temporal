@@ -53,6 +53,7 @@ func newTaskTracker(
 	bucketSize time.Duration,
 	totalInterval time.Duration,
 ) *taskTracker {
+	bucketSize = max(bucketSize, time.Millisecond)
 	buckets := int(totalInterval/bucketSize) + 1
 	return &taskTracker{
 		clock:           timeSource,
@@ -77,7 +78,7 @@ func (s *taskTracker) advanceAndResetLocked(elapsed time.Duration) {
 	s.bucketStartTime = s.bucketStartTime.Add(time.Duration(intervalsElapsed) * s.bucketSize)
 }
 
-// inc adds/removes tasks from the current time that falls in the appropriate interval
+// inc increments the count of tasks by n at the current time
 func (s *taskTracker) inc(n int) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
