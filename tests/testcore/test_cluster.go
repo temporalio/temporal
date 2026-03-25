@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
@@ -71,21 +72,23 @@ type (
 
 	// TestClusterConfig are config for a test cluster
 	TestClusterConfig struct {
-		EnableArchival         bool
-		IsMasterCluster        bool
-		ClusterMetadata        cluster.Config
-		Persistence            persistencetests.TestBaseOptions
-		FrontendConfig         FrontendConfig
-		HistoryConfig          HistoryConfig
-		MatchingConfig         MatchingConfig
-		WorkerConfig           WorkerConfig
-		ESConfig               *esclient.Config
-		MockAdminClient        map[string]adminservice.AdminServiceClient
-		FaultInjection         *config.FaultInjection
-		DynamicConfigOverrides map[dynamicconfig.Key]any
-		EnableMTLS             bool
-		EnableMetricsCapture   bool
-		SpanExporters          map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		EnableArchival                  bool
+		IsMasterCluster                 bool
+		ClusterMetadata                 cluster.Config
+		Persistence                     persistencetests.TestBaseOptions
+		FrontendConfig                  FrontendConfig
+		HistoryConfig                   HistoryConfig
+		MatchingConfig                  MatchingConfig
+		WorkerConfig                    WorkerConfig
+		ESConfig                        *esclient.Config
+		MockAdminClient                 map[string]adminservice.AdminServiceClient
+		FaultInjection                  *config.FaultInjection
+		DynamicConfigOverrides          map[dynamicconfig.Key]any
+		EnableMTLS                      bool
+		EnableMetricsCapture            bool
+		SpanExporters                   map[telemetry.SpanExporterType]sdktrace.SpanExporter
+		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		// ServiceFxOptions can be populated using WithFxOptionsForService.
 		ServiceFxOptions map[primitives.ServiceName][]fx.Option
 	}
@@ -161,7 +164,12 @@ func (f *defaultPersistenceTestBaseFactory) NewTestBase(options *persistencetest
 	return persistencetests.NewTestBase(options)
 }
 
-func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestClusterConfig, logger log.Logger, tbFactory PersistenceTestBaseFactory) (*TestCluster, error) {
+func newClusterWithPersistenceTestBaseFactory(
+	t *testing.T,
+	clusterConfig *TestClusterConfig,
+	logger log.Logger,
+	tbFactory PersistenceTestBaseFactory,
+) (*TestCluster, error) {
 	// determine number of hosts per service
 	const minNodes = 1
 	clusterConfig.FrontendConfig.NumFrontendHosts = max(minNodes, clusterConfig.FrontendConfig.NumFrontendHosts)
@@ -212,7 +220,13 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 	testBase := tbFactory.NewTestBase(&clusterConfig.Persistence)
 
 	testBase.Setup(clusterMetadataConfig)
-	archiverBase := newArchiverBase(clusterConfig.EnableArchival, testBase.ExecutionManager, logger)
+	archiverBase := newArchiverBase(
+		clusterConfig.EnableArchival,
+		clusterConfig.CustomHistoryArchiverFactory,
+		clusterConfig.CustomVisibilityArchiverFactory,
+		testBase.ExecutionManager,
+		logger,
+	)
 
 	pConfig := testBase.DefaultTestCluster.Config()
 	pConfig.NumHistoryShards = clusterConfig.HistoryConfig.NumHistoryShards
@@ -322,7 +336,7 @@ func newClusterWithPersistenceTestBaseFactory(t *testing.T, clusterConfig *TestC
 		MatchingConfig:                   clusterConfig.MatchingConfig,
 		WorkerConfig:                     clusterConfig.WorkerConfig,
 		MockAdminClient:                  clusterConfig.MockAdminClient,
-		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, logger),
+		NamespaceReplicationTaskExecutor: nsreplication.NewTaskExecutor(clusterConfig.ClusterMetadata.CurrentClusterName, testBase.MetadataManager, nsreplication.NewNoopDataMerger(), logger),
 		DynamicConfigOverrides:           clusterConfig.DynamicConfigOverrides,
 		TLSConfigProvider:                tlsConfigProvider,
 		ServiceFxOptions:                 clusterConfig.ServiceFxOptions,
@@ -464,12 +478,18 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 	}
 }
 
-func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager, logger log.Logger) *ArchiverBase {
+func newArchiverBase(
+	enabled bool,
+	customHistoryArchiverFactory provider.CustomHistoryArchiverFactory,
+	customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory,
+	executionManager persistence.ExecutionManager,
+	logger log.Logger,
+) *ArchiverBase {
 	dcCollection := dynamicconfig.NewNoopCollection()
 	if !enabled {
 		return &ArchiverBase{
 			metadata: archiver.NewArchivalMetadata(dcCollection, "", false, "", false, &config.ArchivalNamespaceDefaults{}),
-			provider: provider.NewArchiverProvider(nil, nil, nil, logger, metrics.NoopMetricsHandler),
+			provider: provider.NewArchiverProvider(nil, nil, nil, nil, nil, logger, metrics.NoopMetricsHandler),
 		}
 	}
 
@@ -492,6 +512,8 @@ func newArchiverBase(enabled bool, executionManager persistence.ExecutionManager
 		&config.VisibilityArchiverProvider{
 			Filestore: cfg,
 		},
+		customHistoryArchiverFactory,
+		customVisibilityArchiverFactory,
 		executionManager,
 		logger,
 		metrics.NoopMetricsHandler,
@@ -562,6 +584,11 @@ func (tc *TestCluster) HistoryClient() historyservice.HistoryServiceClient {
 // MatchingClient returns a matching client from the test cluster
 func (tc *TestCluster) MatchingClient() matchingservice.MatchingServiceClient {
 	return tc.host.MatchingClient()
+}
+
+// SchedulerClient returns a scheduler client from the test cluster
+func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
+	return tc.host.SchedulerClient()
 }
 
 // ExecutionManager returns an execution manager factory from the test cluster

@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,7 +11,10 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -151,6 +155,97 @@ func TestHandleStarted(t *testing.T) {
 			response, err := activity.HandleStarted(ctx, request)
 
 			tc.checkOutcome(t, response, err)
+		})
+	}
+}
+
+func TestActivityTerminate(t *testing.T) {
+	testCases := []struct {
+		name           string
+		activityStatus activitypb.ActivityExecutionStatus
+		expectErr      string
+	}{
+		{
+			name:           "terminate scheduled activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		{
+			name:           "terminate started activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		{
+			name:           "terminate cancel-requested activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		},
+		{
+			name:           "error on completed activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			expectErr:      "invalid transition from Completed",
+		},
+		{
+			name:           "no-op on already terminated activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+		},
+		{
+			name:           "error on failed activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			expectErr:      "invalid transition from Failed",
+		},
+		{
+			name:           "error on timed out activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+			expectErr:      "invalid transition from TimedOut",
+		},
+		{
+			name:           "error on canceled activity",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+			expectErr:      "invalid transition from Canceled",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+						namespaceRegistry: nsRegistry,
+					}),
+				},
+			}
+
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+					Status:                 tc.activityStatus,
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
+					StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
+				Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+			}
+
+			_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+				Reason: "Delete activity execution",
+			})
+
+			if tc.expectErr != "" {
+				require.EqualError(t, err, tc.expectErr)
+				require.Equal(t, tc.activityStatus, activity.Status, "expected no state change on error")
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+			}
 		})
 	}
 }

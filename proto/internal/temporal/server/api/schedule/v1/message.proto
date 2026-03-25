@@ -50,6 +50,10 @@ message BufferedStart {
     // Populated when the workflow execution completes. Presence indicates the
     // action is complete and retained for history. Only used by the CHASM scheduler.
     CompletedResult completed = 12;
+    // True when a running BufferedStart is known to have a Nexus callback
+    // attached. False when a BufferedStart originated from a migrated V1
+    // workflow. Only used by CHASM scheduler, for migration from V1.
+    bool has_callback = 13;
 }
 
 // Result when a workflow execution has completed.
@@ -78,6 +82,8 @@ message InternalState {
     int64 conflict_token = 7;
 
     bool need_refresh = 9;
+
+    bool pending_migration = 11;
 }
 
 message StartScheduleArgs {

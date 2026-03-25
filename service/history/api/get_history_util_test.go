@@ -170,7 +170,7 @@ func TestClientSupportsTranOrSpecTasks(t *testing.T) {
 			r := require.New(t)
 
 			ctx := headers.SetVersionsForTests(context.Background(), "1.0.0", tt.clientName, "", "")
-			result := clientSupportsTranOrSpecEvents(ctx)
+			result := ClientSupportsTranOrSpecEvents(ctx)
 			r.Equal(tt.expected, result)
 		})
 	}
@@ -181,7 +181,7 @@ func TestClientSupportsTranOrSpecTasks(t *testing.T) {
 		r := require.New(t)
 
 		ctx := context.Background()
-		result := clientSupportsTranOrSpecEvents(ctx)
+		result := ClientSupportsTranOrSpecEvents(ctx)
 		r.True(result)
 	})
 }

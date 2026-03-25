@@ -306,12 +306,12 @@ func TestSubscribeGradualChange_TimerFiresAtTransitionTime(t *testing.T) {
 
 	ts.Update(gc.When(key).Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals.get())
+		assert.Equal(c, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 
 	ts.Update(end.Add(time.Second))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(t, []bool{true}, callbackVals.get())
+		assert.Equal(c, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 }
 

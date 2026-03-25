@@ -10,8 +10,8 @@ const (
 	DummyWFTypeName = "temporal-sys-dummy-workflow"
 
 	// dummyDuration only needs to account for the duration in which the key needs
-	// to stay reserved.
-	dummyDuration = 1 * time.Hour
+	// to stay reserved. Matches sentinelIdleTime in the CHASM scheduler package.
+	dummyDuration = 15 * time.Minute
 )
 
 // DummyWorkflow is a sentinel workflow that hangs open for a fixed duration.

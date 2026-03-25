@@ -3,18 +3,18 @@ name: Flaky Tests Report
 on:
   schedule:
     # Run on Wednesdays at noon Eastern time (5 PM UTC)
-    - cron: '0 17 * * 3'
+    - cron: "0 17 * * 3"
   workflow_dispatch:
     inputs:
       days:
-        description: 'Number of days to look back for flaky tests'
+        description: "Number of days to look back for flaky tests"
         required: false
-        default: '7'
+        default: "7"
         type: string
       max_links:
-        description: 'Maximum number of failure links to show per test'
+        description: "Maximum number of failure links to show per test"
         required: false
-        default: '3'
+        default: "3"
         type: string
 
 permissions:
@@ -43,7 +43,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
 
       - name: Generate flaky test report
         id: process-flaky-tests
@@ -62,7 +62,6 @@ jobs:
             --days "$DAYS_PARAM" \
             --max-links "$MAX_LINKS_PARAM" \
             --output-dir tools/flakes/out \
-            --github-summary \
             --slack-webhook "$SLACK_WEBHOOK" \
             --run-id "$RUN_ID" \
             --ref-name "$REF_NAME" \

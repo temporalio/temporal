@@ -31,14 +31,9 @@ type WorkerDeploymentSuite struct {
 	workflowVersion DeploymentWorkflowVersion
 }
 
-func TestWorkerDeploymentSuite(t *testing.T) {
+func TestWorkerDeploymentSuiteV2(t *testing.T) {
 	t.Parallel()
-	t.Run("v0", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: InitialVersion})
-	})
-	t.Run("v2", func(t *testing.T) {
-		suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
-	})
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {

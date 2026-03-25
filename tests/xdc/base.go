@@ -10,12 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -185,7 +183,7 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 
 		shard := resp.Shards[0]
 		require.NotNil(c, shard)
-		require.Greater(c, shard.MaxReplicationTaskId, int64(0))
+		require.Positive(c, shard.MaxReplicationTaskId)
 		require.NotNil(c, shard.ShardLocalTime)
 		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
 		require.NotNil(c, shard.RemoteClusters)
@@ -460,13 +458,6 @@ func (s *xdcBaseSuite) failover(
 	s.waitForClusterSynced()
 }
 
-func (s *xdcBaseSuite) mustToPayload(v any) *commonpb.Payload {
-	conv := converter.GetDefaultDataConverter()
-	payload, err := conv.ToPayload(v)
-	s.NoError(err)
-	return payload
-}
-
 func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  hostport,
@@ -479,4 +470,21 @@ func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity stri
 	})
 
 	return sdkClient, worker
+}
+
+// waitForVisibilityCount waits for the visibility store to index the expected number of workflow
+// executions in the given namespace before proceeding. This is important before starting
+// force-replication, which uses ListWorkflowExecutions with an empty query to discover all
+// workflows in a namespace.
+func (s *xdcBaseSuite) waitForVisibilityCount(ctx context.Context, ns string, expectedCount int64) {
+	frontendClient := s.clusters[0].FrontendClient()
+	s.Eventually(func() bool {
+		countResp, err := frontendClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: ns,
+		})
+		if err != nil {
+			return false
+		}
+		return countResp.GetCount() == expectedCount
+	}, 15*time.Second, 200*time.Millisecond, "visibility should index %d workflow runs before force-replication", expectedCount)
 }

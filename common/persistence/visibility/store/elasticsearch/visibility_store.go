@@ -17,9 +17,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -389,11 +391,11 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 
 func (s *VisibilityStore) ListChasmExecutions(
 	ctx context.Context,
-	request *manager.ListChasmExecutionsRequest,
+	request *visibilityservice.ListChasmExecutionsRequest,
 ) (*store.InternalListExecutionsResponse, error) {
-	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeID)
+	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeId)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
+		return nil, serviceerror.NewInvalidArgumentf("unknown archetype ID: %d", request.ArchetypeId)
 	}
 	chasmMapper := rc.SearchAttributesMapper()
 
@@ -407,28 +409,45 @@ func (s *VisibilityStore) ListChasmExecutions(
 		return nil, ConvertElasticsearchClientError("ListChasmExecutions failed", err)
 	}
 
-	return s.GetListWorkflowExecutionsResponse(searchResult, request.Namespace, request.PageSize, chasmMapper)
+	return s.GetListWorkflowExecutionsResponse(
+		searchResult,
+		namespace.Name(request.Namespace),
+		int(request.PageSize),
+		chasmMapper,
+	)
 }
 
 func (s *VisibilityStore) CountChasmExecutions(
 	ctx context.Context,
-	request *manager.CountChasmExecutionsRequest,
+	request *visibilityservice.CountChasmExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {
-	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeID)
+	rc, ok := s.chasmRegistry.ComponentByID(request.ArchetypeId)
 	if !ok {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unknown archetype ID: %d", request.ArchetypeID))
+		return nil, serviceerror.NewInvalidArgumentf("unknown archetype ID: %d", request.ArchetypeId)
 	}
 	mapper := rc.SearchAttributesMapper()
 
 	var queryParams *esQueryParams
 	var err error
 	if s.enableUnifiedQueryConverter() {
-		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query, mapper, request.ArchetypeID)
+		queryParams, err = s.convertQuery(
+			namespace.Name(request.Namespace),
+			namespace.ID(request.NamespaceId),
+			request.Query,
+			mapper,
+			request.ArchetypeId,
+		)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		queryParamsLegacy, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query, mapper, request.ArchetypeID)
+		queryParamsLegacy, err := s.convertQueryLegacy(
+			namespace.Name(request.Namespace),
+			namespace.ID(request.NamespaceId),
+			request.Query,
+			mapper,
+			request.ArchetypeId,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -571,18 +590,18 @@ func (s *VisibilityStore) BuildSearchParametersV2(
 }
 
 func (s *VisibilityStore) BuildChasmSearchParameters(
-	request *manager.ListChasmExecutionsRequest,
+	request *visibilityservice.ListChasmExecutionsRequest,
 	getFieldSorter func([]elastic.Sorter) ([]elastic.Sorter, error),
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) (*client.SearchParameters, error) {
 	return s.buildSearchParametersInternal(&searchParametersInternal{
-		NamespaceName: request.Namespace,
-		NamespaceID:   request.NamespaceID,
+		NamespaceName: namespace.Name(request.Namespace),
+		NamespaceID:   namespace.ID(request.NamespaceId),
 		Query:         request.Query,
-		PageSize:      request.PageSize,
+		PageSize:      int(request.PageSize),
 		NextPageToken: request.NextPageToken,
 		ChasmMapper:   chasmMapper,
-		ArchetypeID:   request.ArchetypeID,
+		ArchetypeID:   request.ArchetypeId,
 	})
 }
 
@@ -942,6 +961,11 @@ func (s *VisibilityStore) GenerateESDoc(
 		metrics.ElasticsearchDocumentGenerateFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf("unable to decode search attributes: %v", err)
 	}
+	for name := range request.SearchAttributes.GetIndexedFields() {
+		if _, ok := searchAttributes[name]; !ok {
+			s.logger.Warn("Skipping unknown search attribute while generating visibility record", tag.String("search-attribute", name))
+		}
+	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
@@ -1037,7 +1061,7 @@ func (s *VisibilityStore) ParseESDoc(
 		fieldType, err := combinedTypeMap.GetType(fieldName)
 		if err != nil {
 			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
-			if errors.Is(err, searchattribute.ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				continue
 			}
 			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
@@ -1184,7 +1208,7 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 			if err != nil {
 				return fmt.Errorf("unable to parse value %v: %w", bucket["key"], err)
 			}
-			payload, err := searchattribute.EncodeValue(value, groupByTypes[index])
+			payload, err := sadefs.EncodeValue(value, groupByTypes[index])
 			if err != nil {
 				return fmt.Errorf("unable to encode value %v: %w", value, err)
 			}
