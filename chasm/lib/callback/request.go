@@ -91,7 +91,7 @@ func routeRequest(
 	if r.URL.String() == commonnexus.SystemCallbackURL {
 		return routeSystemCallbackRequest(r, clusterMetadata, namespaceRegistry, httpClientCache, callbackTokenGenerator, localClient, logger)
 	}
-	// This source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
+	// This source header is populated in nexusoperations/tasks (via the ClientProvider) for worker targets
 	// if this header is not populated then we assume it's an external target.
 	if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
 		return defaultClient.Do(r)

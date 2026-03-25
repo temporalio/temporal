@@ -16,7 +16,7 @@ import (
 )
 
 type (
-	GeneratorTaskExecutorOptions struct {
+	GeneratorTaskHandlerOptions struct {
 		fx.In
 
 		Config         *Config
@@ -26,7 +26,8 @@ type (
 		SpecBuilder    *scheduler.SpecBuilder
 	}
 
-	GeneratorTaskExecutor struct {
+	GeneratorTaskHandler struct {
+		chasm.PureTaskHandlerBase
 		config         *Config
 		metricsHandler metrics.Handler
 		baseLogger     log.Logger
@@ -35,8 +36,8 @@ type (
 	}
 )
 
-func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskExecutor {
-	return &GeneratorTaskExecutor{
+func NewGeneratorTaskHandler(opts GeneratorTaskHandlerOptions) *GeneratorTaskHandler {
+	return &GeneratorTaskHandler{
 		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		baseLogger:     opts.BaseLogger,
@@ -45,7 +46,7 @@ func NewGeneratorTaskExecutor(opts GeneratorTaskExecutorOptions) *GeneratorTaskE
 	}
 }
 
-func (g *GeneratorTaskExecutor) Execute(
+func (g *GeneratorTaskHandler) Execute(
 	ctx chasm.MutableContext,
 	generator *Generator,
 	_ chasm.TaskAttributes,
@@ -141,13 +142,13 @@ func (g *GeneratorTaskExecutor) Execute(
 	return nil
 }
 
-func (g *GeneratorTaskExecutor) logSchedule(logger log.Logger, msg string, scheduler *Scheduler) {
+func (g *GeneratorTaskHandler) logSchedule(logger log.Logger, msg string, sched *Scheduler) {
 	logger.Debug(msg,
-		tag.Stringer("spec", jsonStringer{scheduler.Schedule.Spec}),
-		tag.Stringer("policies", jsonStringer{scheduler.Schedule.Policies}))
+		tag.Stringer("spec", jsonStringer{sched.Schedule.Spec}),
+		tag.Stringer("policies", jsonStringer{sched.Schedule.Policies}))
 }
 
-func (g *GeneratorTaskExecutor) Validate(
+func (g *GeneratorTaskHandler) Validate(
 	ctx chasm.Context,
 	generator *Generator,
 	attrs chasm.TaskAttributes,

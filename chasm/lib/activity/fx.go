@@ -11,11 +11,11 @@ var HistoryModule = fx.Module(
 	"activity-history",
 	fx.Provide(
 		ConfigProvider,
-		newActivityDispatchTaskExecutor,
-		newScheduleToStartTimeoutTaskExecutor,
-		newScheduleToCloseTimeoutTaskExecutor,
-		newStartToCloseTimeoutTaskExecutor,
-		newHeartbeatTimeoutTaskExecutor,
+		newActivityDispatchTaskHandler,
+		newScheduleToStartTimeoutTaskHandler,
+		newScheduleToCloseTimeoutTaskHandler,
+		newStartToCloseTimeoutTaskHandler,
+		newHeartbeatTimeoutTaskHandler,
 		newHandler,
 		newLibrary,
 	),
@@ -33,7 +33,7 @@ var FrontendModule = fx.Module(
 	fx.Provide(newComponentOnlyLibrary),
 	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
 		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
-		// need task executors.
+		// need task handlers.
 		return registry.Register(l)
 	}),
 )
