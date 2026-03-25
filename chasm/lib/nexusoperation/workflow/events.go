@@ -283,7 +283,6 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *chasmworkflo
 
 	if err := nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
-		FromBackingOff: op.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	}); err != nil {
 		return err
 	}

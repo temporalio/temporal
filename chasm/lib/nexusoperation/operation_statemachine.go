@@ -105,9 +105,6 @@ var transitionRescheduled = chasm.NewTransition(
 // asynchronous operation.
 type EventStarted struct {
 	OperationToken string
-	// FromBackingOff indicates whether this transition is from BACKING_OFF state
-	// Used to avoid double-counting attempts
-	FromBackingOff bool
 }
 
 var TransitionStarted = chasm.NewTransition(
@@ -119,23 +116,23 @@ var TransitionStarted = chasm.NewTransition(
 	func(o *Operation, ctx chasm.MutableContext, event EventStarted) error {
 		currentTime := ctx.Now(o)
 
-		// Only increment attempt when NOT coming from BACKING_OFF state
-		// When coming from BACKING_OFF, the attempt was already incremented by transitionAttemptFailed
-		if !event.FromBackingOff {
+		// Only increment attempt when NOT coming from BACKING_OFF state.
+		// When coming from BACKING_OFF, the attempt was already incremented by transitionAttemptFailed.
+		// The transition function is called before the state change, so we can inspect the current state.
+		if o.Status != nexusoperationpb.OPERATION_STATUS_BACKING_OFF {
 			o.Attempt++
 		}
 		o.LastAttemptCompleteTime = timestamppb.New(currentTime)
 		o.LastAttemptFailure = nil
 
-		// Clear the next attempt schedule time when leaving BACKING_OFF state
-		// This field is only valid in BACKING_OFF state
+		// Clear the next attempt schedule time when leaving BACKING_OFF state.
+		// This field is only valid in BACKING_OFF state.
 		o.NextAttemptScheduleTime = nil
 
-		// Store the operation token for async completion
+		// Store the operation token for async completion.
 		o.OperationToken = event.OperationToken
 
-		// TODO: emit a cancellation task if a start-to-close timeout is configured
-		// Emit a start-to-close timeout task if configured
+		// Emit a start-to-close timeout task if configured.
 		if o.StartToCloseTimeout != nil && o.StartToCloseTimeout.AsDuration() != 0 {
 			deadline := o.ScheduledTime.AsTime().Add(o.StartToCloseTimeout.AsDuration())
 			ctx.AddTask(o, chasm.TaskAttributes{

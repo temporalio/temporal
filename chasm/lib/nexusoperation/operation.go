@@ -105,7 +105,6 @@ func (o *Operation) OnStarted(ctx chasm.MutableContext, _ *Operation, operationT
 	}
 	return TransitionStarted.Apply(o, ctx, EventStarted{
 		OperationToken: operationToken,
-		FromBackingOff: o.Status == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 	})
 }
 

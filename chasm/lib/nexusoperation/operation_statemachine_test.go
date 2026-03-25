@@ -254,7 +254,6 @@ func TestTransitionStarted(t *testing.T) {
 
 			event := EventStarted{
 				OperationToken: tc.operationToken,
-				FromBackingOff: tc.startStatus == nexusoperationpb.OPERATION_STATUS_BACKING_OFF,
 			}
 
 			err := TransitionStarted.Apply(operation, ctx, event)
