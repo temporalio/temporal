@@ -1109,7 +1109,6 @@ var (
 	ExecutionQueueSchedulerQueueWaitTime  = NewTimerDef("execution_queue_scheduler_queue_wait_time")
 
 	PausedActivitiesCounter       = NewCounterDef("paused_activities")
-	PausedActivitiesGauge         = NewGaugeDef("paused_activities_gauge")
 	ActivityPauseRequests         = NewCounterDef("activity_pause_requests")
 	ActivityUnpauseRequests       = NewCounterDef("activity_unpause_requests")
 	ActivityResetRequests         = NewCounterDef("activity_reset_requests")

@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
@@ -51,8 +52,9 @@ func Invoke(
 		return nil, err
 	}
 
+	frontendReq := request.GetFrontendRequest()
 	targetingMethod := "type"
-	if _, ok := request.GetFrontendRequest().GetActivity().(*workflowservice.UnpauseActivityRequest_Id); ok {
+	if _, ok := frontendReq.GetActivity().(*workflowservice.UnpauseActivityRequest_Id); ok {
 		targetingMethod = "id"
 	}
 	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
@@ -61,6 +63,15 @@ func Invoke(
 			metrics.ActivityTargetingMethodTag(targetingMethod),
 		)).Record(1)
 	}
+
+	shardContext.GetLogger().Info("unpauseactivity: activity unpaused",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowID(frontendReq.GetExecution().GetWorkflowId()),
+		tag.WorkflowRunID(frontendReq.GetExecution().GetRunId()),
+		tag.NewBoolTag("reset_attempts", frontendReq.GetResetAttempts()),
+		tag.NewBoolTag("reset_heartbeat", frontendReq.GetResetHeartbeat()),
+		tag.NewDurationTag("jitter", frontendReq.GetJitter().AsDuration()),
+	)
 
 	return response, err
 }

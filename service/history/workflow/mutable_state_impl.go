@@ -6400,16 +6400,6 @@ func (ms *MutableStateImpl) UpdateActivity(scheduledEventId int64, updater histo
 			return err
 		}
 
-		gaugeDelta := float64(1)
-		if !ai.Paused {
-			gaugeDelta = -1
-		}
-		metrics.PausedActivitiesGauge.With(
-			ms.metricsHandler.WithTags(
-				metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
-			),
-		).Record(gaugeDelta)
-
 		if ai.Paused {
 			metrics.PausedActivitiesCounter.With(
 				ms.metricsHandler.WithTags(
