@@ -43,7 +43,6 @@ func TestPrioritySuite(t *testing.T) {
 
 func (s *PrioritySuite) SetupSuite() {
 	dynamicConfigOverrides := map[dynamicconfig.Key]any{
-		dynamicconfig.MatchingUseNewMatcher.Key():     true,
 		dynamicconfig.MatchingGetTasksBatchSize.Key(): 20,
 		dynamicconfig.MatchingGetTasksReloadAt.Key():  5,
 	}
@@ -451,7 +450,6 @@ func (s *FairnessSuite) SetupSuite() {
 	}
 	if s.doAutoEnable {
 		dynamicConfigOverrides[dynamicconfig.MatchingAutoEnableV2.Key()] = true
-		dynamicConfigOverrides[dynamicconfig.MatchingEnableMigration.Key()] = true
 		dynamicConfigOverrides[dynamicconfig.MatchingUseNewMatcher.Key()] = false
 		dynamicConfigOverrides[dynamicconfig.MatchingEnableFairness.Key()] = false
 	} else {
@@ -636,7 +634,6 @@ func (s *FairnessSuite) testMigration(newMatcher, fairness bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	s.OverrideDynamicConfig(dynamicconfig.MatchingEnableMigration, true)
 	// Speed up periodic sync so drain completion is detected faster
 	s.OverrideDynamicConfig(dynamicconfig.MatchingUpdateAckInterval, 100*time.Millisecond)
 

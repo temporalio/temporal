@@ -90,6 +90,8 @@ var (
 	ErrTooManyBackfillers    = serviceerror.NewFailedPrecondition("too many concurrent backfillers")
 	ErrInvalidQuery          = serviceerror.NewInvalidArgument("missing or invalid query")
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
+	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
+	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -136,22 +138,42 @@ func NewScheduler(
 }
 
 // NewSentinel returns a sentinel CHASM scheduler that exists only to reserve
-// the schedule ID. Sentinels have no sub-components and return NotFound
-// on all API operations.
+// the schedule ID. Sentinels have no sub-components (other than Info for idle
+// tracking) and return NotFound on all API operations. An idle task auto-closes
+// the sentinel after SentinelIdleTime.
 func NewSentinel(
 	ctx chasm.MutableContext,
 	namespace, namespaceID, scheduleID string,
 ) *Scheduler {
-	return &Scheduler{
+	s := &Scheduler{
 		SchedulerState: &schedulerpb.SchedulerState{
 			Namespace:     namespace,
 			NamespaceId:   namespaceID,
 			ScheduleId:    scheduleID,
 			Sentinel:      true,
 			ConflictToken: scheduler.InitialConflictToken,
+			Info:          &schedulepb.ScheduleInfo{},
 		},
 		cacheConflictToken: scheduler.InitialConflictToken,
 	}
+	s.Info.CreateTime = timestamppb.New(ctx.Now(s))
+
+	ctx.AddTask(s, chasm.TaskAttributes{
+		ScheduledTime: ctx.Now(s).Add(SentinelIdleTime),
+	}, &schedulerpb.SchedulerIdleTask{
+		IdleTimeTotal: durationpb.New(SentinelIdleTime),
+	})
+
+	return s
+}
+
+// CreateSentinelFn is the chasm.StartExecution factory for creating sentinel
+// schedulers. Used by the V1 path to reserve the CHASM key space.
+func CreateSentinelFn(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateSentinelRequest,
+) (*Scheduler, error) {
+	return NewSentinel(ctx, req.Namespace, req.NamespaceId, req.ScheduleId), nil
 }
 
 // IsSentinel returns true if this is a sentinel scheduler.
@@ -218,12 +240,61 @@ func CreateScheduler(
 	return sched, nil
 }
 
+// CreateSchedulerFromMigration initializes a CHASM scheduler from migrated V1 state.
+// Unlike CreateScheduler, this preserves the conflict token and other state from V1.
+//
+// The migrated state components (scheduler, generator, invoker, backfillers) are
+// directly initialized from the request, preserving all state including the
+// conflict token for client compatibility.
+func CreateSchedulerFromMigration(
+	ctx chasm.MutableContext,
+	req *schedulerpb.CreateFromMigrationStateRequest,
+) (*Scheduler, error) {
+	state := req.GetState()
+
+	sched := &Scheduler{
+		SchedulerState:       state.GetSchedulerState(),
+		cacheConflictToken:   state.GetSchedulerState().GetConflictToken(),
+		Backfillers:          make(chasm.Map[string, *Backfiller]),
+		LastCompletionResult: chasm.NewDataField(ctx, state.GetLastCompletionResult()),
+	}
+	sched.setNullableFields()
+
+	sched.Invoker = chasm.NewComponentField(ctx, newInvokerWithState(ctx, state.GetInvokerState()))
+	sched.Generator = chasm.NewComponentField(ctx, newGeneratorWithState(ctx, state.GetGeneratorState()))
+
+	for backfillID, backfillerState := range state.GetBackfillers() {
+		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, newBackfillerWithState(ctx, backfillerState))
+	}
+
+	visibility := chasm.NewVisibility(ctx)
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
+	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
+	visibility.MergeCustomMemo(ctx, state.GetMemo())
+
+	// Schedule a callbacks task to attach Nexus callbacks to any migrated
+	// running workflows. The task self-invalidates if there's no work to do.
+	ctx.AddTask(sched, chasm.TaskAttributes{}, &schedulerpb.SchedulerCallbacksTask{})
+
+	return sched, nil
+}
+
+// LifecycleState implements the chasm.Component interface.
 func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	if s.Closed {
 		return chasm.LifecycleStateCompleted
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+// Terminate implements the chasm.RootComponent interface.
+func (s *Scheduler) Terminate(
+	_ chasm.MutableContext,
+	_ chasm.TerminateComponentRequest,
+) (chasm.TerminateComponentResponse, error) {
+	// TODO: Implement terminate logic.
+	return chasm.TerminateComponentResponse{}, nil
 }
 
 // NewRangeBackfiller returns an intialized Backfiller component, which should
@@ -378,12 +449,15 @@ func (s *Scheduler) getIdleExpiration(
 	// The idle timer to close off the component is started only for schedules with
 	// no more work to do. Paused schedules are held open indefinitely.
 	if idleTime == 0 ||
-		s.Schedule.State.Paused ||
+		s.GetSchedule().GetState().GetPaused() ||
 		(!nextWakeup.IsZero() && s.useScheduledAction(false)) ||
 		s.hasMoreAllowAllBackfills(ctx) {
 		return time.Time{}, false
 	}
 
+	if s.IsSentinel() {
+		return s.Info.GetCreateTime().AsTime().Add(idleTime), true
+	}
 	return s.getLastEventTime(ctx).Add(idleTime), true
 }
 
@@ -630,6 +704,38 @@ func (s *Scheduler) Delete(
 	}, nil
 }
 
+// MigrateToWorkflow pauses the schedule and schedules a side-effect task to
+// start the V1 workflow. This is the CHASM-side operation for V2-to-V1 migration.
+// It is idempotent: if a migration is already pending, it returns success
+// without taking any action.
+func (s *Scheduler) MigrateToWorkflow(
+	ctx chasm.MutableContext,
+	req *schedulerpb.MigrateToWorkflowRequest,
+) (*schedulerpb.MigrateToWorkflowResponse, error) {
+	if s.Sentinel {
+		return nil, ErrSentinel
+	}
+	if s.Closed {
+		return nil, ErrClosed
+	}
+	if s.WorkflowMigration != nil {
+		return &schedulerpb.MigrateToWorkflowResponse{}, nil
+	}
+
+	// Save pre-migration paused state, mark migration as pending, then pause.
+	s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{
+		PreMigrationPaused: s.Schedule.State.Paused,
+		PreMigrationNotes:  s.Schedule.State.Notes,
+	}
+	s.Schedule.State.Paused = true
+	s.Schedule.State.Notes = "paused for migration to workflow-backed scheduler"
+
+	// Schedule a side-effect task to export state and start the V1 workflow.
+	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
+
+	return &schedulerpb.MigrateToWorkflowResponse{}, nil
+}
+
 // Update replaces the schedule with a new one for UpdateSchedule requests.
 func (s *Scheduler) Update(
 	ctx chasm.MutableContext,
@@ -661,8 +767,15 @@ func (s *Scheduler) Update(
 		s.Visibility = chasm.NewComponentField(ctx, visibility)
 	}
 
+	// Reject updates outright when a migration is pending so that changes are
+	// not silently lost during the migration window.
+	if s.WorkflowMigration != nil {
+		return nil, ErrMigrationPending
+	}
+
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
+
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
 
@@ -689,6 +802,9 @@ func (s *Scheduler) Patch(
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Pause
 	}
 	if req.FrontendRequest.Patch.Unpause != "" {
+		if s.WorkflowMigration != nil {
+			return nil, ErrMigrationPending
+		}
 		s.Schedule.State.Paused = false
 		s.Schedule.State.Notes = req.FrontendRequest.Patch.Unpause
 	}

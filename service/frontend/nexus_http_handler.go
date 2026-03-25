@@ -15,7 +15,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,7 +43,6 @@ type NexusHTTPHandler struct {
 	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
 	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	enabled                              dynamicconfig.BoolPropertyFn
 }
 
 func NewNexusHTTPHandler(
@@ -79,7 +77,6 @@ func NewNexusHTTPHandler(
 		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
 		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitIntercptor,
 		rateLimitInterceptor:                 rateLimitInterceptor,
-		enabled:                              serviceConfig.EnableNexusAPIs,
 		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
@@ -121,11 +118,6 @@ func (h *NexusHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Requ
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByNamespaceAndTaskQueue].
 func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.ResponseWriter, r *http.Request) {
-	if !h.enabled() {
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "nexus endpoints disabled"))
-		return
-	}
-
 	var err error
 	nc := h.baseNexusContext(configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName, r.Header)
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
@@ -166,11 +158,6 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w http.Respo
 
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
 func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
-	if !h.enabled() {
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "nexus endpoints disabled"))
-		return
-	}
-
 	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)
@@ -188,14 +175,15 @@ func (h *NexusHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r 
 		}
 		switch s.Code() {
 		case codes.NotFound:
-			if r, ok := (err.(interface{ Retryable() bool })); ok {
-				if r.Retryable() {
-					w.Header().Set("nexus-request-retryable", "true")
-				} else {
-					w.Header().Set("nexus-request-retryable", "false")
-				}
+			retryBehavior := nexus.HandlerErrorRetryBehaviorNonRetryable
+			if r, ok := (err.(interface{ Retryable() bool })); ok && r.Retryable() {
+				retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 			}
-			h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "nexus endpoint not found"))
+			h.writeFailure(w, r, &nexus.HandlerError{
+				Type:          nexus.HandlerErrorTypeNotFound,
+				Message:       "nexus endpoint not found",
+				RetryBehavior: retryBehavior,
+			})
 		case codes.DeadlineExceeded:
 			h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeRequestTimeout, "request timed out"))
 		default:
@@ -253,8 +241,11 @@ func (h *NexusHTTPHandler) nexusContextFromEndpoint(entry *persistencespb.NexusE
 			h.logger.Error("failed to get namespace name by ID", tag.Error(err))
 			var notFoundErr *serviceerror.NamespaceNotFound
 			if errors.As(err, &notFoundErr) {
-				w.Header().Set("nexus-request-retryable", "true")
-				h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "invalid endpoint target"))
+				h.writeFailure(w, r, &nexus.HandlerError{
+					Type:          nexus.HandlerErrorTypeNotFound,
+					Message:       "invalid endpoint target",
+					RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
+				})
 			} else {
 				h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 			}

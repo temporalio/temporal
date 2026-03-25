@@ -92,6 +92,9 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 		scheduler.NewSchedulerIdleTaskExecutor(scheduler.SchedulerIdleTaskExecutorOptions{
 			Config: config,
 		}),
+		scheduler.NewSchedulerCallbacksTaskExecutor(scheduler.SchedulerCallbacksTaskExecutorOptions{
+			Config: config,
+		}),
 		scheduler.NewGeneratorTaskExecutor(scheduler.GeneratorTaskExecutorOptions{
 			Config:         config,
 			MetricsHandler: metrics.NoopMetricsHandler,
@@ -107,6 +110,11 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 			BaseLogger:     logger,
 			SpecProcessor:  specProcessor,
 		}),
+		scheduler.NewSchedulerMigrateToWorkflowTaskExecutor(scheduler.SchedulerMigrateToWorkflowTaskExecutorOptions{
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
+			BaseLogger:     logger,
+		}),
 	)
 }
 
@@ -114,6 +122,7 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 type testEnv struct {
 	t             *testing.T // only used within these setup helpers
 	Ctrl          *gomock.Controller
+	Registry      *chasm.Registry
 	Node          *chasm.Node
 	NodeBackend   *chasm.MockNodeBackend
 	TimeSource    *clock.EventTimeSource
@@ -208,7 +217,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		},
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), node)
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
 	if err != nil {
@@ -230,6 +239,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	env := &testEnv{
 		t:             t,
 		Ctrl:          ctrl,
+		Registry:      registry,
 		Node:          node,
 		NodeBackend:   nodeBackend,
 		TimeSource:    timeSource,
@@ -343,7 +353,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 		}
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger)
+	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	return &testInfra{
 		node:        node,
 		nodeBackend: nodeBackend,

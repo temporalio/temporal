@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -34,6 +35,8 @@ type (
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
 		chasmRegistry                  *chasm.Registry
+		metricsHandler                 metrics.Handler
+		logger                         log.Logger
 
 		enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn
 	}
@@ -75,6 +78,8 @@ func NewSQLVisibilityStore(
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
 		chasmRegistry:                  chasmRegistry,
+		metricsHandler:                 metricsHandler,
+		logger:                         logger,
 
 		enableUnifiedQueryConverter: enableUnifiedQueryConverter,
 	}, nil
@@ -707,7 +712,7 @@ func (s *VisibilityStore) countGroupByExecutions(
 	for _, row := range rows {
 		groupValues := make([]*commonpb.Payload, len(row.GroupValues))
 		for i, val := range row.GroupValues {
-			groupValues[i], err = searchattribute.EncodeValue(val, groupByTypes[i])
+			groupValues[i], err = sadefs.EncodeValue(val, groupByTypes[i])
 			if err != nil {
 				return nil, err
 			}
@@ -789,6 +794,13 @@ func (s *VisibilityStore) prepareSearchAttributesForDb(
 	searchAttributes, err = searchattribute.Decode(request.SearchAttributes, &saTypeMap, false)
 	if err != nil {
 		return nil, err
+	}
+	if len(request.SearchAttributes.GetIndexedFields()) != len(searchAttributes) {
+		for name := range request.SearchAttributes.GetIndexedFields() {
+			if _, ok := searchAttributes[name]; !ok {
+				s.logger.Warn("Skipping unknown search attribute while generating visibility record", tag.String("search-attribute", name))
+			}
+		}
 	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
@@ -876,8 +888,7 @@ func (s *VisibilityStore) encodeRowSearchAttributes(
 	for name, value := range rowSearchAttributes {
 		tp, err := combinedTypeMap.GetType(name)
 		if err != nil {
-			// Silently ignore ErrInvalidName for unregistered chasm search attributes
-			if sadefs.IsChasmSearchAttribute(name) && errors.Is(err, searchattribute.ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				continue
 			}
 			return nil, err

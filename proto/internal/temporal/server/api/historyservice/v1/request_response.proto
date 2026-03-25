@@ -36,6 +36,7 @@ import "temporal/server/api/workflow/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 import "temporal/server/api/adminservice/v1/request_response.proto";
 import "temporal/server/api/common/v1/dlq.proto";
+import "temporal/server/api/health/v1/message.proto";
 
 extend google.protobuf.MessageOptions {
     optional RoutingOptions routing = 7234;
@@ -99,6 +100,12 @@ message StartWorkflowExecutionRequest {
     // After the first workflow task, the effective behavior of the workflow is determined by worker-sent values in
     // subsequent workflow tasks.
     temporal.api.deployment.v1.InheritedAutoUpgradeInfo inherited_auto_upgrade_info = 16;
+    // The target version that the previous run implicitly declined to upgrade to.
+    // Computed at continue-as-new time from the previous run's last_notified_target_version
+    // (if set) or its existing declined value (CaN chain). For retries, passed through
+    // directly from the started event. Written onto the new run's
+    // WorkflowExecutionStartedEvent.
+    temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
 }
 
 message StartWorkflowExecutionResponse {
@@ -1296,6 +1303,8 @@ message DeepHealthCheckRequest {
 
 message DeepHealthCheckResponse {
     temporal.server.api.enums.v1.HealthState state = 1;
+    // Per-check diagnostic results. Populated for all checks regardless of state.
+    repeated temporal.server.api.health.v1.HealthCheck checks = 2;
 }
 
 message SyncWorkflowStateRequest {

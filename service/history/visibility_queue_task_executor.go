@@ -367,7 +367,7 @@ func (t *visibilityQueueTaskExecutor) processChasmTask(
 	}
 
 	valid, err := validateChasmSideEffectTask(ctx, mutableState, task)
-	if err != nil || valid == nil {
+	if err != nil || !valid {
 		return err
 	}
 

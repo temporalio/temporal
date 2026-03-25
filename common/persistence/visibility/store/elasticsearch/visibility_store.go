@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -942,6 +943,11 @@ func (s *VisibilityStore) GenerateESDoc(
 		metrics.ElasticsearchDocumentGenerateFailuresCount.With(s.metricsHandler).Record(1)
 		return nil, serviceerror.NewInternalf("unable to decode search attributes: %v", err)
 	}
+	for name := range request.SearchAttributes.GetIndexedFields() {
+		if _, ok := searchAttributes[name]; !ok {
+			s.logger.Warn("Skipping unknown search attribute while generating visibility record", tag.String("search-attribute", name))
+		}
+	}
 	// This is to prevent existing tasks to fail indefinitely.
 	// If it's only invalid values error, then silently continue without them.
 	searchAttributes, err = s.ValidateCustomSearchAttributes(searchAttributes)
@@ -1037,7 +1043,7 @@ func (s *VisibilityStore) ParseESDoc(
 		fieldType, err := combinedTypeMap.GetType(fieldName)
 		if err != nil {
 			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
-			if errors.Is(err, searchattribute.ErrInvalidName) {
+			if errors.Is(err, sadefs.ErrInvalidName) {
 				continue
 			}
 			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
@@ -1184,7 +1190,7 @@ func (s *VisibilityStore) parseCountGroupByResponse(
 			if err != nil {
 				return fmt.Errorf("unable to parse value %v: %w", bucket["key"], err)
 			}
-			payload, err := searchattribute.EncodeValue(value, groupByTypes[index])
+			payload, err := sadefs.EncodeValue(value, groupByTypes[index])
 			if err != nil {
 				return fmt.Errorf("unable to encode value %v: %w", value, err)
 			}

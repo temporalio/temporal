@@ -91,6 +91,12 @@ testGetDurationPropertyFilteredByTaskTypeKey:
   - value: 10s
     constraints:
       historytasktype: 1
+testGetDurationPropertyFilteredByChasmTaskTypeKey:
+  - value: 30s
+    constraints:
+      chasmtasktype: "activity.dispatch"
+  - value: 24h
+    constraints: {}
 testGetIntPropertyFilteredByDestinationKey:
   - value: 10
     constraints: {}
