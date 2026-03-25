@@ -113,9 +113,9 @@ func (x *ListChasmExecutionsRequest) GetNextPageToken() []byte {
 }
 
 type ListChasmExecutionsResponse struct {
-	state         protoimpl.MessageState   `protogen:"open.v1"`
-	Executions    []*v1.ChasmExecutionInfo `protobuf:"bytes,1,rep,name=executions,proto3" json:"executions,omitempty"`
-	NextPageToken []byte                   `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	Executions    []*v1.VisibilityExecutionInfo `protobuf:"bytes,1,rep,name=executions,proto3" json:"executions,omitempty"`
+	NextPageToken []byte                        `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -150,7 +150,7 @@ func (*ListChasmExecutionsResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_visibilityservice_v1_request_response_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ListChasmExecutionsResponse) GetExecutions() []*v1.ChasmExecutionInfo {
+func (x *ListChasmExecutionsResponse) GetExecutions() []*v1.VisibilityExecutionInfo {
 	if x != nil {
 		return x.Executions
 	}
@@ -350,10 +350,10 @@ const file_temporal_server_api_visibilityservice_v1_request_response_proto_rawDe
 	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05query\x18\x04 \x01(\tR\x05query\x12\x1b\n" +
 	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12&\n" +
-	"\x0fnext_page_token\x18\x06 \x01(\fR\rnextPageToken\"\x97\x01\n" +
-	"\x1bListChasmExecutionsResponse\x12P\n" +
+	"\x0fnext_page_token\x18\x06 \x01(\fR\rnextPageToken\"\x9c\x01\n" +
+	"\x1bListChasmExecutionsResponse\x12U\n" +
 	"\n" +
-	"executions\x18\x01 \x03(\v20.temporal.server.api.chasm.v1.ChasmExecutionInfoR\n" +
+	"executions\x18\x01 \x03(\v25.temporal.server.api.chasm.v1.VisibilityExecutionInfoR\n" +
 	"executions\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"\x97\x01\n" +
 	"\x1bCountChasmExecutionsRequest\x12!\n" +
@@ -387,11 +387,11 @@ var file_temporal_server_api_visibilityservice_v1_request_response_proto_goTypes
 	(*CountChasmExecutionsRequest)(nil),                   // 2: temporal.server.api.visibilityservice.v1.CountChasmExecutionsRequest
 	(*CountChasmExecutionsResponse)(nil),                  // 3: temporal.server.api.visibilityservice.v1.CountChasmExecutionsResponse
 	(*CountChasmExecutionsResponse_AggregationGroup)(nil), // 4: temporal.server.api.visibilityservice.v1.CountChasmExecutionsResponse.AggregationGroup
-	(*v1.ChasmExecutionInfo)(nil),                         // 5: temporal.server.api.chasm.v1.ChasmExecutionInfo
+	(*v1.VisibilityExecutionInfo)(nil),                    // 5: temporal.server.api.chasm.v1.VisibilityExecutionInfo
 	(*v11.Payload)(nil),                                   // 6: temporal.api.common.v1.Payload
 }
 var file_temporal_server_api_visibilityservice_v1_request_response_proto_depIdxs = []int32{
-	5, // 0: temporal.server.api.visibilityservice.v1.ListChasmExecutionsResponse.executions:type_name -> temporal.server.api.chasm.v1.ChasmExecutionInfo
+	5, // 0: temporal.server.api.visibilityservice.v1.ListChasmExecutionsResponse.executions:type_name -> temporal.server.api.chasm.v1.VisibilityExecutionInfo
 	4, // 1: temporal.server.api.visibilityservice.v1.CountChasmExecutionsResponse.groups:type_name -> temporal.server.api.visibilityservice.v1.CountChasmExecutionsResponse.AggregationGroup
 	6, // 2: temporal.server.api.visibilityservice.v1.CountChasmExecutionsResponse.AggregationGroup.group_values:type_name -> temporal.api.common.v1.Payload
 	3, // [3:3] is the sub-list for method output_type

@@ -158,14 +158,7 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 	ctx context.Context,
 	request *visibilityservice.ListChasmExecutionsRequest,
 ) (*visibilityservice.ListChasmExecutionsResponse, error) {
-	response, err := p.store.ListChasmExecutions(ctx, &manager.ListChasmExecutionsRequest{
-		ArchetypeID:   request.ArchetypeId,
-		NamespaceID:   namespace.ID(request.NamespaceId),
-		Namespace:     namespace.Name(request.Namespace),
-		PageSize:      int(request.PageSize),
-		Query:         request.Query,
-		NextPageToken: request.NextPageToken,
-	})
+	response, err := p.store.ListChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +169,7 @@ func (p *visibilityManagerImpl) ListChasmExecutions(
 	}
 	mapper := rc.SearchAttributesMapper()
 
-	executions := make([]*chasmspb.ChasmExecutionInfo, 0, len(response.Executions))
+	executions := make([]*chasmspb.VisibilityExecutionInfo, 0, len(response.Executions))
 	for _, exec := range response.Executions {
 		executionInfo, err := p.convertToChasmExecutionInfo(
 			exec,
@@ -200,7 +193,7 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 	exec *store.InternalExecutionInfo,
 	mapper *chasm.VisibilitySearchAttributesMapper,
 	namespaceName namespace.Name,
-) (*chasmspb.ChasmExecutionInfo, error) {
+) (*chasmspb.VisibilityExecutionInfo, error) {
 	customSAs, chasmSAs := splitSearchAttributes(exec.SearchAttributes)
 
 	chasmAliasedSAs, err := aliasChasmSearchAttributes(chasmSAs, mapper)
@@ -234,7 +227,7 @@ func (p *visibilityManagerImpl) convertToChasmExecutionInfo(
 		return nil, err
 	}
 
-	return &chasmspb.ChasmExecutionInfo{
+	return &chasmspb.VisibilityExecutionInfo{
 		BusinessId:             exec.WorkflowID,
 		RunId:                  exec.RunID,
 		StartTime:              timestamppb.New(exec.StartTime),
@@ -289,12 +282,7 @@ func (p *visibilityManagerImpl) CountChasmExecutions(
 	ctx context.Context,
 	request *visibilityservice.CountChasmExecutionsRequest,
 ) (*visibilityservice.CountChasmExecutionsResponse, error) {
-	internalResp, err := p.store.CountChasmExecutions(ctx, &manager.CountChasmExecutionsRequest{
-		ArchetypeID: request.ArchetypeId,
-		NamespaceID: namespace.ID(request.NamespaceId),
-		Namespace:   namespace.Name(request.Namespace),
-		Query:       request.Query,
-	})
+	internalResp, err := p.store.CountChasmExecutions(ctx, request)
 	if err != nil {
 		return nil, err
 	}

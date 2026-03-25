@@ -24,7 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type ChasmExecutionInfo struct {
+type VisibilityExecutionInfo struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	BusinessId             string                 `protobuf:"bytes,1,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
 	RunId                  string                 `protobuf:"bytes,2,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
@@ -41,20 +41,20 @@ type ChasmExecutionInfo struct {
 	sizeCache              protoimpl.SizeCache
 }
 
-func (x *ChasmExecutionInfo) Reset() {
-	*x = ChasmExecutionInfo{}
+func (x *VisibilityExecutionInfo) Reset() {
+	*x = VisibilityExecutionInfo{}
 	mi := &file_temporal_server_api_chasm_v1_message_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ChasmExecutionInfo) String() string {
+func (x *VisibilityExecutionInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ChasmExecutionInfo) ProtoMessage() {}
+func (*VisibilityExecutionInfo) ProtoMessage() {}
 
-func (x *ChasmExecutionInfo) ProtoReflect() protoreflect.Message {
+func (x *VisibilityExecutionInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_chasm_v1_message_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -66,82 +66,82 @@ func (x *ChasmExecutionInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ChasmExecutionInfo.ProtoReflect.Descriptor instead.
-func (*ChasmExecutionInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use VisibilityExecutionInfo.ProtoReflect.Descriptor instead.
+func (*VisibilityExecutionInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_chasm_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ChasmExecutionInfo) GetBusinessId() string {
+func (x *VisibilityExecutionInfo) GetBusinessId() string {
 	if x != nil {
 		return x.BusinessId
 	}
 	return ""
 }
 
-func (x *ChasmExecutionInfo) GetRunId() string {
+func (x *VisibilityExecutionInfo) GetRunId() string {
 	if x != nil {
 		return x.RunId
 	}
 	return ""
 }
 
-func (x *ChasmExecutionInfo) GetStartTime() *timestamppb.Timestamp {
+func (x *VisibilityExecutionInfo) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.StartTime
 	}
 	return nil
 }
 
-func (x *ChasmExecutionInfo) GetCloseTime() *timestamppb.Timestamp {
+func (x *VisibilityExecutionInfo) GetCloseTime() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CloseTime
 	}
 	return nil
 }
 
-func (x *ChasmExecutionInfo) GetHistoryLength() int64 {
+func (x *VisibilityExecutionInfo) GetHistoryLength() int64 {
 	if x != nil {
 		return x.HistoryLength
 	}
 	return 0
 }
 
-func (x *ChasmExecutionInfo) GetHistorySizeBytes() int64 {
+func (x *VisibilityExecutionInfo) GetHistorySizeBytes() int64 {
 	if x != nil {
 		return x.HistorySizeBytes
 	}
 	return 0
 }
 
-func (x *ChasmExecutionInfo) GetStateTransitionCount() int64 {
+func (x *VisibilityExecutionInfo) GetStateTransitionCount() int64 {
 	if x != nil {
 		return x.StateTransitionCount
 	}
 	return 0
 }
 
-func (x *ChasmExecutionInfo) GetChasmSearchAttributes() *v1.SearchAttributes {
+func (x *VisibilityExecutionInfo) GetChasmSearchAttributes() *v1.SearchAttributes {
 	if x != nil {
 		return x.ChasmSearchAttributes
 	}
 	return nil
 }
 
-func (x *ChasmExecutionInfo) GetCustomSearchAttributes() *v1.SearchAttributes {
+func (x *VisibilityExecutionInfo) GetCustomSearchAttributes() *v1.SearchAttributes {
 	if x != nil {
 		return x.CustomSearchAttributes
 	}
 	return nil
 }
 
-func (x *ChasmExecutionInfo) GetMemo() *v1.Memo {
+func (x *VisibilityExecutionInfo) GetMemo() *v1.Memo {
 	if x != nil {
 		return x.Memo
 	}
 	return nil
 }
 
-func (x *ChasmExecutionInfo) GetChasmMemo() *v1.Payload {
+func (x *VisibilityExecutionInfo) GetChasmMemo() *v1.Payload {
 	if x != nil {
 		return x.ChasmMemo
 	}
@@ -152,8 +152,8 @@ var File_temporal_server_api_chasm_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_chasm_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"*temporal/server/api/chasm/v1/message.proto\x12\x1ctemporal.server.api.chasm.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\x85\x05\n" +
-	"\x12ChasmExecutionInfo\x12\x1f\n" +
+	"*temporal/server/api/chasm/v1/message.proto\x12\x1ctemporal.server.api.chasm.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\"\x8a\x05\n" +
+	"\x17VisibilityExecutionInfo\x12\x1f\n" +
 	"\vbusiness_id\x18\x01 \x01(\tR\n" +
 	"businessId\x12\x15\n" +
 	"\x06run_id\x18\x02 \x01(\tR\x05runId\x129\n" +
@@ -185,19 +185,19 @@ func file_temporal_server_api_chasm_v1_message_proto_rawDescGZIP() []byte {
 
 var file_temporal_server_api_chasm_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_chasm_v1_message_proto_goTypes = []any{
-	(*ChasmExecutionInfo)(nil),    // 0: temporal.server.api.chasm.v1.ChasmExecutionInfo
-	(*timestamppb.Timestamp)(nil), // 1: google.protobuf.Timestamp
-	(*v1.SearchAttributes)(nil),   // 2: temporal.api.common.v1.SearchAttributes
-	(*v1.Memo)(nil),               // 3: temporal.api.common.v1.Memo
-	(*v1.Payload)(nil),            // 4: temporal.api.common.v1.Payload
+	(*VisibilityExecutionInfo)(nil), // 0: temporal.server.api.chasm.v1.VisibilityExecutionInfo
+	(*timestamppb.Timestamp)(nil),   // 1: google.protobuf.Timestamp
+	(*v1.SearchAttributes)(nil),     // 2: temporal.api.common.v1.SearchAttributes
+	(*v1.Memo)(nil),                 // 3: temporal.api.common.v1.Memo
+	(*v1.Payload)(nil),              // 4: temporal.api.common.v1.Payload
 }
 var file_temporal_server_api_chasm_v1_message_proto_depIdxs = []int32{
-	1, // 0: temporal.server.api.chasm.v1.ChasmExecutionInfo.start_time:type_name -> google.protobuf.Timestamp
-	1, // 1: temporal.server.api.chasm.v1.ChasmExecutionInfo.close_time:type_name -> google.protobuf.Timestamp
-	2, // 2: temporal.server.api.chasm.v1.ChasmExecutionInfo.chasm_search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
-	2, // 3: temporal.server.api.chasm.v1.ChasmExecutionInfo.custom_search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
-	3, // 4: temporal.server.api.chasm.v1.ChasmExecutionInfo.memo:type_name -> temporal.api.common.v1.Memo
-	4, // 5: temporal.server.api.chasm.v1.ChasmExecutionInfo.chasm_memo:type_name -> temporal.api.common.v1.Payload
+	1, // 0: temporal.server.api.chasm.v1.VisibilityExecutionInfo.start_time:type_name -> google.protobuf.Timestamp
+	1, // 1: temporal.server.api.chasm.v1.VisibilityExecutionInfo.close_time:type_name -> google.protobuf.Timestamp
+	2, // 2: temporal.server.api.chasm.v1.VisibilityExecutionInfo.chasm_search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
+	2, // 3: temporal.server.api.chasm.v1.VisibilityExecutionInfo.custom_search_attributes:type_name -> temporal.api.common.v1.SearchAttributes
+	3, // 4: temporal.server.api.chasm.v1.VisibilityExecutionInfo.memo:type_name -> temporal.api.common.v1.Memo
+	4, // 5: temporal.server.api.chasm.v1.VisibilityExecutionInfo.chasm_memo:type_name -> temporal.api.common.v1.Payload
 	6, // [6:6] is the sub-list for method output_type
 	6, // [6:6] is the sub-list for method input_type
 	6, // [6:6] is the sub-list for extension type_name

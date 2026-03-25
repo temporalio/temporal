@@ -12,7 +12,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -119,24 +118,6 @@ type (
 		// Token to read next page if there are more workflow executions beyond page size.
 		// Use this to set NextPageToken on ListWorkflowExecutionsRequest to read the next page.
 		NextPageToken []byte
-	}
-
-	ListChasmExecutionsRequest struct {
-		ArchetypeID chasm.ArchetypeID
-		NamespaceID namespace.ID
-		Namespace   namespace.Name
-		PageSize    int // Maximum number of workflow executions per page
-		Query       string
-		// Token to continue reading next page of workflow executions.
-		// Pass in empty slice for first page.
-		NextPageToken []byte
-	}
-
-	CountChasmExecutionsRequest struct {
-		ArchetypeID chasm.ArchetypeID
-		NamespaceID namespace.ID
-		Namespace   namespace.Name
-		Query       string
 	}
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions

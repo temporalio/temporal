@@ -163,17 +163,17 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 	}
 
 	// Setup visibility manager mock
-	expectedRequest := &manager.ListChasmExecutionsRequest{
-		ArchetypeID:   archetypeID,
-		NamespaceID:   testChasmNamespaceID,
-		Namespace:     testChasmNamespace,
-		PageSize:      pageSize,
+	expectedRequest := &visibilityservice.ListChasmExecutionsRequest{
+		ArchetypeId:   archetypeID,
+		NamespaceId:   testChasmNamespaceID.String(),
+		Namespace:     testChasmNamespace.String(),
+		PageSize:      int32(pageSize),
 		NextPageToken: pageToken,
 		Query:         query,
 	}
 
 	expectedResponse := &visibilityservice.ListChasmExecutionsResponse{
-		Executions: []*chasmspb.ChasmExecutionInfo{
+		Executions: []*chasmspb.VisibilityExecutionInfo{
 			{
 				BusinessId:             testBusinessID,
 				RunId:                  testRunID,
@@ -197,10 +197,10 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_Success() {
 			_ context.Context,
 			req *visibilityservice.ListChasmExecutionsRequest,
 		) (*visibilityservice.ListChasmExecutionsResponse, error) {
-			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeId)
-			s.Equal(expectedRequest.NamespaceID.String(), req.NamespaceId)
-			s.Equal(expectedRequest.Namespace.String(), req.Namespace)
-			s.Equal(expectedRequest.PageSize, int(req.PageSize))
+			s.Equal(expectedRequest.ArchetypeId, req.ArchetypeId)
+			s.Equal(expectedRequest.NamespaceId, req.NamespaceId)
+			s.Equal(expectedRequest.Namespace, req.Namespace)
+			s.Equal(expectedRequest.PageSize, req.PageSize)
 			s.Equal(expectedRequest.NextPageToken, req.NextPageToken)
 			s.Equal(expectedRequest.Query, req.Query)
 			return expectedResponse, nil
@@ -262,10 +262,10 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_Success() {
 	expectedCount := int64(42)
 
 	// Setup visibility manager mock
-	expectedRequest := &manager.CountChasmExecutionsRequest{
-		ArchetypeID: archetypeID,
-		NamespaceID: testChasmNamespaceID,
-		Namespace:   testChasmNamespace,
+	expectedRequest := &visibilityservice.CountChasmExecutionsRequest{
+		ArchetypeId: archetypeID,
+		NamespaceId: testChasmNamespaceID.String(),
+		Namespace:   testChasmNamespace.String(),
 		Query:       query,
 	}
 
@@ -279,9 +279,9 @@ func (s *ChasmVisibilityManagerSuite) TestCountExecutions_Success() {
 			_ context.Context,
 			req *visibilityservice.CountChasmExecutionsRequest,
 		) (*visibilityservice.CountChasmExecutionsResponse, error) {
-			s.Equal(expectedRequest.ArchetypeID, req.ArchetypeId)
-			s.Equal(expectedRequest.NamespaceID.String(), req.NamespaceId)
-			s.Equal(expectedRequest.Namespace.String(), req.Namespace)
+			s.Equal(expectedRequest.ArchetypeId, req.ArchetypeId)
+			s.Equal(expectedRequest.NamespaceId, req.NamespaceId)
+			s.Equal(expectedRequest.Namespace, req.Namespace)
 			s.Equal(expectedRequest.Query, req.Query)
 			return expectedResponse, nil
 		})
@@ -470,7 +470,7 @@ func (s *ChasmVisibilityManagerSuite) TestListExecutions_WithTaskQueueSearchAttr
 	}
 
 	expectedResponse := &visibilityservice.ListChasmExecutionsResponse{
-		Executions: []*chasmspb.ChasmExecutionInfo{
+		Executions: []*chasmspb.VisibilityExecutionInfo{
 			{
 				BusinessId:            testBusinessID,
 				RunId:                 testRunID,

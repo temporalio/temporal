@@ -93,7 +93,7 @@ func ListExecutions[C Component, M proto.Message](
 	// Convert response: decode ChasmSearchAttributes and ChasmMemo to type M
 	executions := make([]*ExecutionInfo[M], len(response.Executions))
 	for i, execution := range response.Executions {
-		chasmSAs, err := NewSearchAttributesMapFromProto(execution.ChasmSearchAttributes)
+		chasmSAs, err := newSearchAttributesMapFromProto(execution.ChasmSearchAttributes)
 		if err != nil {
 			return nil, err
 		}

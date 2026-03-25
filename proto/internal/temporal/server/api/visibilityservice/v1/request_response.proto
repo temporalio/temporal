@@ -3,6 +3,9 @@ syntax = "proto3";
 package temporal.server.api.visibilityservice.v1;
 option go_package = "go.temporal.io/server/api/visibilityservice/v1;visibilityservice";
 
+// visibilityservice does not have a corresponding gRPC service.
+// The following request/response types are used by VisibilityManager.
+
 import "temporal/api/common/v1/message.proto";
 import "temporal/server/api/chasm/v1/message.proto";
 
@@ -20,7 +23,7 @@ message ListChasmExecutionsRequest {
 }
 
 message ListChasmExecutionsResponse {
-    repeated temporal.server.api.chasm.v1.ChasmExecutionInfo executions = 1;
+    repeated temporal.server.api.chasm.v1.VisibilityExecutionInfo executions = 1;
     bytes next_page_token = 2;
 }
 

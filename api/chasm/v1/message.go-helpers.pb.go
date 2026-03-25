@@ -5,35 +5,35 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Marshal an object of type ChasmExecutionInfo to the protobuf v3 wire format
-func (val *ChasmExecutionInfo) Marshal() ([]byte, error) {
+// Marshal an object of type VisibilityExecutionInfo to the protobuf v3 wire format
+func (val *VisibilityExecutionInfo) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
 }
 
-// Unmarshal an object of type ChasmExecutionInfo from the protobuf v3 wire format
-func (val *ChasmExecutionInfo) Unmarshal(buf []byte) error {
+// Unmarshal an object of type VisibilityExecutionInfo from the protobuf v3 wire format
+func (val *VisibilityExecutionInfo) Unmarshal(buf []byte) error {
 	return proto.Unmarshal(buf, val)
 }
 
 // Size returns the size of the object, in bytes, once serialized
-func (val *ChasmExecutionInfo) Size() int {
+func (val *VisibilityExecutionInfo) Size() int {
 	return proto.Size(val)
 }
 
-// Equal returns whether two ChasmExecutionInfo values are equivalent by recursively
+// Equal returns whether two VisibilityExecutionInfo values are equivalent by recursively
 // comparing the message's fields.
 // For more information see the documentation for
 // https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
-func (this *ChasmExecutionInfo) Equal(that interface{}) bool {
+func (this *VisibilityExecutionInfo) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	var that1 *ChasmExecutionInfo
+	var that1 *VisibilityExecutionInfo
 	switch t := that.(type) {
-	case *ChasmExecutionInfo:
+	case *VisibilityExecutionInfo:
 		that1 = t
-	case ChasmExecutionInfo:
+	case VisibilityExecutionInfo:
 		that1 = &t
 	default:
 		return false
