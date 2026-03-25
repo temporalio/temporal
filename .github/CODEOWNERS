@@ -32,6 +32,10 @@
 /common/tasks/ @temporalio/oss-foundations @temporalio/cgs
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
 
+# Components
+
+/components/ @temporalio/act @temporalio/nexus
+
 # Proto Definitions
 
 /proto/internal/temporal/server/api/schedule/ @temporalio/act
