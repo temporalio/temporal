@@ -438,8 +438,8 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 
 	if args.AsyncPropagation {
 		d.deleteVersion = true
-		if d.hasMinVersion(VersionDataRevisionNumber) {
-			if workflow.GetVersion(ctx, "serialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		if workflow.GetVersion(ctx, "serialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			if d.hasMinVersion(VersionDataRevisionNumber) {
 				d.syncTaskQueuesAsync(ctx, nil, true)
 			} else {
 				d.asyncPropagationsInProgress++
@@ -585,27 +585,28 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		err = workflow.Await(ctx, func() bool {
 			return d.asyncPropagationsInProgress == 0
 		})
+		if err != nil {
+			return err
+		}
 	}
 
-	if workflow.GetVersion(ctx, "serialDelete", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
-		// In case this version just got deleted, we wait until it finished propagating delete to all task queues before reviving it.
-		// This is because the deleted flag propagation is not protected by revision number and if done parallel to other propagations, it can cause a race condition.
-		err = workflow.Await(ctx, func() bool {
-			return !d.deleteVersion || d.asyncPropagationsInProgress == 0
-		})
-	}
-
-	if err != nil {
-		return err
-	}
 	if d.deleteVersion {
-		if workflow.GetVersion(ctx, "reviveDeleted", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		if workflow.GetVersion(ctx, "awaitSerialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			// In case it was marked as deleted we make it undeleted
 			d.deleteVersion = false
 			if withRevisionNumbers {
+				// If we're changing the version data, we need to increment the revision number
 				d.GetVersionState().RevisionNumber++
 			}
 		} else {
-			// In case it was marked as deleted we make it undeleted and reset state
+			// In case this version just got deleted, we wait until it finished propagating delete to all task queues before reviving it.
+			// This is because the deleted flag propagation is not protected by revision number and if done parallel to other propagations, it can cause a race condition.
+			err = workflow.Await(ctx, func() bool {
+				return d.asyncPropagationsInProgress == 0
+			})
+			if err != nil {
+				return err
+			}
 			d.reviveDeleted(ctx)
 		}
 	}
