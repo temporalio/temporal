@@ -5550,13 +5550,9 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 
 				uwsCh := sendUpdateWithStart(s, testcore.NewContext(s.Context()), startReq, updateReq)
 
+				// The update is admitted to the registry while WFT1 is scheduled, so it
+				// is delivered in WFT1 (the initial workflow task from the hook-started workflow).
 				_, err := s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
-					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-						return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
-					})
-				s.NoError(err)
-
-				_, err = s.TaskPoller().PollAndHandleWorkflowTask(s.Tv(),
 					func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 						return &workflowservice.RespondWorkflowTaskCompletedRequest{
 							Messages: s.UpdateAcceptCompleteMessages(s.Tv(), task.Messages[0]),
@@ -5659,7 +5655,12 @@ func TestWorkflowUpdateSuite(t *testing.T) {
 				// ensure update-with-start returns retryable error
 				uwsRes := <-uwsCh
 				s.Error(uwsRes.err)
-				errs := uwsRes.err.(*serviceerror.MultiOperationExecution).OperationErrors()
+				var multiOpErr *serviceerror.MultiOperationExecution
+				if !errors.As(uwsRes.err, &multiOpErr) {
+					s.Fail("expected MultiOperationExecution error", "got: %T: %v", uwsRes.err, uwsRes.err)
+					return
+				}
+				errs := multiOpErr.OperationErrors()
 				s.Len(errs, 2)
 				s.Equal("Operation was aborted.", errs[0].Error())
 				s.ErrorContains(errs[1], update.AbortedByWorkflowClosingErr.Error())
