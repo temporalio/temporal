@@ -2763,53 +2763,53 @@ func (s *WorkerDeploymentSuite) tryDeleteVersion(
 	}
 }
 
-func (s *WorkerDeploymentSuite) verifyTimestampEquality(expected, actual *timestamppb.Timestamp, maxDuration time.Duration) {
-	s.True((expected == nil) == (actual == nil))
+func (s *WorkerDeploymentSuite) verifyTimestampEquality(a *require.Assertions, expected, actual *timestamppb.Timestamp, maxDuration time.Duration) {
+	a.True((expected == nil) == (actual == nil))
 	if expected != nil {
-		s.True(expected.AsTime().Sub(actual.AsTime()) < maxDuration)
+		a.True(expected.AsTime().Sub(actual.AsTime()) < maxDuration)
 	}
 }
 
-func (s *WorkerDeploymentSuite) verifyVersionSummary(expected, actual *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary, maxDuration time.Duration) {
-	s.Equal(expected.GetVersion(), actual.GetVersion()) //nolint:staticcheck // SA1019: old worker versioning
-	s.Equal(expected.GetDrainageInfo().GetStatus(), actual.GetDrainageInfo().GetStatus())
-	s.Equal(expected.GetStatus(), actual.GetStatus())
+func (s *WorkerDeploymentSuite) verifyVersionSummary(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo_WorkerDeploymentVersionSummary, maxDuration time.Duration) {
+	a.Equal(expected.GetVersion(), actual.GetVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	a.Equal(expected.GetDrainageInfo().GetStatus(), actual.GetDrainageInfo().GetStatus())
+	a.Equal(expected.GetStatus(), actual.GetStatus())
 
-	s.verifyTimestampEquality(expected.GetCreateTime(), actual.GetCreateTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetRoutingUpdateTime(), actual.GetRoutingUpdateTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetCurrentSinceTime(), actual.GetCurrentSinceTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetRampingSinceTime(), actual.GetRampingSinceTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetFirstActivationTime(), actual.GetFirstActivationTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetLastDeactivationTime(), actual.GetLastDeactivationTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetCreateTime(), actual.GetCreateTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetRoutingUpdateTime(), actual.GetRoutingUpdateTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetCurrentSinceTime(), actual.GetCurrentSinceTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetRampingSinceTime(), actual.GetRampingSinceTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetFirstActivationTime(), actual.GetFirstActivationTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetLastDeactivationTime(), actual.GetLastDeactivationTime(), maxDuration)
 }
 
-func (s *WorkerDeploymentSuite) verifyRoutingConfig(expected, actual *deploymentpb.RoutingConfig, maxDuration time.Duration) {
-	s.Equal(expected.GetRampingVersion(), actual.GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
-	s.Equal(expected.GetRampingVersionPercentage(), actual.GetRampingVersionPercentage())
-	s.Equal(expected.GetCurrentVersion(), actual.GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
+func (s *WorkerDeploymentSuite) verifyRoutingConfig(a *require.Assertions, expected, actual *deploymentpb.RoutingConfig, maxDuration time.Duration) {
+	a.Equal(expected.GetRampingVersion(), actual.GetRampingVersion()) //nolint:staticcheck // SA1019: old worker versioning
+	a.Equal(expected.GetRampingVersionPercentage(), actual.GetRampingVersionPercentage())
+	a.Equal(expected.GetCurrentVersion(), actual.GetCurrentVersion()) //nolint:staticcheck // SA1019: old worker versioning
 
-	s.verifyTimestampEquality(expected.GetRampingVersionChangedTime(), actual.GetRampingVersionChangedTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetCurrentVersionChangedTime(), actual.GetCurrentVersionChangedTime(), maxDuration)
-	s.verifyTimestampEquality(expected.GetRampingVersionPercentageChangedTime(), actual.GetRampingVersionPercentageChangedTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetRampingVersionChangedTime(), actual.GetRampingVersionChangedTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetCurrentVersionChangedTime(), actual.GetCurrentVersionChangedTime(), maxDuration)
+	s.verifyTimestampEquality(a, expected.GetRampingVersionPercentageChangedTime(), actual.GetRampingVersionPercentageChangedTime(), maxDuration)
 }
 
-func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(expected, actual *deploymentpb.WorkerDeploymentInfo, maxDuration time.Duration) {
-	s.Equal(expected.GetName(), actual.GetName())
-	s.verifyTimestampEquality(expected.GetCreateTime(), actual.GetCreateTime(), maxDuration)
-	s.Equal(expected.GetLastModifierIdentity(), actual.GetLastModifierIdentity())
-	s.verifyRoutingConfig(expected.GetRoutingConfig(), actual.GetRoutingConfig(), maxDuration)
+func (s *WorkerDeploymentSuite) verifyWorkerDeploymentInfo(a *require.Assertions, expected, actual *deploymentpb.WorkerDeploymentInfo, maxDuration time.Duration) {
+	a.Equal(expected.GetName(), actual.GetName())
+	s.verifyTimestampEquality(a, expected.GetCreateTime(), actual.GetCreateTime(), maxDuration)
+	a.Equal(expected.GetLastModifierIdentity(), actual.GetLastModifierIdentity())
+	s.verifyRoutingConfig(a, expected.GetRoutingConfig(), actual.GetRoutingConfig(), maxDuration)
 
 	// Verify version summaries
 	for _, expectedSummary := range expected.GetVersionSummaries() {
 		found := false
 		for _, actualSummary := range actual.GetVersionSummaries() {
 			if actualSummary.Version == expectedSummary.Version { //nolint:staticcheck // SA1019: old worker versioning
-				s.verifyVersionSummary(expectedSummary, actualSummary, maxDuration)
+				s.verifyVersionSummary(a, expectedSummary, actualSummary, maxDuration)
 				found = true
 				break
 			}
 		}
-		s.True(found)
+		a.True(found)
 	}
 }
 
@@ -2829,7 +2829,7 @@ func (s *WorkerDeploymentSuite) verifyDescribeWorkerDeployment(
 	a.True((actualResp.GetWorkerDeploymentInfo() == nil) == (expectedResp.GetWorkerDeploymentInfo() == nil))
 	a.True((actualResp.GetWorkerDeploymentInfo().GetRoutingConfig() == nil) == (expectedResp.GetWorkerDeploymentInfo().GetRoutingConfig() == nil))
 
-	s.verifyWorkerDeploymentInfo(expectedResp.GetWorkerDeploymentInfo(), actualResp.GetWorkerDeploymentInfo(), maxDurationBetweenTimeStamps)
+	s.verifyWorkerDeploymentInfo(a, expectedResp.GetWorkerDeploymentInfo(), actualResp.GetWorkerDeploymentInfo(), maxDurationBetweenTimeStamps)
 }
 
 func (s *WorkerDeploymentSuite) setAndVerifyRampingVersion(
@@ -2993,13 +2993,13 @@ func (s *WorkerDeploymentSuite) verifyWorkerDeploymentSummary(
 	}
 
 	// Latest version summary checks
-	s.verifyVersionSummary(expectedSummary.LatestVersionSummary, actualSummary.LatestVersionSummary, maxDurationBetweenTimeStamps)
+	s.verifyVersionSummary(s.Require(), expectedSummary.LatestVersionSummary, actualSummary.LatestVersionSummary, maxDurationBetweenTimeStamps)
 
 	// Current version summary checks
-	s.verifyVersionSummary(expectedSummary.CurrentVersionSummary, actualSummary.CurrentVersionSummary, maxDurationBetweenTimeStamps)
+	s.verifyVersionSummary(s.Require(), expectedSummary.CurrentVersionSummary, actualSummary.CurrentVersionSummary, maxDurationBetweenTimeStamps)
 
 	// Ramping version summary checks
-	s.verifyVersionSummary(expectedSummary.RampingVersionSummary, actualSummary.RampingVersionSummary, maxDurationBetweenTimeStamps)
+	s.verifyVersionSummary(s.Require(), expectedSummary.RampingVersionSummary, actualSummary.RampingVersionSummary, maxDurationBetweenTimeStamps)
 
 	return true
 }
